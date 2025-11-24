@@ -34,6 +34,7 @@ import {
   writeBatch,
   where,
   getDocs,
+  query,
 } from "firebase/firestore";
 import { firestore, storage } from "@/firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -359,8 +360,8 @@ export default function LedgerPage() {
               // Item exists - update quantity
               const existingItem = itemSnapshot.docs[0];
               itemId = existingItem.id;
-              const currentQuantity = existingItem.data().quantity || 0;
-              const currentUnitPrice = existingItem.data().unitPrice || 0;
+              const currentQuantity = (existingItem.data() as any).quantity || 0;
+              const currentUnitPrice = (existingItem.data() as any).unitPrice || 0;
               const newQuantity = movementType === "دخول"
                 ? currentQuantity + quantityChange
                 : currentQuantity - quantityChange;
@@ -464,7 +465,7 @@ export default function LedgerPage() {
             // CRITICAL ACCOUNTING: Auto-record COGS when selling (إيراد + خروج)
             if (entryType === "إيراد" && movementType === "خروج" && !itemSnapshot.empty) {
               const existingItem = itemSnapshot.docs[0];
-              const unitCost = existingItem.data().unitPrice || 0;
+              const unitCost = (existingItem.data() as any).unitPrice || 0;
               const cogsAmount = quantityChange * unitCost;
 
               // Create automatic COGS ledger entry

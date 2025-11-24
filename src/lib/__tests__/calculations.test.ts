@@ -23,35 +23,31 @@ describe('Calculations Utilities', () => {
   const mockClient: Client = {
     id: 'client1',
     name: 'Test Client',
-    type: 'customer',
     phone: '123456',
     openingBalance: 100,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: new Date()
   };
 
   const mockTransactions: Transaction[] = [
     {
       id: 't1',
-      transactionId: 'TXN-1',
       description: 'Sale 1',
-      type: 'income',
       amount: 500,
       category: 'income',
       subCategory: 'sales',
       associatedPartyId: 'client1',
+      associatedPartyName: 'Test Client',
       date: new Date('2024-01-15'),
       createdAt: new Date()
     },
     {
       id: 't2',
-      transactionId: 'TXN-2',
       description: 'Expense 1',
-      type: 'expense',
       amount: 200,
       category: 'expense',
       subCategory: 'rent',
       associatedPartyId: 'client1',
+      associatedPartyName: 'Test Client',
       date: new Date('2024-01-20'),
       createdAt: new Date()
     }
@@ -60,11 +56,12 @@ describe('Calculations Utilities', () => {
   const mockPayments: Payment[] = [
     {
       id: 'p1',
-      clientName: 'Test Client',
+      partyName: 'Test Client',
       partyId: 'client1',
       amount: 300,
       type: 'receipt',
-      linkedTransactionId: 'TXN-1',
+      method: 'cash',
+      transactionId: 't1',
       date: new Date('2024-01-16'),
       createdAt: new Date()
     }
@@ -75,29 +72,23 @@ describe('Calculations Utilities', () => {
       id: 'c1',
       chequeNumber: 'CHQ-1',
       clientId: 'client1',
+      clientName: 'Test Client',
       amount: 100,
       status: 'cleared',
       dueDate: new Date('2024-01-18'),
-      createdAt: new Date(),
-      clientName: 'Test Client',
-      type: 'incoming',
-      chequeType: 'normal',
-      bankName: 'Bank A',
-      issueDate: new Date()
+      date: new Date('2024-01-18'),
+      createdAt: new Date()
     },
     {
       id: 'c2',
       chequeNumber: 'CHQ-2',
       clientId: 'client1',
+      clientName: 'Test Client',
       amount: 150,
       status: 'pending',
       dueDate: new Date('2023-12-31'), // Overdue
-      createdAt: new Date(),
-      clientName: 'Test Client',
-      type: 'incoming',
-      chequeType: 'normal',
-      bankName: 'Bank A',
-      issueDate: new Date()
+      date: new Date('2023-12-31'),
+      createdAt: new Date()
     }
   ];
 
@@ -141,12 +132,12 @@ describe('Calculations Utilities', () => {
 
   describe('calculateInventoryValue', () => {
     const mockItems: InventoryItem[] = [
-      { id: 'item1', itemName: 'Item 1', quantity: 0, unitPrice: 10, unit: 'kg', category: 'raw', createdAt: new Date(), updatedAt: new Date() }
+      { id: 'item1', name: 'Item 1', unit: 'kg', createdAt: new Date() }
     ];
 
     const mockMovements: InventoryMovement[] = [
-      { id: 'm1', itemId: 'item1', type: 'entry', quantity: 100, itemName: 'Item 1', createdAt: new Date() },
-      { id: 'm2', itemId: 'item1', type: 'exit', quantity: 30, itemName: 'Item 1', createdAt: new Date() }
+      { id: 'm1', itemId: 'item1', type: 'entry', quantity: 100, itemName: 'Item 1', date: new Date(), createdAt: new Date() },
+      { id: 'm2', itemId: 'item1', type: 'exit', quantity: 30, itemName: 'Item 1', date: new Date(), createdAt: new Date() }
     ];
 
     it('should calculate inventory quantities correctly', () => {
