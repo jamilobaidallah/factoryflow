@@ -1,0 +1,199 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for validation
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidNumber(value) {
+      return value is number && value >= 0;
+    }
+
+    function isValidAmount(value) {
+      return value is number && value > 0;
+    }
+
+    function isValidPercentage(value) {
+      return value is number && value >= 0 && value <= 100;
+    }
+
+    function isValidString(value) {
+      return value is string && value.size() > 0 && value.size() <= 500;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // User data root - read/write access for authenticated owner
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Ledger collection - accounting entries
+      match /ledger/{ledgerId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['transactionId', 'description', 'type', 'amount', 'category', 'date', 'createdAt'])
+          && isValidString(request.resource.data.description)
+          && isValidAmount(request.resource.data.amount)
+          && request.resource.data.type in ['دخل', 'إيراد', 'مصروف']
+          && isValidString(request.resource.data.category)
+          && request.resource.data.date is timestamp
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && request.resource.data.transactionId == resource.data.transactionId // Cannot change transaction ID
+          && isValidString(request.resource.data.description)
+          && isValidAmount(request.resource.data.amount);
+        allow delete: if isOwner(userId);
+      }
+
+      // Partners collection - business partners/owners
+      match /partners/{partnerId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['name', 'ownershipPercentage', 'initialInvestment', 'joinDate', 'active'])
+          && isValidString(request.resource.data.name)
+          && isValidPercentage(request.resource.data.ownershipPercentage)
+          && isValidNumber(request.resource.data.initialInvestment)
+          && request.resource.data.joinDate is timestamp
+          && request.resource.data.active is bool;
+        allow update: if isOwner(userId)
+          && isValidString(request.resource.data.name)
+          && isValidPercentage(request.resource.data.ownershipPercentage)
+          && isValidNumber(request.resource.data.initialInvestment);
+        allow delete: if isOwner(userId);
+      }
+
+      // Clients collection
+      match /clients/{clientId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['name', 'createdAt'])
+          && isValidString(request.resource.data.name)
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && isValidString(request.resource.data.name);
+        allow delete: if isOwner(userId);
+      }
+
+      // Payments collection
+      match /payments/{paymentId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['clientName', 'amount', 'type', 'date', 'createdAt'])
+          && isValidString(request.resource.data.clientName)
+          && isValidAmount(request.resource.data.amount)
+          && request.resource.data.type in ['قبض', 'صرف']
+          && request.resource.data.date is timestamp
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && isValidAmount(request.resource.data.amount);
+        allow delete: if isOwner(userId);
+      }
+
+      // Cheques collection
+      match /cheques/{chequeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['chequeNumber', 'clientName', 'amount', 'type', 'status', 'dueDate', 'createdAt'])
+          && isValidString(request.resource.data.chequeNumber)
+          && isValidString(request.resource.data.clientName)
+          && isValidAmount(request.resource.data.amount)
+          && request.resource.data.type in ['وارد', 'صادر']
+          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي']
+          && request.resource.data.dueDate is timestamp
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي'];
+        allow delete: if isOwner(userId);
+      }
+
+      // Inventory collection
+      match /inventory/{itemId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['itemName', 'quantity', 'unit', 'createdAt'])
+          && isValidString(request.resource.data.itemName)
+          && isValidNumber(request.resource.data.quantity)
+          && isValidString(request.resource.data.unit)
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && isValidNumber(request.resource.data.quantity);
+        allow delete: if isOwner(userId);
+      }
+
+      // Fixed Assets collection
+      match /fixedAssets/{assetId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['assetName', 'purchaseAmount', 'purchaseDate', 'usefulLifeYears', 'createdAt'])
+          && isValidString(request.resource.data.assetName)
+          && isValidAmount(request.resource.data.purchaseAmount)
+          && request.resource.data.purchaseDate is timestamp
+          && isValidNumber(request.resource.data.usefulLifeYears)
+          && request.resource.data.usefulLifeYears > 0
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Production collection
+      match /production/{productionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['outputItemName', 'outputQuantity', 'productionDate', 'createdAt'])
+          && isValidString(request.resource.data.outputItemName)
+          && isValidNumber(request.resource.data.outputQuantity)
+          && request.resource.data.outputQuantity > 0
+          && request.resource.data.productionDate is timestamp
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Employees collection
+      match /employees/{employeeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['name', 'position', 'salary', 'hireDate', 'active', 'createdAt'])
+          && isValidString(request.resource.data.name)
+          && isValidString(request.resource.data.position)
+          && isValidNumber(request.resource.data.salary)
+          && request.resource.data.hireDate is timestamp
+          && request.resource.data.active is bool
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId)
+          && isValidNumber(request.resource.data.salary)
+          && request.resource.data.active is bool;
+        allow delete: if isOwner(userId);
+      }
+
+      // Invoices collection
+      match /invoices/{invoiceId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && hasRequiredFields(['invoiceNumber', 'clientName', 'totalAmount', 'issueDate', 'createdAt'])
+          && isValidString(request.resource.data.invoiceNumber)
+          && isValidString(request.resource.data.clientName)
+          && isValidAmount(request.resource.data.totalAmount)
+          && request.resource.data.issueDate is timestamp
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+

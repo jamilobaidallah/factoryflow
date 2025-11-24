@@ -1,0 +1,715 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  ArrowLeft,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  FileText,
+  Download,
+} from "lucide-react";
+import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
+import {
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
+import { firestore } from "@/firebase/config";
+
+interface Client {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  balance: number;
+  createdAt: Date;
+}
+
+interface LedgerEntry {
+  id: string;
+  type: string;
+  amount: number;
+  date: Date;
+  category: string;
+  subCategory?: string;
+  description: string;
+  associatedParty?: string;
+  remainingBalance?: number;
+}
+
+interface Payment {
+  id: string;
+  type: string;
+  amount: number;
+  date: Date;
+  description: string;
+  paymentMethod: string;
+  associatedParty?: string;
+}
+
+interface Cheque {
+  id: string;
+  chequeNumber: string;
+  amount: number;
+  chequeDate: Date;
+  bank: string;
+  status: string;
+  type: string;
+  associatedParty?: string;
+}
+
+interface ClientDetailPageProps {
+  clientId: string;
+}
+
+export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
+  const router = useRouter();
+  const { user } = useUser();
+  const { toast } = useToast();
+
+  const [client, setClient] = useState<Client | null>(null);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [cheques, setCheques] = useState<Cheque[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Financial metrics
+  const [totalSales, setTotalSales] = useState(0);
+  const [totalPurchases, setTotalPurchases] = useState(0);
+  const [totalPaymentsReceived, setTotalPaymentsReceived] = useState(0);
+  const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
+  const [currentBalance, setCurrentBalance] = useState(0);
+
+  // Load client data
+  useEffect(() => {
+    if (!user || !clientId) {return;}
+
+    const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
+    getDoc(clientRef)
+      .then((docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setClient({
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+          } as Client);
+        } else {
+          toast({
+            title: "خطأ",
+            description: "العميل غير موجود",
+            variant: "destructive",
+          });
+          router.push("/clients");
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error loading client:", error);
+        toast({
+          title: "خطأ",
+          description: "حدث خطأ أثناء تحميل بيانات العميل",
+          variant: "destructive",
+        });
+        setLoading(false);
+      });
+  }, [user, clientId, router, toast]);
+
+  // Load ledger entries for this client
+  useEffect(() => {
+    if (!user || !client) {return;}
+
+    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    const q = query(
+      ledgerRef,
+      where("associatedParty", "==", client.name)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const entries: LedgerEntry[] = [];
+        let sales = 0;
+        let purchases = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const entry = {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate?.() || new Date(),
+          } as LedgerEntry;
+          entries.push(entry);
+
+          // Calculate totals
+          if (entry.type === "دخل" || entry.type === "إيراد") {
+            sales += entry.amount;
+          } else if (entry.type === "مصروف") {
+            purchases += entry.amount;
+          }
+        });
+
+        // Sort by date in JavaScript instead of Firestore
+        entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+        setLedgerEntries(entries);
+        setTotalSales(sales);
+        setTotalPurchases(purchases);
+      },
+      (error) => {
+        console.error("Error loading ledger entries:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, client]);
+
+  // Load payments for this client
+  useEffect(() => {
+    if (!user || !client) {return;}
+
+    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    const q = query(
+      paymentsRef,
+      where("clientName", "==", client.name)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const paymentsList: Payment[] = [];
+        let received = 0;
+        let made = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const payment = {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate?.() || new Date(),
+          } as Payment;
+          paymentsList.push(payment);
+
+          // Calculate totals
+          if (payment.type === "قبض") {
+            received += payment.amount;
+          } else if (payment.type === "صرف") {
+            made += payment.amount;
+          }
+        });
+
+        // Sort by date in JavaScript
+        paymentsList.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+        setPayments(paymentsList);
+        setTotalPaymentsReceived(received);
+        setTotalPaymentsMade(made);
+      },
+      (error) => {
+        console.error("Error loading payments:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, client]);
+
+  // Load cheques for this client
+  useEffect(() => {
+    if (!user || !client) {return;}
+
+    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const q = query(
+      chequesRef,
+      where("clientName", "==", client.name)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const chequesList: Cheque[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          chequesList.push({
+            id: doc.id,
+            ...data,
+            chequeDate: data.chequeDate?.toDate?.() || new Date(),
+          } as Cheque);
+        });
+        // Sort by date in JavaScript
+        chequesList.sort((a, b) => b.chequeDate.getTime() - a.chequeDate.getTime());
+        setCheques(chequesList);
+      },
+      (error) => {
+        console.error("Error loading cheques:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, client]);
+
+  // Calculate current balance
+  useEffect(() => {
+    const balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade);
+    setCurrentBalance(balance);
+  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade]);
+
+  // Export statement to CSV
+  const exportStatement = () => {
+    if (!client) {return;}
+
+    // Combine all transactions
+    const allTransactions = [
+      ...ledgerEntries.map((e) => ({
+        date: e.date,
+        type: "قيد",
+        description: e.description,
+        debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
+        credit: e.type === "مصروف" ? e.amount : 0,
+      })),
+      ...payments.map((p) => ({
+        date: p.date,
+        type: "دفعة",
+        description: p.description,
+        debit: p.type === "صرف" ? p.amount : 0,
+        credit: p.type === "قبض" ? p.amount : 0,
+      })),
+    ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Calculate running balance
+    let runningBalance = 0;
+    const statementData = allTransactions.map((t) => {
+      runningBalance += t.debit - t.credit;
+      return {
+        التاريخ: t.date.toLocaleDateString("ar-JO"),
+        النوع: t.type,
+        الوصف: t.description,
+        مدين: t.debit.toFixed(2),
+        دائن: t.credit.toFixed(2),
+        الرصيد: runningBalance.toFixed(2),
+      };
+    });
+
+    // Convert to CSV
+    const headers = Object.keys(statementData[0] || {}).join(",");
+    const rows = statementData.map((row) => Object.values(row).join(",")).join("\n");
+    const csv = `${headers}\n${rows}`;
+
+    // Download
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `statement_${client.name}_${new Date().toLocaleDateString("en")}.csv`;
+    link.click();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-xl">جاري التحميل...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!client) {
+    return null;
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6" dir="rtl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.push("/clients")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">{client.name}</h1>
+            <p className="text-gray-500">{client.phone}</p>
+          </div>
+        </div>
+        <Button onClick={exportStatement} variant="outline">
+          <Download className="w-4 h-4 ml-2" />
+          تصدير كشف الحساب
+        </Button>
+      </div>
+
+      {/* Financial Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              إجمالي المبيعات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {totalSales.toFixed(2)} د.أ
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {ledgerEntries.filter((e) => e.type === "دخل" || e.type === "إيراد").length} معاملة
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+              <TrendingDown className="w-4 h-4" />
+              إجمالي المشتريات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {totalPurchases.toFixed(2)} د.أ
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {ledgerEntries.filter((e) => e.type === "مصروف").length} معاملة
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              المدفوعات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-lg font-semibold text-gray-700">
+              <span className="text-green-600">قبض: {totalPaymentsReceived.toFixed(2)}</span>
+            </div>
+            <div className="text-lg font-semibold text-gray-700">
+              <span className="text-red-600">صرف: {totalPaymentsMade.toFixed(2)}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              الرصيد الحالي
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold ${
+                currentBalance >= 0 ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {Math.abs(currentBalance).toFixed(2)} د.أ
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {currentBalance >= 0 ? "لنا (مدين)" : "علينا (دائن)"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Client Info Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>معلومات العميل</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">الهاتف</p>
+              <p className="font-medium">{client.phone}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">البريد الإلكتروني</p>
+              <p className="font-medium">{client.email || "-"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">العنوان</p>
+              <p className="font-medium">{client.address || "-"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">تاريخ التسجيل</p>
+              <p className="font-medium">{client.createdAt.toLocaleDateString("ar-JO")}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs Section */}
+      <Tabs defaultValue="transactions" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="transactions">المعاملات المالية</TabsTrigger>
+          <TabsTrigger value="payments">الدفعات</TabsTrigger>
+          <TabsTrigger value="cheques">الشيكات</TabsTrigger>
+          <TabsTrigger value="statement">كشف الحساب</TabsTrigger>
+        </TabsList>
+
+        {/* Transactions Tab */}
+        <TabsContent value="transactions">
+          <Card>
+            <CardHeader>
+              <CardTitle>المعاملات المالية</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>الفئة</TableHead>
+                    <TableHead>الوصف</TableHead>
+                    <TableHead className="text-left">المبلغ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ledgerEntries.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-gray-500">
+                        لا توجد معاملات مالية
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    ledgerEntries.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell>{entry.date.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              entry.type === "دخل" || entry.type === "إيراد"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {entry.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>{entry.category}</TableCell>
+                        <TableCell>{entry.description}</TableCell>
+                        <TableCell className="text-left font-medium">
+                          {entry.amount.toFixed(2)} د.أ
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Payments Tab */}
+        <TabsContent value="payments">
+          <Card>
+            <CardHeader>
+              <CardTitle>الدفعات</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>طريقة الدفع</TableHead>
+                    <TableHead>الوصف</TableHead>
+                    <TableHead className="text-left">المبلغ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-gray-500">
+                        لا توجد دفعات
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    payments.map((payment) => (
+                      <TableRow key={payment.id}>
+                        <TableCell>{payment.date.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              payment.type === "قبض"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {payment.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>{payment.paymentMethod}</TableCell>
+                        <TableCell>{payment.description}</TableCell>
+                        <TableCell className="text-left font-medium">
+                          {payment.amount.toFixed(2)} د.أ
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Cheques Tab */}
+        <TabsContent value="cheques">
+          <Card>
+            <CardHeader>
+              <CardTitle>الشيكات</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>رقم الشيك</TableHead>
+                    <TableHead>تاريخ الشيك</TableHead>
+                    <TableHead>البنك</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>الحالة</TableHead>
+                    <TableHead className="text-left">المبلغ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cheques.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-gray-500">
+                        لا توجد شيكات
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    cheques.map((cheque) => (
+                      <TableRow key={cheque.id}>
+                        <TableCell>{cheque.chequeNumber}</TableCell>
+                        <TableCell>{cheque.chequeDate.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>{cheque.bank}</TableCell>
+                        <TableCell>{cheque.type}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              cheque.status === "معلق"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : cheque.status === "مصروف"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {cheque.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-left font-medium">
+                          {cheque.amount.toFixed(2)} د.أ
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Statement Tab */}
+        <TabsContent value="statement">
+          <Card>
+            <CardHeader>
+              <CardTitle>كشف الحساب</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>الوصف</TableHead>
+                    <TableHead className="text-left">مدين</TableHead>
+                    <TableHead className="text-left">دائن</TableHead>
+                    <TableHead className="text-left">الرصيد</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(() => {
+                    // Combine and sort all transactions
+                    const allTransactions = [
+                      ...ledgerEntries.map((e) => ({
+                        date: e.date,
+                        type: "قيد",
+                        description: e.description,
+                        debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
+                        credit: e.type === "مصروف" ? e.amount : 0,
+                      })),
+                      ...payments.map((p) => ({
+                        date: p.date,
+                        type: "دفعة",
+                        description: p.description,
+                        debit: p.type === "صرف" ? p.amount : 0,
+                        credit: p.type === "قبض" ? p.amount : 0,
+                      })),
+                    ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+                    if (allTransactions.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-gray-500">
+                            لا توجد معاملات
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+
+                    let runningBalance = 0;
+                    return allTransactions.map((transaction, index) => {
+                      runningBalance += transaction.debit - transaction.credit;
+                      return (
+                        <TableRow key={index}>
+                          <TableCell>
+                            {transaction.date.toLocaleDateString("ar-JO")}
+                          </TableCell>
+                          <TableCell>{transaction.type}</TableCell>
+                          <TableCell>{transaction.description}</TableCell>
+                          <TableCell className="text-left">
+                            {transaction.debit > 0 ? `${transaction.debit.toFixed(2)} د.أ` : "-"}
+                          </TableCell>
+                          <TableCell className="text-left">
+                            {transaction.credit > 0 ? `${transaction.credit.toFixed(2)} د.أ` : "-"}
+                          </TableCell>
+                          <TableCell
+                            className={`text-left font-medium ${
+                              runningBalance >= 0 ? "text-green-600" : "text-red-600"
+                            }`}
+                          >
+                            {Math.abs(runningBalance).toFixed(2)} د.أ
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

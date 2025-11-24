@@ -1,0 +1,38 @@
+{
+  "extends": [
+    "next/core-web-vitals"
+  ],
+  "rules": {
+    // React specific rules (already available in next/core-web-vitals)
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+
+    // General code quality rules
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error"]
+      }
+    ],
+    "no-debugger": "warn",
+    "no-duplicate-imports": "error",
+    "no-unused-expressions": "warn",
+    "prefer-const": "warn",
+    "no-var": "error",
+
+    // Next.js specific (already available)
+    "@next/next/no-html-link-for-pages": "error",
+    "@next/next/no-img-element": "warn",
+
+    // Code style
+    "eqeqeq": ["warn", "always"],
+    "curly": ["warn", "all"],
+    "no-multiple-empty-lines": [
+      "warn",
+      {
+        "max": 2,
+        "maxEOF": 1
+      }
+    ]
+  }
+}
