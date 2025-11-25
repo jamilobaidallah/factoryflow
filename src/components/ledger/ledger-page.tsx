@@ -674,13 +674,43 @@ export default function LedgerPage() {
         batch.delete(doc.ref);
       });
 
-      // 4. Delete related inventory movements
+      // 4. Revert inventory quantities and delete related inventory movements
       const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
       const movementsQuery = query(movementsRef, where("linkedTransactionId", "==", entry.transactionId));
       const movementsSnapshot = await getDocs(movementsQuery);
-      movementsSnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
+
+      // Revert quantities before deleting movements
+      for (const movementDoc of movementsSnapshot.docs) {
+        const movement = movementDoc.data() as any;
+        const itemId = movement.itemId;
+        const quantity = movement.quantity || 0;
+        const movementType = movement.type; // 'entry' or 'exit'
+
+        if (itemId) {
+          // Find the inventory item
+          const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+          const itemQuery = query(inventoryRef, where("__name__", "==", itemId));
+          const itemSnapshot = await getDocs(itemQuery);
+
+          if (!itemSnapshot.empty) {
+            const itemDoc = itemSnapshot.docs[0];
+            const currentQuantity = (itemDoc.data() as any).quantity || 0;
+
+            // Revert the quantity change
+            // If it was an entry (+), we subtract to revert
+            // If it was an exit (-), we add back to revert
+            const revertedQuantity = movementType === "entry"
+              ? currentQuantity - quantity
+              : currentQuantity + quantity;
+
+            const itemDocRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
+            batch.update(itemDocRef, { quantity: Math.max(0, revertedQuantity) });
+          }
+        }
+
+        // Delete the movement record
+        batch.delete(movementDoc.ref);
+      }
 
       // 5. Delete auto-generated COGS entries
       const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
