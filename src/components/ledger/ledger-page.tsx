@@ -697,9 +697,9 @@ export default function LedgerPage() {
             const currentQuantity = (itemDoc.data() as any).quantity || 0;
 
             // Revert the quantity change
-            // If it was an entry (+), we subtract to revert
-            // If it was an exit (-), we add back to revert
-            const revertedQuantity = movementType === "entry"
+            // If it was دخول/entry (+), we subtract to revert
+            // If it was خروج/exit (-), we add back to revert
+            const revertedQuantity = movementType === "دخول"
               ? currentQuantity - quantity
               : currentQuantity + quantity;
 
