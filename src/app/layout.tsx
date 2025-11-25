@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { Cairo } from "next/font/google";
 import "./globals.css";
 import { FirebaseClientProvider } from "@/firebase/provider";
 import { Toaster } from "@/components/ui/toaster";
-
-const cairo = Cairo({ subsets: ["arabic", "latin"] });
 
 export const metadata: Metadata = {
   title: "FactoryFlow - نظام إدارة المصنع",
@@ -18,7 +15,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={cairo.className}>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap"
+        />
+      </head>
+      <body className="font-cairo">
         <FirebaseClientProvider>
           {children}
           <Toaster />
