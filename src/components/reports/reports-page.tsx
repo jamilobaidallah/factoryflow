@@ -23,6 +23,7 @@ import {
   where,
   getDocs,
   orderBy,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import SubcategoryAnalysis from "./subcategory-analysis";
@@ -101,13 +102,14 @@ export default function ReportsPage() {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
-      // Fetch ledger entries
+      // Fetch ledger entries (limit to 1000 to prevent memory issues)
       const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
       const ledgerQuery = query(
         ledgerRef,
         where("date", ">=", start),
         where("date", "<=", end),
-        orderBy("date", "desc")
+        orderBy("date", "desc"),
+        limit(1000)
       );
       const ledgerSnapshot = await getDocs(ledgerQuery);
       const ledgerData: LedgerEntry[] = [];
@@ -121,13 +123,14 @@ export default function ReportsPage() {
       });
       setLedgerEntries(ledgerData);
 
-      // Fetch payments
+      // Fetch payments (limit to 1000 to prevent memory issues)
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const paymentsQuery = query(
         paymentsRef,
         where("date", ">=", start),
         where("date", "<=", end),
-        orderBy("date", "desc")
+        orderBy("date", "desc"),
+        limit(1000)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
       const paymentsData: Payment[] = [];
@@ -141,18 +144,20 @@ export default function ReportsPage() {
       });
       setPayments(paymentsData);
 
-      // Fetch inventory (no date filter)
+      // Fetch inventory (limit to 500 items)
       const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
-      const inventorySnapshot = await getDocs(inventoryRef);
+      const inventoryQuery = query(inventoryRef, limit(500));
+      const inventorySnapshot = await getDocs(inventoryQuery);
       const inventoryData: InventoryItem[] = [];
       inventorySnapshot.forEach((doc) => {
         inventoryData.push({ id: doc.id, ...doc.data() } as InventoryItem);
       });
       setInventory(inventoryData);
 
-      // Fetch fixed assets (no date filter)
+      // Fetch fixed assets (limit to 500 items)
       const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
-      const assetsSnapshot = await getDocs(assetsRef);
+      const assetsQuery = query(assetsRef, limit(500));
+      const assetsSnapshot = await getDocs(assetsQuery);
       const assetsData: FixedAsset[] = [];
       assetsSnapshot.forEach((doc) => {
         assetsData.push({ id: doc.id, ...doc.data() } as FixedAsset);
