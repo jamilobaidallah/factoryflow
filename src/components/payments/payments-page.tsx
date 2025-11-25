@@ -35,7 +35,17 @@ import {
   orderBy,
   where,
   getDocs,
+  limit,
+  getCountFromServer,
 } from "firebase/firestore";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { firestore } from "@/firebase/config";
 import { CopyButton } from "@/components/ui/copy-button";
 
@@ -116,6 +126,12 @@ export default function PaymentsPage() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
+
   const [formData, setFormData] = useState({
     clientName: "",
     amount: "",
@@ -127,11 +143,22 @@ export default function PaymentsPage() {
     subCategory: "",
   });
 
+  // Fetch total count
+  useEffect(() => {
+    if (!user) return;
+
+    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    getCountFromServer(query(paymentsRef)).then((snapshot) => {
+      setTotalCount(snapshot.data().count);
+    });
+  }, [user]);
+
+  // Fetch payments with pagination
   useEffect(() => {
     if (!user) {return;}
 
     const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-    const q = query(paymentsRef, orderBy("date", "desc"));
+    const q = query(paymentsRef, orderBy("date", "desc"), limit(pageSize));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const paymentsData: Payment[] = [];
@@ -148,7 +175,7 @@ export default function PaymentsPage() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, pageSize, currentPage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -495,6 +522,58 @@ export default function PaymentsPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                عرض {payments.length} من {totalCount} مدفوعة
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                      }}
+                      className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+
+                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(pageNum);
+                          }}
+                          isActive={currentPage === pageNum}
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                      }}
+                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           )}
         </CardContent>
       </Card>
