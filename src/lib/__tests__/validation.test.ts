@@ -17,11 +17,31 @@ import {
   formatValidationErrors,
   getFirstValidationError,
   validateData,
+  checkDuplicate,
+  checkDuplicateClient,
+  checkDuplicateCheque,
+  checkDuplicateSKU,
+  validateFormWithDuplicateCheck,
+  extractFormData,
+  arabicErrorMap,
+  phoneSchema,
+  emailSchema,
+  positiveNumberSchema,
+  nonNegativeNumberSchema,
+  requiredStringSchema,
 } from '../validation';
+import { getDocs } from 'firebase/firestore';
 
 // Mock Firebase to avoid actual Firestore calls
 jest.mock('@/firebase/config', () => ({
   firestore: {},
+}));
+
+jest.mock('firebase/firestore', () => ({
+  collection: jest.fn(),
+  query: jest.fn(),
+  where: jest.fn(),
+  getDocs: jest.fn(),
 }));
 
 describe('Validation System', () => {
@@ -390,6 +410,382 @@ describe('Validation System', () => {
       };
 
       expect(() => fixedAssetSchema.parse(invalidAsset)).toThrow();
+    });
+  });
+
+  describe('Arabic Error Messages', () => {
+    describe('arabicErrorMap', () => {
+      it('should provide Arabic error for invalid_type string', () => {
+        const testSchema = z.string();
+        try {
+          testSchema.parse(123);
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toContain('نص');
+          }
+        }
+      });
+
+      it('should provide Arabic error for invalid_type number', () => {
+        const testSchema = z.number();
+        try {
+          testSchema.parse('not a number');
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toContain('رقم');
+          }
+        }
+      });
+
+      it('should provide Arabic error for too_small string', () => {
+        const testSchema = z.string().min(5);
+        try {
+          testSchema.parse('abc');
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toMatch(/أحرف/);
+          }
+        }
+      });
+
+      it('should provide Arabic error for too_big string', () => {
+        const testSchema = z.string().max(5);
+        try {
+          testSchema.parse('abcdefghijk');
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toMatch(/تجاوز|حرف/);
+          }
+        }
+      });
+
+      it('should provide Arabic error for invalid email', () => {
+        const testSchema = z.string().email();
+        try {
+          testSchema.parse('not-an-email');
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toContain('بريد');
+          }
+        }
+      });
+
+      it('should provide Arabic error for invalid url', () => {
+        const testSchema = z.string().url();
+        try {
+          testSchema.parse('not-a-url');
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            expect(error.errors[0].message).toContain('رابط');
+          }
+        }
+      });
+    });
+  });
+
+  describe('Common Schemas', () => {
+    it('phoneSchema should accept valid phone numbers', () => {
+      expect(() => phoneSchema.parse('0791234567')).not.toThrow();
+      expect(() => phoneSchema.parse('1234567')).not.toThrow();
+      expect(() => phoneSchema.parse('')).not.toThrow();
+    });
+
+    it('phoneSchema should reject invalid phone numbers', () => {
+      expect(() => phoneSchema.parse('123')).toThrow();
+      expect(() => phoneSchema.parse('abc')).toThrow();
+    });
+
+    it('emailSchema should accept valid emails', () => {
+      expect(() => emailSchema.parse('test@example.com')).not.toThrow();
+      expect(() => emailSchema.parse('')).not.toThrow();
+    });
+
+    it('emailSchema should reject invalid emails', () => {
+      expect(() => emailSchema.parse('invalid')).toThrow();
+    });
+
+    it('positiveNumberSchema should accept positive numbers', () => {
+      expect(() => positiveNumberSchema.parse(100)).not.toThrow();
+    });
+
+    it('positiveNumberSchema should reject zero and negative', () => {
+      expect(() => positiveNumberSchema.parse(0)).toThrow();
+      expect(() => positiveNumberSchema.parse(-100)).toThrow();
+    });
+
+    it('nonNegativeNumberSchema should accept zero and positive', () => {
+      expect(() => nonNegativeNumberSchema.parse(0)).not.toThrow();
+      expect(() => nonNegativeNumberSchema.parse(100)).not.toThrow();
+    });
+
+    it('nonNegativeNumberSchema should reject negative', () => {
+      expect(() => nonNegativeNumberSchema.parse(-100)).toThrow();
+    });
+
+    it('requiredStringSchema should accept non-empty strings', () => {
+      expect(() => requiredStringSchema.parse('hello')).not.toThrow();
+    });
+
+    it('requiredStringSchema should reject empty strings', () => {
+      expect(() => requiredStringSchema.parse('')).toThrow();
+      expect(() => requiredStringSchema.parse('   ')).toThrow();
+    });
+  });
+
+  describe('Duplicate Detection', () => {
+    const mockGetDocs = getDocs as jest.MockedFunction<typeof getDocs>;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    describe('checkDuplicate', () => {
+      it('should return false when no duplicates found', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: true,
+          size: 0,
+          docs: [],
+        } as any);
+
+        const result = await checkDuplicate({
+          collection: 'clients',
+          field: 'name',
+          value: 'محمد أحمد',
+          userId: 'user123',
+        });
+
+        expect(result).toBe(false);
+      });
+
+      it('should return true when duplicate found', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: false,
+          size: 1,
+          docs: [{ id: 'doc1' }],
+        } as any);
+
+        const result = await checkDuplicate({
+          collection: 'clients',
+          field: 'name',
+          value: 'محمد أحمد',
+          userId: 'user123',
+        });
+
+        expect(result).toBe(true);
+      });
+
+      it('should exclude current document when updating', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: false,
+          size: 1,
+          docs: [{ id: 'doc1' }],
+        } as any);
+
+        const result = await checkDuplicate({
+          collection: 'clients',
+          field: 'name',
+          value: 'محمد أحمد',
+          userId: 'user123',
+          excludeId: 'doc1',
+        });
+
+        expect(result).toBe(false);
+      });
+
+      it('should return true when duplicate exists besides current document', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: false,
+          size: 1,
+          docs: [{ id: 'doc2' }],
+        } as any);
+
+        const result = await checkDuplicate({
+          collection: 'clients',
+          field: 'name',
+          value: 'محمد أحمد',
+          userId: 'user123',
+          excludeId: 'doc1',
+        });
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false on error', async () => {
+        mockGetDocs.mockRejectedValue(new Error('Firestore error'));
+
+        const result = await checkDuplicate({
+          collection: 'clients',
+          field: 'name',
+          value: 'محمد أحمد',
+          userId: 'user123',
+        });
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('checkDuplicateClient', () => {
+      it('should check for duplicate client name', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: true,
+          size: 0,
+          docs: [],
+        } as any);
+
+        const result = await checkDuplicateClient('محمد أحمد', 'user123');
+        expect(result).toBe(false);
+      });
+
+      it('should trim client name before checking', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: true,
+          size: 0,
+          docs: [],
+        } as any);
+
+        const result = await checkDuplicateClient('  محمد أحمد  ', 'user123');
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('checkDuplicateCheque', () => {
+      it('should check for duplicate cheque number', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: true,
+          size: 0,
+          docs: [],
+        } as any);
+
+        const result = await checkDuplicateCheque('CHK-001', 'user123');
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('checkDuplicateSKU', () => {
+      it('should check for duplicate SKU', async () => {
+        mockGetDocs.mockResolvedValue({
+          empty: true,
+          size: 0,
+          docs: [],
+        } as any);
+
+        const result = await checkDuplicateSKU('SKU-001', 'user123');
+        expect(result).toBe(false);
+      });
+
+      it('should return false for empty SKU', async () => {
+        const result = await checkDuplicateSKU('', 'user123');
+        expect(result).toBe(false);
+      });
+    });
+  });
+
+  describe('Form Helper Functions', () => {
+    describe('validateFormWithDuplicateCheck', () => {
+      it('should validate data and pass without duplicate checks', async () => {
+        const validData = {
+          name: 'محمد أحمد',
+          phone: '0791234567',
+          email: 'test@example.com',
+          balance: 0,
+        };
+
+        const result = await validateFormWithDuplicateCheck(clientSchema, validData);
+        expect(result.success).toBe(true);
+      });
+
+      it('should return validation errors for invalid data', async () => {
+        const invalidData = {
+          name: '',
+          phone: '123',
+        };
+
+        const result = await validateFormWithDuplicateCheck(clientSchema, invalidData);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.errors.length).toBeGreaterThan(0);
+        }
+      });
+
+      it('should run duplicate checks and pass when no duplicates', async () => {
+        const validData = {
+          name: 'محمد أحمد',
+          phone: '0791234567',
+          email: 'test@example.com',
+          balance: 0,
+        };
+
+        const duplicateChecks = [
+          async () => false, // No duplicate
+        ];
+
+        const result = await validateFormWithDuplicateCheck(
+          clientSchema,
+          validData,
+          duplicateChecks
+        );
+        expect(result.success).toBe(true);
+      });
+
+      it('should return error when duplicate found', async () => {
+        const validData = {
+          name: 'محمد أحمد',
+          phone: '0791234567',
+          email: 'test@example.com',
+          balance: 0,
+        };
+
+        const duplicateChecks = [
+          async () => true, // Duplicate found
+        ];
+
+        const result = await validateFormWithDuplicateCheck(
+          clientSchema,
+          validData,
+          duplicateChecks
+        );
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.errors[0]).toContain('موجودة مسبقاً');
+        }
+      });
+    });
+
+    describe('extractFormData', () => {
+      it('should extract and validate form data successfully', () => {
+        const formData = {
+          name: 'محمد أحمد',
+          phone: '0791234567',
+          email: 'test@example.com',
+          balance: 0,
+        };
+
+        const result = extractFormData(formData, clientSchema);
+        expect(result.success).toBe(true);
+        expect(result.data).toBeDefined();
+      });
+
+      it('should return errors for invalid form data', () => {
+        const formData = {
+          name: '',
+          phone: '123',
+        };
+
+        const result = extractFormData(formData, clientSchema);
+        expect(result.success).toBe(false);
+        expect(result.errors).toBeDefined();
+        if (result.errors) {
+          expect(result.errors.length).toBeGreaterThan(0);
+        }
+      });
+
+      it('should handle non-Zod errors gracefully', () => {
+        const formData = null;
+
+        const result = extractFormData(formData, clientSchema);
+        expect(result.success).toBe(false);
+        expect(result.errors).toBeDefined();
+      });
     });
   });
 });
