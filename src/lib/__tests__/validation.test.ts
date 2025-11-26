@@ -782,7 +782,7 @@ describe('Validation System', () => {
       it('should handle non-Zod errors gracefully', () => {
         const formData = null;
 
-        const result = extractFormData(formData, clientSchema);
+        const result = extractFormData(formData as any, clientSchema);
         expect(result.success).toBe(false);
         expect(result.errors).toBeDefined();
       });
