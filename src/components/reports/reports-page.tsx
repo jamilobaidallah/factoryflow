@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,16 +16,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Download, Calendar, TrendingUp, DollarSign, Package, Building2 } from "lucide-react";
 import { useUser } from "@/firebase/provider";
-import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit,
-} from "firebase/firestore";
-import { firestore } from "@/firebase/config";
 import SubcategoryAnalysis from "./subcategory-analysis";
 import {
   exportToExcel,
@@ -43,6 +33,7 @@ import { SalesAndCOGSTab } from "./tabs/SalesAndCOGSTab";
 import { FixedAssetsTab } from "./tabs/FixedAssetsTab";
 import { TrialBalanceTab } from "./tabs/TrialBalanceTab";
 import { useReportsCalculations } from "./hooks/useReportsCalculations";
+import { useReportsData } from "./hooks/useReportsData";
 
 interface LedgerEntry {
   id: string;
@@ -90,8 +81,6 @@ interface FixedAsset {
 
 export default function ReportsPage() {
   const { user } = useUser();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("income-statement");
 
   // Date range filters
@@ -102,103 +91,13 @@ export default function ReportsPage() {
   });
   const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
 
-  // Data states
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
-
-  // Fetch all data
-  const fetchReportData = useCallback(async () => {
-    if (!user) {return;}
-    setLoading(true);
-
-    try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-
-      // Fetch ledger entries (limit to 1000 to prevent memory issues)
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-      const ledgerQuery = query(
-        ledgerRef,
-        where("date", ">=", start),
-        where("date", "<=", end),
-        orderBy("date", "desc"),
-        limit(1000)
-      );
-      const ledgerSnapshot = await getDocs(ledgerQuery);
-      const ledgerData: LedgerEntry[] = [];
-      ledgerSnapshot.forEach((doc) => {
-        const data = doc.data();
-        ledgerData.push({
-          id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
-        } as LedgerEntry);
-      });
-      setLedgerEntries(ledgerData);
-
-      // Fetch payments (limit to 1000 to prevent memory issues)
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const paymentsQuery = query(
-        paymentsRef,
-        where("date", ">=", start),
-        where("date", "<=", end),
-        orderBy("date", "desc"),
-        limit(1000)
-      );
-      const paymentsSnapshot = await getDocs(paymentsQuery);
-      const paymentsData: Payment[] = [];
-      paymentsSnapshot.forEach((doc) => {
-        const data = doc.data();
-        paymentsData.push({
-          id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
-        } as Payment);
-      });
-      setPayments(paymentsData);
-
-      // Fetch inventory (limit to 500 items)
-      const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
-      const inventoryQuery = query(inventoryRef, limit(500));
-      const inventorySnapshot = await getDocs(inventoryQuery);
-      const inventoryData: InventoryItem[] = [];
-      inventorySnapshot.forEach((doc) => {
-        inventoryData.push({ id: doc.id, ...doc.data() } as InventoryItem);
-      });
-      setInventory(inventoryData);
-
-      // Fetch fixed assets (limit to 500 items)
-      const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
-      const assetsQuery = query(assetsRef, limit(500));
-      const assetsSnapshot = await getDocs(assetsQuery);
-      const assetsData: FixedAsset[] = [];
-      assetsSnapshot.forEach((doc) => {
-        assetsData.push({ id: doc.id, ...doc.data() } as FixedAsset);
-      });
-      setFixedAssets(assetsData);
-
-      toast({
-        title: "تم تحميل البيانات",
-        description: "تم تحميل بيانات التقارير بنجاح",
-      });
-    } catch (error) {
-      console.error("Error fetching report data:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تحميل البيانات",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [user, startDate, endDate, toast]);
-
-  useEffect(() => {
-    fetchReportData();
-  }, [fetchReportData]);
+  // Fetch all data using custom hook
+  const { loading, ledgerEntries, payments, inventory, fixedAssets, refetch } =
+    useReportsData({
+      userId: user?.uid || null,
+      startDate,
+      endDate,
+    });
 
   // Use the custom hook for all calculations
   const {
@@ -336,7 +235,7 @@ export default function ReportsPage() {
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
-            <Button onClick={fetchReportData} disabled={loading}>
+            <Button onClick={refetch} disabled={loading}>
               <Calendar className="w-4 h-4 ml-2" />
               {loading ? "جاري التحميل..." : "تحديث التقارير"}
             </Button>
