@@ -345,6 +345,9 @@ describe('useLedgerForm', () => {
         amount: 500,
         category: "مبيعات",
         subCategory: "خدمات",
+        associatedParty: "",
+        reference: "",
+        notes: "",
         date: new Date("2025-01-16"),
         createdAt: new Date("2025-01-16"),
       };
@@ -514,6 +517,9 @@ describe('useLedgerForm', () => {
         amount: 1000,
         category: "مبيعات",
         subCategory: "منتجات",
+        associatedParty: "عميل أ",
+        reference: "REF-001",
+        notes: "",
         date: new Date("2025-01-15"),
         createdAt: new Date("2025-01-15"),
       };

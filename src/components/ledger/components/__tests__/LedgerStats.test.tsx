@@ -17,6 +17,9 @@ describe('LedgerStats', () => {
     amount: 1000,
     category: 'مبيعات',
     subCategory: 'منتجات',
+    associatedParty: 'عميل أ',
+    reference: 'REF-001',
+    notes: '',
     date: new Date('2025-01-15'),
     createdAt: new Date('2025-01-15'),
   };
@@ -29,6 +32,9 @@ describe('LedgerStats', () => {
     amount: 500,
     category: 'مصروفات',
     subCategory: 'رواتب',
+    associatedParty: 'مورد أ',
+    reference: 'REF-002',
+    notes: '',
     date: new Date('2025-01-16'),
     createdAt: new Date('2025-01-16'),
   };

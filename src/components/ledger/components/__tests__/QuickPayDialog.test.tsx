@@ -44,13 +44,15 @@ describe('QuickPayDialog', () => {
     amount: 1000,
     category: 'مبيعات',
     subCategory: 'منتجات',
+    associatedParty: 'عميل أ',
+    reference: 'REF-001',
+    notes: '',
     date: new Date('2025-01-15'),
     createdAt: new Date('2025-01-15'),
     isARAPEntry: true,
     paymentStatus: 'unpaid',
     remainingBalance: 1000,
     totalPaid: 0,
-    associatedParty: 'عميل أ',
   };
 
   const mockPartiallyPaidEntry: LedgerEntry = {

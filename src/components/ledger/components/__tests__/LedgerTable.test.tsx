@@ -22,9 +22,11 @@ describe('LedgerTable', () => {
     amount: 1000,
     category: 'مبيعات',
     subCategory: 'منتجات',
+    associatedParty: 'عميل أ',
+    reference: 'REF-001',
+    notes: '',
     date: new Date('2025-01-15'),
     createdAt: new Date('2025-01-15'),
-    associatedParty: 'عميل أ',
   };
 
   const mockExpenseEntry: LedgerEntry = {
@@ -35,6 +37,9 @@ describe('LedgerTable', () => {
     amount: 500,
     category: 'مصروفات',
     subCategory: 'رواتب',
+    associatedParty: 'موظف أ',
+    reference: 'REF-002',
+    notes: '',
     date: new Date('2025-01-16'),
     createdAt: new Date('2025-01-16'),
   };
@@ -47,6 +52,9 @@ describe('LedgerTable', () => {
     amount: 2000,
     category: 'مبيعات',
     subCategory: 'خدمات',
+    associatedParty: 'عميل ب',
+    reference: 'REF-003',
+    notes: '',
     date: new Date('2025-01-17'),
     createdAt: new Date('2025-01-17'),
     isARAPEntry: true,
