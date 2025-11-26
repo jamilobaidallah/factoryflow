@@ -395,8 +395,8 @@ describe('LedgerTable', () => {
       );
 
       const buttons = screen.getAllByRole('button');
-      // For paid AR/AP entry, we should have only 3 buttons: view related, edit, delete
-      expect(buttons.length).toBe(3);
+      // For paid AR/AP entry, we should have 4 buttons: copy, view related, edit, delete (no quick pay)
+      expect(buttons.length).toBe(4);
     });
 
     it.skip('should not show quick pay button for non-AR/AP entries', () => {
@@ -411,8 +411,8 @@ describe('LedgerTable', () => {
       );
 
       const buttons = screen.getAllByRole('button');
-      // For non-AR/AP entry, we should have only 3 buttons: view related, edit, delete
-      expect(buttons.length).toBe(3);
+      // For non-AR/AP entry, we should have 4 buttons: copy, view related, edit, delete (no quick pay)
+      expect(buttons.length).toBe(4);
     });
   });
 

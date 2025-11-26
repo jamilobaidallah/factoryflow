@@ -111,29 +111,30 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         <DialogHeader>
           <DialogTitle>إضافة دفعة</DialogTitle>
           <DialogDescription>
-            {entry && (
-              <div className="space-y-2 mt-2">
-                <div className="text-sm">
-                  <span className="font-medium">المعاملة:</span> {entry.description}
-                </div>
-                <div className="text-sm">
-                  <span className="font-medium">المبلغ الإجمالي:</span> {entry.amount.toFixed(2)} دينار
-                </div>
-                <div className="text-sm">
-                  <span className="font-medium">المبلغ المتبقي:</span>{" "}
-                  <span className="text-red-600 font-bold">
-                    {entry.remainingBalance?.toFixed(2)} دينار
-                  </span>
-                </div>
-                {entry.totalPaid && entry.totalPaid > 0 && (
-                  <div className="text-sm">
-                    <span className="font-medium">المدفوع:</span> {entry.totalPaid.toFixed(2)} دينار
-                  </div>
-                )}
-              </div>
-            )}
+            إضافة دفعة جديدة للمعاملة
           </DialogDescription>
         </DialogHeader>
+        {entry && (
+          <div className="space-y-2 mb-4">
+            <div className="text-sm">
+              <span className="font-medium">المعاملة:</span> {entry.description}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium">المبلغ الإجمالي:</span> {entry.amount.toFixed(2)} دينار
+            </div>
+            <div className="text-sm">
+              <span className="font-medium">المبلغ المتبقي:</span>{" "}
+              <span className="text-red-600 font-bold">
+                {entry.remainingBalance?.toFixed(2)} دينار
+              </span>
+            </div>
+            {entry.totalPaid && entry.totalPaid > 0 && (
+              <div className="text-sm">
+                <span className="font-medium">المدفوع:</span> {entry.totalPaid.toFixed(2)} دينار
+              </div>
+            )}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="quickPayAmount">المبلغ المدفوع</Label>
