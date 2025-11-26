@@ -135,18 +135,19 @@ export function exportIncomeStatementToPDF(
 ): void {
   const doc = new jsPDF();
 
-  // Set Arabic font support (basic)
-  doc.setFont('helvetica');
-  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
 
   // Title
-  doc.text('Income Statement / قائمة الدخل', 105, 20, { align: 'center' });
-  doc.setFontSize(10);
+  doc.text('Income Statement', 105, 20, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
   doc.text(`Period: ${startDate} to ${endDate}`, 105, 30, { align: 'center' });
 
   // Revenues section
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('Revenues / الإيرادات', 20, 45);
+  doc.text('Revenues', 20, 45);
 
   const revenueData = data.revenues.map((item) => [
     item.category,
@@ -155,16 +156,20 @@ export function exportIncomeStatementToPDF(
 
   autoTable(doc, {
     startY: 50,
-    head: [['Category / الفئة', 'Amount / المبلغ']],
+    head: [['Category', 'Amount']],
     body: revenueData,
-    foot: [['Total Revenue / إجمالي الإيرادات', data.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
-    theme: 'grid',
+    foot: [['Total Revenue', data.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
+    theme: 'striped',
+    styles: { fontSize: 10, font: 'helvetica' },
+    headStyles: { fillColor: [46, 204, 113], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [39, 174, 96], textColor: 255, fontStyle: 'bold' },
   });
 
   // Expenses section
   const finalY = (doc as any).lastAutoTable.finalY || 50;
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('Expenses / المصروفات', 20, finalY + 15);
+  doc.text('Expenses', 20, finalY + 15);
 
   const expenseData = data.expenses.map((item) => [
     item.category,
@@ -173,17 +178,20 @@ export function exportIncomeStatementToPDF(
 
   autoTable(doc, {
     startY: finalY + 20,
-    head: [['Category / الفئة', 'Amount / المبلغ']],
+    head: [['Category', 'Amount']],
     body: expenseData,
-    foot: [['Total Expenses / إجمالي المصروفات', data.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
-    theme: 'grid',
+    foot: [['Total Expenses', data.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
+    theme: 'striped',
+    styles: { fontSize: 10, font: 'helvetica' },
+    headStyles: { fillColor: [231, 76, 60], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [192, 57, 43], textColor: 255, fontStyle: 'bold' },
   });
 
   // Net income
   const finalY2 = (doc as any).lastAutoTable.finalY || 100;
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  const netIncomeText = `Net Income / صافي الدخل: ${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const netIncomeText = `Net Income: ${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   doc.text(netIncomeText, 20, finalY2 + 15);
 
   // Save PDF
@@ -198,24 +206,25 @@ export function exportIncomeStatementToPDF(
 export function exportLedgerToPDF(entries: any[], filename: string = 'ledger-entries'): void {
   const doc = new jsPDF();
 
-  doc.setFont('helvetica');
-  doc.setFontSize(16);
-  doc.text('Ledger Entries / الحركات المالية', 105, 20, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('Ledger Entries', 105, 20, { align: 'center' });
 
   const tableData = entries.slice(0, 50).map((entry) => [
     entry.transactionId || '',
     entry.date instanceof Date ? entry.date.toLocaleDateString('en-US') : '',
-    entry.description?.substring(0, 30) || '',
     entry.type || '',
+    entry.category || '',
     entry.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0',
   ]);
 
   autoTable(doc, {
     startY: 30,
-    head: [['Transaction ID', 'Date', 'Description', 'Type', 'Amount']],
+    head: [['Transaction ID', 'Date', 'Type', 'Category', 'Amount']],
     body: tableData,
-    theme: 'grid',
-    styles: { fontSize: 8 },
+    theme: 'striped',
+    styles: { fontSize: 9, font: 'helvetica' },
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold' },
   });
 
   if (entries.length > 50) {
