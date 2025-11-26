@@ -37,7 +37,12 @@ export interface BackupData {
 export async function createBackup(userId: string): Promise<BackupData> {
   console.log('Starting backup for user:', userId);
 
-  const collections = ['ledger', 'payments', 'cheques', 'inventory', 'clients', 'partners', 'suppliers', 'assets'];
+  const collections = ['ledger', 'payments', 'cheques', 'inventory', 'clients', 'partners', 'fixedAssets', 'employees'];
+  const collectionMapping: { [key: string]: string } = {
+    'fixedAssets': 'assets',
+    'employees': 'suppliers' // Keep 'suppliers' key for backward compatibility
+  };
+
   const backupData: BackupData = {
     metadata: {
       createdAt: new Date().toISOString(),
@@ -60,7 +65,8 @@ export async function createBackup(userId: string): Promise<BackupData> {
   // Backup each collection
   for (const collectionName of collections) {
     try {
-      const collectionRef = collection(firestore, collectionName);
+      // Use correct user-specific path
+      const collectionRef = collection(firestore, `users/${userId}/${collectionName}`);
       const q = query(collectionRef);
       const snapshot = await getDocs(q);
 
@@ -83,7 +89,9 @@ export async function createBackup(userId: string): Promise<BackupData> {
         return serializedData;
       });
 
-      backupData.data[collectionName as keyof typeof backupData.data] = documents;
+      // Map collection names to backup data keys
+      const dataKey = collectionMapping[collectionName] || collectionName;
+      backupData.data[dataKey as keyof typeof backupData.data] = documents;
       backupData.metadata.totalDocuments += documents.length;
 
       console.log(`Backed up ${documents.length} documents from ${collectionName}`);
@@ -164,6 +172,12 @@ export async function restoreBackup(
   const totalCollections = collections.length;
   let processedCollections = 0;
 
+  // Reverse mapping from backup keys to Firestore collection names
+  const reverseMapping: { [key: string]: string } = {
+    'assets': 'fixedAssets',
+    'suppliers': 'employees'
+  };
+
   for (const collectionName of collections) {
     const documents = backupData.data[collectionName];
 
@@ -176,7 +190,9 @@ export async function restoreBackup(
       // If replace mode, we could delete existing docs first
       // For now, we'll just merge (add/update)
 
-      const collectionRef = collection(firestore, collectionName);
+      // Map backup keys to actual Firestore collection names
+      const actualCollectionName = reverseMapping[collectionName] || collectionName;
+      const collectionRef = collection(firestore, `users/${userId}/${actualCollectionName}`);
       const batchSize = 500; // Firestore batch limit
 
       for (let i = 0; i < documents.length; i += batchSize) {
