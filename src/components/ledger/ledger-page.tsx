@@ -52,6 +52,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { LedgerEntry, CATEGORIES } from "./utils/ledger-constants";
 import { getCategoryType, generateTransactionId } from "./utils/ledger-helpers";
 import { useLedgerData } from "./hooks/useLedgerData";
+import { useLedgerForm } from "./hooks/useLedgerForm";
+import { useLedgerOperations } from "./hooks/useLedgerOperations";
 import { QuickPayDialog } from "./components/QuickPayDialog";
 import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
@@ -84,546 +86,66 @@ export default function LedgerPage() {
   const [isQuickPayDialogOpen, setIsQuickPayDialogOpen] = useState(false);
   const [quickPayEntry, setQuickPayEntry] = useState<LedgerEntry | null>(null);
 
-  // Form states for adding related records
-  const [paymentFormData, setPaymentFormData] = useState({
-    amount: "",
-    notes: "",
-  });
+  // Use custom hooks for form state and operations
+  const formHook = useLedgerForm();
+  const { submitLedgerEntry, deleteLedgerEntry } = useLedgerOperations();
 
-  const [chequeFormData, setChequeFormData] = useState({
-    chequeNumber: "",
-    amount: "",
-    bankName: "",
-    dueDate: new Date().toISOString().split("T")[0],
-    status: "قيد الانتظار",
-    chequeType: "عادي",
-    chequeImage: null as File | null,
-  });
-
-  const [inventoryFormData, setInventoryFormData] = useState({
-    itemName: "",
-    quantity: "",
-    unit: "",
-    thickness: "",
-    width: "",
-    length: "",
-    notes: "",
-  });
-
-  const [formData, setFormData] = useState({
-    description: "",
-    amount: "",
-    category: "",
-    subCategory: "",
-    associatedParty: "",
-    ownerName: "",  // For capital transactions
-    date: new Date().toISOString().split("T")[0],
-    reference: "",
-    notes: "",
-    immediateSettlement: false,
-    trackARAP: false,  // Track Accounts Receivable/Payable
-  });
-
-  // New unified entry states
-  const [hasIncomingCheck, setHasIncomingCheck] = useState(false);
-  const [hasInventoryUpdate, setHasInventoryUpdate] = useState(false);
-  const [hasFixedAsset, setHasFixedAsset] = useState(false);
-  const [hasInitialPayment, setHasInitialPayment] = useState(false);
-  const [initialPaymentAmount, setInitialPaymentAmount] = useState("");
-
-  const [checkFormData, setCheckFormData] = useState({
-    chequeNumber: "",
-    chequeAmount: "",
-    bankName: "",
-    dueDate: new Date().toISOString().split("T")[0],
-  });
-
-  const [inventoryFormDataNew, setInventoryFormDataNew] = useState({
-    itemName: "",
-    quantity: "",
-    unit: "",
-    thickness: "",
-    width: "",
-    length: "",
-    shippingCost: "",
-    otherCosts: "",
-  });
-
-  const [fixedAssetFormData, setFixedAssetFormData] = useState({
-    assetName: "",
-    usefulLifeYears: "",
-    salvageValue: "",
-  });
+  // Destructure form state from hook
+  const {
+    formData,
+    setFormData,
+    hasIncomingCheck,
+    setHasIncomingCheck,
+    hasInventoryUpdate,
+    setHasInventoryUpdate,
+    hasFixedAsset,
+    setHasFixedAsset,
+    hasInitialPayment,
+    setHasInitialPayment,
+    initialPaymentAmount,
+    setInitialPaymentAmount,
+    checkFormData,
+    setCheckFormData,
+    inventoryFormData: inventoryFormDataNew,
+    setInventoryFormData: setInventoryFormDataNew,
+    fixedAssetFormData,
+    setFixedAssetFormData,
+    paymentFormData,
+    setPaymentFormData,
+    chequeRelatedFormData: chequeFormData,
+    setChequeRelatedFormData: setChequeFormData,
+    inventoryRelatedFormData: inventoryFormData,
+    setInventoryRelatedFormData: setInventoryFormData,
+    resetAllForms,
+    loadEntryForEdit,
+    resetPaymentForm,
+    resetChequeForm,
+    resetInventoryForm,
+  } = formHook;
 
   // Calculate current entry type based on selected category for UI rendering
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {return;}
-
-    // Auto-determine type from category (with special handling for owner withdrawals)
-    const entryType = getCategoryType(formData.category, formData.subCategory);
-
     setLoading(true);
     try {
-      if (editingEntry) {
-        const entryRef = doc(firestore, `users/${user.uid}/ledger`, editingEntry.id);
-        await updateDoc(entryRef, {
-          description: formData.description,
-          type: entryType,
-          amount: parseFloat(formData.amount),
-          category: formData.category,
-          subCategory: formData.subCategory,
-          associatedParty: formData.associatedParty,
-          ownerName: formData.ownerName || "",  // Include owner for capital transactions
-          date: new Date(formData.date),
-          reference: formData.reference,
-          notes: formData.notes,
-        });
-        toast({
-          title: "تم التحديث بنجاح",
-          description: "تم تحديث الحركة المالية",
-        });
-      } else {
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        const transactionId = generateTransactionId();
+      const success = await submitLedgerEntry(formData, editingEntry, {
+        hasIncomingCheck,
+        checkFormData,
+        hasInventoryUpdate,
+        inventoryFormData: inventoryFormDataNew,
+        hasFixedAsset,
+        fixedAssetFormData,
+        hasInitialPayment,
+        initialPaymentAmount,
+      });
 
-        // Validate amounts if check is included
-        if (hasIncomingCheck && formData.immediateSettlement) {
-          const totalAmount = parseFloat(formData.amount);
-          const checkAmount = parseFloat(checkFormData.chequeAmount);
-          if (checkAmount > totalAmount) {
-            toast({
-              title: "خطأ في المبلغ",
-              description: "مبلغ الشيك لا يمكن أن يكون أكبر من المبلغ الإجمالي",
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Validate initial payment amount
-        if (hasInitialPayment && initialPaymentAmount) {
-          const totalAmount = parseFloat(formData.amount);
-          const paymentAmt = parseFloat(initialPaymentAmount);
-          if (paymentAmt > totalAmount) {
-            toast({
-              title: "خطأ في المبلغ",
-              description: "مبلغ الدفعة الأولية لا يمكن أن يكون أكبر من المبلغ الإجمالي",
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
-          if (paymentAmt <= 0) {
-            toast({
-              title: "خطأ في المبلغ",
-              description: "يرجى إدخال مبلغ صحيح للدفعة الأولية",
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Use batch for atomic operations when check, inventory, fixed asset, or initial payment is included
-        if (hasIncomingCheck || hasInventoryUpdate || hasFixedAsset || hasInitialPayment) {
-          const batch = writeBatch(firestore);
-
-          // 1. Add ledger entry
-          const ledgerDocRef = doc(ledgerRef);
-          const totalAmount = parseFloat(formData.amount);
-
-          // Calculate initial payment status for AR/AP tracking
-          let initialPaid = 0;
-          let initialStatus: "paid" | "unpaid" | "partial" = "unpaid";
-
-          if (formData.trackARAP) {
-            // If immediate settlement, calculate what's paid
-            if (formData.immediateSettlement) {
-              const cashAmount = hasIncomingCheck
-                ? totalAmount - parseFloat(checkFormData.chequeAmount || "0")
-                : totalAmount;
-              initialPaid = cashAmount;
-              initialStatus = cashAmount >= totalAmount ? "paid" : "partial";
-            } else if (hasInitialPayment && initialPaymentAmount) {
-              // Initial partial payment
-              initialPaid = parseFloat(initialPaymentAmount);
-              initialStatus = initialPaid >= totalAmount ? "paid" : "partial";
-            }
-          } else if (formData.immediateSettlement) {
-            // Legacy behavior: immediate settlement = fully paid
-            initialPaid = totalAmount;
-            initialStatus = "paid";
-          }
-
-          batch.set(ledgerDocRef, {
-            transactionId: transactionId,
-            description: formData.description,
-            type: entryType,
-            amount: totalAmount,
-            category: formData.category,
-            subCategory: formData.subCategory,
-            associatedParty: formData.associatedParty,
-            ownerName: formData.ownerName || "",  // Include owner for capital transactions
-            date: new Date(formData.date),
-            reference: formData.reference,
-            notes: formData.notes,
-            createdAt: new Date(),
-            // AR/AP tracking fields
-            ...(formData.trackARAP && {
-              isARAPEntry: true,
-              totalPaid: initialPaid,
-              remainingBalance: totalAmount - initialPaid,
-              paymentStatus: initialStatus,
-            }),
-          });
-
-          // 2. Add incoming check if selected
-          if (hasIncomingCheck) {
-            const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-            const chequeDocRef = doc(chequesRef);
-            batch.set(chequeDocRef, {
-              chequeNumber: checkFormData.chequeNumber,
-              clientName: formData.associatedParty || "غير محدد",
-              amount: parseFloat(checkFormData.chequeAmount),
-              type: "وارد",
-              chequeType: "عادي",
-              status: "قيد الانتظار",
-              linkedTransactionId: transactionId,
-              issueDate: new Date(formData.date),
-              dueDate: new Date(checkFormData.dueDate),
-              bankName: checkFormData.bankName,
-              notes: `مرتبط بالمعاملة: ${formData.description}`,
-              createdAt: new Date(),
-            });
-
-            // Create payment record for the check (no cash movement)
-            const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-            const paymentDocRef = doc(paymentsRef);
-            batch.set(paymentDocRef, {
-              clientName: formData.associatedParty || "غير محدد",
-              amount: parseFloat(checkFormData.chequeAmount),
-              type: entryType === "دخل" ? "قبض" : "صرف",
-              linkedTransactionId: transactionId,
-              date: new Date(formData.date),
-              notes: `شيك ${entryType === "دخل" ? "وارد" : "صادر"} - ${formData.description}`,
-              createdAt: new Date(),
-              noCashMovement: true,
-            });
-          }
-
-          // 3. Add cash payment if immediate settlement is checked
-          if (formData.immediateSettlement) {
-            const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-            const paymentDocRef = doc(paymentsRef);
-            const cashAmount = hasIncomingCheck
-              ? parseFloat(formData.amount) - parseFloat(checkFormData.chequeAmount)
-              : parseFloat(formData.amount);
-
-            if (cashAmount > 0) {
-              batch.set(paymentDocRef, {
-                clientName: formData.associatedParty || "غير محدد",
-                amount: cashAmount,
-                type: entryType === "دخل" ? "قبض" : "صرف",
-                linkedTransactionId: transactionId,
-                date: new Date(formData.date),
-                notes: `تسوية فورية نقدية - ${formData.description}`,
-                category: formData.category,
-                subCategory: formData.subCategory,
-                createdAt: new Date(),
-              });
-            }
-          }
-
-          // 3b. Add initial partial payment if checked (for AR/AP tracking)
-          if (hasInitialPayment && initialPaymentAmount && formData.trackARAP) {
-            const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-            const paymentDocRef = doc(paymentsRef);
-            const paymentAmt = parseFloat(initialPaymentAmount);
-
-            if (paymentAmt > 0) {
-              batch.set(paymentDocRef, {
-                clientName: formData.associatedParty || "غير محدد",
-                amount: paymentAmt,
-                type: entryType === "دخل" ? "قبض" : "صرف",
-                linkedTransactionId: transactionId,
-                date: new Date(formData.date),
-                notes: `دفعة أولية - ${formData.description}`,
-                category: formData.category,
-                subCategory: formData.subCategory,
-                createdAt: new Date(),
-              });
-            }
-          }
-
-          // 4. Add inventory movement if selected
-          if (hasInventoryUpdate) {
-            // IMPORTANT: When you buy materials (expense), inventory INCREASES (دخول)
-            // When you sell products (income), inventory DECREASES (خروج)
-            const movementType = entryType === "مصروف" ? "دخول" : "خروج";
-            const quantityChange = parseFloat(inventoryFormDataNew.quantity);
-
-            // First, check if inventory item exists
-            const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
-            const itemQuery = query(inventoryRef, where("itemName", "==", inventoryFormDataNew.itemName));
-            const itemSnapshot = await getDocs(itemQuery);
-
-            let itemId = "";
-
-            if (!itemSnapshot.empty) {
-              // Item exists - update quantity
-              const existingItem = itemSnapshot.docs[0];
-              itemId = existingItem.id;
-              const currentQuantity = (existingItem.data() as any).quantity || 0;
-              const currentUnitPrice = (existingItem.data() as any).unitPrice || 0;
-              const newQuantity = movementType === "دخول"
-                ? currentQuantity + quantityChange
-                : currentQuantity - quantityChange;
-
-              // Validate we don't go negative
-              if (newQuantity < 0) {
-                toast({
-                  title: "خطأ في المخزون",
-                  description: `الكمية المتوفرة في المخزون (${currentQuantity}) غير كافية لإجراء عملية خروج بكمية ${quantityChange}`,
-                  variant: "destructive",
-                });
-                setLoading(false);
-                return;
-              }
-
-              const itemDocRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
-
-              // CRITICAL ACCOUNTING: Calculate weighted average cost when adding inventory
-              if (movementType === "دخول" && formData.amount) {
-                // Calculate new unit price from purchase amount
-                const purchaseUnitPrice = parseFloat(formData.amount) / quantityChange;
-
-                // Weighted Average Cost formula:
-                // New Unit Price = (Old Quantity × Old Price + New Quantity × New Price) / Total Quantity
-                const oldValue = currentQuantity * currentUnitPrice;
-                const newValue = quantityChange * purchaseUnitPrice;
-                const weightedAvgPrice = parseFloat(((oldValue + newValue) / newQuantity).toFixed(2));
-
-                batch.update(itemDocRef, {
-                  quantity: newQuantity,
-                  unitPrice: weightedAvgPrice,
-                  lastPurchasePrice: parseFloat(purchaseUnitPrice.toFixed(2)),
-                  lastPurchaseDate: new Date(),
-                  lastPurchaseAmount: formData.amount,
-                });
-              } else {
-                // Just update quantity (for sales or when no purchase amount)
-                batch.update(itemDocRef, {
-                  quantity: newQuantity,
-                });
-              }
-            } else {
-              // Item doesn't exist - create it
-              if (movementType === "خروج") {
-                toast({
-                  title: "خطأ في المخزون",
-                  description: `الصنف "${inventoryFormDataNew.itemName}" غير موجود في المخزون. لا يمكن إجراء عملية خروج`,
-                  variant: "destructive",
-                });
-                setLoading(false);
-                return;
-              }
-
-              // Calculate landed cost (purchase amount + shipping + other costs)
-              const shippingCost = inventoryFormDataNew.shippingCost ? parseFloat(inventoryFormDataNew.shippingCost) : 0;
-              const otherCosts = inventoryFormDataNew.otherCosts ? parseFloat(inventoryFormDataNew.otherCosts) : 0;
-              const purchaseAmount = formData.amount ? parseFloat(formData.amount) : 0;
-              const totalLandedCost = purchaseAmount + shippingCost + otherCosts;
-
-              // Calculate unit price from total landed cost and round to 2 decimals
-              const calculatedUnitPrice = totalLandedCost > 0 ? parseFloat((totalLandedCost / quantityChange).toFixed(2)) : 0;
-
-              const newItemRef = doc(inventoryRef);
-              itemId = newItemRef.id;
-              batch.set(newItemRef, {
-                itemName: inventoryFormDataNew.itemName,
-                category: formData.category || "غير مصنف",
-                quantity: quantityChange,
-                unit: inventoryFormDataNew.unit,
-                unitPrice: calculatedUnitPrice,
-                thickness: inventoryFormDataNew.thickness ? parseFloat(inventoryFormDataNew.thickness) : null,
-                width: inventoryFormDataNew.width ? parseFloat(inventoryFormDataNew.width) : null,
-                length: inventoryFormDataNew.length ? parseFloat(inventoryFormDataNew.length) : null,
-                minStock: 0,
-                location: "",
-                notes: `تم الإنشاء تلقائياً من المعاملة: ${formData.description}`,
-                createdAt: new Date(),
-                lastPurchasePrice: calculatedUnitPrice,
-                lastPurchaseDate: new Date(),
-                lastPurchaseAmount: totalLandedCost,
-              });
-            }
-
-            // Add movement record
-            const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
-            const movementDocRef = doc(movementsRef);
-            batch.set(movementDocRef, {
-              itemId: itemId,
-              itemName: inventoryFormDataNew.itemName,
-              type: movementType,
-              quantity: quantityChange,
-              unit: inventoryFormDataNew.unit,
-              thickness: inventoryFormDataNew.thickness ? parseFloat(inventoryFormDataNew.thickness) : null,
-              width: inventoryFormDataNew.width ? parseFloat(inventoryFormDataNew.width) : null,
-              length: inventoryFormDataNew.length ? parseFloat(inventoryFormDataNew.length) : null,
-              linkedTransactionId: transactionId,
-              notes: `مرتبط بالمعاملة: ${formData.description}`,
-              createdAt: new Date(),
-            });
-
-            // CRITICAL ACCOUNTING: Auto-record COGS when selling (إيراد + خروج)
-            if (entryType === "إيراد" && movementType === "خروج" && !itemSnapshot.empty) {
-              const existingItem = itemSnapshot.docs[0];
-              const unitCost = (existingItem.data() as any).unitPrice || 0;
-              const cogsAmount = quantityChange * unitCost;
-
-              // Create automatic COGS ledger entry
-              const cogsDocRef = doc(ledgerRef);
-              batch.set(cogsDocRef, {
-                transactionId: `COGS-${transactionId}`,
-                description: `تكلفة البضاعة المباعة - ${inventoryFormDataNew.itemName}`,
-                type: "مصروف",
-                amount: cogsAmount,
-                category: "تكلفة البضاعة المباعة (COGS)",
-                subCategory: "مبيعات",
-                date: new Date(formData.date),
-                linkedTransactionId: transactionId,
-                autoGenerated: true,
-                notes: `حساب تلقائي: ${quantityChange} × ${unitCost.toFixed(2)} = ${cogsAmount.toFixed(2)} دينار`,
-                createdAt: new Date(),
-              });
-            }
-          }
-
-          // 5. Add fixed asset if selected
-          if (hasFixedAsset) {
-            const fixedAssetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
-            const assetDocRef = doc(fixedAssetsRef);
-
-            // Generate asset number
-            const now = new Date();
-            const year = now.getFullYear();
-            const assetsSnapshot = await getDocs(fixedAssetsRef);
-            const assetNumber = `ASSET-${year}-${String(assetsSnapshot.size + 1).padStart(4, '0')}`;
-
-            // Calculate depreciation
-            const purchaseCost = parseFloat(formData.amount);
-            const salvageValue = parseFloat(fixedAssetFormData.salvageValue);
-            const usefulLifeMonths = parseFloat(fixedAssetFormData.usefulLifeYears) * 12;
-            const monthlyDepreciation = (purchaseCost - salvageValue) / usefulLifeMonths;
-
-            batch.set(assetDocRef, {
-              assetNumber: assetNumber,
-              assetName: fixedAssetFormData.assetName,
-              category: formData.subCategory || "غير محدد",
-              purchaseDate: new Date(formData.date),
-              purchaseCost: purchaseCost,
-              salvageValue: salvageValue,
-              linkedPurchaseTransactionId: transactionId,
-              depreciationMethod: "straight-line",
-              usefulLifeMonths: usefulLifeMonths,
-              monthlyDepreciation: monthlyDepreciation,
-              status: "active",
-              accumulatedDepreciation: 0,
-              bookValue: purchaseCost,
-              supplier: formData.associatedParty || "",
-              notes: formData.notes || "",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            });
-          }
-
-          // Commit batch
-          await batch.commit();
-
-          // Build success message
-          const successParts = ["حركة مالية"];
-          if (hasIncomingCheck) {successParts.push(entryType === "دخل" ? "شيك وارد" : "شيك صادر");}
-          if (hasInventoryUpdate) {successParts.push("حركة مخزون");}
-          if (hasFixedAsset) {successParts.push("أصل ثابت");}
-          if (formData.immediateSettlement) {successParts.push("تسوية فورية");}
-
-          toast({
-            title: "تمت الإضافة بنجاح",
-            description: `تم إضافة: ${successParts.join(" + ")} - رقم المعاملة: ${transactionId}`,
-          });
-        } else {
-          // Original simple add without batch
-          const totalAmount = parseFloat(formData.amount);
-
-          // Calculate initial payment status for AR/AP tracking
-          let initialPaid = 0;
-          let initialStatus: "paid" | "unpaid" | "partial" = "unpaid";
-
-          if (formData.trackARAP) {
-            if (formData.immediateSettlement) {
-              initialPaid = totalAmount;
-              initialStatus = "paid";
-            }
-          } else if (formData.immediateSettlement) {
-            initialPaid = totalAmount;
-            initialStatus = "paid";
-          }
-
-          await addDoc(ledgerRef, {
-            transactionId: transactionId,
-            description: formData.description,
-            type: entryType,
-            amount: totalAmount,
-            category: formData.category,
-            subCategory: formData.subCategory,
-            associatedParty: formData.associatedParty,
-            ownerName: formData.ownerName || "",  // Include owner for capital transactions
-            date: new Date(formData.date),
-            reference: formData.reference,
-            notes: formData.notes,
-            createdAt: new Date(),
-            // AR/AP tracking fields
-            ...(formData.trackARAP && {
-              isARAPEntry: true,
-              totalPaid: initialPaid,
-              remainingBalance: totalAmount - initialPaid,
-              paymentStatus: initialStatus,
-            }),
-          });
-
-          // If immediate settlement is checked, create payment record
-          if (formData.immediateSettlement) {
-            const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-            const paymentType = entryType === "دخل" ? "قبض" : "صرف";
-            await addDoc(paymentsRef, {
-              clientName: formData.associatedParty || "غير محدد",
-              amount: parseFloat(formData.amount),
-              type: paymentType,
-              linkedTransactionId: transactionId,
-              date: new Date(formData.date),
-              notes: `تسوية فورية - ${formData.description}`,
-              category: formData.category || null,
-              subCategory: formData.subCategory || null,
-              createdAt: new Date(),
-            });
-          }
-
-          toast({
-            title: "تمت الإضافة بنجاح",
-            description: formData.immediateSettlement
-              ? `تم إضافة حركة مالية وتسوية فورية - رقم المعاملة: ${transactionId}`
-              : `تم إضافة حركة مالية جديدة - رقم المعاملة: ${transactionId}`,
-          });
-        }
+      if (success) {
+        resetAllForms();
+        setEditingEntry(null);
+        setIsDialogOpen(false);
       }
-
-      resetForm();
-      setIsDialogOpen(false);
     } catch (error) {
       console.error("Error saving ledger entry:", error);
       toast({
@@ -638,19 +160,7 @@ export default function LedgerPage() {
 
   const handleEdit = (entry: LedgerEntry) => {
     setEditingEntry(entry);
-    setFormData({
-      description: entry.description || "",
-      amount: (entry.amount || 0).toString(),
-      category: entry.category || "",
-      subCategory: entry.subCategory || "",
-      associatedParty: entry.associatedParty || "",
-      ownerName: (entry as any).ownerName || "",  // Load owner for capital transactions
-      date: entry.date ? new Date(entry.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-      reference: entry.reference || "",
-      notes: entry.notes || "",
-      immediateSettlement: false,
-      trackARAP: false,
-    });
+    loadEntryForEdit(entry);
     setIsDialogOpen(true);
   };
 
@@ -798,6 +308,7 @@ export default function LedgerPage() {
       assetName: "",
       usefulLifeYears: "",
       salvageValue: "",
+      depreciationMethod: "straight-line",
     });
   };
 

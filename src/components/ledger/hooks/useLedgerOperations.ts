@@ -55,7 +55,7 @@ export interface InventoryFormData {
 export interface FixedAssetFormData {
   assetName: string;
   usefulLifeYears: string;
-  residualValue: string;
+  salvageValue: string;
   depreciationMethod: string;
 }
 
@@ -580,12 +580,12 @@ async function handleFixedAssetBatch(
 
   const purchaseAmount = parseFloat(formData.amount);
   const usefulLifeYears = parseFloat(fixedAssetFormData.usefulLifeYears);
-  const residualValue = fixedAssetFormData.residualValue
-    ? parseFloat(fixedAssetFormData.residualValue)
+  const salvageValue = fixedAssetFormData.salvageValue
+    ? parseFloat(fixedAssetFormData.salvageValue)
     : 0;
 
   // Calculate annual depreciation
-  const depreciableAmount = purchaseAmount - residualValue;
+  const depreciableAmount = purchaseAmount - salvageValue;
   const annualDepreciation =
     fixedAssetFormData.depreciationMethod === "declining"
       ? purchaseAmount * 0.2 // 20% declining balance
@@ -596,7 +596,7 @@ async function handleFixedAssetBatch(
     purchaseAmount: purchaseAmount,
     purchaseDate: new Date(formData.date),
     usefulLifeYears: usefulLifeYears,
-    residualValue: residualValue,
+    salvageValue: salvageValue,
     depreciationMethod: fixedAssetFormData.depreciationMethod,
     annualDepreciation: annualDepreciation,
     accumulatedDepreciation: 0,

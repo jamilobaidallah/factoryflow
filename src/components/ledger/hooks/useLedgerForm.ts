@@ -41,7 +41,7 @@ export interface InventoryFormState {
 export interface FixedAssetFormState {
   assetName: string;
   usefulLifeYears: string;
-  residualValue: string;
+  salvageValue: string;
   depreciationMethod: string;
 }
 
@@ -105,7 +105,7 @@ const initialInventoryFormData: InventoryFormState = {
 const initialFixedAssetFormData: FixedAssetFormState = {
   assetName: "",
   usefulLifeYears: "",
-  residualValue: "",
+  salvageValue: "",
   depreciationMethod: "straight-line",
 };
 
@@ -186,7 +186,7 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
         ? entry.date.toISOString().split("T")[0]
         : new Date(entry.date).toISOString().split("T")[0],
       associatedParty: entry.associatedParty || "",
-      ownerName: entry.ownerName || "",
+      ownerName: (entry as any).ownerName || "",
       reference: entry.reference || "",
       notes: entry.notes || "",
       trackARAP: entry.isARAPEntry || false,
