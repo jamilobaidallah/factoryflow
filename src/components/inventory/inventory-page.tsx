@@ -21,9 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Download } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { exportInventoryToExcel } from "@/lib/export-utils";
 import {
   collection,
   addDoc,
@@ -378,7 +379,19 @@ export default function InventoryPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>سجل المخزون ({items.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>سجل المخزون ({items.length})</CardTitle>
+            {items.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
+              >
+                <Download className="w-4 h-4 ml-2" />
+                Excel
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (

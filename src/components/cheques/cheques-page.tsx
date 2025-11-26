@@ -22,9 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, Download } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { exportChequesToExcel } from "@/lib/export-utils";
 import {
   collection,
   addDoc,
@@ -446,7 +447,19 @@ export default function ChequesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>سجل الشيكات ({cheques.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>سجل الشيكات ({cheques.length})</CardTitle>
+            {cheques.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportChequesToExcel(cheques, `الشيكات_${new Date().toISOString().split('T')[0]}`)}
+              >
+                <Download className="w-4 h-4 ml-2" />
+                Excel
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {cheques.length === 0 ? (

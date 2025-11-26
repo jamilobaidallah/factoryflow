@@ -29,10 +29,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Plus, Edit, Trash2, FolderOpen, DollarSign } from "lucide-react";
+import { Plus, Edit, Trash2, FolderOpen, DollarSign, Download } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
+import { exportLedgerToExcel, exportLedgerToPDF } from "@/lib/export-utils";
 import {
   collection,
   addDoc,
@@ -1157,7 +1158,29 @@ export default function LedgerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>سجل الحركات المالية ({entries.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>سجل الحركات المالية ({entries.length})</CardTitle>
+            {entries.length > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportLedgerToExcel(entries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                >
+                  <Download className="w-4 h-4 ml-2" />
+                  Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportLedgerToPDF(entries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                >
+                  <Download className="w-4 h-4 ml-2" />
+                  PDF
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {entries.length === 0 ? (

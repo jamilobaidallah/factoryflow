@@ -21,9 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Download } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { exportPaymentsToExcel } from "@/lib/export-utils";
 import {
   collection,
   addDoc,
@@ -425,7 +426,19 @@ export default function PaymentsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>سجل المدفوعات ({payments.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>سجل المدفوعات ({payments.length})</CardTitle>
+            {payments.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
+              >
+                <Download className="w-4 h-4 ml-2" />
+                Excel
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {payments.length === 0 ? (
