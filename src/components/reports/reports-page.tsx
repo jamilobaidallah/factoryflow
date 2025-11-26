@@ -42,6 +42,7 @@ import { InventoryTab } from "./tabs/InventoryTab";
 import { SalesAndCOGSTab } from "./tabs/SalesAndCOGSTab";
 import { FixedAssetsTab } from "./tabs/FixedAssetsTab";
 import { TrialBalanceTab } from "./tabs/TrialBalanceTab";
+import { useReportsCalculations } from "./hooks/useReportsCalculations";
 
 interface LedgerEntry {
   id: string;
@@ -199,201 +200,21 @@ export default function ReportsPage() {
     fetchReportData();
   }, [fetchReportData]);
 
-  // Calculate Owner Equity (separate from profit/loss)
-  const calculateOwnerEquity = () => {
-    let ownerInvestments = 0;
-    let ownerWithdrawals = 0;
-
-    ledgerEntries.forEach((entry) => {
-      // Exclude owner equity transactions (رأس المال) from P&L
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
-        if (entry.type === "دخل") {
-          ownerInvestments += entry.amount;
-        } else if (entry.type === "مصروف") {
-          ownerWithdrawals += entry.amount;
-        }
-      }
-    });
-
-    const netOwnerEquity = ownerInvestments - ownerWithdrawals;
-
-    return {
-      ownerInvestments,
-      ownerWithdrawals,
-      netOwnerEquity,
-    };
-  };
-
-  // Calculate Income Statement (EXCLUDING owner equity)
-  const calculateIncomeStatement = () => {
-    let totalRevenue = 0;
-    let totalExpenses = 0;
-    const revenueByCategory: { [key: string]: number } = {};
-    const expensesByCategory: { [key: string]: number } = {};
-
-    ledgerEntries.forEach((entry) => {
-      // EXCLUDE owner equity transactions from profit/loss
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
-        return; // Skip owner equity transactions
-      }
-
-      if (entry.type === "دخل") {
-        totalRevenue += entry.amount;
-        revenueByCategory[entry.category] =
-          (revenueByCategory[entry.category] || 0) + entry.amount;
-      } else if (entry.type === "مصروف") {
-        totalExpenses += entry.amount;
-        expensesByCategory[entry.category] =
-          (expensesByCategory[entry.category] || 0) + entry.amount;
-      }
-    });
-
-    const netProfit = totalRevenue - totalExpenses;
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-
-    return {
-      totalRevenue,
-      totalExpenses,
-      netProfit,
-      profitMargin,
-      revenueByCategory,
-      expensesByCategory,
-    };
-  };
-
-  // Calculate Cash Flow
-  const calculateCashFlow = () => {
-    let cashIn = 0;
-    let cashOut = 0;
-
-    // Count all payments from Payments collection
-    // Instant settlement automatically creates payment records, so we only need to count from payments
-    // EXCLUDE endorsed cheques and no-cash-movement payments to avoid double counting
-    payments.forEach((payment: any) => {
-      // Skip endorsed cheques and no-cash-movement payments
-      if (payment.isEndorsement || payment.noCashMovement) {
-        return;
-      }
-
-      if (payment.type === "قبض") {
-        cashIn += payment.amount;
-      } else if (payment.type === "صرف") {
-        cashOut += payment.amount;
-      }
-    });
-
-    const netCashFlow = cashIn - cashOut;
-
-    return { cashIn, cashOut, netCashFlow };
-  };
-
-  // Calculate AR/AP Aging
-  const calculateARAPAging = () => {
-    const receivables: LedgerEntry[] = [];
-    const payables: LedgerEntry[] = [];
-    let totalReceivables = 0;
-    let totalPayables = 0;
-
-    ledgerEntries.forEach((entry) => {
-      if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
-        if (entry.type === "دخل") {
-          receivables.push(entry);
-          totalReceivables += entry.remainingBalance || 0;
-        } else if (entry.type === "مصروف") {
-          payables.push(entry);
-          totalPayables += entry.remainingBalance || 0;
-        }
-      }
-    });
-
-    // Calculate aging buckets (days overdue)
-    const getAgingBucket = (date: Date) => {
-      const today = new Date();
-      const diffTime = today.getTime() - date.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays <= 30) {return "0-30 يوم";}
-      if (diffDays <= 60) {return "31-60 يوم";}
-      if (diffDays <= 90) {return "61-90 يوم";}
-      return "+90 يوم";
-    };
-
-    return {
-      receivables,
-      payables,
-      totalReceivables,
-      totalPayables,
-      getAgingBucket,
-    };
-  };
-
-  // Calculate Inventory Valuation
-  const calculateInventoryValuation = () => {
-    let totalValue = 0;
-    const totalItems = inventory.length;
-    let lowStockItems = 0;
-
-    const valuedInventory = inventory.map((item) => {
-      const value = item.quantity * item.unitPrice;
-      totalValue += value;
-      if (item.quantity < 10) {lowStockItems++;} // Arbitrary low stock threshold
-      return { ...item, totalValue: value };
-    });
-
-    return { valuedInventory, totalValue, totalItems, lowStockItems };
-  };
-
-  // Calculate Sales & COGS
-  const calculateSalesAndCOGS = () => {
-    let totalSales = 0;
-    let totalCOGS = 0;
-
-    ledgerEntries.forEach((entry) => {
-      if (entry.category === "إيرادات المبيعات") {
-        totalSales += entry.amount;
-      }
-      if (entry.category === "تكلفة البضاعة المباعة (COGS)") {
-        totalCOGS += entry.amount;
-      }
-    });
-
-    const grossProfit = totalSales - totalCOGS;
-    const grossMargin = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
-
-    return { totalSales, totalCOGS, grossProfit, grossMargin };
-  };
-
-  // Calculate Fixed Assets Summary
-  const calculateFixedAssetsSummary = () => {
-    let totalCost = 0;
-    let totalAccumulatedDepreciation = 0;
-    let totalBookValue = 0;
-    let monthlyDepreciation = 0;
-
-    const activeAssets = fixedAssets.filter((asset) => asset.status === "active");
-
-    activeAssets.forEach((asset) => {
-      totalCost += asset.purchaseCost;
-      totalAccumulatedDepreciation += asset.accumulatedDepreciation;
-      totalBookValue += asset.bookValue;
-      monthlyDepreciation += asset.monthlyDepreciation;
-    });
-
-    const assetsByCategory: { [key: string]: number } = {};
-    activeAssets.forEach((asset) => {
-      assetsByCategory[asset.category] =
-        (assetsByCategory[asset.category] || 0) + asset.bookValue;
-    });
-
-    return {
-      activeAssets,
-      totalCost,
-      totalAccumulatedDepreciation,
-      totalBookValue,
-      monthlyDepreciation,
-      assetsByCategory,
-    };
-  };
+  // Use the custom hook for all calculations
+  const {
+    ownerEquity,
+    incomeStatement,
+    cashFlow,
+    arapAging,
+    inventoryValuation,
+    salesAndCOGS,
+    fixedAssetsSummary,
+  } = useReportsCalculations({
+    ledgerEntries,
+    payments,
+    inventory,
+    fixedAssets,
+  });
 
   // Export functions
   const exportToCSV = (data: any[], filename: string) => {
@@ -479,14 +300,6 @@ export default function ReportsPage() {
       endDate
     );
   };
-
-  const incomeStatement = calculateIncomeStatement();
-  const ownerEquity = calculateOwnerEquity();
-  const cashFlow = calculateCashFlow();
-  const arapAging = calculateARAPAging();
-  const inventoryValuation = calculateInventoryValuation();
-  const salesAndCOGS = calculateSalesAndCOGS();
-  const fixedAssetsSummary = calculateFixedAssetsSummary();
 
   return (
     <div className="space-y-6">
