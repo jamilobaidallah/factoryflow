@@ -52,6 +52,9 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { LedgerEntry, CATEGORIES } from "./utils/ledger-constants";
 import { getCategoryType, generateTransactionId } from "./utils/ledger-helpers";
 import { useLedgerData } from "./hooks/useLedgerData";
+import { QuickPayDialog } from "./components/QuickPayDialog";
+import { LedgerStats } from "./components/LedgerStats";
+import { LedgerTable } from "./components/LedgerTable";
 
 // Interfaces and constants are now imported from utils
 
@@ -80,7 +83,6 @@ export default function LedgerPage() {
   // Quick payment dialog
   const [isQuickPayDialogOpen, setIsQuickPayDialogOpen] = useState(false);
   const [quickPayEntry, setQuickPayEntry] = useState<LedgerEntry | null>(null);
-  const [quickPayAmount, setQuickPayAmount] = useState("");
 
   // Form states for adding related records
   const [paymentFormData, setPaymentFormData] = useState({
@@ -811,82 +813,7 @@ export default function LedgerPage() {
 
   const openQuickPayDialog = (entry: LedgerEntry) => {
     setQuickPayEntry(entry);
-    setQuickPayAmount("");
     setIsQuickPayDialogOpen(true);
-  };
-
-  const handleQuickPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !quickPayEntry) {return;}
-
-    const paymentAmount = parseFloat(quickPayAmount);
-    if (isNaN(paymentAmount) || paymentAmount <= 0) {
-      toast({
-        title: "خطأ",
-        description: "يرجى إدخال مبلغ صحيح",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate payment amount
-    if (quickPayEntry.remainingBalance !== undefined && paymentAmount > quickPayEntry.remainingBalance) {
-      toast({
-        title: "خطأ في المبلغ",
-        description: `المبلغ المتبقي هو ${quickPayEntry.remainingBalance.toFixed(2)} دينار فقط`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const paymentType = quickPayEntry.type === "دخل" ? "قبض" : "صرف";
-
-      // Add payment record
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      await addDoc(paymentsRef, {
-        clientName: quickPayEntry.associatedParty || "غير محدد",
-        amount: paymentAmount,
-        type: paymentType,
-        linkedTransactionId: quickPayEntry.transactionId,
-        date: new Date(),
-        notes: `دفعة جزئية - ${quickPayEntry.description}`,
-        category: quickPayEntry.category,
-        subCategory: quickPayEntry.subCategory,
-        createdAt: new Date(),
-      });
-
-      // Update ledger entry AR/AP tracking
-      const newTotalPaid = (quickPayEntry.totalPaid || 0) + paymentAmount;
-      const newRemainingBalance = quickPayEntry.amount - newTotalPaid;
-      const newStatus = newRemainingBalance === 0 ? "paid" : newRemainingBalance < quickPayEntry.amount ? "partial" : "unpaid";
-
-      const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, quickPayEntry.id);
-      await updateDoc(ledgerEntryRef, {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      });
-
-      toast({
-        title: "تمت الإضافة بنجاح",
-        description: `تم إضافة دفعة بمبلغ ${paymentAmount.toFixed(2)} دينار`,
-      });
-
-      setIsQuickPayDialogOpen(false);
-      setQuickPayAmount("");
-      setQuickPayEntry(null);
-    } catch (error) {
-      console.error("Error adding quick payment:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إضافة الدفعة",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleAddPayment = async (e: React.FormEvent) => {
@@ -1100,16 +1027,6 @@ export default function LedgerPage() {
     }
   };
 
-  const totalIncome = entries
-    .filter((e) => e.type === "دخل")
-    .reduce((sum, e) => sum + (e.amount || 0), 0);
-
-  const totalExpenses = entries
-    .filter((e) => e.type === "مصروف")
-    .reduce((sum, e) => sum + (e.amount || 0), 0);
-
-  const netBalance = totalIncome - totalExpenses;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1123,38 +1040,7 @@ export default function LedgerPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي الدخل</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {totalIncome.toFixed(2)} دينار
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي المصروفات</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">
-              {totalExpenses.toFixed(2)} دينار
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>الرصيد الصافي</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-3xl font-bold ${netBalance >= 0 ? "text-blue-600" : "text-orange-600"}`}>
-              {netBalance.toFixed(2)} دينار
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <LedgerStats entries={entries} />
 
       <Card>
         <CardHeader>
@@ -1192,137 +1078,13 @@ export default function LedgerPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {entries.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد حركات مالية مسجلة. اضغط على &quot;إضافة حركة مالية&quot; للبدء.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>رقم المعاملة</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>الوصف</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead>التصنيف</TableHead>
-                  <TableHead>الفئة الفرعية</TableHead>
-                  <TableHead>الطرف المعني</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>حالة الدفع</TableHead>
-                  <TableHead>الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      {entry.transactionId ? (
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono text-xs">
-                            {entry.transactionId}
-                          </span>
-                          <CopyButton text={entry.transactionId} size="sm" />
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(entry.date).toLocaleDateString("ar-EG")}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {entry.description}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${entry.type === "دخل"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                          }`}
-                      >
-                        {entry.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>{entry.category}</TableCell>
-                    <TableCell>{entry.subCategory}</TableCell>
-                    <TableCell>{entry.associatedParty || "-"}</TableCell>
-                    <TableCell>{entry.amount || 0} دينار</TableCell>
-                    <TableCell>
-                      {entry.isARAPEntry ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${entry.paymentStatus === "paid"
-                                ? "bg-green-100 text-green-700"
-                                : entry.paymentStatus === "partial"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-red-100 text-red-700"
-                                }`}
-                            >
-                              {entry.paymentStatus === "paid"
-                                ? "مدفوع"
-                                : entry.paymentStatus === "partial"
-                                  ? "دفعة جزئية"
-                                  : "غير مدفوع"}
-                            </span>
-                          </div>
-                          {entry.paymentStatus !== "paid" && (
-                            <div className="text-xs text-gray-600">
-                              متبقي: {entry.remainingBalance?.toFixed(2)} دينار
-                            </div>
-                          )}
-                          {entry.totalPaid && entry.totalPaid > 0 && (
-                            <div className="text-xs text-gray-500">
-                              مدفوع: {entry.totalPaid.toFixed(2)} دينار
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => openQuickPayDialog(entry)}
-                            title="إضافة دفعة"
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <DollarSign className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openRelatedDialog(entry)}
-                          title="إدارة السجلات المرتبطة"
-                        >
-                          <FolderOpen className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(entry)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(entry.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <LedgerTable
+            entries={entries}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onQuickPay={openQuickPayDialog}
+            onViewRelated={openRelatedDialog}
+          />
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
@@ -2226,67 +1988,16 @@ export default function LedgerPage() {
       </Dialog>
 
       {/* Quick Payment Dialog */}
-      <Dialog open={isQuickPayDialogOpen} onOpenChange={setIsQuickPayDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>إضافة دفعة</DialogTitle>
-            <DialogDescription>
-              {quickPayEntry && (
-                <div className="space-y-2 mt-2">
-                  <div className="text-sm">
-                    <span className="font-medium">المعاملة:</span> {quickPayEntry.description}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">المبلغ الإجمالي:</span> {quickPayEntry.amount.toFixed(2)} دينار
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">المبلغ المتبقي:</span>{" "}
-                    <span className="text-red-600 font-bold">
-                      {quickPayEntry.remainingBalance?.toFixed(2)} دينار
-                    </span>
-                  </div>
-                  {quickPayEntry.totalPaid && quickPayEntry.totalPaid > 0 && (
-                    <div className="text-sm">
-                      <span className="font-medium">المدفوع:</span> {quickPayEntry.totalPaid.toFixed(2)} دينار
-                    </div>
-                  )}
-                </div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleQuickPayment} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="quickPayAmount">المبلغ المدفوع</Label>
-              <Input
-                id="quickPayAmount"
-                type="number"
-                step="0.01"
-                placeholder="أدخل المبلغ"
-                value={quickPayAmount}
-                onChange={(e) => setQuickPayAmount(e.target.value)}
-                required
-              />
-              {quickPayEntry && quickPayEntry.remainingBalance && (
-                <p className="text-xs text-gray-500">
-                  الحد الأقصى: {quickPayEntry.remainingBalance.toFixed(2)} دينار
-                </p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsQuickPayDialogOpen(false)}
-              >
-                إلغاء
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري الإضافة..." : "إضافة الدفعة"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <QuickPayDialog
+        isOpen={isQuickPayDialogOpen}
+        onClose={() => setIsQuickPayDialogOpen(false)}
+        entry={quickPayEntry}
+        onSuccess={() => {
+          // Data will refresh automatically via onSnapshot in useLedgerData
+          setIsQuickPayDialogOpen(false);
+          setQuickPayEntry(null);
+        }}
+      />
     </div>
   );
 }
