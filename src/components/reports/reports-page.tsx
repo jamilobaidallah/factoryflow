@@ -31,6 +31,7 @@ import {
   exportToExcel,
   exportLedgerToExcel,
   exportIncomeStatementToPDF,
+  exportIncomeStatementToHTML,
   exportBalanceSheetToPDF,
   exportLedgerToPDF,
 } from "@/lib/export-utils";
@@ -451,6 +452,27 @@ export default function ReportsPage() {
     );
   };
 
+  // Export income statement to HTML (printable with Arabic)
+  const exportIncomeStatementHTML = () => {
+    exportIncomeStatementToHTML(
+      {
+        revenues: Object.entries(incomeStatement.revenueByCategory).map(([category, amount]) => ({
+          category,
+          amount: typeof amount === 'number' ? amount : 0,
+        })),
+        expenses: Object.entries(incomeStatement.expensesByCategory).map(([category, amount]) => ({
+          category,
+          amount: typeof amount === 'number' ? amount : 0,
+        })),
+        totalRevenue: incomeStatement.totalRevenue,
+        totalExpenses: incomeStatement.totalExpenses,
+        netIncome: incomeStatement.netProfit,
+      },
+      startDate,
+      endDate
+    );
+  };
+
   const incomeStatement = calculateIncomeStatement();
   const ownerEquity = calculateOwnerEquity();
   const cashFlow = calculateCashFlow();
@@ -667,10 +689,19 @@ export default function ReportsPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={exportIncomeStatementHTML}
+                    title="طباعة باللغة العربية"
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    PDF عربي
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={exportIncomeStatementPDF}
                   >
                     <Download className="w-4 h-4 ml-2" />
-                    PDF
+                    PDF (EN)
                   </Button>
                 </div>
               </div>

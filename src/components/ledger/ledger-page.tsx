@@ -33,7 +33,7 @@ import { Plus, Edit, Trash2, FolderOpen, DollarSign, Download } from "lucide-rea
 import { useUser } from "@/firebase/provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
-import { exportLedgerToExcel, exportLedgerToPDF } from "@/lib/export-utils";
+import { exportLedgerToExcel, exportLedgerToPDF, exportLedgerToHTML } from "@/lib/export-utils";
 import {
   collection,
   addDoc,
@@ -1173,10 +1173,19 @@ export default function LedgerPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => exportLedgerToHTML(entries)}
+                  title="طباعة باللغة العربية"
+                >
+                  <Download className="w-4 h-4 ml-2" />
+                  PDF عربي
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => exportLedgerToPDF(entries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
                 >
                   <Download className="w-4 h-4 ml-2" />
-                  PDF
+                  PDF (EN)
                 </Button>
               </div>
             )}
