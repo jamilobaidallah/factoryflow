@@ -5,6 +5,45 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 /**
+ * Translate Arabic text to English for PDF export
+ * @param text Text to translate
+ * @returns English translation
+ */
+function translateToEnglish(text: string): string {
+  const translations: { [key: string]: string } = {
+    // Types
+    'دخل': 'Income',
+    'مصروف': 'Expense',
+    'حصيل': 'Collection',
+
+    // Categories
+    'شراء': 'Purchase',
+    'بيع': 'Sale',
+    'رأس المال': 'Capital',
+    'رأس مال مالك': 'Owner Capital',
+    'راتب عمل': 'Salary',
+    'مصاريف تشغيلية': 'Operating Expenses',
+    'مصاريف شخصية': 'Personal Expenses',
+    'تحويل بنكي الى فاضي': 'Bank Transfer to Fady',
+    'تحويل كليك من رضوان': 'Click Transfer from Radwan',
+    'تحويل مشترينا': 'Purchase Transfer',
+
+    // Payment methods
+    'نقدي': 'Cash',
+    'شيك': 'Check',
+    'تحويل': 'Transfer',
+
+    // Status
+    'مدفوع': 'Paid',
+    'معلق': 'Pending',
+    'ملغي': 'Cancelled',
+    'مكتمل': 'Completed',
+  };
+
+  return translations[text] || text;
+}
+
+/**
  * Export data to Excel file
  * @param data Array of objects to export
  * @param filename Name of the file (without extension)
@@ -150,7 +189,7 @@ export function exportIncomeStatementToPDF(
   doc.text('Revenues', 20, 45);
 
   const revenueData = data.revenues.map((item) => [
-    item.category,
+    translateToEnglish(item.category),
     item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
   ]);
 
@@ -172,7 +211,7 @@ export function exportIncomeStatementToPDF(
   doc.text('Expenses', 20, finalY + 15);
 
   const expenseData = data.expenses.map((item) => [
-    item.category,
+    translateToEnglish(item.category),
     item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
   ]);
 
@@ -213,8 +252,8 @@ export function exportLedgerToPDF(entries: any[], filename: string = 'ledger-ent
   const tableData = entries.slice(0, 50).map((entry) => [
     entry.transactionId || '',
     entry.date instanceof Date ? entry.date.toLocaleDateString('en-US') : '',
-    entry.type || '',
-    entry.category || '',
+    translateToEnglish(entry.type || ''),
+    translateToEnglish(entry.category || ''),
     entry.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0',
   ]);
 
