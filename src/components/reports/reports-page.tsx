@@ -23,9 +23,17 @@ import {
   where,
   getDocs,
   orderBy,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import SubcategoryAnalysis from "./subcategory-analysis";
+import {
+  exportToExcel,
+  exportLedgerToExcel,
+  exportIncomeStatementToPDF,
+  exportBalanceSheetToPDF,
+  exportLedgerToPDF,
+} from "@/lib/export-utils";
 
 interface LedgerEntry {
   id: string;
@@ -101,13 +109,14 @@ export default function ReportsPage() {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
-      // Fetch ledger entries
+      // Fetch ledger entries (limit to 1000 to prevent memory issues)
       const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
       const ledgerQuery = query(
         ledgerRef,
         where("date", ">=", start),
         where("date", "<=", end),
-        orderBy("date", "desc")
+        orderBy("date", "desc"),
+        limit(1000)
       );
       const ledgerSnapshot = await getDocs(ledgerQuery);
       const ledgerData: LedgerEntry[] = [];
@@ -121,13 +130,14 @@ export default function ReportsPage() {
       });
       setLedgerEntries(ledgerData);
 
-      // Fetch payments
+      // Fetch payments (limit to 1000 to prevent memory issues)
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const paymentsQuery = query(
         paymentsRef,
         where("date", ">=", start),
         where("date", "<=", end),
-        orderBy("date", "desc")
+        orderBy("date", "desc"),
+        limit(1000)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
       const paymentsData: Payment[] = [];
@@ -141,18 +151,20 @@ export default function ReportsPage() {
       });
       setPayments(paymentsData);
 
-      // Fetch inventory (no date filter)
+      // Fetch inventory (limit to 500 items)
       const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
-      const inventorySnapshot = await getDocs(inventoryRef);
+      const inventoryQuery = query(inventoryRef, limit(500));
+      const inventorySnapshot = await getDocs(inventoryQuery);
       const inventoryData: InventoryItem[] = [];
       inventorySnapshot.forEach((doc) => {
         inventoryData.push({ id: doc.id, ...doc.data() } as InventoryItem);
       });
       setInventory(inventoryData);
 
-      // Fetch fixed assets (no date filter)
+      // Fetch fixed assets (limit to 500 items)
       const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
-      const assetsSnapshot = await getDocs(assetsRef);
+      const assetsQuery = query(assetsRef, limit(500));
+      const assetsSnapshot = await getDocs(assetsQuery);
       const assetsData: FixedAsset[] = [];
       assetsSnapshot.forEach((doc) => {
         assetsData.push({ id: doc.id, ...doc.data() } as FixedAsset);
@@ -392,6 +404,53 @@ export default function ReportsPage() {
     return [headers, ...rows].join("\n");
   };
 
+  // Export income statement to Excel
+  const exportIncomeStatementToExcel = () => {
+    const revenueData = Object.entries(incomeStatement.revenueByCategory).map(([category, amount]) => ({
+      'الفئة': category,
+      'النوع': 'إيراد',
+      'المبلغ': amount,
+    }));
+
+    const expenseData = Object.entries(incomeStatement.expensesByCategory).map(([category, amount]) => ({
+      'الفئة': category,
+      'النوع': 'مصروف',
+      'المبلغ': amount,
+    }));
+
+    const allData = [
+      ...revenueData,
+      { 'الفئة': 'إجمالي الإيرادات', 'النوع': '', 'المبلغ': incomeStatement.totalRevenue },
+      ...expenseData,
+      { 'الفئة': 'إجمالي المصروفات', 'النوع': '', 'المبلغ': incomeStatement.totalExpenses },
+      { 'الفئة': 'صافي الدخل', 'النوع': '', 'المبلغ': incomeStatement.netProfit },
+    ];
+
+    exportToExcel(allData, `قائمة_الدخل_${startDate}_${endDate}`, 'قائمة الدخل');
+  };
+
+  // Export income statement to PDF
+  const exportIncomeStatementPDF = () => {
+    exportIncomeStatementToPDF(
+      {
+        revenues: Object.entries(incomeStatement.revenueByCategory).map(([category, amount]) => ({
+          category,
+          amount: typeof amount === 'number' ? amount : 0,
+        })),
+        expenses: Object.entries(incomeStatement.expensesByCategory).map(([category, amount]) => ({
+          category,
+          amount: typeof amount === 'number' ? amount : 0,
+        })),
+        totalRevenue: incomeStatement.totalRevenue,
+        totalExpenses: incomeStatement.totalExpenses,
+        netIncome: incomeStatement.netProfit,
+      },
+      startDate,
+      endDate,
+      `قائمة_الدخل_${startDate}_${endDate}`
+    );
+  };
+
   const incomeStatement = calculateIncomeStatement();
   const ownerEquity = calculateOwnerEquity();
   const cashFlow = calculateCashFlow();
@@ -576,26 +635,44 @@ export default function ReportsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>تفصيل الإيرادات والمصروفات</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    exportToCSV(
-                      [
-                        ...Object.entries(incomeStatement.revenueByCategory).map(
-                          ([cat, amt]) => ({ النوع: "إيراد", الفئة: cat, المبلغ: amt })
-                        ),
-                        ...Object.entries(incomeStatement.expensesByCategory).map(
-                          ([cat, amt]) => ({ النوع: "مصروف", الفئة: cat, المبلغ: amt })
-                        ),
-                      ],
-                      "income_statement"
-                    )
-                  }
-                >
-                  <Download className="w-4 h-4 ml-2" />
-                  تصدير CSV
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      exportToCSV(
+                        [
+                          ...Object.entries(incomeStatement.revenueByCategory).map(
+                            ([cat, amt]) => ({ النوع: "إيراد", الفئة: cat, المبلغ: amt })
+                          ),
+                          ...Object.entries(incomeStatement.expensesByCategory).map(
+                            ([cat, amt]) => ({ النوع: "مصروف", الفئة: cat, المبلغ: amt })
+                          ),
+                        ],
+                        "income_statement"
+                      )
+                    }
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportIncomeStatementToExcel}
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportIncomeStatementPDF}
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    PDF
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
