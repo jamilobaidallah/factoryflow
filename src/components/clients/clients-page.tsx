@@ -34,6 +34,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -86,7 +87,8 @@ export default function ClientsPage() {
     if (!user) return;
 
     const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-    const q = query(clientsRef, orderBy("createdAt", "desc"));
+    // Limit to 500 most recent clients to prevent performance issues
+    const q = query(clientsRef, orderBy("createdAt", "desc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const clientsData: Client[] = [];

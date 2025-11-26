@@ -36,6 +36,7 @@ import {
   where,
   getDocs,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -140,7 +141,8 @@ export default function FixedAssetsPage() {
     if (!user) {return;}
 
     const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
-    const q = query(assetsRef, orderBy("createdAt", "desc"));
+    // Limit to 500 most recent assets
+    const q = query(assetsRef, orderBy("createdAt", "desc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const assetsData: FixedAsset[] = [];

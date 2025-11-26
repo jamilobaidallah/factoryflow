@@ -79,7 +79,8 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         if (!user) {return;}
 
         const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-        const q = query(clientsRef, orderBy("name", "asc"));
+        // Limit to 500 clients for dropdown (reasonable for most businesses)
+        const q = query(clientsRef, orderBy("name", "asc"), limit(500));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const clientsData: { id: string; name: string }[] = [];
@@ -101,7 +102,8 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         if (!user) {return;}
 
         const partnersRef = collection(firestore, `users/${user.uid}/partners`);
-        const q = query(partnersRef, orderBy("name", "asc"));
+        // Limit to 100 partners for dropdown
+        const q = query(partnersRef, orderBy("name", "asc"), limit(100));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const partnersData: { id: string; name: string }[] = [];

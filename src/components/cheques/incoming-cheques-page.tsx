@@ -36,6 +36,7 @@ import {
   orderBy,
   where,
   getDocs,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -88,8 +89,8 @@ export default function IncomingChequesPage() {
     if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-    // Get all cheques and filter client-side to avoid composite index requirement
-    const q = query(chequesRef, orderBy("dueDate", "desc"));
+    // Limit to 1000 most recent cheques, filter client-side for type
+    const q = query(chequesRef, orderBy("dueDate", "desc"), limit(1000));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const chequesData: Cheque[] = [];

@@ -36,6 +36,7 @@ import {
   where,
   getDocs,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -112,7 +113,8 @@ export default function ProductionPage() {
     if (!user) {return;}
 
     const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
-    const q = query(inventoryRef, orderBy("itemName", "asc"));
+    // Limit to 500 inventory items for production dropdown
+    const q = query(inventoryRef, orderBy("itemName", "asc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const itemsData: InventoryItem[] = [];
@@ -134,7 +136,8 @@ export default function ProductionPage() {
     if (!user) {return;}
 
     const ordersRef = collection(firestore, `users/${user.uid}/production_orders`);
-    const q = query(ordersRef, orderBy("date", "desc"));
+    // Limit to 500 most recent production orders
+    const q = query(ordersRef, orderBy("date", "desc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData: ProductionOrder[] = [];

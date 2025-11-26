@@ -34,6 +34,7 @@ import {
   query,
   orderBy,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -108,7 +109,8 @@ export default function EmployeesPage() {
     if (!user) {return;}
 
     const employeesRef = collection(firestore, `users/${user.uid}/employees`);
-    const q = query(employeesRef, orderBy("name", "asc"));
+    // Limit to 500 employees (reasonable for most businesses)
+    const q = query(employeesRef, orderBy("name", "asc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const employeesData: Employee[] = [];
@@ -132,7 +134,8 @@ export default function EmployeesPage() {
     if (!user) {return;}
 
     const historyRef = collection(firestore, `users/${user.uid}/salary_history`);
-    const q = query(historyRef, orderBy("effectiveDate", "desc"));
+    // Limit to 1000 most recent salary changes
+    const q = query(historyRef, orderBy("effectiveDate", "desc"), limit(1000));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const historyData: SalaryHistory[] = [];
@@ -156,7 +159,8 @@ export default function EmployeesPage() {
     if (!user) {return;}
 
     const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
-    const q = query(payrollRef, orderBy("month", "desc"));
+    // Limit to last 24 months of payroll (2 years)
+    const q = query(payrollRef, orderBy("month", "desc"), limit(24));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const payrollData: PayrollEntry[] = [];

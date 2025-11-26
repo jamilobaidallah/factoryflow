@@ -33,6 +33,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import PartnersEquityReport from "./partners-equity-report";
@@ -70,7 +71,8 @@ export default function PartnersPage() {
     if (!user) {return;}
 
     const partnersRef = collection(firestore, `users/${user.uid}/partners`);
-    const q = query(partnersRef, orderBy("name", "asc"));
+    // Limit to 100 partners (reasonable for most businesses)
+    const q = query(partnersRef, orderBy("name", "asc"), limit(100));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const partnersData: Partner[] = [];

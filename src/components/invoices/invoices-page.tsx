@@ -34,6 +34,7 @@ import {
   query,
   orderBy,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -91,7 +92,8 @@ export default function InvoicesPage() {
     if (!user) {return;}
 
     const invoicesRef = collection(firestore, `users/${user.uid}/invoices`);
-    const q = query(invoicesRef, orderBy("invoiceDate", "desc"));
+    // Limit to 1000 most recent invoices
+    const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(1000));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const invoicesData: Invoice[] = [];
