@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ValidatedInput } from "@/components/ui/validated-input";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -21,8 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { Plus, Edit, Trash2, Eye } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -36,22 +36,6 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
-
-// Import validation utilities
-import {
-  clientSchema,
-  type ClientInput,
-  checkDuplicateClient,
-  parseNumericInput,
-  sanitizeString,
-} from "@/lib/validation";
-import {
-  handleError,
-  getErrorTitle,
-  getSuccessMessage,
-  logError,
-} from "@/lib/error-handling";
-import { z } from "zod";
 
 interface Client {
   id: string;
@@ -71,7 +55,6 @@ export default function ClientsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -83,7 +66,7 @@ export default function ClientsPage() {
 
   // Real-time data fetching
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const clientsRef = collection(firestore, `users/${user.uid}/clients`);
     const q = query(clientsRef, orderBy("createdAt", "desc"));
@@ -104,124 +87,49 @@ export default function ClientsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // Validate form data in real-time
-  const validateForm = (data: typeof formData): boolean => {
-    const errors: Record<string, string> = {};
-
-    // Parse balance
-    const balanceNum = parseNumericInput(data.balance);
-    if (balanceNum === null) {
-      errors.balance = "يجب إدخال رقم صحيح";
-    }
-
-    // Prepare data for Zod validation
-    const clientData: ClientInput = {
-      name: sanitizeString(data.name),
-      phone: data.phone.trim(),
-      email: data.email.trim(),
-      address: data.address.trim(),
-      balance: balanceNum ?? 0,
-    };
-
-    // Validate with Zod schema
-    try {
-      clientSchema.parse(clientData);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        error.errors.forEach((err) => {
-          const field = err.path[0] as string;
-          errors[field] = err.message;
-        });
-      }
-    }
-
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    // Validate form
-    if (!validateForm(formData)) {
-      toast({
-        title: "خطأ في البيانات",
-        description: "يرجى تصحيح الأخطاء والمحاولة مرة أخرى",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!user) {return;}
 
     setLoading(true);
-
     try {
-      // Check for duplicate name
-      const isDuplicate = await checkDuplicateClient(
-        formData.name,
-        user.uid,
-        editingClient?.id
-      );
-
-      if (isDuplicate) {
-        toast({
-          title: "عميل مكرر",
-          description: "يوجد عميل بنفس الاسم مسبقاً",
-          variant: "destructive",
-        });
-        setValidationErrors({ name: "يوجد عميل بنفس الاسم مسبقاً" });
-        setLoading(false);
-        return;
-      }
-
-      // Parse and validate data
-      const balanceNum = parseNumericInput(formData.balance) ?? 0;
-
-      const clientData: ClientInput = {
-        name: sanitizeString(formData.name),
-        phone: formData.phone.trim(),
-        email: formData.email.trim(),
-        address: formData.address.trim(),
-        balance: balanceNum,
-      };
-
-      // Final validation with Zod
-      const validated = clientSchema.parse(clientData);
-
       if (editingClient) {
         // Update existing client
         const clientRef = doc(firestore, `users/${user.uid}/clients`, editingClient.id);
-        await updateDoc(clientRef, validated);
-
-        const successMsg = getSuccessMessage('update', 'العميل');
+        await updateDoc(clientRef, {
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address,
+          balance: parseFloat(formData.balance),
+        });
         toast({
-          title: successMsg.title,
-          description: successMsg.description,
+          title: "تم التحديث بنجاح",
+          description: "تم تحديث بيانات العميل",
         });
       } else {
         // Add new client
         const clientsRef = collection(firestore, `users/${user.uid}/clients`);
         await addDoc(clientsRef, {
-          ...validated,
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address,
+          balance: parseFloat(formData.balance),
           createdAt: new Date(),
         });
-
-        const successMsg = getSuccessMessage('create', 'العميل');
         toast({
-          title: successMsg.title,
-          description: successMsg.description,
+          title: "تمت الإضافة بنجاح",
+          description: "تم إضافة عميل جديد",
         });
       }
 
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
-      const appError = handleError(error);
-      logError(appError, { operation: 'saveClient', formData }, user?.uid);
-
       toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
+        title: "خطأ",
+        description: "حدث خطأ أثناء حفظ البيانات",
         variant: "destructive",
       });
     } finally {
@@ -238,30 +146,24 @@ export default function ClientsPage() {
       address: client.address || "",
       balance: (client.balance || 0).toString(),
     });
-    setValidationErrors({});
     setIsDialogOpen(true);
   };
 
   const handleDelete = async (clientId: string) => {
-    if (!user) return;
-    if (!confirm("هل أنت متأكد من حذف هذا العميل؟")) return;
+    if (!user) {return;}
+    if (!confirm("هل أنت متأكد من حذف هذا العميل؟")) {return;}
 
     try {
       const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
       await deleteDoc(clientRef);
-
-      const successMsg = getSuccessMessage('delete', 'العميل');
       toast({
-        title: successMsg.title,
-        description: successMsg.description,
+        title: "تم الحذف",
+        description: "تم حذف العميل بنجاح",
       });
     } catch (error) {
-      const appError = handleError(error);
-      logError(appError, { operation: 'deleteClient', clientId }, user?.uid);
-
       toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
+        title: "خطأ",
+        description: "حدث خطأ أثناء الحذف",
         variant: "destructive",
       });
     }
@@ -275,7 +177,6 @@ export default function ClientsPage() {
       address: "",
       balance: "0",
     });
-    setValidationErrors({});
     setEditingClient(null);
   };
 
@@ -360,7 +261,7 @@ export default function ClientsPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
@@ -371,78 +272,69 @@ export default function ClientsPage() {
                 : "أدخل بيانات العميل الجديد أدناه"}
             </DialogDescription>
           </DialogHeader>
-
-          {Object.keys(validationErrors).length > 0 && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                يرجى تصحيح الأخطاء أدناه
-              </AlertDescription>
-            </Alert>
-          )}
-
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <ValidatedInput
-                label="الاسم"
-                name="name"
-                value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value })}
-                required
-                error={validationErrors.name}
-                hint="اسم العميل الكامل"
-                maxLength={100}
-              />
-
-              <ValidatedInput
-                label="رقم الهاتف"
-                name="phone"
-                value={formData.phone}
-                onChange={(value) => setFormData({ ...formData, phone: value })}
-                error={validationErrors.phone}
-                hint="رقم من 7 إلى 20 خانة"
-                maxLength={20}
-              />
-
-              <ValidatedInput
-                label="البريد الإلكتروني"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={(value) => setFormData({ ...formData, email: value })}
-                error={validationErrors.email}
-                hint="اختياري"
-              />
-
-              <ValidatedInput
-                label="العنوان"
-                name="address"
-                value={formData.address}
-                onChange={(value) => setFormData({ ...formData, address: value })}
-                error={validationErrors.address}
-                hint="اختياري"
-                maxLength={200}
-              />
-
-              <ValidatedInput
-                label="الرصيد الافتتاحي (دينار)"
-                name="balance"
-                type="number"
-                value={formData.balance}
-                onChange={(value) => setFormData({ ...formData, balance: value })}
-                error={validationErrors.balance}
-                hint="الرصيد عند إنشاء الحساب (افتراضي: 0)"
-                showSuccessIndicator={false}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="name">الاسم</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">رقم الهاتف</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">العنوان</Label>
+                <Input
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="balance">الرصيد الافتتاحي (دينار)</Label>
+                <Input
+                  id="balance"
+                  type="number"
+                  step="0.01"
+                  value={formData.balance}
+                  onChange={(e) =>
+                    setFormData({ ...formData, balance: e.target.value })
+                  }
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setIsDialogOpen(false);
-                  resetForm();
-                }}
+                onClick={() => setIsDialogOpen(false)}
               >
                 إلغاء
               </Button>
