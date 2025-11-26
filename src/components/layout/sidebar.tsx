@@ -20,6 +20,7 @@ import {
   Receipt,
   Search,
   Users2,
+  Database,
 } from "lucide-react";
 
 const menuItems = [
@@ -92,6 +93,11 @@ const menuItems = [
     title: "التقارير",
     href: "/reports",
     icon: BarChart3,
+  },
+  {
+    title: "النسخ الاحتياطي",
+    href: "/backup",
+    icon: Database,
   },
 ];
 
