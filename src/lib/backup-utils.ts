@@ -264,6 +264,31 @@ export async function restoreBackup(
 }
 
 /**
+ * Create an automatic backup before restore operation
+ * This creates a safety backup of current data before restoring from a file
+ * @param userId User ID to backup data for
+ * @param download Whether to automatically download the backup (default: true)
+ * @returns Backup data object
+ */
+export async function createAutoBackupBeforeRestore(
+  userId: string,
+  download: boolean = true
+): Promise<BackupData> {
+  console.log('Creating auto-backup before restore for user:', userId);
+
+  const backupData = await createBackup(userId);
+
+  if (download) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `factoryflow_auto_backup_before_restore_${timestamp}.json`;
+    downloadBackup(backupData, filename);
+    console.log('Auto-backup downloaded:', filename);
+  }
+
+  return backupData;
+}
+
+/**
  * Parse uploaded backup file
  * @param file File object from input
  * @returns Parsed backup data
