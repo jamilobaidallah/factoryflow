@@ -89,7 +89,6 @@ const { __mocks__: mocks } = firestore as any;
 describe('Backup Utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    console.log = jest.fn();
     console.error = jest.fn();
     // Default: return empty docs for getDocs
     mocks.mockGetDocs.mockResolvedValue({ docs: [] });
@@ -341,12 +340,6 @@ describe('Backup Utilities', () => {
       await expect(restoreBackup(invalidBackup, 'test-user-id')).rejects.toThrow();
     });
 
-    it('should log completion message', async () => {
-      await restoreBackup(validBackup, 'test-user-id');
-
-      expect(console.log).toHaveBeenCalledWith('Restore completed successfully');
-    });
-
     it('should call progress with 100% at completion', async () => {
       const onProgress = jest.fn();
 
@@ -440,12 +433,6 @@ describe('Backup Utilities', () => {
       // Verify download was triggered
       expect(mockCreateObjectURL).toHaveBeenCalled();
       expect(mockClick).toHaveBeenCalled();
-
-      // Verify log message
-      expect(console.log).toHaveBeenCalledWith(
-        'Creating auto-backup before restore for user:',
-        'test-user-id'
-      );
     });
 
     it('should skip download when download parameter is false', async () => {
@@ -465,15 +452,6 @@ describe('Backup Utilities', () => {
       expect(result.metadata).toBeDefined();
       expect(result.data).toBeDefined();
       expect(result.metadata.version).toBe('1.0.0');
-    });
-
-    it('should log download filename when download is enabled', async () => {
-      await createAutoBackupBeforeRestore('test-user-id', true);
-
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('Auto-backup downloaded:'),
-        expect.stringContaining('factoryflow_auto_backup_before_restore_')
-      );
     });
   });
 });

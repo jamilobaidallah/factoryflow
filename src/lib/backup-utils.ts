@@ -36,8 +36,6 @@ export interface BackupData {
  * @returns Backup data object
  */
 export async function createBackup(userId: string): Promise<BackupData> {
-  console.log('Starting backup for user:', userId);
-
   const collections = ['ledger', 'payments', 'cheques', 'inventory', 'clients', 'partners', 'fixedAssets', 'employees'];
   const collectionMapping: { [key: string]: string } = {
     'fixedAssets': 'assets',
@@ -94,15 +92,12 @@ export async function createBackup(userId: string): Promise<BackupData> {
       const dataKey = collectionMapping[collectionName] || collectionName;
       backupData.data[dataKey as keyof typeof backupData.data] = documents;
       backupData.metadata.totalDocuments += documents.length;
-
-      console.log(`Backed up ${documents.length} documents from ${collectionName}`);
     } catch (error) {
       console.error(`Error backing up ${collectionName}:`, error);
       throw new Error(`Failed to backup ${collectionName}: ${error}`);
     }
   }
 
-  console.log('Backup completed:', backupData.metadata);
   return backupData;
 }
 
@@ -164,8 +159,6 @@ export async function restoreBackup(
   mode: 'replace' | 'merge' = 'merge',
   onProgress?: (progress: number, message: string) => void
 ): Promise<void> {
-  console.log(`Starting restore in ${mode} mode for user:`, userId);
-
   // Validate backup first
   validateBackup(backupData);
 
@@ -206,8 +199,6 @@ export async function restoreBackup(
           deleteDoc(docSnapshot.ref)
         );
         await Promise.all(deletePromises);
-
-        console.log(`Deleted ${existingDocs.docs.length} existing documents from ${actualCollectionName}`);
       }
       const batchSize = 500; // Firestore batch limit
 
@@ -245,7 +236,6 @@ export async function restoreBackup(
       }
 
       processedCollections++;
-      console.log(`Restored ${documents.length} documents to ${collectionName}`);
 
       if (onProgress) {
         const progress = Math.round((processedCollections / totalCollections) * 100);
@@ -257,7 +247,6 @@ export async function restoreBackup(
     }
   }
 
-  console.log('Restore completed successfully');
   if (onProgress) {
     onProgress(100, 'Restore completed!');
   }
@@ -274,15 +263,12 @@ export async function createAutoBackupBeforeRestore(
   userId: string,
   download: boolean = true
 ): Promise<BackupData> {
-  console.log('Creating auto-backup before restore for user:', userId);
-
   const backupData = await createBackup(userId);
 
   if (download) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `factoryflow_auto_backup_before_restore_${timestamp}.json`;
     downloadBackup(backupData, filename);
-    console.log('Auto-backup downloaded:', filename);
   }
 
   return backupData;
