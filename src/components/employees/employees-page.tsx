@@ -26,6 +26,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import {
   collection,
   addDoc,
@@ -244,9 +245,10 @@ export default function EmployeesPage() {
       resetEmployeeForm();
       setIsEmployeeDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -269,9 +271,10 @@ export default function EmployeesPage() {
             description: "تم حذف الموظف بنجاح",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
@@ -364,9 +367,10 @@ export default function EmployeesPage() {
           // Reset payroll data
           setPayrollData({});
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء معالجة الرواتب",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         } finally {
@@ -433,9 +437,10 @@ export default function EmployeesPage() {
         description: `تم تسجيل دفع راتب ${payrollEntry.employeeName}`,
       });
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تسجيل الدفع",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {

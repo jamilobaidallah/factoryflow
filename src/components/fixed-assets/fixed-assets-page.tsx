@@ -25,6 +25,7 @@ import { Plus, Edit, Trash2, TrendingDown, Calendar, FileText } from "lucide-rea
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import {
   collection,
   addDoc,
@@ -240,9 +241,10 @@ export default function FixedAssetsPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -375,10 +377,10 @@ export default function FixedAssetsPage() {
           });
           setIsDepreciationDialogOpen(false);
         } catch (error) {
-          console.error("Error running depreciation:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء تسجيل الاستهلاك",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         } finally {
@@ -421,9 +423,10 @@ export default function FixedAssetsPage() {
             description: "تم حذف الأصل الثابت بنجاح",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }

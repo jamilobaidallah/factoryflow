@@ -25,6 +25,7 @@ import { Plus, Edit, Trash2, Users } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import {
   collection,
   addDoc,
@@ -149,9 +150,10 @@ export default function PartnersPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -187,9 +189,10 @@ export default function PartnersPage() {
             description: "تم حذف الشريك بنجاح",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }

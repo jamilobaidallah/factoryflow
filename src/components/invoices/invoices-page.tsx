@@ -25,6 +25,7 @@ import { Plus, Edit, Trash2, Download, Eye, Send } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import {
   collection,
   addDoc,
@@ -217,10 +218,10 @@ export default function InvoicesPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
-      console.error("Error saving invoice:", error);
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ الفاتورة",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -257,9 +258,10 @@ export default function InvoicesPage() {
             description: "تم حذف الفاتورة بنجاح",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
@@ -304,9 +306,10 @@ export default function InvoicesPage() {
         description: `تم تحديث حالة الفاتورة إلى: ${getStatusLabel(newStatus)}`,
       });
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تحديث الحالة",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     }

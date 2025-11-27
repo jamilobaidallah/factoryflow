@@ -26,6 +26,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcel } from "@/lib/export-utils";
 import {
   collection,
@@ -192,9 +193,10 @@ export default function InventoryPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -249,9 +251,10 @@ export default function InventoryPage() {
       setSelectedItem(null);
       setMovementData({ type: "دخول", quantity: "", linkedTransactionId: "", notes: "" });
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تسجيل الحركة",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -298,9 +301,10 @@ export default function InventoryPage() {
             description: "تم حذف العنصر من المخزون بنجاح",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
