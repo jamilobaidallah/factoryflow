@@ -291,10 +291,6 @@ export async function retryOperation<T>(
       // Calculate delay with optional exponential backoff
       const delay = backoff ? delayMs * Math.pow(2, attempt - 1) : delayMs;
 
-      // Log retry attempt
-      // eslint-disable-next-line no-console
-      console.log(`Retrying operation (attempt ${attempt}/${maxAttempts}) after ${delay}ms...`);
-
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, delay));
     }
