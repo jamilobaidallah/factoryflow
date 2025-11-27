@@ -11,7 +11,15 @@ import {
   reverseARAPOnPaymentDelete,
 } from '../arap-utils';
 import { PAYMENT_STATUSES } from '../definitions';
-import { Firestore } from 'firebase/firestore';
+import {
+  Firestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+} from 'firebase/firestore';
 
 // Mock Firebase Firestore
 jest.mock('firebase/firestore', () => ({
@@ -22,15 +30,6 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: jest.fn(),
   doc: jest.fn(),
 }));
-
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  doc,
-} from 'firebase/firestore';
 
 const mockCollection = collection as jest.Mock;
 const mockQuery = query as jest.Mock;
