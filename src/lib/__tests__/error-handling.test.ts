@@ -496,7 +496,7 @@ describe('Error Handling System', () => {
     it('should log errors in development mode', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const originalNodeEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
 
       const error: AppError = {
         type: ErrorType.FIREBASE,
@@ -507,14 +507,14 @@ describe('Error Handling System', () => {
 
       expect(consoleSpy).toHaveBeenCalled();
 
-      process.env.NODE_ENV = originalNodeEnv;
+      (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
       consoleSpy.mockRestore();
     });
 
     it('should not log in production mode', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const originalNodeEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
 
       const error: AppError = {
         type: ErrorType.FIREBASE,
@@ -525,7 +525,7 @@ describe('Error Handling System', () => {
 
       expect(consoleSpy).not.toHaveBeenCalled();
 
-      process.env.NODE_ENV = originalNodeEnv;
+      (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
       consoleSpy.mockRestore();
     });
   });

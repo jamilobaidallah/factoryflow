@@ -69,7 +69,7 @@ jest.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
 });
 
 // Mock window.open for HTML export
-const mockWindowOpen = jest.fn(() => ({
+const mockWindowOpen = jest.fn<{ document: { write: jest.Mock; close: jest.Mock } } | null, []>(() => ({
   document: {
     write: jest.fn(),
     close: jest.fn(),
