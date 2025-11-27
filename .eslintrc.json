@@ -3,11 +3,9 @@
     "next/core-web-vitals"
   ],
   "rules": {
-    // React specific rules (already available in next/core-web-vitals)
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
 
-    // General code quality rules
     "no-console": [
       "warn",
       {
@@ -20,11 +18,9 @@
     "prefer-const": "warn",
     "no-var": "error",
 
-    // Next.js specific (already available)
     "@next/next/no-html-link-for-pages": "error",
     "@next/next/no-img-element": "warn",
 
-    // Code style
     "eqeqeq": ["warn", "always"],
     "curly": ["warn", "all"],
     "no-multiple-empty-lines": [
