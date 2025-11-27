@@ -6,7 +6,8 @@ import {
   writeBatch,
   doc,
   query,
-  Timestamp
+  Timestamp,
+  deleteDoc
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 
@@ -187,12 +188,27 @@ export async function restoreBackup(
     }
 
     try {
-      // If replace mode, we could delete existing docs first
-      // For now, we'll just merge (add/update)
-
       // Map backup keys to actual Firestore collection names
       const actualCollectionName = reverseMapping[collectionName] || collectionName;
       const collectionRef = collection(firestore, `users/${userId}/${actualCollectionName}`);
+
+      // If replace mode, delete existing documents first
+      if (mode === 'replace') {
+        if (onProgress) {
+          onProgress(
+            Math.round((processedCollections / totalCollections) * 100),
+            `Clearing existing ${collectionName} data...`
+          );
+        }
+
+        const existingDocs = await getDocs(query(collectionRef));
+        const deletePromises = existingDocs.docs.map((docSnapshot) =>
+          deleteDoc(docSnapshot.ref)
+        );
+        await Promise.all(deletePromises);
+
+        console.log(`Deleted ${existingDocs.docs.length} existing documents from ${actualCollectionName}`);
+      }
       const batchSize = 500; // Firestore batch limit
 
       for (let i = 0; i < documents.length; i += batchSize) {
