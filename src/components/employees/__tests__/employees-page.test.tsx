@@ -309,7 +309,6 @@ describe('EmployeesPage', () => {
   describe('Delete Employee', () => {
     it('calls deleteDoc when delete confirmed', async () => {
       mockDeleteDoc.mockResolvedValueOnce(undefined);
-      const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
 
       render(<EmployeesPage />);
 
@@ -322,11 +321,18 @@ describe('EmployeesPage', () => {
       const buttons = dataRow.querySelectorAll('button');
       await userEvent.click(buttons[2]); // Delete button
 
+      // Wait for confirmation dialog to appear
+      await waitFor(() => {
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      });
+
+      // Click the confirm button in the dialog
+      const confirmButton = screen.getByRole('button', { name: /تأكيد/ });
+      await userEvent.click(confirmButton);
+
       await waitFor(() => {
         expect(mockDeleteDoc).toHaveBeenCalled();
       });
-
-      confirmSpy.mockRestore();
     });
   });
 

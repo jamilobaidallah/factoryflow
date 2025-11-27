@@ -274,7 +274,6 @@ describe('ClientsPage', () => {
   describe('Delete Client', () => {
     it('calls deleteDoc when delete confirmed', async () => {
       mockDeleteDoc.mockResolvedValueOnce(undefined);
-      const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
 
       render(<ClientsPage />);
 
@@ -286,17 +285,22 @@ describe('ClientsPage', () => {
       const dataRow = rows[1];
       const buttons = dataRow.querySelectorAll('button');
       await userEvent.click(buttons[2]); // Delete button
+
+      // Wait for confirmation dialog to appear
+      await waitFor(() => {
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      });
+
+      // Click the confirm button in the dialog
+      const confirmButton = screen.getByRole('button', { name: /تأكيد/ });
+      await userEvent.click(confirmButton);
 
       await waitFor(() => {
         expect(mockDeleteDoc).toHaveBeenCalled();
       });
-
-      confirmSpy.mockRestore();
     });
 
     it('does not delete when cancel is clicked', async () => {
-      const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
-
       render(<ClientsPage />);
 
       await waitFor(() => {
@@ -308,9 +312,16 @@ describe('ClientsPage', () => {
       const buttons = dataRow.querySelectorAll('button');
       await userEvent.click(buttons[2]); // Delete button
 
-      expect(mockDeleteDoc).not.toHaveBeenCalled();
+      // Wait for confirmation dialog to appear
+      await waitFor(() => {
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      });
 
-      confirmSpy.mockRestore();
+      // Click the cancel button in the dialog
+      const cancelButton = screen.getByRole('button', { name: /إلغاء/ });
+      await userEvent.click(cancelButton);
+
+      expect(mockDeleteDoc).not.toHaveBeenCalled();
     });
   });
 
