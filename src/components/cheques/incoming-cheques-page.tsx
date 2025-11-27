@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, X, Upload } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +39,8 @@ import {
   getDocs,
   limit,
 } from "firebase/firestore";
-import { firestore } from "@/firebase/config";
+import { firestore, storage } from "@/firebase/config";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface Cheque {
   id: string;
@@ -86,6 +87,9 @@ export default function IncomingChequesPage() {
     bankName: "",
     notes: "",
   });
+  const [chequeImage, setChequeImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!user) {return;}
@@ -121,9 +125,22 @@ export default function IncomingChequesPage() {
 
     setLoading(true);
     try {
+      // Upload image if provided
+      let chequeImageUrl: string | undefined = undefined;
+      if (chequeImage) {
+        setUploadingImage(true);
+        const imageRef = ref(
+          storage,
+          `users/${user.uid}/cheques/${Date.now()}_${chequeImage.name}`
+        );
+        await uploadBytes(imageRef, chequeImage);
+        chequeImageUrl = await getDownloadURL(imageRef);
+        setUploadingImage(false);
+      }
+
       if (editingCheque) {
         const chequeRef = doc(firestore, `users/${user.uid}/cheques`, editingCheque.id);
-        await updateDoc(chequeRef, {
+        const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
@@ -133,7 +150,12 @@ export default function IncomingChequesPage() {
           dueDate: new Date(formData.dueDate),
           bankName: formData.bankName,
           notes: formData.notes,
-        });
+        };
+        // Only update image URL if a new image was uploaded
+        if (chequeImageUrl) {
+          updateData.chequeImageUrl = chequeImageUrl;
+        }
+        await updateDoc(chequeRef, updateData);
         toast({
           title: "تم التحديث بنجاح",
           description: "تم تحديث بيانات الشيك الوارد",
@@ -152,6 +174,7 @@ export default function IncomingChequesPage() {
           bankName: formData.bankName,
           notes: formData.notes,
           createdAt: new Date(),
+          ...(chequeImageUrl && { chequeImageUrl }),
         });
         toast({
           title: "تمت الإضافة بنجاح",
@@ -185,6 +208,9 @@ export default function IncomingChequesPage() {
       bankName: cheque.bankName || "",
       notes: cheque.notes || "",
     });
+    // Set image preview if cheque has an existing image
+    setChequeImage(null);
+    setImagePreview(cheque.chequeImageUrl || null);
     setIsDialogOpen(true);
   };
 
@@ -227,6 +253,8 @@ export default function IncomingChequesPage() {
       notes: "",
     });
     setEditingCheque(null);
+    setChequeImage(null);
+    setImagePreview(null);
   };
 
   const openAddDialog = () => {
@@ -726,6 +754,57 @@ export default function IncomingChequesPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="chequeImage">صورة الشيك (اختياري)</Label>
+                <div className="space-y-2">
+                  {imagePreview && (
+                    <div className="relative inline-block">
+                      <img
+                        src={imagePreview}
+                        alt="معاينة صورة الشيك"
+                        className="max-h-32 rounded-md border object-contain"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+                        onClick={() => {
+                          setChequeImage(null);
+                          setImagePreview(null);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="chequeImage"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setChequeImage(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setImagePreview(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="cursor-pointer"
+                    />
+                    <Upload className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {editingCheque?.chequeImageUrl && !chequeImage
+                      ? "الصورة الحالية محفوظة. اختر صورة جديدة لاستبدالها"
+                      : "يمكنك رفع صورة الشيك بصيغة JPG أو PNG"}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="notes">ملاحظات</Label>
                 <Input
                   id="notes"
@@ -744,8 +823,8 @@ export default function IncomingChequesPage() {
               >
                 إلغاء
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري الحفظ..." : editingCheque ? "تحديث" : "إضافة"}
+              <Button type="submit" disabled={loading || uploadingImage}>
+                {uploadingImage ? "جاري رفع الصورة..." : loading ? "جاري الحفظ..." : editingCheque ? "تحديث" : "إضافة"}
               </Button>
             </DialogFooter>
           </form>
