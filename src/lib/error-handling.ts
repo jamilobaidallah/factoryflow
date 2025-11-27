@@ -18,6 +18,7 @@ export enum ErrorType {
   DUPLICATE = 'DUPLICATE',
   NOT_FOUND = 'NOT_FOUND',
   PERMISSION = 'PERMISSION',
+  RATE_LIMITED = 'RATE_LIMITED',
   UNKNOWN = 'UNKNOWN',
 }
 
@@ -229,6 +230,8 @@ export function getErrorTitle(error: AppError): string {
       return 'غير موجود';
     case ErrorType.PERMISSION:
       return 'غير مصرح';
+    case ErrorType.RATE_LIMITED:
+      return 'تم تجاوز عدد المحاولات';
     case ErrorType.UNKNOWN:
     default:
       return 'خطأ';
