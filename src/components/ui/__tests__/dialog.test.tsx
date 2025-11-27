@@ -111,8 +111,8 @@ describe('Dialog Components', () => {
         </Dialog>
       );
 
-      // Close button should have sr-only text "Close"
-      expect(screen.getByText('Close')).toHaveClass('sr-only');
+      // Close button should have sr-only text "إغلاق" (Arabic for "Close")
+      expect(screen.getByText('إغلاق')).toHaveClass('sr-only');
     });
 
     it('should apply correct positioning classes', async () => {
