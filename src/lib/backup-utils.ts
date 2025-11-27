@@ -93,6 +93,7 @@ export async function createBackup(userId: string): Promise<BackupData> {
       backupData.data[dataKey as keyof typeof backupData.data] = documents;
       backupData.metadata.totalDocuments += documents.length;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(`Error backing up ${collectionName}:`, error);
       throw new Error(`Failed to backup ${collectionName}: ${error}`);
     }
@@ -242,6 +243,7 @@ export async function restoreBackup(
         onProgress(progress, `Completed ${collectionName}`);
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(`Error restoring ${collectionName}:`, error);
       throw new Error(`Failed to restore ${collectionName}: ${error}`);
     }

@@ -59,7 +59,7 @@ export async function exportToExcel(
   const worksheet = workbook.addWorksheet(sheetName);
 
   // If data is empty, return
-  if (data.length === 0) return;
+  if (data.length === 0) { return; }
 
   // Get headers from first object
   const headers = Object.keys(data[0]);

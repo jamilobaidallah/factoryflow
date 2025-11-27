@@ -1,7 +1,33 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from '../login-page';
+import { resetRateLimiter, getRateLimiter } from '@/lib/rate-limiter';
+
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: jest.fn((key: string) => store[key] || null),
+    setItem: jest.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    }),
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: jest.fn((index: number) => Object.keys(store)[index] || null),
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+});
 
 // Mock Firebase auth
 const mockSignInWithEmailAndPassword = jest.fn();
@@ -25,6 +51,8 @@ jest.mock('@/hooks/use-toast', () => ({
 describe('LoginPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorageMock.clear();
+    resetRateLimiter();
   });
 
   describe('Rendering', () => {
@@ -288,6 +316,190 @@ describe('LoginPage', () => {
 
       const passwordInput = screen.getByLabelText('كلمة المرور');
       expect(passwordInput).toHaveAttribute('type', 'password');
+    });
+  });
+
+  describe('Rate Limiting', () => {
+    it('tracks failed login attempts', async () => {
+      mockSignInWithEmailAndPassword.mockRejectedValue(new Error('Invalid credentials'));
+      render(<LoginPage />);
+
+      const emailInput = screen.getByLabelText('البريد الإلكتروني');
+      const passwordInput = screen.getByLabelText('كلمة المرور');
+      const submitButton = screen.getByRole('button', { name: 'تسجيل الدخول' });
+
+      // First failed attempt
+      await userEvent.type(emailInput, 'test@example.com');
+      await userEvent.type(passwordInput, 'wrongpassword');
+      await userEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockSignInWithEmailAndPassword).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('shows warning toast when running low on attempts', async () => {
+      mockSignInWithEmailAndPassword.mockRejectedValue(new Error('Invalid credentials'));
+      const rateLimiter = getRateLimiter();
+
+      // Pre-record some failed attempts (3 out of 5)
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+      await userEvent.type(screen.getByLabelText('كلمة المرور'), 'wrongpassword');
+      await userEvent.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+
+      await waitFor(() => {
+        // Should show warning about remaining attempts
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            variant: 'destructive',
+          })
+        );
+      });
+    });
+
+    it('blocks login attempts when locked out', async () => {
+      mockSignInWithEmailAndPassword.mockRejectedValue(new Error('Invalid credentials'));
+      const rateLimiter = getRateLimiter();
+
+      // Trigger lockout by exceeding max attempts
+      for (let i = 0; i < 5; i++) {
+        rateLimiter.recordAttempt('test@example.com', false);
+      }
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+
+      // Wait for rate limit status to be checked
+      await waitFor(() => {
+        // Submit button should show lockout message
+        expect(screen.getByRole('button', { name: /الانتظار/ })).toBeInTheDocument();
+      });
+    });
+
+    it('shows lockout alert when account is locked', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Trigger lockout
+      for (let i = 0; i < 5; i++) {
+        rateLimiter.recordAttempt('test@example.com', false);
+      }
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+
+      await waitFor(() => {
+        // Should show lockout alert
+        expect(screen.getByText(/تم قفل الحساب مؤقتاً/)).toBeInTheDocument();
+      });
+    });
+
+    it('disables form inputs when locked out', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Trigger lockout
+      for (let i = 0; i < 5; i++) {
+        rateLimiter.recordAttempt('test@example.com', false);
+      }
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('البريد الإلكتروني')).toBeDisabled();
+        expect(screen.getByLabelText('كلمة المرور')).toBeDisabled();
+      });
+    });
+
+    it('resets rate limit status on successful login', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Add some failed attempts
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+
+      mockSignInWithEmailAndPassword.mockResolvedValueOnce({ user: { uid: '123' } });
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+      await userEvent.type(screen.getByLabelText('كلمة المرور'), 'correctpassword');
+      await userEvent.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'تم تسجيل الدخول بنجاح',
+          })
+        );
+      });
+
+      // Check that rate limiter was reset
+      const status = rateLimiter.checkRateLimit('test@example.com');
+      expect(status.remainingAttempts).toBe(5); // Reset to max
+    });
+
+    it('does not apply rate limiting to signup mode', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Trigger lockout for login
+      for (let i = 0; i < 5; i++) {
+        rateLimiter.recordAttempt('test@example.com', false);
+      }
+
+      render(<LoginPage />);
+
+      // Switch to signup mode
+      await userEvent.click(screen.getByText(/ليس لديك حساب/));
+
+      // Form should not be disabled in signup mode
+      expect(screen.getByLabelText('البريد الإلكتروني')).not.toBeDisabled();
+      expect(screen.getByLabelText('كلمة المرور')).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'إنشاء حساب' })).not.toBeDisabled();
+    });
+
+    it('shows low attempts warning alert when only 2 attempts remain', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Use up 3 attempts (leaving 2)
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+
+      await waitFor(() => {
+        // Should show warning alert
+        expect(screen.getByText(/تبقى لديك 2 محاولات/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows last attempt warning when only 1 attempt remains', async () => {
+      const rateLimiter = getRateLimiter();
+
+      // Use up 4 attempts (leaving 1)
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+      rateLimiter.recordAttempt('test@example.com', false);
+
+      render(<LoginPage />);
+
+      await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'test@example.com');
+
+      await waitFor(() => {
+        // Should show last attempt warning
+        expect(screen.getByText(/آخر محاولة/)).toBeInTheDocument();
+      });
     });
   });
 });

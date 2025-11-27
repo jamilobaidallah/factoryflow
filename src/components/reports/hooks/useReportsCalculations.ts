@@ -230,9 +230,9 @@ export function useReportsCalculations({
       const diffTime = today.getTime() - date.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays <= 30) return "0-30 يوم";
-      if (diffDays <= 60) return "31-60 يوم";
-      if (diffDays <= 90) return "61-90 يوم";
+      if (diffDays <= 30) { return "0-30 يوم"; }
+      if (diffDays <= 60) { return "31-60 يوم"; }
+      if (diffDays <= 90) { return "61-90 يوم"; }
       return "+90 يوم";
     };
 
@@ -254,7 +254,7 @@ export function useReportsCalculations({
     const valuedInventory = inventory.map((item) => {
       const value = item.quantity * item.unitPrice;
       totalValue += value;
-      if (item.quantity < 10) lowStockItems++; // Arbitrary low stock threshold
+      if (item.quantity < 10) { lowStockItems++; } // Arbitrary low stock threshold
       return { ...item, totalValue: value };
     });
 

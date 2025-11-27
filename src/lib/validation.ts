@@ -298,7 +298,7 @@ export async function checkDuplicateSKU(
   userId: string,
   excludeId?: string
 ): Promise<boolean> {
-  if (!sku) return false; // SKU is optional
+  if (!sku) { return false; } // SKU is optional
 
   return checkDuplicate({
     collection: 'inventory',
