@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, DollarSign, TrendingUp, TrendingDown, Package, Activity } from "lucide-react";
 import dynamic from "next/dynamic";
+import { Skeleton, StatCardSkeleton, ListSkeleton } from "@/components/ui/loading-skeleton";
 
 // Lazy load heavy chart components
 const LazyLineChart = dynamic(
@@ -77,6 +78,11 @@ export default function DashboardPage() {
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [recentClients, setRecentClients] = useState<any[]>([]);
 
+  // Loading states
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(true);
+
   // Chart data states
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [cashFlowData, setCashFlowData] = useState<any[]>([]);
@@ -97,6 +103,7 @@ export default function DashboardPage() {
         clients.push({ id: doc.id, ...doc.data() });
       });
       setRecentClients(clients);
+      setClientsLoading(false);
     });
 
     return () => unsubscribe();
@@ -216,6 +223,8 @@ export default function DashboardPage() {
         .slice(0, 5)
         .map(([name, value]) => ({ name, value }));
       setExpensesByCategory(categoryArray);
+      setTransactionsLoading(false);
+      setStatsLoading(false);
     });
 
     return () => unsubscribe();
@@ -345,24 +354,34 @@ export default function DashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={index}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {statsLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          stats.map((stat, index) => {
+            const Icon = stat.icon;
+            return (
+              <Card key={index}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    {stat.title}
+                  </CardTitle>
+                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                    <Icon className={`w-5 h-5 ${stat.color}`} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stat.value}</div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Charts Row 1: Revenue vs Expenses + Cash Flow */}
@@ -474,7 +493,19 @@ export default function DashboardPage() {
             <CardTitle>آخر الحركات المالية</CardTitle>
           </CardHeader>
           <CardContent>
-            {recentTransactions.length === 0 ? (
+            {transactionsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              </div>
+            ) : recentTransactions.length === 0 ? (
               <p className="text-gray-500 text-center py-8">لا توجد حركات مالية بعد</p>
             ) : (
               <div className="space-y-3">
@@ -511,7 +542,19 @@ export default function DashboardPage() {
             <CardTitle>العملاء الجدد</CardTitle>
           </CardHeader>
           <CardContent>
-            {recentClients.length === 0 ? (
+            {clientsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))}
+              </div>
+            ) : recentClients.length === 0 ? (
               <p className="text-gray-500 text-center py-8">لا يوجد عملاء بعد</p>
             ) : (
               <div className="space-y-3">

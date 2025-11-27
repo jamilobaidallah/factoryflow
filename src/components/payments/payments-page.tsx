@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
@@ -128,6 +129,7 @@ export default function PaymentsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -175,6 +177,7 @@ export default function PaymentsPage() {
         } as Payment);
       });
       setPayments(paymentsData);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
@@ -410,26 +413,35 @@ export default function PaymentsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي المقبوضات</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {totalReceived} دينار
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي المصروفات</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">
-              {totalPaid} دينار
-            </div>
-          </CardContent>
-        </Card>
+        {dataLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>إجمالي المقبوضات</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {totalReceived} دينار
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>إجمالي المصروفات</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-red-600">
+                  {totalPaid} دينار
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       <Card>
@@ -450,7 +462,9 @@ export default function PaymentsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {payments.length === 0 ? (
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : payments.length === 0 ? (
             <p className="text-gray-500 text-center py-12">
               لا توجد مدفوعات مسجلة. اضغط على &quot;إضافة مدفوعة&quot; للبدء.
             </p>

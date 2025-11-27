@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, Download } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportChequesToExcel } from "@/lib/export-utils";
@@ -78,6 +79,7 @@ export default function ChequesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<Cheque | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string>("");
   const [endorseDialogOpen, setEndorseDialogOpen] = useState(false);
@@ -133,6 +135,7 @@ export default function ChequesPage() {
         } as Cheque);
       });
       setCheques(chequesData);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
@@ -470,7 +473,9 @@ export default function ChequesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {cheques.length === 0 ? (
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : cheques.length === 0 ? (
             <p className="text-gray-500 text-center py-12">
               لا توجد شيكات مسجلة. اضغط على &quot;إضافة شيك&quot; للبدء.
             </p>

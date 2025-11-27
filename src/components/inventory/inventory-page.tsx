@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Download } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportInventoryToExcel } from "@/lib/export-utils";
@@ -78,6 +79,7 @@ export default function InventoryPage() {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -134,6 +136,7 @@ export default function InventoryPage() {
         } as InventoryItem);
       });
       setItems(itemsData);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
@@ -353,36 +356,46 @@ export default function InventoryPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي العناصر</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">
-              {totalItems}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>عناصر منخفضة المخزون</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">
-              {lowStockItems}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>القيمة الإجمالية</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {totalValue.toFixed(2)} دينار
-            </div>
-          </CardContent>
-        </Card>
+        {dataLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>إجمالي العناصر</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-blue-600">
+                  {totalItems}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>عناصر منخفضة المخزون</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-orange-600">
+                  {lowStockItems}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>القيمة الإجمالية</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {totalValue.toFixed(2)} دينار
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       <Card>
@@ -402,7 +415,9 @@ export default function InventoryPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {items.length === 0 ? (
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : items.length === 0 ? (
             <p className="text-gray-500 text-center py-12">
               لا توجد عناصر في المخزون. اضغط على &quot;إضافة عنصر للمخزون&quot; للبدء.
             </p>
