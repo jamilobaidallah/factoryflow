@@ -8,27 +8,39 @@ jest.mock('@/firebase/config', () => ({
   firestore: {},
 }));
 
-// Mock Firebase functions
-const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
-const mockBatchSet = jest.fn();
+// Mock Firebase functions - defined inside mock factory to avoid hoisting issues
+jest.mock('firebase/firestore', () => {
+  const mockBatchCommitFn = jest.fn().mockResolvedValue(undefined);
+  const mockBatchSetFn = jest.fn();
+  const mockDeleteDocFn = jest.fn().mockResolvedValue(undefined);
+  const mockGetDocsFn = jest.fn().mockResolvedValue({ docs: [] });
 
-jest.mock('firebase/firestore', () => ({
-  collection: jest.fn(),
-  getDocs: jest.fn(),
-  writeBatch: jest.fn(() => ({
-    set: mockBatchSet,
-    commit: mockBatchCommit,
-  })),
-  doc: jest.fn(),
-  query: jest.fn(),
-  Timestamp: {
-    fromDate: jest.fn((date: Date) => ({
-      toDate: () => date,
-      seconds: Math.floor(date.getTime() / 1000),
-      nanoseconds: 0,
+  return {
+    collection: jest.fn(),
+    getDocs: mockGetDocsFn,
+    writeBatch: jest.fn(() => ({
+      set: mockBatchSetFn,
+      commit: mockBatchCommitFn,
     })),
-  },
-}));
+    doc: jest.fn(),
+    query: jest.fn(),
+    deleteDoc: mockDeleteDocFn,
+    Timestamp: {
+      fromDate: jest.fn((date: Date) => ({
+        toDate: () => date,
+        seconds: Math.floor(date.getTime() / 1000),
+        nanoseconds: 0,
+      })),
+    },
+    // Export the mocks for test access
+    __mocks__: {
+      mockBatchCommit: mockBatchCommitFn,
+      mockBatchSet: mockBatchSetFn,
+      mockDeleteDoc: mockDeleteDocFn,
+      mockGetDocs: mockGetDocsFn,
+    },
+  };
+});
 
 // Mock browser APIs
 const mockCreateObjectURL = jest.fn(() => 'blob:test-url');
@@ -69,11 +81,19 @@ import {
   BackupData,
 } from '../backup-utils';
 
+// Get access to the mocks
+import * as firestore from 'firebase/firestore';
+const { __mocks__: mocks } = firestore as any;
+
 describe('Backup Utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     console.log = jest.fn();
     console.error = jest.fn();
+    // Default: return empty docs for getDocs
+    mocks.mockGetDocs.mockResolvedValue({ docs: [] });
+    mocks.mockBatchCommit.mockResolvedValue(undefined);
+    mocks.mockDeleteDoc.mockResolvedValue(undefined);
   });
 
   describe('downloadBackup', () => {
@@ -234,19 +254,51 @@ describe('Backup Utilities', () => {
     it('should restore backup in merge mode', async () => {
       await restoreBackup(validBackup, 'test-user-id', 'merge');
 
-      expect(mockBatchCommit).toHaveBeenCalled();
+      expect(mocks.mockBatchCommit).toHaveBeenCalled();
     });
 
     it('should restore backup in replace mode', async () => {
       await restoreBackup(validBackup, 'test-user-id', 'replace');
 
-      expect(mockBatchCommit).toHaveBeenCalled();
+      expect(mocks.mockBatchCommit).toHaveBeenCalled();
+    });
+
+    it('should delete existing documents in replace mode', async () => {
+      // Mock existing documents in the collection
+      const mockDocRef1 = { id: 'existing1' };
+      const mockDocRef2 = { id: 'existing2' };
+      mocks.mockGetDocs.mockResolvedValue({
+        docs: [
+          { ref: mockDocRef1 },
+          { ref: mockDocRef2 },
+        ],
+      });
+
+      await restoreBackup(validBackup, 'test-user-id', 'replace');
+
+      // Verify deleteDoc was called for existing documents
+      expect(mocks.mockDeleteDoc).toHaveBeenCalledWith(mockDocRef1);
+      expect(mocks.mockDeleteDoc).toHaveBeenCalledWith(mockDocRef2);
+    });
+
+    it('should NOT delete existing documents in merge mode', async () => {
+      // Mock existing documents in the collection
+      mocks.mockGetDocs.mockResolvedValue({
+        docs: [
+          { ref: { id: 'existing1' } },
+        ],
+      });
+
+      await restoreBackup(validBackup, 'test-user-id', 'merge');
+
+      // Verify deleteDoc was NOT called in merge mode
+      expect(mocks.mockDeleteDoc).not.toHaveBeenCalled();
     });
 
     it('should use merge mode by default', async () => {
       await restoreBackup(validBackup, 'test-user-id');
 
-      expect(mockBatchCommit).toHaveBeenCalled();
+      expect(mocks.mockBatchCommit).toHaveBeenCalled();
     });
 
     it('should call progress callback during restore', async () => {
@@ -279,7 +331,7 @@ describe('Backup Utilities', () => {
 
       await restoreBackup(backupWithDates, 'test-user-id');
 
-      expect(mockBatchSet).toHaveBeenCalled();
+      expect(mocks.mockBatchSet).toHaveBeenCalled();
     });
 
     it('should validate backup before restoring', async () => {
@@ -355,7 +407,7 @@ describe('Backup Utilities', () => {
 
   describe('Error Handling', () => {
     it('should handle Firestore errors during restore', async () => {
-      mockBatchCommit.mockRejectedValueOnce(new Error('Firestore error'));
+      mocks.mockBatchCommit.mockRejectedValueOnce(new Error('Firestore error'));
 
       const validBackup: BackupData = {
         metadata: {
