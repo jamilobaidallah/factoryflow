@@ -82,7 +82,7 @@ describe('Dashboard Page', () => {
 
     // Dashboard should show key sections
     await waitFor(() => {
-      expect(screen.getByText(/لوحة التحكم|العملاء|الإيرادات/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/لوحة التحكم|العملاء|الإيرادات/i).length).toBeGreaterThan(0);
     });
   });
 

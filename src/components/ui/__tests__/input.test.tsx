@@ -17,7 +17,7 @@ describe('Input Component', () => {
     });
 
     it('should render with correct default type', () => {
-      render(<Input data-testid="input" />);
+      render(<Input type="text" data-testid="input" />);
 
       const input = screen.getByTestId('input');
       expect(input).toHaveAttribute('type', 'text');

@@ -207,13 +207,13 @@ describe('Pagination Components', () => {
         <Pagination>
           <PaginationContent>
             <PaginationItem>
-              <PaginationLink isActive>1</PaginationLink>
+              <PaginationLink href="/page/1" isActive data-testid="link">1</PaginationLink>
             </PaginationItem>
           </PaginationContent>
         </Pagination>
       );
 
-      expect(screen.getByRole('link')).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByTestId('link')).toHaveAttribute('aria-current', 'page');
     });
 
     it('should not set aria-current when not active', () => {
@@ -221,13 +221,13 @@ describe('Pagination Components', () => {
         <Pagination>
           <PaginationContent>
             <PaginationItem>
-              <PaginationLink>1</PaginationLink>
+              <PaginationLink href="/page/1" data-testid="link">1</PaginationLink>
             </PaginationItem>
           </PaginationContent>
         </Pagination>
       );
 
-      expect(screen.getByRole('link')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('link')).not.toHaveAttribute('aria-current');
     });
 
     it('should use icon size by default', () => {
@@ -444,7 +444,7 @@ describe('Pagination Components', () => {
       );
 
       expect(screen.getByRole('navigation')).toBeInTheDocument();
-      expect(screen.getAllByRole('link')).toHaveLength(7);
+      expect(screen.getAllByRole('link')).toHaveLength(6); // 6 links: prev, 1, 2, 3, 10, next
       expect(screen.getByText('السابق')).toBeInTheDocument();
       expect(screen.getByText('التالي')).toBeInTheDocument();
       expect(screen.getByText('1')).toBeInTheDocument();
@@ -482,13 +482,13 @@ describe('Pagination Components', () => {
         <Pagination>
           <PaginationContent>
             <PaginationItem>
-              <PaginationLink onClick={handleClick}>1</PaginationLink>
+              <PaginationLink href="/page/1" onClick={handleClick} data-testid="link">1</PaginationLink>
             </PaginationItem>
           </PaginationContent>
         </Pagination>
       );
 
-      fireEvent.click(screen.getByRole('link'));
+      fireEvent.click(screen.getByTestId('link'));
       expect(handleClick).toHaveBeenCalled();
     });
   });

@@ -38,13 +38,13 @@ jest.mock('recharts', () => ({
 }));
 
 // Import report tab components
-import TrialBalanceTab from '../tabs/TrialBalanceTab';
-import IncomeStatementTab from '../tabs/IncomeStatementTab';
-import CashFlowTab from '../tabs/CashFlowTab';
-import ARAPAgingTab from '../tabs/ARAPAgingTab';
-import InventoryTab from '../tabs/InventoryTab';
-import FixedAssetsTab from '../tabs/FixedAssetsTab';
-import SalesAndCOGSTab from '../tabs/SalesAndCOGSTab';
+import { TrialBalanceTab } from '../tabs/TrialBalanceTab';
+import { IncomeStatementTab } from '../tabs/IncomeStatementTab';
+import { CashFlowTab } from '../tabs/CashFlowTab';
+import { ARAPAgingTab } from '../tabs/ARAPAgingTab';
+import { InventoryTab } from '../tabs/InventoryTab';
+import { FixedAssetsTab } from '../tabs/FixedAssetsTab';
+import { SalesAndCOGSTab } from '../tabs/SalesAndCOGSTab';
 
 // Mock data for testing
 const mockIncomeStatement = {

@@ -37,7 +37,7 @@ jest.mock('@/firebase/config', () => ({
   storage: {},
 }));
 
-jest.mock('./provider', () => ({
+jest.mock('@/firebase/provider', () => ({
   FirebaseClientProvider: ({ children }: { children: React.ReactNode }) => children,
   useUser: () => ({ user: { uid: 'test-user' }, loading: false }),
 }));

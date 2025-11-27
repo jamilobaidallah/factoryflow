@@ -45,7 +45,7 @@ jest.mock('firebase/firestore', () => ({
 }));
 
 // Mock helper functions
-jest.mock('../utils/ledger-helpers', () => ({
+jest.mock('../../utils/ledger-helpers', () => ({
   getCategoryType: jest.fn((category, subCategory) => {
     if (category.includes('مبيعات') || category.includes('إيراد')) return 'دخل';
     if (category.includes('مشتريات') || category.includes('مصروف')) return 'مصروف';
