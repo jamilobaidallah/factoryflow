@@ -55,7 +55,8 @@ class FirebaseCache {
    * Invalidate all entries matching a prefix
    */
   invalidatePrefix(prefix: string): void {
-    for (const key of this.cache.keys()) {
+    const keys = Array.from(this.cache.keys());
+    for (const key of keys) {
       if (key.startsWith(prefix)) {
         this.cache.delete(key);
       }
