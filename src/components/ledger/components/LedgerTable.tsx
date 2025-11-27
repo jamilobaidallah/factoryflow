@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -21,7 +22,130 @@ interface LedgerTableProps {
   onViewRelated: (entry: LedgerEntry) => void;
 }
 
-export function LedgerTable({
+// Memoized table row for better performance with large lists
+const LedgerTableRow = memo(function LedgerTableRow({
+  entry,
+  onEdit,
+  onDelete,
+  onQuickPay,
+  onViewRelated,
+}: {
+  entry: LedgerEntry;
+  onEdit: (entry: LedgerEntry) => void;
+  onDelete: (id: string) => void;
+  onQuickPay: (entry: LedgerEntry) => void;
+  onViewRelated: (entry: LedgerEntry) => void;
+}) {
+  return (
+    <TableRow>
+      <TableCell>
+        {entry.transactionId ? (
+          <div className="flex items-center gap-1">
+            <span className="font-mono text-xs">{entry.transactionId}</span>
+            <CopyButton text={entry.transactionId} size="sm" />
+          </div>
+        ) : (
+          <span className="text-gray-400">-</span>
+        )}
+      </TableCell>
+
+      <TableCell>
+        {new Date(entry.date).toLocaleDateString("ar-EG")}
+      </TableCell>
+
+      <TableCell className="font-medium">{entry.description}</TableCell>
+
+      <TableCell>
+        <span
+          className={`px-2 py-1 rounded-full text-xs ${
+            entry.type === "دخل"
+              ? "bg-green-100 text-green-700"
+              : "bg-red-100 text-red-700"
+          }`}
+        >
+          {entry.type}
+        </span>
+      </TableCell>
+
+      <TableCell>{entry.category}</TableCell>
+      <TableCell>{entry.subCategory}</TableCell>
+      <TableCell>{entry.associatedParty || "-"}</TableCell>
+      <TableCell>{entry.amount || 0} دينار</TableCell>
+
+      <TableCell>
+        {entry.isARAPEntry ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  entry.paymentStatus === "paid"
+                    ? "bg-green-100 text-green-700"
+                    : entry.paymentStatus === "partial"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                {entry.paymentStatus === "paid"
+                  ? "مدفوع"
+                  : entry.paymentStatus === "partial"
+                  ? "دفعة جزئية"
+                  : "غير مدفوع"}
+              </span>
+            </div>
+            {entry.paymentStatus !== "paid" && (
+              <div className="text-xs text-gray-600">
+                متبقي: {entry.remainingBalance?.toFixed(2)} دينار
+              </div>
+            )}
+            {entry.totalPaid && entry.totalPaid > 0 && (
+              <div className="text-xs text-gray-500">
+                مدفوع: {entry.totalPaid.toFixed(2)} دينار
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
+        )}
+      </TableCell>
+
+      <TableCell>
+        <div className="flex gap-2">
+          {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onQuickPay(entry)}
+              title="إضافة دفعة"
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <DollarSign className="w-4 h-4" />
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onViewRelated(entry)}
+            title="إدارة السجلات المرتبطة"
+          >
+            <FolderOpen className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => onEdit(entry)}>
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onDelete(entry.id)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+export const LedgerTable = memo(function LedgerTable({
   entries,
   onEdit,
   onDelete,
@@ -54,113 +178,16 @@ export function LedgerTable({
       </TableHeader>
       <TableBody>
         {entries.map((entry) => (
-          <TableRow key={entry.id}>
-            <TableCell>
-              {entry.transactionId ? (
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-xs">{entry.transactionId}</span>
-                  <CopyButton text={entry.transactionId} size="sm" />
-                </div>
-              ) : (
-                <span className="text-gray-400">-</span>
-              )}
-            </TableCell>
-
-            <TableCell>
-              {new Date(entry.date).toLocaleDateString("ar-EG")}
-            </TableCell>
-
-            <TableCell className="font-medium">{entry.description}</TableCell>
-
-            <TableCell>
-              <span
-                className={`px-2 py-1 rounded-full text-xs ${
-                  entry.type === "دخل"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {entry.type}
-              </span>
-            </TableCell>
-
-            <TableCell>{entry.category}</TableCell>
-            <TableCell>{entry.subCategory}</TableCell>
-            <TableCell>{entry.associatedParty || "-"}</TableCell>
-            <TableCell>{entry.amount || 0} دينار</TableCell>
-
-            <TableCell>
-              {entry.isARAPEntry ? (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        entry.paymentStatus === "paid"
-                          ? "bg-green-100 text-green-700"
-                          : entry.paymentStatus === "partial"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {entry.paymentStatus === "paid"
-                        ? "مدفوع"
-                        : entry.paymentStatus === "partial"
-                        ? "دفعة جزئية"
-                        : "غير مدفوع"}
-                    </span>
-                  </div>
-                  {entry.paymentStatus !== "paid" && (
-                    <div className="text-xs text-gray-600">
-                      متبقي: {entry.remainingBalance?.toFixed(2)} دينار
-                    </div>
-                  )}
-                  {entry.totalPaid && entry.totalPaid > 0 && (
-                    <div className="text-xs text-gray-500">
-                      مدفوع: {entry.totalPaid.toFixed(2)} دينار
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <span className="text-xs text-gray-400">-</span>
-              )}
-            </TableCell>
-
-            <TableCell>
-              <div className="flex gap-2">
-                {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => onQuickPay(entry)}
-                    title="إضافة دفعة"
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onViewRelated(entry)}
-                  title="إدارة السجلات المرتبطة"
-                >
-                  <FolderOpen className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => onEdit(entry)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => onDelete(entry.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
+          <LedgerTableRow
+            key={entry.id}
+            entry={entry}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onQuickPay={onQuickPay}
+            onViewRelated={onViewRelated}
+          />
         ))}
       </TableBody>
     </Table>
   );
-}
+});

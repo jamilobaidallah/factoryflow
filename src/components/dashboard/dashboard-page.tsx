@@ -1,17 +1,43 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, DollarSign, TrendingUp, TrendingDown, Package, Activity } from "lucide-react";
+import dynamic from "next/dynamic";
+
+// Lazy load heavy chart components
+const LazyLineChart = dynamic(
+  () => import("recharts").then((mod) => ({ default: mod.LineChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const LazyBarChart = dynamic(
+  () => import("recharts").then((mod) => ({ default: mod.BarChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const LazyPieChart = dynamic(
+  () => import("recharts").then((mod) => ({ default: mod.PieChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const LazyComposedChart = dynamic(
+  () => import("recharts").then((mod) => ({ default: mod.ComposedChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+
+// Chart skeleton for loading state
+function ChartSkeleton() {
+  return (
+    <div className="h-[300px] w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
+      <span className="text-gray-400">جاري تحميل الرسم البياني...</span>
+    </div>
+  );
+}
 import { useUser } from "@/firebase/provider";
 import { collection, onSnapshot, query, orderBy, getDocs } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+// Import only what we need from recharts (tree shaking)
 import {
-  LineChart,
   Line,
-  BarChart,
   Bar,
-  PieChart,
   Pie,
   Cell,
   XAxis,
@@ -20,7 +46,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ComposedChart,
 } from "recharts";
 
 interface LedgerEntry {
@@ -269,7 +294,8 @@ export default function DashboardPage() {
 
   const netCashFlow = totalCashIn - totalCashOut;
 
-  const stats = [
+  // Memoize stats to avoid recalculation on every render
+  const stats = useMemo(() => [
     {
       title: "إجمالي العملاء",
       value: clientsCount.toString(),
@@ -305,9 +331,10 @@ export default function DashboardPage() {
       color: netCashFlow >= 0 ? "text-green-600" : "text-red-600",
       bgColor: netCashFlow >= 0 ? "bg-green-100" : "bg-red-100",
     },
-  ];
+  ], [clientsCount, totalRevenue, totalExpenses, netCashFlow]);
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+  // Memoize colors to avoid recreation
+  const COLORS = useMemo(() => ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'], []);
 
   return (
     <div className="space-y-6">
@@ -347,7 +374,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthlyData}>
+              <LazyLineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -356,7 +383,7 @@ export default function DashboardPage() {
                 <Line type="monotone" dataKey="الإيرادات" stroke="#10b981" strokeWidth={2} />
                 <Line type="monotone" dataKey="المصروفات" stroke="#ef4444" strokeWidth={2} />
                 <Line type="monotone" dataKey="الربح" stroke="#3b82f6" strokeWidth={2} />
-              </LineChart>
+              </LazyLineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -368,7 +395,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={cashFlowData}>
+              <LazyComposedChart data={cashFlowData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -377,7 +404,7 @@ export default function DashboardPage() {
                 <Bar dataKey="نقد وارد" fill="#10b981" />
                 <Bar dataKey="نقد صادر" fill="#ef4444" />
                 <Line type="monotone" dataKey="صافي التدفق" stroke="#3b82f6" strokeWidth={2} />
-              </ComposedChart>
+              </LazyComposedChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -395,13 +422,13 @@ export default function DashboardPage() {
               <p className="text-gray-500 text-center py-8">لا توجد بيانات بعد</p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topCustomers} layout="vertical">
+                <LazyBarChart data={topCustomers} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="name" type="category" width={100} />
                   <Tooltip />
                   <Bar dataKey="amount" fill="#3b82f6" />
-                </BarChart>
+                </LazyBarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -417,7 +444,7 @@ export default function DashboardPage() {
               <p className="text-gray-500 text-center py-8">لا توجد مصروفات بعد</p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
+                <LazyPieChart>
                   <Pie
                     data={expensesByCategory}
                     cx="50%"
@@ -433,7 +460,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip />
-                </PieChart>
+                </LazyPieChart>
               </ResponsiveContainer>
             )}
           </CardContent>
