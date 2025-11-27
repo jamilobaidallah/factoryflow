@@ -78,6 +78,7 @@ import {
   validateBackup,
   restoreBackup,
   parseBackupFile,
+  createAutoBackupBeforeRestore,
   BackupData,
 } from '../backup-utils';
 
@@ -429,6 +430,50 @@ describe('Backup Utilities', () => {
       };
 
       await expect(restoreBackup(validBackup, 'test-user-id')).rejects.toThrow();
+    });
+  });
+
+  describe('createAutoBackupBeforeRestore', () => {
+    it('should create backup and download with special filename by default', async () => {
+      await createAutoBackupBeforeRestore('test-user-id');
+
+      // Verify download was triggered
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+
+      // Verify log message
+      expect(console.log).toHaveBeenCalledWith(
+        'Creating auto-backup before restore for user:',
+        'test-user-id'
+      );
+    });
+
+    it('should skip download when download parameter is false', async () => {
+      mockCreateObjectURL.mockClear();
+      mockClick.mockClear();
+
+      await createAutoBackupBeforeRestore('test-user-id', false);
+
+      // Verify download was NOT triggered
+      expect(mockClick).not.toHaveBeenCalled();
+    });
+
+    it('should return backup data', async () => {
+      const result = await createAutoBackupBeforeRestore('test-user-id', false);
+
+      expect(result).toBeDefined();
+      expect(result.metadata).toBeDefined();
+      expect(result.data).toBeDefined();
+      expect(result.metadata.version).toBe('1.0.0');
+    });
+
+    it('should log download filename when download is enabled', async () => {
+      await createAutoBackupBeforeRestore('test-user-id', true);
+
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringContaining('Auto-backup downloaded:'),
+        expect.stringContaining('factoryflow_auto_backup_before_restore_')
+      );
     });
   });
 });
