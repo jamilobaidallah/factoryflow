@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Factory } from "lucide-react";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -91,6 +92,16 @@ export default function LoginPage() {
                 minLength={6}
               />
             </div>
+            {isLogin && (
+              <div className="text-left">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  نسيت كلمة المرور؟
+                </Link>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "جاري التحميل..." : isLogin ? "تسجيل الدخول" : "إنشاء حساب"}
             </Button>
