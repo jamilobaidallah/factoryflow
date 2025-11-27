@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/firebase/config";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,10 +36,11 @@ export default function LoginPage() {
           description: "يمكنك الآن استخدام النظام",
         });
       }
-    } catch (error: any) {
+    } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: error.message || "حدث خطأ أثناء العملية",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {

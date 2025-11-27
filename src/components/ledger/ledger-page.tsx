@@ -34,6 +34,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportLedgerToExcel, exportLedgerToPDF, exportLedgerToHTML } from "@/lib/export-utils";
 import {
   collection,
@@ -152,10 +153,10 @@ export default function LedgerPage() {
         setIsDialogOpen(false);
       }
     } catch (error) {
-      console.error("Error saving ledger entry:", error);
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: error instanceof Error ? error.message : "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -267,10 +268,10 @@ export default function LedgerPage() {
               : "تم حذف الحركة المالية بنجاح",
           });
         } catch (error) {
-          console.error("Error deleting entry:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
@@ -401,9 +402,10 @@ export default function LedgerPage() {
       setPaymentFormData({ amount: "", notes: "" });
       setIsRelatedDialogOpen(false); // Close dialog to show updated ledger
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إضافة الدفعة",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -494,9 +496,10 @@ export default function LedgerPage() {
         chequeImage: null,
       });
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إضافة الشيك",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -539,9 +542,10 @@ export default function LedgerPage() {
         notes: ""
       });
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إضافة حركة المخزون",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {

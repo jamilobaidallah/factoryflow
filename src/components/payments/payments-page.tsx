@@ -26,6 +26,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
 import {
   collection,
@@ -277,9 +278,10 @@ export default function PaymentsPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -360,10 +362,10 @@ export default function PaymentsPage() {
               : "تم حذف المدفوعة بنجاح",
           });
         } catch (error) {
-          console.error("Error deleting payment:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }

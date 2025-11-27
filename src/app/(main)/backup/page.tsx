@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { useUser } from '@/firebase/provider';
 import { useToast } from '@/hooks/use-toast';
+import { handleError, getErrorTitle } from '@/lib/error-handling';
 import { Download, Upload, AlertCircle, CheckCircle, Database } from 'lucide-react';
 import { useConfirmation } from '@/components/ui/confirmation-dialog';
 import {
@@ -56,10 +57,10 @@ export default function BackupPage() {
         description: `تم حفظ ${backup.metadata.totalDocuments} مستند`,
       });
     } catch (error) {
-      console.error('Backup error:', error);
+      const appError = handleError(error);
       toast({
-        title: 'فشل إنشاء النسخة الاحتياطية',
-        description: error instanceof Error ? error.message : 'حدث خطأ غير متوقع',
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: 'destructive',
       });
     } finally {
@@ -83,11 +84,11 @@ export default function BackupPage() {
         description: `يحتوي على ${backupData.metadata.totalDocuments} مستند`,
       });
     } catch (error) {
-      console.error('File parse error:', error);
       setBackupPreview(null);
+      const appError = handleError(error);
       toast({
-        title: 'ملف غير صالح',
-        description: error instanceof Error ? error.message : 'تأكد من رفع ملف نسخة احتياطية صحيح',
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: 'destructive',
       });
     }
@@ -138,10 +139,10 @@ export default function BackupPage() {
             window.location.reload();
           }, 2000);
         } catch (error) {
-          console.error('Restore error:', error);
+          const appError = handleError(error);
           toast({
-            title: 'فشلت الاستعادة',
-            description: error instanceof Error ? error.message : 'حدث خطأ غير متوقع',
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: 'destructive',
           });
         } finally {

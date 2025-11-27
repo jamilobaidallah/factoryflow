@@ -25,6 +25,7 @@ import { Plus, CheckCircle, XCircle, Eye, Pencil, Trash2 } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import {
   collection,
   addDoc,
@@ -422,9 +423,10 @@ export default function ProductionPage() {
       setIsEditMode(false);
       setEditingOrderId(null);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: isEditMode ? "حدث خطأ أثناء تحديث أمر الإنتاج" : "حدث خطأ أثناء إنشاء أمر الإنتاج",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -544,10 +546,10 @@ export default function ProductionPage() {
             description: "تم تحديث المخزون بنجاح",
           });
         } catch (error) {
-          console.error("Error completing order:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء إكمال الأمر",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         } finally {
@@ -576,9 +578,10 @@ export default function ProductionPage() {
             description: "تم إلغاء أمر الإنتاج",
           });
         } catch (error) {
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الإلغاء",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
@@ -686,10 +689,10 @@ export default function ProductionPage() {
               : "تم حذف أمر الإنتاج",
           });
         } catch (error) {
-          console.error("Error deleting order:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         } finally {

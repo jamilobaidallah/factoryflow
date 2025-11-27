@@ -27,6 +27,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportChequesToExcel } from "@/lib/export-utils";
 import {
   collection,
@@ -231,9 +232,10 @@ export default function ChequesPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
@@ -316,10 +318,10 @@ export default function ChequesPage() {
               : "تم حذف الشيك بنجاح",
           });
         } catch (error) {
-          console.error("Error deleting cheque:", error);
+          const appError = handleError(error);
           toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
+            title: getErrorTitle(appError),
+            description: appError.message,
             variant: "destructive",
           });
         }
@@ -432,10 +434,10 @@ export default function ChequesPage() {
       setChequeToEndorse(null);
       setEndorseToSupplier("");
     } catch (error) {
-      console.error("Error endorsing cheque:", error);
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تظهير الشيك",
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
     } finally {
