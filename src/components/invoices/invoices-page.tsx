@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download, Eye, Send } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -68,6 +69,7 @@ interface Invoice {
 export default function InvoicesPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -241,23 +243,29 @@ export default function InvoicesPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (invoiceId: string) => {
+  const handleDelete = (invoiceId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذه الفاتورة؟")) {return;}
 
-    try {
-      await deleteDoc(doc(firestore, `users/${user.uid}/invoices`, invoiceId));
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الفاتورة بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الفاتورة",
+      "هل أنت متأكد من حذف هذه الفاتورة؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          await deleteDoc(doc(firestore, `users/${user.uid}/invoices`, invoiceId));
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الفاتورة بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const handleUpdateStatus = async (invoiceId: string, newStatus: Invoice["status"]) => {
@@ -773,6 +781,8 @@ export default function InvoicesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

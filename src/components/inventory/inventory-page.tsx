@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Download } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportInventoryToExcel } from "@/lib/export-utils";
@@ -70,6 +71,7 @@ interface InventoryItem {
 export default function InventoryPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
@@ -278,24 +280,30 @@ export default function InventoryPage() {
     setIsMovementDialogOpen(true);
   };
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = (itemId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا العنصر؟")) {return;}
 
-    try {
-      const itemRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
-      await deleteDoc(itemRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف العنصر من المخزون بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف العنصر",
+      "هل أنت متأكد من حذف هذا العنصر من المخزون؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const itemRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
+          await deleteDoc(itemRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف العنصر من المخزون بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -779,6 +787,8 @@ export default function InventoryPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

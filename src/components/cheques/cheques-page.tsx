@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, Download } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportChequesToExcel } from "@/lib/export-utils";
@@ -72,6 +73,7 @@ interface Cheque {
 export default function ChequesPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [cheques, setCheques] = useState<Cheque[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<Cheque | null>(null);
@@ -253,68 +255,74 @@ export default function ChequesPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (chequeId: string) => {
+  const handleDelete = (chequeId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الشيك؟")) {return;}
 
-    try {
-      // First, get the cheque data to access linkedTransactionId and amount
-      const cheque = cheques.find((c) => c.id === chequeId);
+    confirm(
+      "حذف الشيك",
+      "هل أنت متأكد من حذف هذا الشيك؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          // First, get the cheque data to access linkedTransactionId and amount
+          const cheque = cheques.find((c) => c.id === chequeId);
 
-      if (cheque && cheque.linkedTransactionId) {
-        // Reverse AR/AP update before deleting
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        const ledgerQuery = query(
-          ledgerRef,
-          where("transactionId", "==", cheque.linkedTransactionId.trim())
-        );
-        const ledgerSnapshot = await getDocs(ledgerQuery);
+          if (cheque && cheque.linkedTransactionId) {
+            // Reverse AR/AP update before deleting
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", cheque.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
 
-        if (!ledgerSnapshot.empty) {
-          const ledgerDoc = ledgerSnapshot.docs[0];
-          const ledgerData = ledgerDoc.data();
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
 
-          if (ledgerData.isARAPEntry) {
-            const currentTotalPaid = ledgerData.totalPaid || 0;
-            const transactionAmount = ledgerData.amount || 0;
-            const newTotalPaid = Math.max(0, currentTotalPaid - cheque.amount);
-            const newRemainingBalance = transactionAmount - newTotalPaid;
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = Math.max(0, currentTotalPaid - cheque.amount);
+                const newRemainingBalance = transactionAmount - newTotalPaid;
 
-            let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-            if (newRemainingBalance <= 0) {
-              newStatus = "paid";
-            } else if (newTotalPaid > 0) {
-              newStatus = "partial";
+                let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+                if (newRemainingBalance <= 0) {
+                  newStatus = "paid";
+                } else if (newTotalPaid > 0) {
+                  newStatus = "partial";
+                }
+
+                // Update the ledger entry
+                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newStatus,
+                });
+              }
             }
-
-            // Update the ledger entry
-            await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
-              totalPaid: newTotalPaid,
-              remainingBalance: newRemainingBalance,
-              paymentStatus: newStatus,
-            });
           }
+
+          // Now delete the cheque
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+          await deleteDoc(chequeRef);
+
+          toast({
+            title: "تم الحذف",
+            description: cheque?.linkedTransactionId
+              ? "تم حذف الشيك وتحديث الرصيد في دفتر الأستاذ"
+              : "تم حذف الشيك بنجاح",
+          });
+        } catch (error) {
+          console.error("Error deleting cheque:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
         }
-      }
-
-      // Now delete the cheque
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
-      await deleteDoc(chequeRef);
-
-      toast({
-        title: "تم الحذف",
-        description: cheque?.linkedTransactionId
-          ? "تم حذف الشيك وتحديث الرصيد في دفتر الأستاذ"
-          : "تم حذف الشيك بنجاح",
-      });
-    } catch (error) {
-      console.error("Error deleting cheque:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -885,6 +893,8 @@ export default function ChequesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, TrendingDown, Calendar, FileText } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -113,6 +114,7 @@ const generateTransactionId = (): string => {
 export default function FixedAssetsPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDepreciationDialogOpen, setIsDepreciationDialogOpen] = useState(false);
@@ -248,137 +250,143 @@ export default function FixedAssetsPage() {
     }
   };
 
-  const handleRunDepreciation = async () => {
+  const handleRunDepreciation = () => {
     if (!user) {return;}
-    if (!confirm(`هل أنت متأكد من تسجيل استهلاك شهر ${depreciationPeriod.month}/${depreciationPeriod.year}؟`)) {return;}
 
-    setLoading(true);
-    try {
-      const batch = writeBatch(firestore);
-      const periodLabel = `${depreciationPeriod.year}-${String(depreciationPeriod.month).padStart(2, '0')}`;
+    confirm(
+      "تسجيل الاستهلاك",
+      `هل أنت متأكد من تسجيل استهلاك شهر ${depreciationPeriod.month}/${depreciationPeriod.year}؟`,
+      async () => {
+        setLoading(true);
+        try {
+          const batch = writeBatch(firestore);
+          const periodLabel = `${depreciationPeriod.year}-${String(depreciationPeriod.month).padStart(2, '0')}`;
 
-      // Check if depreciation already run for this period
-      const runsRef = collection(firestore, `users/${user.uid}/depreciation_runs`);
-      const runQuery = query(runsRef, where("period", "==", periodLabel));
-      const runSnapshot = await getDocs(runQuery);
+          // Check if depreciation already run for this period
+          const runsRef = collection(firestore, `users/${user.uid}/depreciation_runs`);
+          const runQuery = query(runsRef, where("period", "==", periodLabel));
+          const runSnapshot = await getDocs(runQuery);
 
-      if (!runSnapshot.empty) {
-        toast({
-          title: "تحذير",
-          description: "تم تسجيل الاستهلاك لهذه الفترة مسبقاً",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
+          if (!runSnapshot.empty) {
+            toast({
+              title: "تحذير",
+              description: "تم تسجيل الاستهلاك لهذه الفترة مسبقاً",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
 
-      // Get active assets
-      const activeAssets = assets.filter(a => a.status === "active");
+          // Get active assets
+          const activeAssets = assets.filter(a => a.status === "active");
 
-      if (activeAssets.length === 0) {
-        toast({
-          title: "لا توجد أصول",
-          description: "لا توجد أصول ثابتة نشطة لتسجيل الاستهلاك",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
+          if (activeAssets.length === 0) {
+            toast({
+              title: "لا توجد أصول",
+              description: "لا توجد أصول ثابتة نشطة لتسجيل الاستهلاك",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
 
-      let totalDepreciation = 0;
-      const transactionId = generateTransactionId();
+          let totalDepreciation = 0;
+          const transactionId = generateTransactionId();
 
-      // Process each asset
-      for (const asset of activeAssets) {
-        // Check if asset is fully depreciated
-        if (asset.accumulatedDepreciation >= (asset.purchaseCost - asset.salvageValue)) {
-          continue; // Skip fully depreciated assets
+          // Process each asset
+          for (const asset of activeAssets) {
+            // Check if asset is fully depreciated
+            if (asset.accumulatedDepreciation >= (asset.purchaseCost - asset.salvageValue)) {
+              continue; // Skip fully depreciated assets
+            }
+
+            const depreciationAmount = Math.min(
+              asset.monthlyDepreciation,
+              (asset.purchaseCost - asset.salvageValue) - asset.accumulatedDepreciation
+            );
+
+            const newAccumulatedDepreciation = asset.accumulatedDepreciation + depreciationAmount;
+            const newBookValue = asset.purchaseCost - newAccumulatedDepreciation;
+
+            // Create depreciation record
+            const recordsRef = collection(firestore, `users/${user.uid}/depreciation_records`);
+            const recordDocRef = doc(recordsRef);
+            batch.set(recordDocRef, {
+              assetId: asset.id,
+              assetName: asset.assetName,
+              month: depreciationPeriod.month,
+              year: depreciationPeriod.year,
+              periodLabel: periodLabel,
+              depreciationAmount: depreciationAmount,
+              accumulatedDepreciationBefore: asset.accumulatedDepreciation,
+              accumulatedDepreciationAfter: newAccumulatedDepreciation,
+              bookValueBefore: asset.bookValue,
+              bookValueAfter: newBookValue,
+              ledgerEntryId: transactionId,
+              recordedDate: new Date(),
+              createdAt: new Date(),
+            });
+
+            // Update asset
+            const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, asset.id);
+            batch.update(assetRef, {
+              accumulatedDepreciation: newAccumulatedDepreciation,
+              bookValue: newBookValue,
+              lastDepreciationDate: new Date(),
+            });
+
+            totalDepreciation += depreciationAmount;
+          }
+
+          // Create ledger entry for total depreciation
+          const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+          const ledgerDocRef = doc(ledgerRef);
+          batch.set(ledgerDocRef, {
+            transactionId: transactionId,
+            description: `استهلاك أصول ثابتة - ${periodLabel}`,
+            type: "مصروف",
+            amount: totalDepreciation,
+            category: "مصاريف تشغيلية",
+            subCategory: "استهلاك أصول ثابتة",
+            associatedParty: "",
+            date: new Date(),
+            reference: periodLabel,
+            notes: `استهلاك شهري لعدد ${activeAssets.length} أصول ثابتة`,
+            autoGenerated: true,
+            createdAt: new Date(),
+          });
+
+          // Record depreciation run
+          const runDocRef = doc(runsRef);
+          batch.set(runDocRef, {
+            period: periodLabel,
+            runDate: new Date(),
+            assetsCount: activeAssets.length,
+            totalDepreciation: totalDepreciation,
+            ledgerEntryId: transactionId,
+            createdAt: new Date(),
+          });
+
+          await batch.commit();
+
+          toast({
+            title: "تم تسجيل الاستهلاك بنجاح",
+            description: `إجمالي الاستهلاك: ${totalDepreciation.toFixed(2)} دينار`,
+          });
+          setIsDepreciationDialogOpen(false);
+        } catch (error) {
+          console.error("Error running depreciation:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء تسجيل الاستهلاك",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
         }
-
-        const depreciationAmount = Math.min(
-          asset.monthlyDepreciation,
-          (asset.purchaseCost - asset.salvageValue) - asset.accumulatedDepreciation
-        );
-
-        const newAccumulatedDepreciation = asset.accumulatedDepreciation + depreciationAmount;
-        const newBookValue = asset.purchaseCost - newAccumulatedDepreciation;
-
-        // Create depreciation record
-        const recordsRef = collection(firestore, `users/${user.uid}/depreciation_records`);
-        const recordDocRef = doc(recordsRef);
-        batch.set(recordDocRef, {
-          assetId: asset.id,
-          assetName: asset.assetName,
-          month: depreciationPeriod.month,
-          year: depreciationPeriod.year,
-          periodLabel: periodLabel,
-          depreciationAmount: depreciationAmount,
-          accumulatedDepreciationBefore: asset.accumulatedDepreciation,
-          accumulatedDepreciationAfter: newAccumulatedDepreciation,
-          bookValueBefore: asset.bookValue,
-          bookValueAfter: newBookValue,
-          ledgerEntryId: transactionId,
-          recordedDate: new Date(),
-          createdAt: new Date(),
-        });
-
-        // Update asset
-        const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, asset.id);
-        batch.update(assetRef, {
-          accumulatedDepreciation: newAccumulatedDepreciation,
-          bookValue: newBookValue,
-          lastDepreciationDate: new Date(),
-        });
-
-        totalDepreciation += depreciationAmount;
-      }
-
-      // Create ledger entry for total depreciation
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-      const ledgerDocRef = doc(ledgerRef);
-      batch.set(ledgerDocRef, {
-        transactionId: transactionId,
-        description: `استهلاك أصول ثابتة - ${periodLabel}`,
-        type: "مصروف",
-        amount: totalDepreciation,
-        category: "مصاريف تشغيلية",
-        subCategory: "استهلاك أصول ثابتة",
-        associatedParty: "",
-        date: new Date(),
-        reference: periodLabel,
-        notes: `استهلاك شهري لعدد ${activeAssets.length} أصول ثابتة`,
-        autoGenerated: true,
-        createdAt: new Date(),
-      });
-
-      // Record depreciation run
-      const runDocRef = doc(runsRef);
-      batch.set(runDocRef, {
-        period: periodLabel,
-        runDate: new Date(),
-        assetsCount: activeAssets.length,
-        totalDepreciation: totalDepreciation,
-        ledgerEntryId: transactionId,
-        createdAt: new Date(),
-      });
-
-      await batch.commit();
-
-      toast({
-        title: "تم تسجيل الاستهلاك بنجاح",
-        description: `إجمالي الاستهلاك: ${totalDepreciation.toFixed(2)} دينار`,
-      });
-      setIsDepreciationDialogOpen(false);
-    } catch (error) {
-      console.error("Error running depreciation:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تسجيل الاستهلاك",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+      },
+      "warning"
+    );
   };
 
   const handleEdit = (asset: FixedAsset) => {
@@ -398,24 +406,30 @@ export default function FixedAssetsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (assetId: string) => {
+  const handleDelete = (assetId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الأصل الثابت؟")) {return;}
 
-    try {
-      const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, assetId);
-      await deleteDoc(assetRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الأصل الثابت بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الأصل الثابت",
+      "هل أنت متأكد من حذف هذا الأصل الثابت؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, assetId);
+          await deleteDoc(assetRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الأصل الثابت بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -844,6 +858,8 @@ export default function FixedAssetsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, DollarSign, History } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -79,6 +80,7 @@ interface PayrollEntry {
 export default function EmployeesPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([]);
@@ -249,24 +251,30 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleDeleteEmployee = async (employeeId: string) => {
+  const handleDeleteEmployee = (employeeId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الموظف؟")) {return;}
 
-    try {
-      const employeeRef = doc(firestore, `users/${user.uid}/employees`, employeeId);
-      await deleteDoc(employeeRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الموظف بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الموظف",
+      "هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const employeeRef = doc(firestore, `users/${user.uid}/employees`, employeeId);
+          await deleteDoc(employeeRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الموظف بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const handleEditEmployee = (employee: Employee) => {
@@ -311,53 +319,59 @@ export default function EmployeesPage() {
     return overtimeHours * hourlyRate * 1.5;
   };
 
-  const handleProcessPayroll = async () => {
+  const handleProcessPayroll = () => {
     if (!user) {return;}
-    if (!confirm(`هل أنت متأكد من معالجة الرواتب لشهر ${selectedMonth}؟`)) {return;}
 
-    setLoading(true);
-    try {
-      const batch = writeBatch(firestore);
-      const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
+    confirm(
+      "معالجة الرواتب",
+      `هل أنت متأكد من معالجة الرواتب لشهر ${selectedMonth}؟`,
+      async () => {
+        setLoading(true);
+        try {
+          const batch = writeBatch(firestore);
+          const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
 
-      for (const employee of employees) {
-        const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
-        const overtimePay = employee.overtimeEligible ? calculateOvertimePay(employee, overtimeHours) : 0;
-        const totalSalary = employee.currentSalary + overtimePay;
+          for (const employee of employees) {
+            const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
+            const overtimePay = employee.overtimeEligible ? calculateOvertimePay(employee, overtimeHours) : 0;
+            const totalSalary = employee.currentSalary + overtimePay;
 
-        const payrollDocRef = doc(payrollRef);
-        batch.set(payrollDocRef, {
-          employeeId: employee.id,
-          employeeName: employee.name,
-          month: selectedMonth,
-          baseSalary: employee.currentSalary,
-          overtimeHours: overtimeHours,
-          overtimePay: overtimePay,
-          totalSalary: totalSalary,
-          isPaid: false,
-          notes: payrollData[employee.id]?.notes || "",
-          createdAt: new Date(),
-        });
-      }
+            const payrollDocRef = doc(payrollRef);
+            batch.set(payrollDocRef, {
+              employeeId: employee.id,
+              employeeName: employee.name,
+              month: selectedMonth,
+              baseSalary: employee.currentSalary,
+              overtimeHours: overtimeHours,
+              overtimePay: overtimePay,
+              totalSalary: totalSalary,
+              isPaid: false,
+              notes: payrollData[employee.id]?.notes || "",
+              createdAt: new Date(),
+            });
+          }
 
-      await batch.commit();
+          await batch.commit();
 
-      toast({
-        title: "تمت المعالجة",
-        description: `تم إنشاء كشف رواتب ${selectedMonth} بنجاح`,
-      });
+          toast({
+            title: "تمت المعالجة",
+            description: `تم إنشاء كشف رواتب ${selectedMonth} بنجاح`,
+          });
 
-      // Reset payroll data
-      setPayrollData({});
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء معالجة الرواتب",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+          // Reset payroll data
+          setPayrollData({});
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء معالجة الرواتب",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+      "warning"
+    );
   };
 
   const handleMarkAsPaid = async (payrollEntry: PayrollEntry) => {
@@ -892,6 +906,8 @@ export default function EmployeesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

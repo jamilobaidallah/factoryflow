@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -62,6 +63,7 @@ interface Cheque {
 export default function IncomingChequesPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [cheques, setCheques] = useState<Cheque[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<Cheque | null>(null);
@@ -186,24 +188,30 @@ export default function IncomingChequesPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (chequeId: string) => {
+  const handleDelete = (chequeId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الشيك؟")) {return;}
 
-    try {
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
-      await deleteDoc(chequeRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الشيك بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الشيك",
+      "هل أنت متأكد من حذف هذا الشيك؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+          await deleteDoc(chequeRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الشيك بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -349,60 +357,63 @@ export default function IncomingChequesPage() {
     }
   };
 
-  const handleCancelEndorsement = async (cheque: Cheque) => {
+  const handleCancelEndorsement = (cheque: Cheque) => {
     if (!user) {return;}
 
-    if (!confirm(`هل أنت متأكد من إلغاء تظهير الشيك رقم ${cheque.chequeNumber}؟\nسيتم حذف حركات التظهير المرتبطة والشيك من الصادرة.`)) {
-      return;
-    }
+    confirm(
+      "إلغاء التظهير",
+      `هل أنت متأكد من إلغاء تظهير الشيك رقم ${cheque.chequeNumber}؟ سيتم حذف حركات التظهير المرتبطة والشيك من الصادرة.`,
+      async () => {
+        setLoading(true);
+        try {
+          // 1. Delete the outgoing cheque entry if it exists
+          if ((cheque as any).endorsedToOutgoingId) {
+            const outgoingChequeRef = doc(
+              firestore,
+              `users/${user.uid}/cheques`,
+              (cheque as any).endorsedToOutgoingId
+            );
+            await deleteDoc(outgoingChequeRef);
+          }
 
-    setLoading(true);
-    try {
-      // 1. Delete the outgoing cheque entry if it exists
-      if ((cheque as any).endorsedToOutgoingId) {
-        const outgoingChequeRef = doc(
-          firestore,
-          `users/${user.uid}/cheques`,
-          (cheque as any).endorsedToOutgoingId
-        );
-        await deleteDoc(outgoingChequeRef);
-      }
+          // 2. Revert incoming cheque to pending status
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+          await updateDoc(chequeRef, {
+            chequeType: "عادي",
+            status: "قيد الانتظار",
+            endorsedTo: null,
+            endorsedDate: null,
+            endorsedToOutgoingId: null,
+          });
 
-      // 2. Revert incoming cheque to pending status
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
-      await updateDoc(chequeRef, {
-        chequeType: "عادي",
-        status: "قيد الانتظار",
-        endorsedTo: null,
-        endorsedDate: null,
-        endorsedToOutgoingId: null,
-      });
+          // 3. Delete endorsement payment records
+          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const paymentsSnapshot = await getDocs(
+            query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
+          );
 
-      // 3. Delete endorsement payment records
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const paymentsSnapshot = await getDocs(
-        query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
-      );
+          const deletePromises = paymentsSnapshot.docs.map((doc) =>
+            deleteDoc(doc.ref)
+          );
+          await Promise.all(deletePromises);
 
-      const deletePromises = paymentsSnapshot.docs.map((doc) =>
-        deleteDoc(doc.ref)
-      );
-      await Promise.all(deletePromises);
-
-      toast({
-        title: "تم إلغاء التظهير",
-        description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} بنجاح`,
-      });
-    } catch (error) {
-      console.error("Error canceling endorsement:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إلغاء التظهير",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+          toast({
+            title: "تم إلغاء التظهير",
+            description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} بنجاح`,
+          });
+        } catch (error) {
+          console.error("Error canceling endorsement:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء إلغاء التظهير",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+      "warning"
+    );
   };
 
   // Calculate summary statistics
@@ -843,6 +854,8 @@ export default function IncomingChequesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

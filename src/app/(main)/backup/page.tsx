@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { useUser } from '@/firebase/provider';
 import { useToast } from '@/hooks/use-toast';
 import { Download, Upload, AlertCircle, CheckCircle, Database } from 'lucide-react';
+import { useConfirmation } from '@/components/ui/confirmation-dialog';
 import {
   createBackup,
   downloadBackup,
@@ -19,6 +20,7 @@ import {
 export default function BackupPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -92,57 +94,62 @@ export default function BackupPage() {
   };
 
   // Restore from backup
-  const handleRestore = async (mode: 'replace' | 'merge') => {
+  const handleRestore = (mode: 'replace' | 'merge') => {
     if (!user || !backupPreview) return;
 
-    const confirmed = window.confirm(
-      mode === 'replace'
-        ? 'تحذير: سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟'
-        : 'سيتم دمج البيانات مع البيانات الحالية. هل تريد المتابعة؟'
-    );
+    const title = mode === 'replace' ? 'استبدال البيانات' : 'دمج البيانات';
+    const message = mode === 'replace'
+      ? 'تحذير: سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟'
+      : 'سيتم دمج البيانات مع البيانات الحالية. هل تريد المتابعة؟';
+    const variant = mode === 'replace' ? 'destructive' : 'warning';
 
-    if (!confirmed) return;
+    confirm(
+      title,
+      message,
+      async () => {
+        setIsRestoring(true);
+        setRestoreProgress(0);
+        setRestoreMessage('جاري الاستعادة...');
 
-    setIsRestoring(true);
-    setRestoreProgress(0);
-    setRestoreMessage('جاري الاستعادة...');
+        try {
+          await restoreBackup(
+            backupPreview,
+            user.uid,
+            mode,
+            (progress, progressMessage) => {
+              setRestoreProgress(progress);
+              setRestoreMessage(progressMessage);
+            }
+          );
 
-    try {
-      await restoreBackup(
-        backupPreview,
-        user.uid,
-        mode,
-        (progress, message) => {
-          setRestoreProgress(progress);
-          setRestoreMessage(message);
+          toast({
+            title: 'تمت الاستعادة بنجاح!',
+            description: 'تم استعادة جميع البيانات',
+          });
+
+          // Clear preview after successful restore
+          setBackupPreview(null);
+          setSelectedFile(null);
+          setRestoreProgress(0);
+          setRestoreMessage('');
+
+          // Reload page to show new data
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } catch (error) {
+          console.error('Restore error:', error);
+          toast({
+            title: 'فشلت الاستعادة',
+            description: error instanceof Error ? error.message : 'حدث خطأ غير متوقع',
+            variant: 'destructive',
+          });
+        } finally {
+          setIsRestoring(false);
         }
-      );
-
-      toast({
-        title: 'تمت الاستعادة بنجاح! ✓',
-        description: 'تم استعادة جميع البيانات',
-      });
-
-      // Clear preview after successful restore
-      setBackupPreview(null);
-      setSelectedFile(null);
-      setRestoreProgress(0);
-      setRestoreMessage('');
-
-      // Reload page to show new data
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (error) {
-      console.error('Restore error:', error);
-      toast({
-        title: 'فشلت الاستعادة',
-        description: error instanceof Error ? error.message : 'حدث خطأ غير متوقع',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRestoring(false);
-    }
+      },
+      variant as "destructive" | "warning"
+    );
   };
 
   return (
@@ -290,6 +297,8 @@ export default function BackupPage() {
           <p>• استخدام &quot;استبدال&quot; يحذف البيانات الحالية ويستبدلها بالنسخة الاحتياطية</p>
         </CardContent>
       </Card>
+
+      {confirmationDialog}
     </div>
   );
 }

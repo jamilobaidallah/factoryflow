@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Users } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -52,6 +53,7 @@ interface Partner {
 export default function PartnersPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
@@ -170,24 +172,30 @@ export default function PartnersPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (partnerId: string) => {
+  const handleDelete = (partnerId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الشريك؟")) {return;}
 
-    try {
-      const partnerRef = doc(firestore, `users/${user.uid}/partners`, partnerId);
-      await deleteDoc(partnerRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الشريك بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الشريك",
+      "هل أنت متأكد من حذف هذا الشريك؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const partnerRef = doc(firestore, `users/${user.uid}/partners`, partnerId);
+          await deleteDoc(partnerRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الشريك بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -466,6 +474,8 @@ export default function PartnersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

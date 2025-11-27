@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Image as ImageIcon, Link } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -60,6 +61,7 @@ interface Cheque {
 export default function OutgoingChequesPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [cheques, setCheques] = useState<Cheque[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<Cheque | null>(null);
@@ -183,24 +185,30 @@ export default function OutgoingChequesPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (chequeId: string) => {
+  const handleDelete = (chequeId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذا الشيك؟")) {return;}
 
-    try {
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
-      await deleteDoc(chequeRef);
-      toast({
-        title: "تم الحذف",
-        description: "تم حذف الشيك بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+    confirm(
+      "حذف الشيك",
+      "هل أنت متأكد من حذف هذا الشيك؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+          await deleteDoc(chequeRef);
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الشيك بنجاح",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -700,6 +708,8 @@ export default function OutgoingChequesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }
