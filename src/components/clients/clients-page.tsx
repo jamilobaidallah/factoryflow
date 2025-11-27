@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -68,6 +69,7 @@ export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [clients, setClients] = useState<Client[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -244,29 +246,35 @@ export default function ClientsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (clientId: string) => {
+  const handleDelete = (clientId: string) => {
     if (!user) return;
-    if (!confirm("هل أنت متأكد من حذف هذا العميل؟")) return;
 
-    try {
-      const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
-      await deleteDoc(clientRef);
+    confirm(
+      "حذف العميل",
+      "هل أنت متأكد من حذف هذا العميل؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
+          await deleteDoc(clientRef);
 
-      const successMsg = getSuccessMessage('delete', 'العميل');
-      toast({
-        title: successMsg.title,
-        description: successMsg.description,
-      });
-    } catch (error) {
-      const appError = handleError(error);
-      logError(appError, { operation: 'deleteClient', clientId }, user?.uid);
+          const successMsg = getSuccessMessage('delete', 'العميل');
+          toast({
+            title: successMsg.title,
+            description: successMsg.description,
+          });
+        } catch (error) {
+          const appError = handleError(error);
+          logError(appError, { operation: 'deleteClient', clientId }, user?.uid);
 
-      toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
-        variant: "destructive",
-      });
-    }
+          toast({
+            title: getErrorTitle(appError),
+            description: appError.message,
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -455,6 +463,8 @@ export default function ClientsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

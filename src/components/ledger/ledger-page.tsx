@@ -30,6 +30,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Plus, Edit, Trash2, FolderOpen, DollarSign, Download } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +66,7 @@ import { RelatedRecordsDialog } from "./components/RelatedRecordsDialog";
 export default function LedgerPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -166,11 +168,14 @@ export default function LedgerPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (entryId: string) => {
+  const handleDelete = (entryId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذه الحركة؟ سيتم حذف جميع السجلات المرتبطة (مدفوعات، شيكات، حركات مخزون).")) {return;}
 
-    try {
+    confirm(
+      "حذف الحركة المالية",
+      "هل أنت متأكد من حذف هذه الحركة؟ سيتم حذف جميع السجلات المرتبطة (مدفوعات، شيكات، حركات مخزون). لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
       // Get the entry to find its transactionId
       const entry = entries.find((e) => e.id === entryId);
       if (!entry) {
@@ -253,21 +258,24 @@ export default function LedgerPage() {
       // Commit all deletions
       await batch.commit();
 
-      const deletedCount = paymentsSnapshot.size + chequesSnapshot.size + movementsSnapshot.size + cogsSnapshot.size;
-      toast({
-        title: "تم الحذف",
-        description: deletedCount > 0
-          ? `تم حذف الحركة المالية و ${deletedCount} سجل مرتبط`
-          : "تم حذف الحركة المالية بنجاح",
-      });
-    } catch (error) {
-      console.error("Error deleting entry:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+          const deletedCount = paymentsSnapshot.size + chequesSnapshot.size + movementsSnapshot.size + cogsSnapshot.size;
+          toast({
+            title: "تم الحذف",
+            description: deletedCount > 0
+              ? `تم حذف الحركة المالية و ${deletedCount} سجل مرتبط`
+              : "تم حذف الحركة المالية بنجاح",
+          });
+        } catch (error) {
+          console.error("Error deleting entry:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -711,6 +719,8 @@ export default function LedgerPage() {
           setQuickPayEntry(null);
         }}
       />
+
+      {confirmationDialog}
     </div>
   );
 }
