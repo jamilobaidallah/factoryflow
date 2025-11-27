@@ -118,8 +118,8 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-4">
-        <ul className="space-y-2">
+      <nav className="flex-1 p-4" aria-label="القائمة الرئيسية">
+        <ul className="space-y-2" role="list">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
@@ -134,8 +134,10 @@ export default function Sidebar() {
                       ? "bg-primary text-white"
                       : "text-gray-700 hover:bg-gray-100"
                   )}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={item.title}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-5 h-5" aria-hidden="true" />
                   <span className="font-medium">{item.title}</span>
                 </Link>
               </li>

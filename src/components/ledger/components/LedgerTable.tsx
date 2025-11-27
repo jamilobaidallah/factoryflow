@@ -62,6 +62,8 @@ const LedgerTableRow = memo(function LedgerTableRow({
               ? "bg-green-100 text-green-700"
               : "bg-red-100 text-red-700"
           }`}
+          role="status"
+          aria-label={`النوع: ${entry.type}`}
         >
           {entry.type}
         </span>
@@ -84,6 +86,8 @@ const LedgerTableRow = memo(function LedgerTableRow({
                     ? "bg-yellow-100 text-yellow-700"
                     : "bg-red-100 text-red-700"
                 }`}
+                role="status"
+                aria-label={`حالة الدفع: ${entry.paymentStatus === "paid" ? "مدفوع" : entry.paymentStatus === "partial" ? "دفعة جزئية" : "غير مدفوع"}`}
               >
                 {entry.paymentStatus === "paid"
                   ? "مدفوع"
@@ -109,16 +113,17 @@ const LedgerTableRow = memo(function LedgerTableRow({
       </TableCell>
 
       <TableCell>
-        <div className="flex gap-2">
+        <div className="flex gap-2" role="group" aria-label="إجراءات الحركة المالية">
           {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
             <Button
               variant="default"
               size="sm"
               onClick={() => onQuickPay(entry)}
               title="إضافة دفعة"
+              aria-label={`إضافة دفعة لـ ${entry.description}`}
               className="bg-green-600 hover:bg-green-700"
             >
-              <DollarSign className="w-4 h-4" />
+              <DollarSign className="w-4 h-4" aria-hidden="true" />
             </Button>
           )}
           <Button
@@ -126,18 +131,25 @@ const LedgerTableRow = memo(function LedgerTableRow({
             size="sm"
             onClick={() => onViewRelated(entry)}
             title="إدارة السجلات المرتبطة"
+            aria-label={`عرض السجلات المرتبطة بـ ${entry.description}`}
           >
-            <FolderOpen className="w-4 h-4" />
+            <FolderOpen className="w-4 h-4" aria-hidden="true" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onEdit(entry)}>
-            <Edit className="w-4 h-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit(entry)}
+            aria-label={`تعديل ${entry.description}`}
+          >
+            <Edit className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button
             variant="destructive"
             size="sm"
             onClick={() => onDelete(entry.id)}
+            aria-label={`حذف ${entry.description}`}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
           </Button>
         </div>
       </TableCell>

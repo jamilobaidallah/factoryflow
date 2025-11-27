@@ -476,7 +476,7 @@ export default function EmployeesPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-4">
+        <nav className="flex gap-4" role="tablist" aria-label="أقسام الموظفين والرواتب">
           <button
             onClick={() => setActiveTab("employees")}
             className={`pb-2 px-1 border-b-2 font-medium text-sm ${
@@ -484,6 +484,10 @@ export default function EmployeesPage() {
                 ? "border-blue-500 text-blue-600"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
+            role="tab"
+            aria-selected={activeTab === "employees"}
+            aria-controls="employees-panel"
+            id="employees-tab"
           >
             📋 الموظفين
           </button>
@@ -494,6 +498,10 @@ export default function EmployeesPage() {
                 ? "border-blue-500 text-blue-600"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
+            role="tab"
+            aria-selected={activeTab === "payroll"}
+            aria-controls="payroll-panel"
+            id="payroll-tab"
           >
             💰 الرواتب الشهرية
           </button>
@@ -505,8 +513,8 @@ export default function EmployeesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>قائمة الموظفين ({employees.length})</CardTitle>
-            <Button onClick={openAddEmployeeDialog} className="gap-2">
-              <Plus className="w-4 h-4" />
+            <Button onClick={openAddEmployeeDialog} className="gap-2" aria-label="إضافة موظف جديد">
+              <Plus className="w-4 h-4" aria-hidden="true" />
               إضافة موظف
             </Button>
           </CardHeader>
@@ -535,11 +543,11 @@ export default function EmployeesPage() {
                       <TableCell>{employee.currentSalary} دينار</TableCell>
                       <TableCell>
                         {employee.overtimeEligible ? (
-                          <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
+                          <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700" role="status" aria-label="مؤهل للوقت الإضافي">
                             مؤهل
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
+                          <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700" role="status" aria-label="غير مؤهل للوقت الإضافي">
                             غير مؤهل
                           </span>
                         )}
@@ -548,27 +556,30 @@ export default function EmployeesPage() {
                         {new Date(employee.hireDate).toLocaleDateString("ar-EG")}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2" role="group" aria-label="إجراءات الموظف">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => viewSalaryHistory(employee.id)}
+                            aria-label={`عرض سجل رواتب ${employee.name}`}
                           >
-                            <History className="w-4 h-4" />
+                            <History className="w-4 h-4" aria-hidden="true" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleEditEmployee(employee)}
+                            aria-label={`تعديل ${employee.name}`}
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4" aria-hidden="true" />
                           </Button>
                           <Button
                             variant="destructive"
                             size="sm"
                             onClick={() => handleDeleteEmployee(employee.id)}
+                            aria-label={`حذف ${employee.name}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </Button>
                         </div>
                       </TableCell>
@@ -630,11 +641,11 @@ export default function EmployeesPage() {
                           </TableCell>
                           <TableCell>
                             {entry.isPaid ? (
-                              <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
+                              <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700" role="status" aria-label="حالة الدفع: تم الدفع">
                                 تم الدفع
                               </span>
                             ) : (
-                              <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">
+                              <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700" role="status" aria-label="حالة الدفع: لم يتم الدفع">
                                 لم يتم الدفع
                               </span>
                             )}
@@ -645,8 +656,9 @@ export default function EmployeesPage() {
                                 size="sm"
                                 onClick={() => handleMarkAsPaid(entry)}
                                 disabled={loading}
+                                aria-label={`تسجيل دفع راتب ${entry.employeeName}`}
                               >
-                                <DollarSign className="w-4 h-4 mr-1" />
+                                <DollarSign className="w-4 h-4 mr-1" aria-hidden="true" />
                                 تسجيل دفع
                               </Button>
                             )}
@@ -737,8 +749,9 @@ export default function EmployeesPage() {
                       disabled={loading}
                       size="lg"
                       className="gap-2"
+                      aria-label={`معالجة رواتب شهر ${selectedMonth}`}
                     >
-                      <DollarSign className="w-5 h-5" />
+                      <DollarSign className="w-5 h-5" aria-hidden="true" />
                       معالجة الرواتب
                     </Button>
                   </div>

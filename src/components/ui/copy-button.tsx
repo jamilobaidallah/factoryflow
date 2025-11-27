@@ -55,12 +55,14 @@ export function CopyButton({ text, size = "sm", showText = false }: CopyButtonPr
       size="sm"
       className={`${sizeClasses[size]} hover:bg-gray-100 transition-colors`}
       onClick={handleCopy}
-      title="نسخ"
+      title={copied ? "تم النسخ" : "نسخ"}
+      aria-label={copied ? "تم النسخ إلى الحافظة" : "نسخ إلى الحافظة"}
+      aria-live="polite"
     >
       {copied ? (
-        <Check className={`${iconSizes[size]} text-green-600`} />
+        <Check className={`${iconSizes[size]} text-green-600`} aria-hidden="true" />
       ) : (
-        <Copy className={`${iconSizes[size]} text-gray-500`} />
+        <Copy className={`${iconSizes[size]} text-gray-500`} aria-hidden="true" />
       )}
       {showText && (
         <span className="mr-1 text-xs">

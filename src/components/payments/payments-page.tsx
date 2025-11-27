@@ -403,8 +403,8 @@ export default function PaymentsPage() {
           <h1 className="text-3xl font-bold text-gray-900">المدفوعات</h1>
           <p className="text-gray-600 mt-2">تتبع عمليات القبض والصرف</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
+        <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
+          <Plus className="w-4 h-4" aria-hidden="true" />
           إضافة مدفوعة
         </Button>
       </div>
@@ -441,8 +441,9 @@ export default function PaymentsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
+                aria-label="تصدير المدفوعات إلى ملف Excel"
               >
-                <Download className="w-4 h-4 ml-2" />
+                <Download className="w-4 h-4 ml-2" aria-hidden="true" />
                 Excel
               </Button>
             )}
@@ -484,6 +485,8 @@ export default function PaymentsPage() {
                               ? "bg-green-100 text-green-700"
                               : "bg-red-100 text-red-700"
                           }`}
+                          role="status"
+                          aria-label={`النوع: ${payment.type}`}
                         >
                           {payment.type}
                         </span>
@@ -522,20 +525,22 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell>{payment.notes}</TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" role="group" aria-label="إجراءات المدفوعة">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleEdit(payment)}
+                          aria-label={`تعديل مدفوعة ${payment.clientName}`}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-4 h-4" aria-hidden="true" />
                         </Button>
                         <Button
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDelete(payment.id)}
+                          aria-label={`حذف مدفوعة ${payment.clientName}`}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </Button>
                       </div>
                     </TableCell>
