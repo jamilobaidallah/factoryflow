@@ -33,7 +33,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !entry) return;
+    if (!user || !entry) { return; }
 
     const paymentAmount = parseFloat(amount);
     if (isNaN(paymentAmount) || paymentAmount <= 0) {

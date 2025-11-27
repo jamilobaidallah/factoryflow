@@ -34,7 +34,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
 
     // Load total count of entries
     useEffect(() => {
-        if (!user) return;
+        if (!user) { return; }
 
         const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
         getCountFromServer(query(ledgerRef)).then((snapshot) => {
@@ -47,7 +47,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         if (!user) {return;}
 
         const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        let q = query(ledgerRef, orderBy("date", "desc"), limit(pageSize));
+        const q = query(ledgerRef, orderBy("date", "desc"), limit(pageSize));
 
         // For pages after the first, we need to skip
         // Note: Firestore doesn't support offset, so we use limit for now

@@ -111,7 +111,7 @@ export default function InventoryPage() {
 
   // Fetch total count
   useEffect(() => {
-    if (!user) return;
+    if (!user) { return; }
 
     const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
     getCountFromServer(query(inventoryRef)).then((snapshot) => {
@@ -509,7 +509,7 @@ export default function InventoryPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                        if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
                       }}
                       className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
                     />
@@ -538,7 +538,7 @@ export default function InventoryPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                        if (currentPage > 1) { setCurrentPage(currentPage - 1); }
                       }}
                       className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
                     />

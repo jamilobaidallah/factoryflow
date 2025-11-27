@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Unit Tests for Backup Utilities
  * Tests backup validation, download, restoration, and file parsing

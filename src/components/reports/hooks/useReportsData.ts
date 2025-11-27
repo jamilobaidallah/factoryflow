@@ -75,7 +75,7 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
 
   const fetchReportData = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) { return; }
     setLoading(true);
 
     try {
