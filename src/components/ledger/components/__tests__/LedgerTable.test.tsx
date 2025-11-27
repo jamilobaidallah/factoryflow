@@ -331,7 +331,7 @@ describe('LedgerTable', () => {
       expect(mockOnDelete).toHaveBeenCalledWith('1');
     });
 
-    it.skip('should call onViewRelated when view related button is clicked', () => {
+    it('should call onViewRelated when view related button is clicked', () => {
       render(
         <LedgerTable
           entries={[mockIncomeEntry]}
@@ -342,14 +342,13 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      const viewRelatedButton = buttons[0]; // First button is view related
-
+      // Find the view related button by its title
+      const viewRelatedButton = screen.getByTitle('إدارة السجلات المرتبطة');
       fireEvent.click(viewRelatedButton);
       expect(mockOnViewRelated).toHaveBeenCalledWith(mockIncomeEntry);
     });
 
-    it.skip('should show quick pay button for unpaid AR/AP entries', () => {
+    it('should show quick pay button for unpaid AR/AP entries', () => {
       render(
         <LedgerTable
           entries={[mockARAPEntry]}
@@ -360,12 +359,12 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      // For AR/AP entry, we should have 4 buttons: quick pay, view related, edit, delete
-      expect(buttons.length).toBe(4);
+      // Quick pay button should be present for unpaid AR/AP entries
+      const quickPayButton = screen.getByTitle('إضافة دفعة');
+      expect(quickPayButton).toBeInTheDocument();
     });
 
-    it.skip('should call onQuickPay when quick pay button is clicked', () => {
+    it('should call onQuickPay when quick pay button is clicked', () => {
       render(
         <LedgerTable
           entries={[mockARAPEntry]}
@@ -376,14 +375,12 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      const quickPayButton = buttons[0]; // First button for AR/AP unpaid entry is quick pay
-
+      const quickPayButton = screen.getByTitle('إضافة دفعة');
       fireEvent.click(quickPayButton);
       expect(mockOnQuickPay).toHaveBeenCalledWith(mockARAPEntry);
     });
 
-    it.skip('should not show quick pay button for paid entries', () => {
+    it('should not show quick pay button for paid entries', () => {
       render(
         <LedgerTable
           entries={[mockPaidEntry]}
@@ -394,12 +391,12 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      // For paid AR/AP entry, we should have 4 buttons: copy, view related, edit, delete (no quick pay)
-      expect(buttons.length).toBe(4);
+      // Quick pay button should NOT be present for paid entries
+      const quickPayButton = screen.queryByTitle('إضافة دفعة');
+      expect(quickPayButton).not.toBeInTheDocument();
     });
 
-    it.skip('should not show quick pay button for non-AR/AP entries', () => {
+    it('should not show quick pay button for non-AR/AP entries', () => {
       render(
         <LedgerTable
           entries={[mockIncomeEntry]}
@@ -410,9 +407,9 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      // For non-AR/AP entry, we should have 4 buttons: copy, view related, edit, delete (no quick pay)
-      expect(buttons.length).toBe(4);
+      // Quick pay button should NOT be present for non-AR/AP entries
+      const quickPayButton = screen.queryByTitle('إضافة دفعة');
+      expect(quickPayButton).not.toBeInTheDocument();
     });
   });
 
