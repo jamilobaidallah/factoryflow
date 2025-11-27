@@ -28,7 +28,7 @@ export default function Header() {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6" role="banner">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">
           مرحباً بك في نظام إدارة المصنع
@@ -36,8 +36,8 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <User className="w-4 h-4" />
+        <div className="flex items-center gap-2 text-sm text-gray-600" aria-label="معلومات المستخدم">
+          <User className="w-4 h-4" aria-hidden="true" />
           <span>{user?.email}</span>
         </div>
         <Button
@@ -45,8 +45,9 @@ export default function Header() {
           size="sm"
           onClick={handleLogout}
           className="gap-2"
+          aria-label="تسجيل الخروج من النظام"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-4 h-4" aria-hidden="true" />
           تسجيل الخروج
         </Button>
       </div>

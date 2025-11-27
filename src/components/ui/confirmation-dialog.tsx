@@ -82,7 +82,7 @@ export function ConfirmationDialog({
               variant === "warning" && "bg-yellow-100",
               variant === "info" && "bg-blue-100",
               variant === "success" && "bg-green-100"
-            )}>
+            )} aria-hidden="true">
               <Icon className={cn("w-6 h-6", colorMap[variant])} />
             </div>
             <div className="flex-1">
@@ -96,7 +96,7 @@ export function ConfirmationDialog({
           </div>
         </AlertDialogHeader>
         <AlertDialogFooter className="gap-2 sm:gap-2">
-          <AlertDialogCancel disabled={loading || isLoading}>
+          <AlertDialogCancel disabled={loading || isLoading} aria-label={cancelText}>
             {cancelText}
           </AlertDialogCancel>
           <AlertDialogAction
@@ -105,6 +105,8 @@ export function ConfirmationDialog({
               handleConfirm();
             }}
             disabled={loading || isLoading}
+            aria-label={confirmText}
+            aria-busy={loading || isLoading}
             className={cn(
               variant === "destructive" && "bg-red-600 hover:bg-red-700",
               variant === "warning" && "bg-yellow-600 hover:bg-yellow-700",

@@ -301,8 +301,8 @@ export default function ClientsPage() {
           <h1 className="text-3xl font-bold text-gray-900">إدارة العملاء</h1>
           <p className="text-gray-600 mt-2">إضافة وتتبع معلومات العملاء</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
+        <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة عميل جديد">
+          <Plus className="w-4 h-4" aria-hidden="true" />
           إضافة عميل جديد
         </Button>
       </div>
@@ -337,27 +337,30 @@ export default function ClientsPage() {
                     <TableCell>{client.address}</TableCell>
                     <TableCell>{client.balance || 0} دينار</TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" role="group" aria-label="إجراءات العميل">
                         <Button
                           variant="default"
                           size="sm"
                           onClick={() => router.push(`/clients/${client.id}`)}
+                          aria-label={`عرض تفاصيل ${client.name}`}
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-4 h-4" aria-hidden="true" />
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleEdit(client)}
+                          aria-label={`تعديل ${client.name}`}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-4 h-4" aria-hidden="true" />
                         </Button>
                         <Button
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDelete(client.id)}
+                          aria-label={`حذف ${client.name}`}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </Button>
                       </div>
                     </TableCell>
