@@ -24,8 +24,8 @@ test.describe('Authentication', () => {
     // Click login button
     await page.getByRole('button', { name: /تسجيل الدخول|دخول|login/i }).click();
 
-    // Should show error message
-    await expect(page.getByText(/خطأ|error|invalid/i)).toBeVisible({ timeout: 10000 });
+    // Should show error message (use .first() as multiple elements may match)
+    await expect(page.getByText(/خطأ|error|invalid/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should toggle between login and signup modes', async ({ page }) => {
