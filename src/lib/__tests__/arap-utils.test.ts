@@ -7,10 +7,45 @@ import {
   isValidTransactionId,
   formatCurrency,
   validatePaymentAmount,
+  updateARAPOnPaymentAdd,
+  reverseARAPOnPaymentDelete,
 } from '../arap-utils';
 import { PAYMENT_STATUSES } from '../definitions';
+import {
+  Firestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+} from 'firebase/firestore';
+
+// Mock Firebase Firestore
+jest.mock('firebase/firestore', () => ({
+  collection: jest.fn(),
+  query: jest.fn(),
+  where: jest.fn(),
+  getDocs: jest.fn(),
+  updateDoc: jest.fn(),
+  doc: jest.fn(),
+}));
+
+const mockCollection = collection as jest.Mock;
+const mockQuery = query as jest.Mock;
+const mockWhere = where as jest.Mock;
+const mockGetDocs = getDocs as jest.Mock;
+const mockUpdateDoc = updateDoc as jest.Mock;
+const mockDoc = doc as jest.Mock;
+
+// Mock Firestore instance
+const mockFirestore = {} as Firestore;
 
 describe('AR/AP Utilities', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('calculatePaymentStatus', () => {
     it('should return "paid" when fully paid', () => {
       const status = calculatePaymentStatus(1000, 1000);
@@ -133,6 +168,597 @@ describe('AR/AP Utilities', () => {
     it('should accept decimal amounts', () => {
       const result = validatePaymentAmount(123.45);
       expect(result.isValid).toBe(true);
+    });
+
+    it('should accept amount at boundary', () => {
+      const result = validatePaymentAmount(999999999);
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should reject amount just over boundary', () => {
+      const result = validatePaymentAmount(1000000000);
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('المبلغ كبير جداً');
+    });
+
+    it('should handle Infinity', () => {
+      const result = validatePaymentAmount(Infinity);
+      expect(result.isValid).toBe(false);
+    });
+  });
+
+  describe('calculatePaymentStatus - additional edge cases', () => {
+    it('should handle negative transaction amounts', () => {
+      const status = calculatePaymentStatus(100, -100);
+      expect(status).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should handle both amounts as zero', () => {
+      const status = calculatePaymentStatus(0, 0);
+      expect(status).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should handle negative total paid', () => {
+      const status = calculatePaymentStatus(-50, 1000);
+      expect(status).toBe(PAYMENT_STATUSES.UNPAID);
+    });
+
+    it('should handle exact remaining of zero', () => {
+      const status = calculatePaymentStatus(500.00, 500.00);
+      expect(status).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should handle floating point precision issues', () => {
+      // 0.1 + 0.2 in JavaScript is 0.30000000000000004
+      const status = calculatePaymentStatus(0.1 + 0.2, 0.3);
+      expect(status).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should handle very large amounts', () => {
+      const status = calculatePaymentStatus(500000000, 1000000000);
+      expect(status).toBe(PAYMENT_STATUSES.PARTIAL);
+    });
+  });
+
+  describe('formatCurrency - additional edge cases', () => {
+    it('should handle very large numbers', () => {
+      expect(formatCurrency(1000000000)).toBe('1000000000.00 دينار');
+    });
+
+    it('should handle very small decimals', () => {
+      expect(formatCurrency(0.001)).toBe('0.00 دينار');
+    });
+
+    it('should handle empty currency string', () => {
+      expect(formatCurrency(100, '')).toBe('100.00 ');
+    });
+
+    it('should handle special characters in currency', () => {
+      expect(formatCurrency(100, '€')).toBe('100.00 €');
+    });
+  });
+
+  describe('isValidTransactionId - additional edge cases', () => {
+    it('should reject IDs with letters in date section', () => {
+      expect(isValidTransactionId('TXN-2025112A-123456-789')).toBe(false);
+    });
+
+    it('should reject IDs with extra digits', () => {
+      expect(isValidTransactionId('TXN-202511220-123456-789')).toBe(false);
+    });
+
+    it('should reject IDs with missing digits', () => {
+      expect(isValidTransactionId('TXN-2025112-123456-789')).toBe(false);
+    });
+
+    it('should reject IDs with wrong prefix', () => {
+      expect(isValidTransactionId('TX-20251122-123456-789')).toBe(false);
+      expect(isValidTransactionId('TXNN-20251122-123456-789')).toBe(false);
+    });
+
+    it('should reject IDs with extra sections', () => {
+      expect(isValidTransactionId('TXN-20251122-123456-789-000')).toBe(false);
+    });
+
+    it('should reject IDs with wrong separators', () => {
+      expect(isValidTransactionId('TXN_20251122_123456_789')).toBe(false);
+    });
+  });
+
+  describe('updateARAPOnPaymentAdd', () => {
+    const mockLedgerDocId = 'ledger-doc-123';
+    const mockUserId = 'user-123';
+    const mockTransactionId = 'TXN-20251122-123456-789';
+
+    const createMockSnapshot = (data: Record<string, unknown> | null) => {
+      if (data === null) {
+        return { empty: true, docs: [] };
+      }
+      return {
+        empty: false,
+        docs: [
+          {
+            id: mockLedgerDocId,
+            data: () => data,
+          },
+        ],
+      };
+    };
+
+    it('should successfully update AR/AP when payment is added', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 500,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(700);
+      expect(result.newRemainingBalance).toBe(300);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
+      expect(mockUpdateDoc).toHaveBeenCalled();
+    });
+
+    it('should return paid status when payment completes the balance', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 800,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(1000);
+      expect(result.newRemainingBalance).toBe(0);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should handle overpayment correctly', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 800,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        500
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(1300);
+      expect(result.newRemainingBalance).toBe(-300);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PAID);
+    });
+
+    it('should fail when ledger entry is not found', async () => {
+      mockGetDocs.mockResolvedValue(createMockSnapshot(null));
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        'TXN-99999999-999999-999',
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('لم يتم العثور على حركة مالية');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    it('should fail when AR/AP tracking is not enabled', async () => {
+      const ledgerData = {
+        isARAPEntry: false,
+        totalPaid: 500,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('لا تتبع نظام الذمم');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    it('should handle Firestore error gracefully', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Firestore error'));
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('حدث خطأ');
+    });
+
+    it('should trim whitespace from transaction ID', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 0,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        '  TXN-20251122-123456-789  ',
+        500
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockWhere).toHaveBeenCalledWith(
+        'transactionId',
+        '==',
+        'TXN-20251122-123456-789'
+      );
+    });
+
+    it('should handle first payment on unpaid entry', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 0,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        100
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(100);
+      expect(result.newRemainingBalance).toBe(900);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
+    });
+
+    it('should handle missing totalPaid field (defaults to 0)', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        300
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(300);
+    });
+
+    it('should handle missing amount field (defaults to 0)', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 0,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await updateARAPOnPaymentAdd(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        100
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(100);
+      expect(result.newRemainingBalance).toBe(-100);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PAID);
+    });
+  });
+
+  describe('reverseARAPOnPaymentDelete', () => {
+    const mockLedgerDocId = 'ledger-doc-456';
+    const mockUserId = 'user-456';
+    const mockTransactionId = 'TXN-20251122-654321-123';
+
+    const createMockSnapshot = (data: Record<string, unknown> | null) => {
+      if (data === null) {
+        return { empty: true, docs: [] };
+      }
+      return {
+        empty: false,
+        docs: [
+          {
+            id: mockLedgerDocId,
+            data: () => data,
+          },
+        ],
+      };
+    };
+
+    it('should successfully reverse payment and update balance', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 700,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(500);
+      expect(result.newRemainingBalance).toBe(500);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
+      expect(mockUpdateDoc).toHaveBeenCalled();
+    });
+
+    it('should change status to unpaid when all payments reversed', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 200,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(0);
+      expect(result.newRemainingBalance).toBe(1000);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.UNPAID);
+    });
+
+    it('should not allow totalPaid to go below 0', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 100,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        500
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(0);
+      expect(result.newRemainingBalance).toBe(1000);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.UNPAID);
+    });
+
+    it('should fail when ledger entry is not found', async () => {
+      mockGetDocs.mockResolvedValue(createMockSnapshot(null));
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        'TXN-99999999-999999-999',
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('لم يتم العثور على حركة مالية');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    it('should fail when AR/AP tracking is not enabled', async () => {
+      const ledgerData = {
+        isARAPEntry: false,
+        totalPaid: 500,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('لا تتبع نظام الذمم');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    it('should handle Firestore error gracefully', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Firestore error'));
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('حدث خطأ');
+    });
+
+    it('should trim whitespace from transaction ID', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 500,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        '  TXN-20251122-654321-123  ',
+        100
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockWhere).toHaveBeenCalledWith(
+        'transactionId',
+        '==',
+        'TXN-20251122-654321-123'
+      );
+    });
+
+    it('should change status from paid to partial on reversal', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 1000,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        300
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(700);
+      expect(result.newRemainingBalance).toBe(300);
+      expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
+    });
+
+    it('should handle missing totalPaid field (defaults to 0)', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(0);
+    });
+
+    it('should handle missing amount field (defaults to 0)', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 500,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockResolvedValue(undefined);
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.newTotalPaid).toBe(300);
+      expect(result.newRemainingBalance).toBe(-300);
+    });
+
+    it('should handle updateDoc failure', async () => {
+      const ledgerData = {
+        isARAPEntry: true,
+        totalPaid: 500,
+        amount: 1000,
+      };
+
+      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockUpdateDoc.mockRejectedValue(new Error('Update failed'));
+      mockDoc.mockReturnValue('mock-doc-ref');
+
+      const result = await reverseARAPOnPaymentDelete(
+        mockFirestore,
+        mockUserId,
+        mockTransactionId,
+        200
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('حدث خطأ');
     });
   });
 });
