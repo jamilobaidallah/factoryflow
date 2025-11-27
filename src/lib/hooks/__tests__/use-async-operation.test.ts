@@ -4,9 +4,9 @@ import { useAsyncOperation } from '../use-async-operation';
 // Mock error-handler
 jest.mock('../../error-handler', () => ({
   handleFirebaseError: jest.fn((error) => ({
-    code: 'error',
-    message: error.message || 'An error occurred',
-    originalError: error,
+    title: 'Error',
+    description: error.message || 'An error occurred',
+    variant: 'destructive',
   })),
   logError: jest.fn(),
 }));
