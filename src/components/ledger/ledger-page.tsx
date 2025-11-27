@@ -60,6 +60,7 @@ import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
 import { LedgerFormDialog } from "./components/LedgerFormDialog";
 import { RelatedRecordsDialog } from "./components/RelatedRecordsDialog";
+import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Interfaces and constants are now imported from utils
 
@@ -73,7 +74,7 @@ export default function LedgerPage() {
   const [pageSize] = useState(50);
 
   // Use custom hook for data fetching with pagination
-  const { entries, clients, partners, totalCount, totalPages } = useLedgerData({
+  const { entries, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
     pageSize,
     currentPage,
   });
@@ -561,7 +562,16 @@ export default function LedgerPage() {
         </Button>
       </div>
 
-      <LedgerStats entries={entries} />
+      {dataLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+      ) : (
+        <LedgerStats entries={entries} />
+      )}
 
       <Card>
         <CardHeader>
@@ -599,13 +609,17 @@ export default function LedgerPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <LedgerTable
-            entries={entries}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onQuickPay={openQuickPayDialog}
-            onViewRelated={openRelatedDialog}
-          />
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : (
+            <LedgerTable
+              entries={entries}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onQuickPay={openQuickPayDialog}
+              onViewRelated={openRelatedDialog}
+            />
+          )}
 
           {/* Pagination Controls */}
           {totalPages > 1 && (

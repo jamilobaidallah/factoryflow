@@ -30,6 +30,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
+    const [loading, setLoading] = useState(true);
 
     // Load total count of entries
     useEffect(() => {
@@ -69,6 +70,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
 
             setEntries(entriesData);
             setLastDoc(lastVisible);
+            setLoading(false);
         });
 
         return () => unsubscribe();
@@ -129,5 +131,6 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         totalCount,
         lastDoc,
         totalPages: Math.ceil(totalCount / pageSize),
+        loading,
     };
 }

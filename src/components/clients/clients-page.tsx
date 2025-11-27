@@ -24,6 +24,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -74,6 +75,7 @@ export default function ClientsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
@@ -103,6 +105,7 @@ export default function ClientsPage() {
         } as Client);
       });
       setClients(clientsData);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
@@ -312,7 +315,9 @@ export default function ClientsPage() {
           <CardTitle>قائمة العملاء ({clients.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {clients.length === 0 ? (
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : clients.length === 0 ? (
             <p className="text-gray-500 text-center py-12">
               لا يوجد عملاء حالياً. اضغط على &quot;إضافة عميل جديد&quot; للبدء.
             </p>

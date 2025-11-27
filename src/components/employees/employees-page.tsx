@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, DollarSign, History } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -91,6 +92,7 @@ export default function EmployeesPage() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<SalaryHistory[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Payroll state
   const [selectedMonth, setSelectedMonth] = useState(
@@ -126,6 +128,7 @@ export default function EmployeesPage() {
         } as Employee);
       });
       setEmployees(employeesData);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
@@ -454,24 +457,33 @@ export default function EmployeesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>عدد الموظفين</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{totalEmployees}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>إجمالي الرواتب الشهرية</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {totalMonthlySalaries.toFixed(2)} دينار
-            </div>
-          </CardContent>
-        </Card>
+        {dataLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>عدد الموظفين</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-blue-600">{totalEmployees}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>إجمالي الرواتب الشهرية</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {totalMonthlySalaries.toFixed(2)} دينار
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Tabs */}
@@ -519,7 +531,9 @@ export default function EmployeesPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            {employees.length === 0 ? (
+            {dataLoading ? (
+              <TableSkeleton rows={10} />
+            ) : employees.length === 0 ? (
               <p className="text-gray-500 text-center py-12">
                 لا يوجد موظفين. اضغط &quot;إضافة موظف&quot; للبدء.
               </p>
