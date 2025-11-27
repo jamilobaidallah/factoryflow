@@ -43,6 +43,10 @@ const firebaseErrorMessages: Record<string, string> = {
   'auth/email-already-in-use': 'البريد الإلكتروني مستخدم مسبقاً',
   'auth/weak-password': 'كلمة المرور ضعيفة',
   'auth/network-request-failed': 'فشل الاتصال بالإنترنت',
+  'auth/too-many-requests': 'تم إرسال طلبات كثيرة، يرجى المحاولة لاحقاً',
+  'auth/invalid-action-code': 'رابط إعادة التعيين غير صالح أو منتهي الصلاحية',
+  'auth/expired-action-code': 'انتهت صلاحية رابط إعادة التعيين',
+  'auth/missing-email': 'يرجى إدخال البريد الإلكتروني',
 
   // Firestore errors
   'permission-denied': 'ليس لديك صلاحية للقيام بهذا الإجراء',

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Factory, AlertTriangle, Clock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -223,6 +224,16 @@ export default function LoginPage() {
                 minLength={6}
               />
             </div>
+            {isLogin && (
+              <div className="text-left">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  نسيت كلمة المرور؟
+                </Link>
+              </div>
+            )}
             <Button
               type="submit"
               className="w-full"

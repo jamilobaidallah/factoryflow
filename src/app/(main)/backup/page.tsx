@@ -15,6 +15,7 @@ import {
   downloadBackup,
   restoreBackup,
   parseBackupFile,
+  createAutoBackupBeforeRestore,
   BackupData,
 } from '@/lib/backup-utils';
 
@@ -100,8 +101,8 @@ export default function BackupPage() {
 
     const title = mode === 'replace' ? 'استبدال البيانات' : 'دمج البيانات';
     const message = mode === 'replace'
-      ? 'تحذير: سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟'
-      : 'سيتم دمج البيانات مع البيانات الحالية. هل تريد المتابعة؟';
+      ? 'تحذير: سيتم استبدال جميع البيانات الحالية. سيتم إنشاء نسخة احتياطية تلقائية قبل الاستعادة. هل أنت متأكد؟'
+      : 'سيتم دمج البيانات مع البيانات الحالية. سيتم إنشاء نسخة احتياطية تلقائية قبل الاستعادة. هل تريد المتابعة؟';
     const variant = mode === 'replace' ? 'destructive' : 'warning';
 
     confirm(
@@ -110,9 +111,19 @@ export default function BackupPage() {
       async () => {
         setIsRestoring(true);
         setRestoreProgress(0);
-        setRestoreMessage('جاري الاستعادة...');
+        setRestoreMessage('جاري إنشاء نسخة احتياطية تلقائية...');
 
         try {
+          // Create auto-backup before restore
+          await createAutoBackupBeforeRestore(user.uid);
+
+          toast({
+            title: 'تم إنشاء نسخة احتياطية تلقائية',
+            description: 'تم حفظ نسخة من بياناتك الحالية قبل الاستعادة',
+          });
+
+          setRestoreMessage('جاري الاستعادة...');
+
           await restoreBackup(
             backupPreview,
             user.uid,
@@ -296,6 +307,7 @@ export default function BackupPage() {
           <p>• تأكد من اختبار الاستعادة بشكل دوري للتأكد من صلاحية النسخ</p>
           <p>• استخدام &quot;دمج&quot; آمن ولا يحذف البيانات الحالية</p>
           <p>• استخدام &quot;استبدال&quot; يحذف البيانات الحالية ويستبدلها بالنسخة الاحتياطية</p>
+          <p>• يتم إنشاء نسخة احتياطية تلقائية قبل كل عملية استعادة لحماية بياناتك</p>
         </CardContent>
       </Card>
 
