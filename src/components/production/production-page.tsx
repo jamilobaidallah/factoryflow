@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, CheckCircle, XCircle, Eye, Pencil, Trash2 } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -86,6 +87,7 @@ const generateOrderNumber = (): string => {
 export default function ProductionPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -430,12 +432,15 @@ export default function ProductionPage() {
     }
   };
 
-  const handleCompleteOrder = async (order: ProductionOrder) => {
+  const handleCompleteOrder = (order: ProductionOrder) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من إكمال أمر الإنتاج؟ سيتم تحديث المخزون تلقائياً.")) {return;}
 
-    setLoading(true);
-    try {
+    confirm(
+      "إكمال أمر الإنتاج",
+      "هل أنت متأكد من إكمال أمر الإنتاج؟ سيتم تحديث المخزون تلقائياً.",
+      async () => {
+        setLoading(true);
+        try {
       const batch = writeBatch(firestore);
 
       // 1. Update order status
@@ -534,46 +539,55 @@ export default function ProductionPage() {
 
       await batch.commit();
 
-      toast({
-        title: "تم إكمال الأمر",
-        description: "تم تحديث المخزون بنجاح",
-      });
-    } catch (error) {
-      console.error("Error completing order:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إكمال الأمر",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+          toast({
+            title: "تم إكمال الأمر",
+            description: "تم تحديث المخزون بنجاح",
+          });
+        } catch (error) {
+          console.error("Error completing order:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء إكمال الأمر",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+      "warning"
+    );
   };
 
-  const handleCancelOrder = async (orderId: string) => {
+  const handleCancelOrder = (orderId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من إلغاء أمر الإنتاج؟")) {return;}
 
-    try {
-      const orderRef = doc(firestore, `users/${user.uid}/production_orders`, orderId);
-      await updateDoc(orderRef, {
-        status: "ملغي",
-      });
+    confirm(
+      "إلغاء أمر الإنتاج",
+      "هل أنت متأكد من إلغاء أمر الإنتاج؟",
+      async () => {
+        try {
+          const orderRef = doc(firestore, `users/${user.uid}/production_orders`, orderId);
+          await updateDoc(orderRef, {
+            status: "ملغي",
+          });
 
-      toast({
-        title: "تم الإلغاء",
-        description: "تم إلغاء أمر الإنتاج",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الإلغاء",
-        variant: "destructive",
-      });
-    }
+          toast({
+            title: "تم الإلغاء",
+            description: "تم إلغاء أمر الإنتاج",
+          });
+        } catch (error) {
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الإلغاء",
+            variant: "destructive",
+          });
+        }
+      },
+      "warning"
+    );
   };
 
-  const handleDeleteOrder = async (orderId: string, status: string) => {
+  const handleDeleteOrder = (orderId: string, status: string) => {
     if (!user) {return;}
 
     const order = orders.find(o => o.id === orderId);
@@ -583,10 +597,12 @@ export default function ProductionPage() {
       ? "هل أنت متأكد من حذف أمر الإنتاج؟ سيتم عكس التغييرات على المخزون تلقائياً."
       : "هل أنت متأكد من حذف أمر الإنتاج؟";
 
-    if (!confirm(message)) {return;}
-
-    setLoading(true);
-    try {
+    confirm(
+      "حذف أمر الإنتاج",
+      message,
+      async () => {
+        setLoading(true);
+        try {
       const batch = writeBatch(firestore);
 
       // If order is completed, reverse inventory changes
@@ -663,22 +679,25 @@ export default function ProductionPage() {
 
       await batch.commit();
 
-      toast({
-        title: "تم الحذف",
-        description: status === "مكتمل"
-          ? "تم حذف أمر الإنتاج وعكس التغييرات على المخزون"
-          : "تم حذف أمر الإنتاج",
-      });
-    } catch (error) {
-      console.error("Error deleting order:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+          toast({
+            title: "تم الحذف",
+            description: status === "مكتمل"
+              ? "تم حذف أمر الإنتاج وعكس التغييرات على المخزون"
+              : "تم حذف أمر الإنتاج",
+          });
+        } catch (error) {
+          console.error("Error deleting order:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -1222,6 +1241,8 @@ export default function ProductionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }

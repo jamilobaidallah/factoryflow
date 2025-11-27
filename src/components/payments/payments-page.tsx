@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download } from "lucide-react";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
@@ -122,6 +123,7 @@ interface Payment {
 export default function PaymentsPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
@@ -297,68 +299,74 @@ export default function PaymentsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (paymentId: string) => {
+  const handleDelete = (paymentId: string) => {
     if (!user) {return;}
-    if (!confirm("هل أنت متأكد من حذف هذه المدفوعة؟")) {return;}
 
-    try {
-      // First, get the payment data to access linkedTransactionId and amount
-      const payment = payments.find((p) => p.id === paymentId);
+    confirm(
+      "حذف المدفوعة",
+      "هل أنت متأكد من حذف هذه المدفوعة؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          // First, get the payment data to access linkedTransactionId and amount
+          const payment = payments.find((p) => p.id === paymentId);
 
-      if (payment && payment.linkedTransactionId) {
-        // Reverse AR/AP update before deleting
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        const ledgerQuery = query(
-          ledgerRef,
-          where("transactionId", "==", payment.linkedTransactionId.trim())
-        );
-        const ledgerSnapshot = await getDocs(ledgerQuery);
+          if (payment && payment.linkedTransactionId) {
+            // Reverse AR/AP update before deleting
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", payment.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
 
-        if (!ledgerSnapshot.empty) {
-          const ledgerDoc = ledgerSnapshot.docs[0];
-          const ledgerData = ledgerDoc.data();
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
 
-          if (ledgerData.isARAPEntry) {
-            const currentTotalPaid = ledgerData.totalPaid || 0;
-            const transactionAmount = ledgerData.amount || 0;
-            const newTotalPaid = Math.max(0, currentTotalPaid - payment.amount);
-            const newRemainingBalance = transactionAmount - newTotalPaid;
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = Math.max(0, currentTotalPaid - payment.amount);
+                const newRemainingBalance = transactionAmount - newTotalPaid;
 
-            let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-            if (newRemainingBalance <= 0) {
-              newStatus = "paid";
-            } else if (newTotalPaid > 0) {
-              newStatus = "partial";
+                let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+                if (newRemainingBalance <= 0) {
+                  newStatus = "paid";
+                } else if (newTotalPaid > 0) {
+                  newStatus = "partial";
+                }
+
+                // Update the ledger entry
+                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newStatus,
+                });
+              }
             }
-
-            // Update the ledger entry
-            await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
-              totalPaid: newTotalPaid,
-              remainingBalance: newRemainingBalance,
-              paymentStatus: newStatus,
-            });
           }
+
+          // Now delete the payment
+          const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentId);
+          await deleteDoc(paymentRef);
+
+          toast({
+            title: "تم الحذف",
+            description: payment?.linkedTransactionId
+              ? "تم حذف المدفوعة وتحديث الرصيد في دفتر الأستاذ"
+              : "تم حذف المدفوعة بنجاح",
+          });
+        } catch (error) {
+          console.error("Error deleting payment:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء الحذف",
+            variant: "destructive",
+          });
         }
-      }
-
-      // Now delete the payment
-      const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentId);
-      await deleteDoc(paymentRef);
-
-      toast({
-        title: "تم الحذف",
-        description: payment?.linkedTransactionId
-          ? "تم حذف المدفوعة وتحديث الرصيد في دفتر الأستاذ"
-          : "تم حذف المدفوعة بنجاح",
-      });
-    } catch (error) {
-      console.error("Error deleting payment:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء الحذف",
-        variant: "destructive",
-      });
-    }
+      },
+      "destructive"
+    );
   };
 
   const resetForm = () => {
@@ -731,6 +739,8 @@ export default function PaymentsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {confirmationDialog}
     </div>
   );
 }
