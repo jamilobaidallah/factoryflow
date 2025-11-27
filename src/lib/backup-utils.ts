@@ -36,6 +36,7 @@ export interface BackupData {
  * @returns Backup data object
  */
 export async function createBackup(userId: string): Promise<BackupData> {
+  // eslint-disable-next-line no-console
   console.log('Starting backup for user:', userId);
 
   const collections = ['ledger', 'payments', 'cheques', 'inventory', 'clients', 'partners', 'fixedAssets', 'employees'];
@@ -95,13 +96,16 @@ export async function createBackup(userId: string): Promise<BackupData> {
       backupData.data[dataKey as keyof typeof backupData.data] = documents;
       backupData.metadata.totalDocuments += documents.length;
 
+      // eslint-disable-next-line no-console
       console.log(`Backed up ${documents.length} documents from ${collectionName}`);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(`Error backing up ${collectionName}:`, error);
       throw new Error(`Failed to backup ${collectionName}: ${error}`);
     }
   }
 
+  // eslint-disable-next-line no-console
   console.log('Backup completed:', backupData.metadata);
   return backupData;
 }
@@ -164,6 +168,7 @@ export async function restoreBackup(
   mode: 'replace' | 'merge' = 'merge',
   onProgress?: (progress: number, message: string) => void
 ): Promise<void> {
+  // eslint-disable-next-line no-console
   console.log(`Starting restore in ${mode} mode for user:`, userId);
 
   // Validate backup first
@@ -207,6 +212,7 @@ export async function restoreBackup(
         );
         await Promise.all(deletePromises);
 
+        // eslint-disable-next-line no-console
         console.log(`Deleted ${existingDocs.docs.length} existing documents from ${actualCollectionName}`);
       }
       const batchSize = 500; // Firestore batch limit
@@ -245,6 +251,7 @@ export async function restoreBackup(
       }
 
       processedCollections++;
+      // eslint-disable-next-line no-console
       console.log(`Restored ${documents.length} documents to ${collectionName}`);
 
       if (onProgress) {
@@ -252,11 +259,13 @@ export async function restoreBackup(
         onProgress(progress, `Completed ${collectionName}`);
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error(`Error restoring ${collectionName}:`, error);
       throw new Error(`Failed to restore ${collectionName}: ${error}`);
     }
   }
 
+  // eslint-disable-next-line no-console
   console.log('Restore completed successfully');
   if (onProgress) {
     onProgress(100, 'Restore completed!');
@@ -274,6 +283,7 @@ export async function createAutoBackupBeforeRestore(
   userId: string,
   download: boolean = true
 ): Promise<BackupData> {
+  // eslint-disable-next-line no-console
   console.log('Creating auto-backup before restore for user:', userId);
 
   const backupData = await createBackup(userId);
@@ -282,6 +292,7 @@ export async function createAutoBackupBeforeRestore(
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `factoryflow_auto_backup_before_restore_${timestamp}.json`;
     downloadBackup(backupData, filename);
+    // eslint-disable-next-line no-console
     console.log('Auto-backup downloaded:', filename);
   }
 

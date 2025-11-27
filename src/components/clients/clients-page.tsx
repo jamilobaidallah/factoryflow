@@ -88,7 +88,7 @@ export default function ClientsPage() {
 
   // Real-time data fetching
   useEffect(() => {
-    if (!user) return;
+    if (!user) { return; }
 
     const clientsRef = collection(firestore, `users/${user.uid}/clients`);
     // Limit to 500 most recent clients to prevent performance issues
@@ -148,7 +148,7 @@ export default function ClientsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) { return; }
 
     // Validate form
     if (!validateForm(formData)) {
@@ -250,7 +250,7 @@ export default function ClientsPage() {
   };
 
   const handleDelete = (clientId: string) => {
-    if (!user) return;
+    if (!user) { return; }
 
     confirm(
       "حذف العميل",

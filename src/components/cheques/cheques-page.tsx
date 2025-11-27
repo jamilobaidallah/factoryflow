@@ -112,7 +112,7 @@ export default function ChequesPage() {
 
   // Fetch total count
   useEffect(() => {
-    if (!user) return;
+    if (!user) { return; }
 
     const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
     getCountFromServer(query(chequesRef)).then((snapshot) => {
@@ -638,7 +638,7 @@ export default function ChequesPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                        if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
                       }}
                       className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
                     />
@@ -667,7 +667,7 @@ export default function ChequesPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                        if (currentPage > 1) { setCurrentPage(currentPage - 1); }
                       }}
                       className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
                     />

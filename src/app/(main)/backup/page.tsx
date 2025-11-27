@@ -72,7 +72,7 @@ export default function BackupPage() {
   // Handle file selection
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) { return; }
 
     setSelectedFile(file);
 
@@ -97,7 +97,7 @@ export default function BackupPage() {
 
   // Restore from backup
   const handleRestore = (mode: 'replace' | 'merge') => {
-    if (!user || !backupPreview) return;
+    if (!user || !backupPreview) { return; }
 
     const title = mode === 'replace' ? 'استبدال البيانات' : 'دمج البيانات';
     const message = mode === 'replace'

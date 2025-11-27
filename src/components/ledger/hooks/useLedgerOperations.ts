@@ -80,7 +80,7 @@ export function useLedgerOperations() {
       initialPaymentAmount?: string;
     } = {}
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) { return false; }
 
     const entryType = getCategoryType(formData.category, formData.subCategory);
 
@@ -251,7 +251,7 @@ export function useLedgerOperations() {
             ledgerRef,
             toast
           );
-          if (!success) return false;
+          if (!success) { return false; }
         }
 
         // Handle fixed asset
@@ -309,8 +309,8 @@ export function useLedgerOperations() {
    * Delete a ledger entry
    */
   const deleteLedgerEntry = async (entryId: string): Promise<boolean> => {
-    if (!user) return false;
-    if (!confirm("هل أنت متأكد من حذف هذه الحركة المالية؟")) return false;
+    if (!user) { return false; }
+    if (!confirm("هل أنت متأكد من حذف هذه الحركة المالية؟")) { return false; }
 
     try {
       await deleteDoc(doc(firestore, `users/${user.uid}/ledger`, entryId));
