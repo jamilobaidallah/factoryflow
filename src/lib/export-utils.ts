@@ -1,6 +1,6 @@
 'use client';
 
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -49,22 +49,54 @@ function translateToEnglish(text: string): string {
  * @param filename Name of the file (without extension)
  * @param sheetName Name of the worksheet
  */
-export function exportToExcel(
+export async function exportToExcel(
   data: any[],
   filename: string,
   sheetName: string = 'Sheet1'
-): void {
+): Promise<void> {
   // Create a new workbook
-  const workbook = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
 
-  // Convert data to worksheet
-  const worksheet = XLSX.utils.json_to_sheet(data);
+  // If data is empty, return
+  if (data.length === 0) return;
 
-  // Add worksheet to workbook
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  // Get headers from first object
+  const headers = Object.keys(data[0]);
 
-  // Generate Excel file and trigger download
-  XLSX.writeFile(workbook, `${filename}.xlsx`);
+  // Add header row
+  worksheet.addRow(headers);
+
+  // Style header row
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: '2563EB' }
+  };
+  headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+
+  // Add data rows
+  data.forEach(item => {
+    const row = headers.map(header => item[header]);
+    worksheet.addRow(row);
+  });
+
+  // Auto-fit columns
+  worksheet.columns.forEach(column => {
+    column.width = 15;
+  });
+
+  // Generate buffer and trigger download
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}.xlsx`;
+  link.click();
+  window.URL.revokeObjectURL(url);
 }
 
 /**
@@ -72,7 +104,7 @@ export function exportToExcel(
  * @param entries Ledger entries to export
  * @param filename Name of the file
  */
-export function exportLedgerToExcel(entries: any[], filename: string = 'ledger-entries'): void {
+export async function exportLedgerToExcel(entries: any[], filename: string = 'ledger-entries'): Promise<void> {
   const exportData = entries.map((entry) => ({
     'رقم المعاملة': entry.transactionId || '',
     'التاريخ': entry.date instanceof Date ? entry.date.toLocaleDateString('ar-EG') : '',
@@ -87,7 +119,7 @@ export function exportLedgerToExcel(entries: any[], filename: string = 'ledger-e
     'الرصيد المتبقي': entry.remainingBalance || 0,
   }));
 
-  exportToExcel(exportData, filename, 'الحركات المالية');
+  await exportToExcel(exportData, filename, 'الحركات المالية');
 }
 
 /**
@@ -95,7 +127,7 @@ export function exportLedgerToExcel(entries: any[], filename: string = 'ledger-e
  * @param payments Payment entries to export
  * @param filename Name of the file
  */
-export function exportPaymentsToExcel(payments: any[], filename: string = 'payments'): void {
+export async function exportPaymentsToExcel(payments: any[], filename: string = 'payments'): Promise<void> {
   const exportData = payments.map((payment) => ({
     'اسم العميل': payment.clientName || '',
     'التاريخ': payment.date instanceof Date ? payment.date.toLocaleDateString('ar-EG') : '',
@@ -106,7 +138,7 @@ export function exportPaymentsToExcel(payments: any[], filename: string = 'payme
     'الملاحظات': payment.notes || '',
   }));
 
-  exportToExcel(exportData, filename, 'المدفوعات');
+  await exportToExcel(exportData, filename, 'المدفوعات');
 }
 
 /**
@@ -114,7 +146,7 @@ export function exportPaymentsToExcel(payments: any[], filename: string = 'payme
  * @param cheques Cheque entries to export
  * @param filename Name of the file
  */
-export function exportChequesToExcel(cheques: any[], filename: string = 'cheques'): void {
+export async function exportChequesToExcel(cheques: any[], filename: string = 'cheques'): Promise<void> {
   const exportData = cheques.map((cheque) => ({
     'رقم الشيك': cheque.chequeNumber || '',
     'اسم العميل': cheque.clientName || '',
@@ -127,7 +159,7 @@ export function exportChequesToExcel(cheques: any[], filename: string = 'cheques
     'الملاحظات': cheque.notes || '',
   }));
 
-  exportToExcel(exportData, filename, 'الشيكات');
+  await exportToExcel(exportData, filename, 'الشيكات');
 }
 
 /**
@@ -135,7 +167,7 @@ export function exportChequesToExcel(cheques: any[], filename: string = 'cheques
  * @param items Inventory items to export
  * @param filename Name of the file
  */
-export function exportInventoryToExcel(items: any[], filename: string = 'inventory'): void {
+export async function exportInventoryToExcel(items: any[], filename: string = 'inventory'): Promise<void> {
   const exportData = items.map((item) => ({
     'اسم العنصر': item.itemName || '',
     'الفئة': item.category || '',
@@ -150,7 +182,7 @@ export function exportInventoryToExcel(items: any[], filename: string = 'invento
     'الملاحظات': item.notes || '',
   }));
 
-  exportToExcel(exportData, filename, 'المخزون');
+  await exportToExcel(exportData, filename, 'المخزون');
 }
 
 /**
