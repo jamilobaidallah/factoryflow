@@ -12,14 +12,14 @@ test.describe('Authentication', () => {
   test('should display login page', async ({ page }) => {
     // Check for login form elements
     await expect(page.getByRole('heading', { name: /تسجيل الدخول|FactoryFlow/i })).toBeVisible();
-    await expect(page.getByPlaceholder(/البريد الإلكتروني|email/i)).toBeVisible();
-    await expect(page.getByPlaceholder(/كلمة المرور|password/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/البريد الإلكتروني|email|example@email/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/••••••••|كلمة المرور|password/i)).toBeVisible();
   });
 
   test('should show error for invalid credentials', async ({ page }) => {
     // Enter invalid credentials
-    await page.getByPlaceholder(/البريد الإلكتروني|email/i).fill('invalid@test.com');
-    await page.getByPlaceholder(/كلمة المرور|password/i).fill('wrongpassword');
+    await page.getByPlaceholder(/البريد الإلكتروني|email|example@email/i).fill('invalid@test.com');
+    await page.getByPlaceholder(/••••••••|كلمة المرور|password/i).fill('wrongpassword');
 
     // Click login button
     await page.getByRole('button', { name: /تسجيل الدخول|دخول|login/i }).click();
