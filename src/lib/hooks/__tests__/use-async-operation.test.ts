@@ -4,9 +4,9 @@ import { useAsyncOperation } from '../use-async-operation';
 // Mock error-handler
 jest.mock('../../error-handler', () => ({
   handleFirebaseError: jest.fn((error) => ({
-    code: 'error',
-    message: error.message || 'An error occurred',
-    originalError: error,
+    title: 'Error',
+    description: error.message || 'An error occurred',
+    variant: 'destructive',
   })),
   logError: jest.fn(),
 }));
@@ -97,7 +97,7 @@ describe('useAsyncOperation', () => {
 
     it('returns result from execute', async () => {
       const asyncFn = jest.fn().mockResolvedValue('result');
-      const { result } = renderHook(() => useAsyncOperation(asyncFn));
+      const { result } = renderHook(() => useAsyncOperation<string>(asyncFn));
 
       let returnValue: string | undefined;
       await act(async () => {
@@ -152,7 +152,7 @@ describe('useAsyncOperation', () => {
       });
 
       expect(result.current.error).not.toBeNull();
-      expect(result.current.error?.message).toBe('Test error');
+      expect(result.current.error?.description).toBe('Test error');
     });
 
     it('sets loading false on failure', async () => {
