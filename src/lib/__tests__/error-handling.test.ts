@@ -484,10 +484,21 @@ describe('Error Handling System', () => {
   });
 
   describe('Error Logging', () => {
+    const originalEnv = process.env.NODE_ENV;
+
+    afterEach(() => {
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: originalEnv,
+        writable: true,
+      });
+    });
+
     it('should log errors in development mode', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true,
+      });
 
       const error: AppError = {
         type: ErrorType.FIREBASE,
@@ -497,15 +508,15 @@ describe('Error Handling System', () => {
       logError(error, { action: 'test' }, 'user123');
 
       expect(consoleSpy).toHaveBeenCalled();
-
-      process.env.NODE_ENV = originalEnv;
       consoleSpy.mockRestore();
     });
 
     it('should not log in production mode', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'production',
+        writable: true,
+      });
 
       const error: AppError = {
         type: ErrorType.FIREBASE,
@@ -515,8 +526,6 @@ describe('Error Handling System', () => {
       logError(error);
 
       expect(consoleSpy).not.toHaveBeenCalled();
-
-      process.env.NODE_ENV = originalEnv;
       consoleSpy.mockRestore();
     });
   });
