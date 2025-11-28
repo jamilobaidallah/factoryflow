@@ -12,6 +12,7 @@ import {
     getCountFromServer,
 } from "firebase/firestore";
 import { LedgerEntry } from "../utils/ledger-constants";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 
 interface UseLedgerDataOptions {
     pageSize?: number;
@@ -61,9 +62,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
                 const data = doc.data();
                 entriesData.push({
                     id: doc.id,
-                    ...data,
-                    date: data.date?.toDate ? data.date.toDate() : new Date(),
-                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+                    ...convertFirestoreDates(data),
                 } as LedgerEntry);
                 lastVisible = doc;
             });

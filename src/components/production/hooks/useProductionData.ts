@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { InventoryItem, ProductionOrder } from "../types/production";
+import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 
 interface UseProductionDataReturn {
   orders: ProductionOrder[];
@@ -59,10 +60,8 @@ export function useProductionData(): UseProductionDataReturn {
         const data = doc.data();
         ordersData.push({
           id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-          completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : undefined,
+          ...convertFirestoreDates(data),
+          completedAt: toDateOptional(data.completedAt),
         } as ProductionOrder);
       });
       setOrders(ordersData);

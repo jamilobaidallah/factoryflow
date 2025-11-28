@@ -51,6 +51,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { firestore } from "@/firebase/config";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { CopyButton } from "@/components/ui/copy-button";
 
 // Categories with subcategories (matching ledger categories)
@@ -172,9 +173,7 @@ export default function PaymentsPage() {
         const data = doc.data();
         paymentsData.push({
           id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Payment);
       });
       setPayments(paymentsData);

@@ -39,6 +39,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 
 // Import validation utilities
 import {
@@ -100,8 +101,7 @@ export default function ClientsPage() {
         const data = doc.data();
         clientsData.push({
           id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Client);
       });
       setClients(clientsData);

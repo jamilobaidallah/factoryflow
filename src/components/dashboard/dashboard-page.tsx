@@ -35,6 +35,7 @@ function ChartSkeleton() {
 import { useUser } from "@/firebase/provider";
 import { collection, onSnapshot, query, orderBy, getDocs } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { toDate } from "@/lib/firestore-utils";
 // Import only what we need from recharts (tree shaking)
 import {
   Line,
@@ -136,7 +137,7 @@ export default function DashboardPage() {
           type: data.type || "",
           amount: data.amount || 0,
           category: data.category || "",
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
+          date: toDate(data.date),
           associatedParty: data.associatedParty,
           description: data.description,
         };
@@ -242,7 +243,7 @@ export default function DashboardPage() {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const date = data.date?.toDate ? data.date.toDate() : new Date();
+        const date = toDate(data.date);
         // Use UTC to avoid timezone shifting the month
         const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 

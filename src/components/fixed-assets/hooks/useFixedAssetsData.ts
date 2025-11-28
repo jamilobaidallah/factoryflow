@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { FixedAsset } from "../types/fixed-assets";
+import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 
 interface UseFixedAssetsDataReturn {
   assets: FixedAsset[];
@@ -37,10 +38,8 @@ export function useFixedAssetsData(): UseFixedAssetsDataReturn {
         const data = doc.data();
         assetsData.push({
           id: doc.id,
-          ...data,
-          purchaseDate: data.purchaseDate?.toDate ? data.purchaseDate.toDate() : new Date(),
-          lastDepreciationDate: data.lastDepreciationDate?.toDate ? data.lastDepreciationDate.toDate() : undefined,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
+          lastDepreciationDate: toDateOptional(data.lastDepreciationDate),
         } as FixedAsset);
       });
       setAssets(assetsData);

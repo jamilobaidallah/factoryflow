@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
+import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 
 interface UseOutgoingChequesDataReturn {
   cheques: Cheque[];
@@ -44,11 +45,8 @@ export function useOutgoingChequesData(): UseOutgoingChequesDataReturn {
         const data = doc.data();
         chequesData.push({
           id: doc.id,
-          ...data,
-          issueDate: data.issueDate?.toDate ? data.issueDate.toDate() : new Date(),
-          dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-          endorsedDate: data.endorsedDate?.toDate?.() || undefined,
+          ...convertFirestoreDates(data),
+          endorsedDate: toDateOptional(data.endorsedDate),
         } as Cheque);
       });
       setCheques(chequesData);
