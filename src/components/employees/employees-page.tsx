@@ -1,99 +1,38 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Plus, Edit, Trash2, DollarSign, History } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
-import { useUser } from "@/firebase/provider";
-import { useToast } from "@/hooks/use-toast";
-import { handleError, getErrorTitle } from "@/lib/error-handling";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  writeBatch,
-  limit,
-} from "firebase/firestore";
-import { firestore } from "@/firebase/config";
 
-interface Employee {
-  id: string;
-  name: string;
-  currentSalary: number;
-  overtimeEligible: boolean;
-  hireDate: Date;
-  position: string;
-  createdAt: Date;
-}
+// Types and hooks
+import { Employee, initialEmployeeFormData } from "./types/employees";
+import { useEmployeesData } from "./hooks/useEmployeesData";
+import { useEmployeesOperations } from "./hooks/useEmployeesOperations";
 
-interface SalaryHistory {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  oldSalary: number;
-  newSalary: number;
-  incrementPercentage: number;
-  effectiveDate: Date;
-  notes: string;
-  createdAt: Date;
-}
-
-interface PayrollEntry {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  month: string; // "2025-11"
-  baseSalary: number;
-  overtimeHours: number;
-  overtimePay: number;
-  totalSalary: number;
-  isPaid: boolean;
-  paidDate?: Date;
-  linkedTransactionId?: string;
-  notes: string;
-  createdAt: Date;
-}
+// Components
+import { EmployeesStatsCards } from "./components/EmployeesStatsCards";
+import { EmployeesTable } from "./components/EmployeesTable";
+import { PayrollTable } from "./components/PayrollTable";
+import { EmployeeFormDialog } from "./components/EmployeeFormDialog";
+import { SalaryHistoryDialog } from "./components/SalaryHistoryDialog";
 
 export default function EmployeesPage() {
-  const { user } = useUser();
-  const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
-  const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([]);
-  const [payrollEntries, setPayrollEntries] = useState<PayrollEntry[]>([]);
 
+  // Data and operations hooks
+  const { employees, salaryHistory, payrollEntries, loading: dataLoading } = useEmployeesData();
+  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid } = useEmployeesOperations();
+
+  // UI state
+  const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<SalaryHistory[]>([]);
+  const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<typeof salaryHistory>([]);
   const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
 
   // Payroll state
   const [selectedMonth, setSelectedMonth] = useState(
@@ -101,186 +40,17 @@ export default function EmployeesPage() {
   );
   const [payrollData, setPayrollData] = useState<{[key: string]: {overtime: string, notes: string}}>({});
 
-  const [employeeFormData, setEmployeeFormData] = useState({
-    name: "",
-    currentSalary: "",
-    overtimeEligible: false,
-    position: "",
-    hireDate: new Date().toISOString().split("T")[0],
-  });
+  // Form state
+  const [employeeFormData, setEmployeeFormData] = useState(initialEmployeeFormData);
 
-  // Load employees
-  useEffect(() => {
-    if (!user) {return;}
-
-    const employeesRef = collection(firestore, `users/${user.uid}/employees`);
-    // Limit to 500 employees (reasonable for most businesses)
-    const q = query(employeesRef, orderBy("name", "asc"), limit(500));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const employeesData: Employee[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        employeesData.push({
-          id: doc.id,
-          ...data,
-          hireDate: data.hireDate?.toDate ? data.hireDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-        } as Employee);
-      });
-      setEmployees(employeesData);
-      setDataLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Load salary history
-  useEffect(() => {
-    if (!user) {return;}
-
-    const historyRef = collection(firestore, `users/${user.uid}/salary_history`);
-    // Limit to 1000 most recent salary changes
-    const q = query(historyRef, orderBy("effectiveDate", "desc"), limit(1000));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const historyData: SalaryHistory[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        historyData.push({
-          id: doc.id,
-          ...data,
-          effectiveDate: data.effectiveDate?.toDate ? data.effectiveDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-        } as SalaryHistory);
-      });
-      setSalaryHistory(historyData);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Load payroll entries
-  useEffect(() => {
-    if (!user) {return;}
-
-    const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
-    // Limit to last 24 months of payroll (2 years)
-    const q = query(payrollRef, orderBy("month", "desc"), limit(24));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const payrollData: PayrollEntry[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        payrollData.push({
-          id: doc.id,
-          ...data,
-          paidDate: data.paidDate?.toDate ? data.paidDate.toDate() : undefined,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-        } as PayrollEntry);
-      });
-      setPayrollEntries(payrollData);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleEmployeeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {return;}
-
-    setLoading(true);
-    try {
-      if (editingEmployee) {
-        const oldSalary = editingEmployee.currentSalary;
-        const newSalary = parseFloat(employeeFormData.currentSalary);
-
-        // Update employee
-        const employeeRef = doc(firestore, `users/${user.uid}/employees`, editingEmployee.id);
-        await updateDoc(employeeRef, {
-          name: employeeFormData.name,
-          currentSalary: newSalary,
-          overtimeEligible: employeeFormData.overtimeEligible,
-          position: employeeFormData.position,
-          hireDate: new Date(employeeFormData.hireDate),
-        });
-
-        // If salary changed, record history
-        if (oldSalary !== newSalary) {
-          const incrementPercentage = ((newSalary - oldSalary) / oldSalary) * 100;
-          const historyRef = collection(firestore, `users/${user.uid}/salary_history`);
-          await addDoc(historyRef, {
-            employeeId: editingEmployee.id,
-            employeeName: employeeFormData.name,
-            oldSalary: oldSalary,
-            newSalary: newSalary,
-            incrementPercentage: incrementPercentage,
-            effectiveDate: new Date(),
-            notes: incrementPercentage > 0 ? "زيادة راتب" : "تخفيض راتب",
-            createdAt: new Date(),
-          });
-        }
-
-        toast({
-          title: "تم التحديث",
-          description: "تم تحديث بيانات الموظف بنجاح",
-        });
-      } else {
-        const employeesRef = collection(firestore, `users/${user.uid}/employees`);
-        await addDoc(employeesRef, {
-          name: employeeFormData.name,
-          currentSalary: parseFloat(employeeFormData.currentSalary),
-          overtimeEligible: employeeFormData.overtimeEligible,
-          position: employeeFormData.position,
-          hireDate: new Date(employeeFormData.hireDate),
-          createdAt: new Date(),
-        });
-
-        toast({
-          title: "تمت الإضافة",
-          description: "تم إضافة موظف جديد بنجاح",
-        });
-      }
-
-      resetEmployeeForm();
-      setIsEmployeeDialogOpen(false);
-    } catch (error) {
-      const appError = handleError(error);
-      toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const resetEmployeeForm = () => {
+    setEmployeeFormData(initialEmployeeFormData);
+    setEditingEmployee(null);
   };
 
-  const handleDeleteEmployee = (employeeId: string) => {
-    if (!user) {return;}
-
-    confirm(
-      "حذف الموظف",
-      "هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن هذا الإجراء.",
-      async () => {
-        try {
-          const employeeRef = doc(firestore, `users/${user.uid}/employees`, employeeId);
-          await deleteDoc(employeeRef);
-          toast({
-            title: "تم الحذف",
-            description: "تم حذف الموظف بنجاح",
-          });
-        } catch (error) {
-          const appError = handleError(error);
-          toast({
-            title: getErrorTitle(appError),
-            description: appError.message,
-            variant: "destructive",
-          });
-        }
-      },
-      "destructive"
-    );
+  const openAddEmployeeDialog = () => {
+    resetEmployeeForm();
+    setIsEmployeeDialogOpen(true);
   };
 
   const handleEditEmployee = (employee: Employee) => {
@@ -295,162 +65,59 @@ export default function EmployeesPage() {
     setIsEmployeeDialogOpen(true);
   };
 
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const success = await submitEmployee(employeeFormData, editingEmployee);
+
+    if (success) {
+      resetEmployeeForm();
+      setIsEmployeeDialogOpen(false);
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteEmployee = (employeeId: string) => {
+    confirm(
+      "حذف الموظف",
+      "هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        await deleteEmployee(employeeId);
+      },
+      "destructive"
+    );
+  };
+
   const viewSalaryHistory = (employeeId: string) => {
     const history = salaryHistory.filter(h => h.employeeId === employeeId);
     setSelectedEmployeeHistory(history);
     setIsHistoryDialogOpen(true);
   };
 
-  const resetEmployeeForm = () => {
-    setEmployeeFormData({
-      name: "",
-      currentSalary: "",
-      overtimeEligible: false,
-      position: "",
-      hireDate: new Date().toISOString().split("T")[0],
-    });
-    setEditingEmployee(null);
-  };
-
-  const openAddEmployeeDialog = () => {
-    resetEmployeeForm();
-    setIsEmployeeDialogOpen(true);
-  };
-
-  // Payroll functions
-  const calculateOvertimePay = (employee: Employee, overtimeHours: number): number => {
-    // Calculate hourly rate: monthly salary ÷ 208 hours (26 days × 8 hours)
-    const hourlyRate = employee.currentSalary / 208;
-    // Overtime at 1.5x
-    return overtimeHours * hourlyRate * 1.5;
-  };
-
   const handleProcessPayroll = () => {
-    if (!user) {return;}
-
     confirm(
       "معالجة الرواتب",
       `هل أنت متأكد من معالجة الرواتب لشهر ${selectedMonth}؟`,
       async () => {
         setLoading(true);
-        try {
-          const batch = writeBatch(firestore);
-          const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
-
-          for (const employee of employees) {
-            const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
-            const overtimePay = employee.overtimeEligible ? calculateOvertimePay(employee, overtimeHours) : 0;
-            const totalSalary = employee.currentSalary + overtimePay;
-
-            const payrollDocRef = doc(payrollRef);
-            batch.set(payrollDocRef, {
-              employeeId: employee.id,
-              employeeName: employee.name,
-              month: selectedMonth,
-              baseSalary: employee.currentSalary,
-              overtimeHours: overtimeHours,
-              overtimePay: overtimePay,
-              totalSalary: totalSalary,
-              isPaid: false,
-              notes: payrollData[employee.id]?.notes || "",
-              createdAt: new Date(),
-            });
-          }
-
-          await batch.commit();
-
-          toast({
-            title: "تمت المعالجة",
-            description: `تم إنشاء كشف رواتب ${selectedMonth} بنجاح`,
-          });
-
-          // Reset payroll data
+        const success = await processPayroll(selectedMonth, employees, payrollData);
+        if (success) {
           setPayrollData({});
-        } catch (error) {
-          const appError = handleError(error);
-          toast({
-            title: getErrorTitle(appError),
-            description: appError.message,
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
         }
+        setLoading(false);
       },
       "warning"
     );
   };
 
-  const handleMarkAsPaid = async (payrollEntry: PayrollEntry) => {
-    if (!user) {return;}
-
+  const handleMarkAsPaid = async (payrollEntry: typeof payrollEntries[0]) => {
     setLoading(true);
-    try {
-      const batch = writeBatch(firestore);
-
-      // Generate transaction ID
-      const now = new Date();
-      const transactionId = `SAL-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-
-      // Update payroll entry
-      const payrollRef = doc(firestore, `users/${user.uid}/payroll`, payrollEntry.id);
-      batch.update(payrollRef, {
-        isPaid: true,
-        paidDate: new Date(),
-        linkedTransactionId: transactionId,
-      });
-
-      // Create ledger entry
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-      const ledgerDocRef = doc(ledgerRef);
-      batch.set(ledgerDocRef, {
-        transactionId: transactionId,
-        description: `راتب ${payrollEntry.employeeName} - ${payrollEntry.month}`,
-        type: "مصروف",
-        amount: payrollEntry.totalSalary,
-        category: "مصاريف تشغيلية",
-        subCategory: "رواتب وأجور",
-        associatedParty: payrollEntry.employeeName,
-        date: new Date(),
-        reference: `Payroll-${payrollEntry.month}`,
-        notes: `راتب شهر ${payrollEntry.month}${payrollEntry.overtimeHours > 0 ? ` - ساعات إضافية: ${payrollEntry.overtimeHours}` : ""}`,
-        createdAt: new Date(),
-      });
-
-      // Create payment entry
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const paymentDocRef = doc(paymentsRef);
-      batch.set(paymentDocRef, {
-        clientName: payrollEntry.employeeName,
-        amount: payrollEntry.totalSalary,
-        type: "صرف",
-        linkedTransactionId: transactionId,
-        date: new Date(),
-        notes: `دفع راتب ${payrollEntry.month}`,
-        createdAt: new Date(),
-      });
-
-      await batch.commit();
-
-      toast({
-        title: "تم الدفع",
-        description: `تم تسجيل دفع راتب ${payrollEntry.employeeName}`,
-      });
-    } catch (error) {
-      const appError = handleError(error);
-      toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    await markAsPaid(payrollEntry);
+    setLoading(false);
   };
 
   const monthPayroll = payrollEntries.filter(p => p.month === selectedMonth);
-  const totalEmployees = employees.length;
-  const totalMonthlySalaries = employees.reduce((sum, emp) => sum + emp.currentSalary, 0);
 
   return (
     <div className="space-y-6">
@@ -468,26 +135,7 @@ export default function EmployeesPage() {
             <StatCardSkeleton />
           </>
         ) : (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle>عدد الموظفين</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-blue-600">{totalEmployees}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>إجمالي الرواتب الشهرية</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-green-600">
-                  {totalMonthlySalaries.toFixed(2)} دينار
-                </div>
-              </CardContent>
-            </Card>
-          </>
+          <EmployeesStatsCards employees={employees} />
         )}
       </div>
 
@@ -538,74 +186,13 @@ export default function EmployeesPage() {
           <CardContent>
             {dataLoading ? (
               <TableSkeleton rows={10} />
-            ) : employees.length === 0 ? (
-              <p className="text-gray-500 text-center py-12">
-                لا يوجد موظفين. اضغط &quot;إضافة موظف&quot; للبدء.
-              </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>الاسم</TableHead>
-                    <TableHead>المسمى الوظيفي</TableHead>
-                    <TableHead>الراتب الحالي</TableHead>
-                    <TableHead>الوقت الإضافي</TableHead>
-                    <TableHead>تاريخ التعيين</TableHead>
-                    <TableHead>الإجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employees.map((employee) => (
-                    <TableRow key={employee.id}>
-                      <TableCell className="font-medium">{employee.name}</TableCell>
-                      <TableCell>{employee.position || "-"}</TableCell>
-                      <TableCell>{employee.currentSalary} دينار</TableCell>
-                      <TableCell>
-                        {employee.overtimeEligible ? (
-                          <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700" role="status" aria-label="مؤهل للوقت الإضافي">
-                            مؤهل
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700" role="status" aria-label="غير مؤهل للوقت الإضافي">
-                            غير مؤهل
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(employee.hireDate).toLocaleDateString("ar-EG")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2" role="group" aria-label="إجراءات الموظف">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => viewSalaryHistory(employee.id)}
-                            aria-label={`عرض سجل رواتب ${employee.name}`}
-                          >
-                            <History className="w-4 h-4" aria-hidden="true" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditEmployee(employee)}
-                            aria-label={`تعديل ${employee.name}`}
-                          >
-                            <Edit className="w-4 h-4" aria-hidden="true" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteEmployee(employee.id)}
-                            aria-label={`حذف ${employee.name}`}
-                          >
-                            <Trash2 className="w-4 h-4" aria-hidden="true" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <EmployeesTable
+                employees={employees}
+                onEdit={handleEditEmployee}
+                onDelete={handleDeleteEmployee}
+                onViewHistory={viewSalaryHistory}
+              />
             )}
           </CardContent>
         </Card>
@@ -613,331 +200,41 @@ export default function EmployeesPage() {
 
       {/* Payroll Tab */}
       {activeTab === "payroll" && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>معالجة الرواتب الشهرية</CardTitle>
-                <div className="flex items-center gap-4">
-                  <Label htmlFor="month">الشهر:</Label>
-                  <Input
-                    id="month"
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="w-48"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {monthPayroll.length > 0 ? (
-                <div>
-                  <p className="text-sm text-gray-600 mb-4">
-                    تم معالجة رواتب هذا الشهر. يمكنك عرض التفاصيل أدناه.
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>الموظف</TableHead>
-                        <TableHead>الراتب الأساسي</TableHead>
-                        <TableHead>ساعات إضافية</TableHead>
-                        <TableHead>أجر إضافي</TableHead>
-                        <TableHead>الإجمالي</TableHead>
-                        <TableHead>الحالة</TableHead>
-                        <TableHead>الإجراء</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {monthPayroll.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell className="font-medium">{entry.employeeName}</TableCell>
-                          <TableCell>{entry.baseSalary} دينار</TableCell>
-                          <TableCell>{entry.overtimeHours} ساعة</TableCell>
-                          <TableCell>{entry.overtimePay.toFixed(2)} دينار</TableCell>
-                          <TableCell className="font-bold">
-                            {entry.totalSalary.toFixed(2)} دينار
-                          </TableCell>
-                          <TableCell>
-                            {entry.isPaid ? (
-                              <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700" role="status" aria-label="حالة الدفع: تم الدفع">
-                                تم الدفع
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700" role="status" aria-label="حالة الدفع: لم يتم الدفع">
-                                لم يتم الدفع
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {!entry.isPaid && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleMarkAsPaid(entry)}
-                                disabled={loading}
-                                aria-label={`تسجيل دفع راتب ${entry.employeeName}`}
-                              >
-                                <DollarSign className="w-4 h-4 mr-1" aria-hidden="true" />
-                                تسجيل دفع
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : employees.length > 0 ? (
-                <div>
-                  <p className="text-sm text-gray-600 mb-4">
-                    أدخل ساعات العمل الإضافية (إن وجدت) لكل موظف:
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>الموظف</TableHead>
-                        <TableHead>الراتب الأساسي</TableHead>
-                        <TableHead>ساعات إضافية</TableHead>
-                        <TableHead>أجر إضافي</TableHead>
-                        <TableHead>الإجمالي</TableHead>
-                        <TableHead>ملاحظات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {employees.map((employee) => {
-                        const overtime = parseFloat(payrollData[employee.id]?.overtime || "0");
-                        const overtimePay = employee.overtimeEligible
-                          ? calculateOvertimePay(employee, overtime)
-                          : 0;
-                        const total = employee.currentSalary + overtimePay;
-
-                        return (
-                          <TableRow key={employee.id}>
-                            <TableCell className="font-medium">{employee.name}</TableCell>
-                            <TableCell>{employee.currentSalary} دينار</TableCell>
-                            <TableCell>
-                              {employee.overtimeEligible ? (
-                                <Input
-                                  type="number"
-                                  step="0.5"
-                                  value={payrollData[employee.id]?.overtime || ""}
-                                  onChange={(e) =>
-                                    setPayrollData({
-                                      ...payrollData,
-                                      [employee.id]: {
-                                        ...payrollData[employee.id],
-                                        overtime: e.target.value,
-                                      },
-                                    })
-                                  }
-                                  placeholder="0"
-                                  className="w-24"
-                                />
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {overtimePay > 0 ? `${overtimePay.toFixed(2)} دينار` : "-"}
-                            </TableCell>
-                            <TableCell className="font-bold">{total.toFixed(2)} دينار</TableCell>
-                            <TableCell>
-                              <Input
-                                value={payrollData[employee.id]?.notes || ""}
-                                onChange={(e) =>
-                                  setPayrollData({
-                                    ...payrollData,
-                                    [employee.id]: {
-                                      ...payrollData[employee.id],
-                                      notes: e.target.value,
-                                    },
-                                  })
-                                }
-                                placeholder="ملاحظات"
-                                className="w-32"
-                              />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      onClick={handleProcessPayroll}
-                      disabled={loading}
-                      size="lg"
-                      className="gap-2"
-                      aria-label={`معالجة رواتب شهر ${selectedMonth}`}
-                    >
-                      <DollarSign className="w-5 h-5" aria-hidden="true" />
-                      معالجة الرواتب
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-12">
-                  لا يوجد موظفين. قم بإضافة موظفين أولاً.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>الرواتب الشهرية</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PayrollTable
+              employees={employees}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              monthPayroll={monthPayroll}
+              payrollData={payrollData}
+              setPayrollData={setPayrollData}
+              loading={loading}
+              onProcessPayroll={handleProcessPayroll}
+              onMarkAsPaid={handleMarkAsPaid}
+            />
+          </CardContent>
+        </Card>
       )}
 
-      {/* Add/Edit Employee Dialog */}
-      <Dialog open={isEmployeeDialogOpen} onOpenChange={setIsEmployeeDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingEmployee ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingEmployee
-                ? "قم بتعديل البيانات أدناه. تغيير الراتب سيتم تسجيله تلقائياً."
-                : "أدخل بيانات الموظف الجديد"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEmployeeSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">الاسم</Label>
-                <Input
-                  id="name"
-                  value={employeeFormData.name}
-                  onChange={(e) =>
-                    setEmployeeFormData({ ...employeeFormData, name: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="position">المسمى الوظيفي</Label>
-                <Input
-                  id="position"
-                  value={employeeFormData.position}
-                  onChange={(e) =>
-                    setEmployeeFormData({ ...employeeFormData, position: e.target.value })
-                  }
-                  placeholder="مثال: عامل، مشرف، فني"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currentSalary">الراتب الشهري (دينار)</Label>
-                <Input
-                  id="currentSalary"
-                  type="number"
-                  step="0.01"
-                  value={employeeFormData.currentSalary}
-                  onChange={(e) =>
-                    setEmployeeFormData({
-                      ...employeeFormData,
-                      currentSalary: e.target.value,
-                    })
-                  }
-                  required
-                />
-                {editingEmployee && parseFloat(employeeFormData.currentSalary) !== editingEmployee.currentSalary && (
-                  <p className="text-sm text-blue-600">
-                    التغيير: {editingEmployee.currentSalary} ← {employeeFormData.currentSalary} دينار
-                    {" "}
-                    ({(((parseFloat(employeeFormData.currentSalary) - editingEmployee.currentSalary) / editingEmployee.currentSalary) * 100).toFixed(2)}%)
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center space-x-2 space-x-reverse">
-                <input
-                  type="checkbox"
-                  id="overtimeEligible"
-                  checked={employeeFormData.overtimeEligible}
-                  onChange={(e) =>
-                    setEmployeeFormData({
-                      ...employeeFormData,
-                      overtimeEligible: e.target.checked,
-                    })
-                  }
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <Label htmlFor="overtimeEligible" className="cursor-pointer font-normal">
-                  مؤهل للوقت الإضافي (1.5x)
-                </Label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hireDate">تاريخ التعيين</Label>
-                <Input
-                  id="hireDate"
-                  type="date"
-                  value={employeeFormData.hireDate}
-                  onChange={(e) =>
-                    setEmployeeFormData({ ...employeeFormData, hireDate: e.target.value })
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEmployeeDialogOpen(false)}
-              >
-                إلغاء
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري الحفظ..." : editingEmployee ? "تحديث" : "إضافة"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <EmployeeFormDialog
+        isOpen={isEmployeeDialogOpen}
+        onClose={() => setIsEmployeeDialogOpen(false)}
+        editingEmployee={editingEmployee}
+        formData={employeeFormData}
+        setFormData={setEmployeeFormData}
+        loading={loading}
+        onSubmit={handleEmployeeSubmit}
+      />
 
-      {/* Salary History Dialog */}
-      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>سجل الرواتب</DialogTitle>
-            <DialogDescription>تاريخ التغييرات على الراتب</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {selectedEmployeeHistory.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">لا يوجد سجل تغييرات</p>
-            ) : (
-              <div className="space-y-3">
-                {selectedEmployeeHistory.map((history) => (
-                  <div key={history.id} className="border-b pb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">
-                          {history.oldSalary} ← {history.newSalary} دينار
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {new Date(history.effectiveDate).toLocaleDateString("ar-EG")}
-                        </div>
-                      </div>
-                      <div
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          history.incrementPercentage > 0
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {history.incrementPercentage > 0 ? "+" : ""}
-                        {history.incrementPercentage.toFixed(2)}%
-                      </div>
-                    </div>
-                    {history.notes && (
-                      <div className="text-sm text-gray-600 mt-1">{history.notes}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsHistoryDialogOpen(false)}>إغلاق</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SalaryHistoryDialog
+        isOpen={isHistoryDialogOpen}
+        onClose={() => setIsHistoryDialogOpen(false)}
+        history={selectedEmployeeHistory}
+      />
 
       {confirmationDialog}
     </div>
