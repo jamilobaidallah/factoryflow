@@ -1,10 +1,11 @@
 /**
  * LedgerFormDialog - Main form dialog for adding/editing ledger entries
- * Extracted from ledger-page.tsx for better maintainability
+ * Uses LedgerFormContext to eliminate prop drilling
  */
 
-import { LedgerEntry, CATEGORIES } from "../utils/ledger-constants";
+import { CATEGORIES } from "../utils/ledger-constants";
 import { getCategoryType } from "../utils/ledger-helpers";
+import { useLedgerFormContext } from "../context/LedgerFormContext";
 import {
   Dialog,
   DialogContent,
@@ -17,85 +18,41 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-interface Client {
-  id: string;
-  name: string;
-}
+export function LedgerFormDialog() {
+  const {
+    isOpen,
+    onClose,
+    editingEntry,
+    onSubmit,
+    loading,
+    clients,
+    partners,
+    formData,
+    setFormData,
+    hasIncomingCheck,
+    setHasIncomingCheck,
+    hasOutgoingCheck,
+    setHasOutgoingCheck,
+    hasInventoryUpdate,
+    setHasInventoryUpdate,
+    hasFixedAsset,
+    setHasFixedAsset,
+    hasInitialPayment,
+    setHasInitialPayment,
+    initialPaymentAmount,
+    setInitialPaymentAmount,
+    checkFormData,
+    setCheckFormData,
+    outgoingCheckFormData,
+    setOutgoingCheckFormData,
+    inventoryFormData,
+    setInventoryFormData,
+    fixedAssetFormData,
+    setFixedAssetFormData,
+    createInvoice,
+    setCreateInvoice,
+  } = useLedgerFormContext();
 
-interface Partner {
-  id: string;
-  name: string;
-}
-
-interface LedgerFormDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  editingEntry: LedgerEntry | null;
-  onSubmit: (e: React.FormEvent) => void;
-  loading: boolean;
-  clients: Client[];
-  partners: Partner[];
-  // Form state
-  formData: any;
-  setFormData: (data: any) => void;
-  hasIncomingCheck: boolean;
-  setHasIncomingCheck: (value: boolean) => void;
-  hasOutgoingCheck: boolean;
-  setHasOutgoingCheck: (value: boolean) => void;
-  hasInventoryUpdate: boolean;
-  setHasInventoryUpdate: (value: boolean) => void;
-  hasFixedAsset: boolean;
-  setHasFixedAsset: (value: boolean) => void;
-  hasInitialPayment: boolean;
-  setHasInitialPayment: (value: boolean) => void;
-  initialPaymentAmount: string;
-  setInitialPaymentAmount: (value: string) => void;
-  checkFormData: any;
-  setCheckFormData: (data: any) => void;
-  outgoingCheckFormData: any;
-  setOutgoingCheckFormData: (data: any) => void;
-  inventoryFormData: any;
-  setInventoryFormData: (data: any) => void;
-  fixedAssetFormData: any;
-  setFixedAssetFormData: (data: any) => void;
-  // جسر إنشاء الفاتورة - Invoice creation bridge
-  createInvoice?: boolean;
-  setCreateInvoice?: (value: boolean) => void;
-}
-
-export function LedgerFormDialog({
-  isOpen,
-  onClose,
-  editingEntry,
-  onSubmit,
-  loading,
-  clients,
-  partners,
-  formData,
-  setFormData,
-  hasIncomingCheck,
-  setHasIncomingCheck,
-  hasOutgoingCheck,
-  setHasOutgoingCheck,
-  hasInventoryUpdate,
-  setHasInventoryUpdate,
-  hasFixedAsset,
-  setHasFixedAsset,
-  hasInitialPayment,
-  setHasInitialPayment,
-  initialPaymentAmount,
-  setInitialPaymentAmount,
-  checkFormData,
-  setCheckFormData,
-  outgoingCheckFormData,
-  setOutgoingCheckFormData,
-  inventoryFormData,
-  setInventoryFormData,
-  fixedAssetFormData,
-  setFixedAssetFormData,
-  createInvoice,
-  setCreateInvoice,
-}: LedgerFormDialogProps) {
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
 
   return (
