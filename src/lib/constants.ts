@@ -55,6 +55,29 @@ export const CHEQUE_STATUS_LABELS = {
   [CHEQUE_STATUSES.CANCELLED]: 'ملغي',
 } as const;
 
+// Cheque Types (Direction)
+export const CHEQUE_TYPES = {
+  INCOMING: 'وارد',
+  OUTGOING: 'صادر',
+} as const;
+
+// Cheque Status Arabic Values (as stored in database)
+export const CHEQUE_STATUS_AR = {
+  PENDING: 'قيد الانتظار',
+  CASHED: 'تم الصرف',
+  ENDORSED: 'مجيّر',
+  BOUNCED: 'مرفوض',
+  RETURNED: 'مرتجع',
+  COLLECTED: 'محصل',
+  CANCELLED: 'ملغي',
+} as const;
+
+// Dashboard Labels
+export const CASH_FLOW_LABELS = {
+  CASH_IN: 'نقد وارد',
+  CASH_OUT: 'نقد صادر',
+} as const;
+
 // Inventory Movement Types
 export const MOVEMENT_TYPES = {
   ENTRY: 'دخول',
@@ -233,5 +256,7 @@ export type PaymentType = typeof PAYMENT_TYPES[keyof typeof PAYMENT_TYPES];
 export type TransactionType = typeof TRANSACTION_TYPES[keyof typeof TRANSACTION_TYPES];
 export type PaymentStatus = typeof PAYMENT_STATUSES[keyof typeof PAYMENT_STATUSES];
 export type ChequeStatus = typeof CHEQUE_STATUSES[keyof typeof CHEQUE_STATUSES];
+export type ChequeType = typeof CHEQUE_TYPES[keyof typeof CHEQUE_TYPES];
+export type ChequeStatusAr = typeof CHEQUE_STATUS_AR[keyof typeof CHEQUE_STATUS_AR];
 export type MovementType = typeof MOVEMENT_TYPES[keyof typeof MOVEMENT_TYPES];
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];

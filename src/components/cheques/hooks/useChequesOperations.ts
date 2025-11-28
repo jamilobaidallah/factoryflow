@@ -16,6 +16,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -114,8 +115,8 @@ export function useChequesOperations(): UseChequesOperationsReturn {
 
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
-        const pendingStatuses = ["قيد الانتظار", "pending"];
-        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+        const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
+        const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
         const wasPending = pendingStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
 
@@ -123,7 +124,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
           updateData.clearedDate = new Date();
 
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-          const paymentType = formData.type === "وارد" ? "قبض" : "صرف";
+          const paymentType = formData.type === CHEQUE_TYPES.INCOMING ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
           const chequeAmount = parseFloat(formData.amount);
 
           await addDoc(paymentsRef, {
@@ -237,7 +238,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
         chequeType: "مجير",
-        status: "مجيّر",
+        status: CHEQUE_STATUS_AR.ENDORSED,
         endorsedTo: supplierName,
         endorsedDate: new Date(),
       });
@@ -246,7 +247,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
       await addDoc(paymentsRef, {
         clientName: cheque.clientName,
         amount: cheque.amount,
-        type: "قبض",
+        type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: cheque.linkedTransactionId || "",
         date: new Date(),
         notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
@@ -258,7 +259,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
       await addDoc(paymentsRef, {
         clientName: supplierName,
         amount: cheque.amount,
-        type: "صرف",
+        type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: cheque.linkedTransactionId || "",
         date: new Date(),
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
@@ -289,12 +290,12 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     try {
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
-        status: "تم الصرف",
+        status: CHEQUE_STATUS_AR.CASHED,
         clearedDate: new Date(),
       });
 
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const paymentType = cheque.type === "وارد" ? "قبض" : "صرف";
+      const paymentType = cheque.type === CHEQUE_TYPES.INCOMING ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 
       await addDoc(paymentsRef, {
         clientName: cheque.clientName,
@@ -333,7 +334,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     try {
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
-        status: "مرفوض",
+        status: CHEQUE_STATUS_AR.BOUNCED,
         bouncedDate: new Date(),
       });
 

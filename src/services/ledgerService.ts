@@ -40,6 +40,7 @@ import type {
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { getCategoryType, generateTransactionId } from "@/components/ledger/utils/ledger-helpers";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -606,7 +607,7 @@ export class LedgerService {
         }
       }
 
-      const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+      const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 
       await addDoc(this.paymentsRef, {
         clientName: entry.associatedParty || "غير محدد",
@@ -651,7 +652,7 @@ export class LedgerService {
         };
       }
 
-      const paymentType = data.entryType === "دخل" ? "قبض" : "صرف";
+      const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 
       // Add payment record
       await addDoc(this.paymentsRef, {
@@ -704,18 +705,18 @@ export class LedgerService {
         chequeImageUrl = await getDownloadURL(imageRef);
       }
 
-      const chequeDirection = entry.type === "دخل" ? "وارد" : "صادر";
+      const chequeDirection = entry.type === "دخل" ? CHEQUE_TYPES.INCOMING : CHEQUE_TYPES.OUTGOING;
       const chequeAmount = parseFloat(formData.amount);
       const accountingType = formData.accountingType || "cashed";
 
       // Determine the correct status based on accounting type
       let chequeStatus = formData.status;
       if (accountingType === "cashed") {
-        chequeStatus = "تم الصرف";
+        chequeStatus = CHEQUE_STATUS_AR.CASHED;
       } else if (accountingType === "postponed") {
-        chequeStatus = "قيد الانتظار";
+        chequeStatus = CHEQUE_STATUS_AR.PENDING;
       } else if (accountingType === "endorsed") {
-        chequeStatus = "مجيّر";
+        chequeStatus = CHEQUE_STATUS_AR.ENDORSED;
       }
 
       // Validate endorsee name for endorsed cheques
@@ -754,7 +755,7 @@ export class LedgerService {
       // Handle different accounting flows
       if (accountingType === "cashed") {
         // Create payment record
-        const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+        const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
         await addDoc(this.paymentsRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,
@@ -782,7 +783,7 @@ export class LedgerService {
         await addDoc(this.paymentsRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,
-          type: "قبض",
+          type: PAYMENT_TYPES.RECEIPT,
           linkedTransactionId: entry.transactionId,
           date: new Date(),
           notes: `تظهير شيك رقم ${formData.chequeNumber} للجهة: ${formData.endorsedToName}`,
@@ -794,7 +795,7 @@ export class LedgerService {
         await addDoc(this.paymentsRef, {
           clientName: formData.endorsedToName,
           amount: chequeAmount,
-          type: "صرف",
+          type: PAYMENT_TYPES.DISBURSEMENT,
           linkedTransactionId: entry.transactionId,
           date: new Date(),
           notes: `استلام شيك مظهر رقم ${formData.chequeNumber} من العميل: ${entry.associatedParty}`,
@@ -978,11 +979,11 @@ export class LedgerService {
 
     let chequeStatus: string;
     if (accountingType === "cashed") {
-      chequeStatus = "تم الصرف";
+      chequeStatus = CHEQUE_STATUS_AR.CASHED;
     } else if (accountingType === "postponed") {
-      chequeStatus = "قيد الانتظار";
+      chequeStatus = CHEQUE_STATUS_AR.PENDING;
     } else {
-      chequeStatus = "مجيّر";
+      chequeStatus = CHEQUE_STATUS_AR.ENDORSED;
     }
 
     const chequeDocRef = doc(this.chequesRef);
@@ -990,7 +991,7 @@ export class LedgerService {
       chequeNumber: checkFormData.chequeNumber,
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
-      type: "وارد",
+      type: CHEQUE_TYPES.INCOMING,
       chequeType: accountingType === "endorsed" ? "مجير" : "عادي",
       status: chequeStatus,
       linkedTransactionId: transactionId,
@@ -1014,7 +1015,7 @@ export class LedgerService {
       batch.set(paymentDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: chequeAmount,
-        type: entryType === "دخل" ? "قبض" : "صرف",
+        type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
         method: "cheque",
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
@@ -1026,7 +1027,7 @@ export class LedgerService {
       batch.set(receiptDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: chequeAmount,
-        type: "قبض",
+        type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
         notes: `تظهير شيك رقم ${checkFormData.chequeNumber} للجهة: ${checkFormData.endorsedToName}`,
@@ -1039,7 +1040,7 @@ export class LedgerService {
       batch.set(disbursementDocRef, {
         clientName: checkFormData.endorsedToName,
         amount: chequeAmount,
-        type: "صرف",
+        type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
         notes: `استلام شيك مظهر رقم ${checkFormData.chequeNumber} من العميل: ${formData.associatedParty}`,
@@ -1062,11 +1063,11 @@ export class LedgerService {
 
     let chequeStatus: string;
     if (accountingType === "cashed") {
-      chequeStatus = "تم الصرف";
+      chequeStatus = CHEQUE_STATUS_AR.CASHED;
     } else if (accountingType === "postponed") {
-      chequeStatus = "قيد الانتظار";
+      chequeStatus = CHEQUE_STATUS_AR.PENDING;
     } else {
-      chequeStatus = "تم الصرف";
+      chequeStatus = CHEQUE_STATUS_AR.CASHED;
     }
 
     const chequeDocRef = doc(this.chequesRef);
@@ -1074,7 +1075,7 @@ export class LedgerService {
       chequeNumber: outgoingCheckFormData.chequeNumber,
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
-      type: "صادر",
+      type: CHEQUE_TYPES.OUTGOING,
       chequeType: accountingType === "endorsed" ? "مظهر" : "عادي",
       status: chequeStatus,
       linkedTransactionId: transactionId,
@@ -1099,7 +1100,7 @@ export class LedgerService {
       batch.set(paymentDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: chequeAmount,
-        type: "صرف",
+        type: PAYMENT_TYPES.DISBURSEMENT,
         method: "cheque",
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
@@ -1111,7 +1112,7 @@ export class LedgerService {
       batch.set(paymentDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: chequeAmount,
-        type: "صرف",
+        type: PAYMENT_TYPES.DISBURSEMENT,
         method: "cheque",
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
@@ -1134,7 +1135,7 @@ export class LedgerService {
       batch.set(paymentDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: cashAmount,
-        type: entryType === "دخل" ? "قبض" : "صرف",
+        type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
         notes: `تسوية فورية نقدية - ${formData.description}`,
@@ -1157,7 +1158,7 @@ export class LedgerService {
       batch.set(paymentDocRef, {
         clientName: formData.associatedParty || "غير محدد",
         amount: paymentAmount,
-        type: entryType === "دخل" ? "قبض" : "صرف",
+        type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: transactionId,
         date: new Date(formData.date),
         notes: `دفعة أولية - ${formData.description}`,

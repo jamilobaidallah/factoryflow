@@ -13,6 +13,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
 import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
+import { CHEQUE_TYPES } from "@/lib/constants";
 
 interface UseOutgoingChequesDataReturn {
   cheques: Cheque[];
@@ -34,7 +35,7 @@ export function useOutgoingChequesData(): UseOutgoingChequesDataReturn {
     // Filter for outgoing cheques only
     const q = query(
       chequesRef,
-      where("type", "==", "صادر"),
+      where("type", "==", CHEQUE_TYPES.OUTGOING),
       orderBy("dueDate", "desc"),
       limit(1000)
     );

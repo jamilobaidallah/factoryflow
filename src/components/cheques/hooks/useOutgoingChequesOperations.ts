@@ -15,6 +15,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -114,9 +115,9 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         // Check if status changed - critical accounting logic
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
-        const pendingStatuses = ["قيد الانتظار", "pending"];
-        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
-        const bouncedOrRevertedStatuses = ["مرتجع", "bounced", "قيد الانتظار", "pending", "ملغي", "cancelled"];
+        const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
+        const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+        const bouncedOrRevertedStatuses = [CHEQUE_STATUS_AR.RETURNED, "bounced", CHEQUE_STATUS_AR.PENDING, "pending", CHEQUE_STATUS_AR.CANCELLED, "cancelled"];
         const wasPending = pendingStatuses.includes(oldStatus);
         const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
@@ -135,7 +136,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           const paymentRef = await addDoc(paymentsRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
-            type: "صرف", // Disbursement - we paid the supplier
+            type: PAYMENT_TYPES.DISBURSEMENT, // Disbursement - we paid the supplier
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
             linkedChequeId: editingCheque.id,
@@ -200,7 +201,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         if (wasPending && isNowCleared) {
           toastDescription = `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`;
         } else if (wasCleared && isNowBouncedOrReverted) {
-          if (newStatus === "مرتجع" || newStatus === "bounced") {
+          if (newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced") {
             toastDescription = `تم تسجيل الشيك رقم ${formData.chequeNumber} كمرتجع وإلغاء سند الصرف`;
           } else {
             toastDescription = `تم إرجاع الشيك رقم ${formData.chequeNumber} إلى قيد الانتظار وإلغاء سند الصرف`;
@@ -217,7 +218,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
-          type: "صادر", // Always outgoing
+          type: CHEQUE_TYPES.OUTGOING, // Always outgoing
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),

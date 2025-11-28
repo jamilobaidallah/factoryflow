@@ -13,6 +13,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface UseIncomingChequesDataReturn {
   cheques: Cheque[];
@@ -40,7 +41,7 @@ export function useIncomingChequesData(): UseIncomingChequesDataReturn {
     // Filter for incoming cheques only
     const q = query(
       chequesRef,
-      where("type", "==", "وارد"),
+      where("type", "==", CHEQUE_TYPES.INCOMING),
       orderBy("dueDate", "desc"),
       limit(1000)
     );
@@ -62,10 +63,10 @@ export function useIncomingChequesData(): UseIncomingChequesDataReturn {
   }, [user]);
 
   // Calculate summary statistics
-  const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
-  const clearedCheques = cheques.filter(c => c.status === "تم الصرف");
-  const endorsedCheques = cheques.filter(c => c.status === "مجيّر");
-  const bouncedCheques = cheques.filter(c => c.status === "مرفوض");
+  const pendingCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.PENDING);
+  const clearedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CASHED);
+  const endorsedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.ENDORSED);
+  const bouncedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.BOUNCED);
 
   const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
   const totalClearedValue = clearedCheques.reduce((sum, c) => sum + c.amount, 0);
