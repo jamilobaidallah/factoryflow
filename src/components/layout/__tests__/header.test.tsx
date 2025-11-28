@@ -31,19 +31,19 @@ describe('Header', () => {
   });
 
   describe('Rendering', () => {
-    it('renders welcome message', () => {
+    it('renders title', () => {
       render(<Header />);
 
-      expect(screen.getByText('مرحباً بك في نظام إدارة المصنع')).toBeInTheDocument();
+      expect(screen.getByText('نظام إدارة المصنع')).toBeInTheDocument();
     });
 
-    it('displays user email', () => {
+    it('displays user email on desktop', () => {
       render(<Header />);
 
       expect(screen.getByText('test@example.com')).toBeInTheDocument();
     });
 
-    it('renders logout button', () => {
+    it('renders logout button on desktop', () => {
       render(<Header />);
 
       expect(screen.getByRole('button', { name: /تسجيل الخروج/ })).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('Header', () => {
       render(<Header />);
 
       const header = screen.getByRole('banner');
-      expect(header).toHaveClass('h-16', 'bg-white');
+      expect(header).toHaveClass('bg-white');
     });
   });
 });
