@@ -1,18 +1,8 @@
 import { useState, useEffect } from "react";
 import { useUser } from "@/firebase/provider";
-import { firestore } from "@/firebase/config";
-import {
-    collection,
-    onSnapshot,
-    query,
-    orderBy,
-    limit,
-    startAfter,
-    DocumentSnapshot,
-    getCountFromServer,
-} from "firebase/firestore";
 import { LedgerEntry } from "../utils/ledger-constants";
-import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { createLedgerService } from "@/services/ledgerService";
+import { DocumentSnapshot } from "firebase/firestore";
 
 interface UseLedgerDataOptions {
     pageSize?: number;
@@ -21,7 +11,7 @@ interface UseLedgerDataOptions {
 
 /**
  * Custom hook to fetch and manage ledger data with pagination
- * Handles real-time subscriptions to ledger entries, clients, and partners
+ * Uses LedgerService for all Firestore operations
  */
 export function useLedgerData(options: UseLedgerDataOptions = {}) {
     const { pageSize = 50, currentPage = 1 } = options;
@@ -37,88 +27,66 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        getCountFromServer(query(ledgerRef)).then((snapshot) => {
-            setTotalCount(snapshot.data().count);
+        const service = createLedgerService(user.uid);
+        service.getTotalCount().then((count) => {
+            setTotalCount(count);
         });
     }, [user]);
 
     // Load ledger entries with pagination
     useEffect(() => {
-        if (!user) {return;}
+        if (!user) { return; }
 
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-        const q = query(ledgerRef, orderBy("date", "desc"), limit(pageSize));
+        const service = createLedgerService(user.uid);
 
-        // For pages after the first, we need to skip
-        // Note: Firestore doesn't support offset, so we use limit for now
-        // For true pagination, we'd need to track the last document of previous page
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const entriesData: LedgerEntry[] = [];
-            let lastVisible: DocumentSnapshot | null = null;
-
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                entriesData.push({
-                    id: doc.id,
-                    ...convertFirestoreDates(data),
-                } as LedgerEntry);
-                lastVisible = doc;
-            });
-
-            setEntries(entriesData);
-            setLastDoc(lastVisible);
-            setLoading(false);
-        });
+        const unsubscribe = service.subscribeLedgerEntries(
+            pageSize,
+            (entriesData, lastVisible) => {
+                setEntries(entriesData);
+                setLastDoc(lastVisible);
+                setLoading(false);
+            },
+            (error) => {
+                console.error("Error fetching ledger entries:", error);
+                setLoading(false);
+            }
+        );
 
         return () => unsubscribe();
     }, [user, pageSize, currentPage]);
 
     // Load clients list for dropdown
     useEffect(() => {
-        if (!user) {return;}
+        if (!user) { return; }
 
-        const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-        // Limit to 500 clients for dropdown (reasonable for most businesses)
-        const q = query(clientsRef, orderBy("name", "asc"), limit(500));
+        const service = createLedgerService(user.uid);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const clientsData: { id: string; name: string }[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                clientsData.push({
-                    id: doc.id,
-                    name: data.name || "",
-                });
-            });
-            setClients(clientsData);
-        });
+        const unsubscribe = service.subscribeClients(
+            (clientsData) => {
+                setClients(clientsData);
+            },
+            (error) => {
+                console.error("Error fetching clients:", error);
+            }
+        );
 
         return () => unsubscribe();
     }, [user]);
 
     // Load partners list for dropdown
     useEffect(() => {
-        if (!user) {return;}
+        if (!user) { return; }
 
-        const partnersRef = collection(firestore, `users/${user.uid}/partners`);
-        // Limit to 100 partners for dropdown
-        const q = query(partnersRef, orderBy("name", "asc"), limit(100));
+        const service = createLedgerService(user.uid);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const partnersData: { id: string; name: string }[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.active !== false) {  // Only include active partners
-                    partnersData.push({
-                        id: doc.id,
-                        name: data.name || "",
-                    });
-                }
-            });
-            setPartners(partnersData);
-        });
+        const unsubscribe = service.subscribePartners(
+            (partnersData) => {
+                setPartners(partnersData);
+            },
+            (error) => {
+                console.error("Error fetching partners:", error);
+            }
+        );
 
         return () => unsubscribe();
     }, [user]);

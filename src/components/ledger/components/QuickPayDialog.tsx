@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
-import { firestore } from "@/firebase/config";
+import { createLedgerService } from "@/services/ledgerService";
 import { LedgerEntry } from "../utils/ledger-constants";
 
 interface QuickPayDialogProps {
@@ -57,42 +56,39 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
     setLoading(true);
     try {
-      const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+      const service = createLedgerService(user.uid);
 
-      // Add payment record
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      await addDoc(paymentsRef, {
-        clientName: entry.associatedParty || "غير محدد",
+      const result = await service.addQuickPayment({
         amount: paymentAmount,
-        type: paymentType,
-        linkedTransactionId: entry.transactionId,
-        date: new Date(),
-        notes: `دفعة جزئية - ${entry.description}`,
-        category: entry.category,
-        subCategory: entry.subCategory,
-        createdAt: new Date(),
+        entryId: entry.id,
+        entryTransactionId: entry.transactionId,
+        entryType: entry.type,
+        entryAmount: entry.amount,
+        entryDescription: entry.description,
+        entryCategory: entry.category,
+        entrySubCategory: entry.subCategory,
+        associatedParty: entry.associatedParty,
+        totalPaid: entry.totalPaid || 0,
+        remainingBalance: entry.remainingBalance || entry.amount,
+        isARAPEntry: entry.isARAPEntry || false,
       });
 
-      // Update ledger entry AR/AP tracking
-      const newTotalPaid = (entry.totalPaid || 0) + paymentAmount;
-      const newRemainingBalance = entry.amount - newTotalPaid;
-      const newStatus = newRemainingBalance === 0 ? "paid" : newRemainingBalance < entry.amount ? "partial" : "unpaid";
+      if (result.success) {
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: `تم إضافة دفعة بمبلغ ${paymentAmount.toFixed(2)} دينار`,
+        });
 
-      const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, entry.id);
-      await updateDoc(ledgerEntryRef, {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      });
-
-      toast({
-        title: "تمت الإضافة بنجاح",
-        description: `تم إضافة دفعة بمبلغ ${paymentAmount.toFixed(2)} دينار`,
-      });
-
-      setAmount("");
-      onClose();
-      onSuccess?.();
+        setAmount("");
+        onClose();
+        onSuccess?.();
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "حدث خطأ أثناء إضافة الدفعة",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error("Error adding quick payment:", error);
       toast({

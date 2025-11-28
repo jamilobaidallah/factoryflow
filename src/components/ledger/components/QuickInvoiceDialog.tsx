@@ -22,8 +22,7 @@ import { Plus, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
-import { collection, addDoc } from "firebase/firestore";
-import { firestore } from "@/firebase/config";
+import { createLedgerService } from "@/services/ledgerService";
 
 // وحدات القياس للمصنع - Unit types for manufacturing
 type InvoiceItemUnit = 'm' | 'm2' | 'piece';
@@ -105,12 +104,6 @@ export function QuickInvoiceDialog({
     }]);
   }
 
-  const generateInvoiceNumber = () => {
-    const year = new Date().getFullYear();
-    const random = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-    return `INV-${year}-${random}`;
-  };
-
   const calculateTotals = (itemsList: InvoiceItem[], taxRate: number) => {
     const subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
     const taxAmount = (subtotal * taxRate) / 100;
@@ -155,7 +148,6 @@ export function QuickInvoiceDialog({
     setLoading(true);
     try {
       const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
-      const invoiceNumber = generateInvoiceNumber();
 
       // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
       // Clean items from undefined values - Firestore doesn't accept undefined
@@ -186,8 +178,8 @@ export function QuickInvoiceDialog({
       const invoiceDate = new Date(formData.invoiceDate);
       const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      await addDoc(collection(firestore, `users/${user.uid}/invoices`), {
-        invoiceNumber,
+      const service = createLedgerService(user.uid);
+      const result = await service.createInvoice({
         clientName: pendingData.clientName,
         clientAddress: formData.clientAddress,
         clientPhone: formData.clientPhone,
@@ -198,20 +190,25 @@ export function QuickInvoiceDialog({
         taxRate: parseFloat(formData.taxRate),
         taxAmount,
         total,
-        status: "draft",
         notes: formData.notes,
-        createdAt: new Date(),
-        updatedAt: new Date(),
       });
 
-      toast({
-        title: "تم إنشاء الفاتورة",
-        description: `تم إنشاء الفاتورة ${invoiceNumber} للعميل ${pendingData.clientName}`,
-      });
+      if (result.success) {
+        toast({
+          title: "تم إنشاء الفاتورة",
+          description: `تم إنشاء الفاتورة ${result.data} للعميل ${pendingData.clientName}`,
+        });
 
-      // إعادة تعيين النموذج - Reset form
-      resetForm();
-      onClose();
+        // إعادة تعيين النموذج - Reset form
+        resetForm();
+        onClose();
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "حدث خطأ أثناء إنشاء الفاتورة",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       const appError = handleError(error);
       toast({
