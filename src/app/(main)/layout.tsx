@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import MobileNav from "@/components/layout/mobile-nav";
+import FloatingActionButton from "@/components/layout/floating-action-button";
 
 export default function MainLayout({
   children,
@@ -48,6 +49,8 @@ export default function MainLayout({
       </div>
       {/* شريط التنقل السفلي للجوال */}
       <MobileNav />
+      {/* زر الإجراء العائم للجوال */}
+      <FloatingActionButton />
     </div>
   );
 }

@@ -28,15 +28,21 @@ export default function Header() {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6" role="banner">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">
-          مرحباً بك في نظام إدارة المصنع
+    <header
+      className="min-h-[56px] md:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 py-2 md:py-0"
+      role="banner"
+    >
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
+          نظام إدارة المصنع
         </h2>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600" aria-label="معلومات المستخدم">
+      <div className="hidden md:flex items-center gap-4">
+        <div
+          className="flex items-center gap-2 text-sm text-gray-600"
+          aria-label="معلومات المستخدم"
+        >
           <User className="w-4 h-4" aria-hidden="true" />
           <span>{user?.email}</span>
         </div>
