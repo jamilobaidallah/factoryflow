@@ -64,7 +64,6 @@ export function QuickInvoiceDialog({
     clientPhone: "",
     clientAddress: "",
     invoiceDate: new Date().toISOString().split("T")[0],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     taxRate: "0",
     notes: "",
   });
@@ -146,13 +145,18 @@ export function QuickInvoiceDialog({
       const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
       const invoiceNumber = generateInvoiceNumber();
 
+      // تعيين تاريخ الاستحقاق تلقائياً (30 يوم من تاريخ الفاتورة)
+      // Auto-set due date to 30 days from invoice date
+      const invoiceDate = new Date(formData.invoiceDate);
+      const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
       await addDoc(collection(firestore, `users/${user.uid}/invoices`), {
         invoiceNumber,
         clientName: pendingData.clientName,
         clientAddress: formData.clientAddress,
         clientPhone: formData.clientPhone,
-        invoiceDate: new Date(formData.invoiceDate),
-        dueDate: new Date(formData.dueDate),
+        invoiceDate,
+        dueDate,
         items,
         subtotal,
         taxRate: parseFloat(formData.taxRate),
@@ -189,7 +193,6 @@ export function QuickInvoiceDialog({
       clientPhone: "",
       clientAddress: "",
       invoiceDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       taxRate: "0",
       notes: "",
     });
@@ -249,8 +252,8 @@ export function QuickInvoiceDialog({
             />
           </div>
 
-          {/* التواريخ والضريبة - Dates and Tax */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* التاريخ والضريبة - Date and Tax */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="invoiceDate">تاريخ الفاتورة</Label>
               <Input
@@ -258,16 +261,6 @@ export function QuickInvoiceDialog({
                 type="date"
                 value={formData.invoiceDate}
                 onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">تاريخ الاستحقاق</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                 required
               />
             </div>
@@ -295,25 +288,25 @@ export function QuickInvoiceDialog({
 
             {/* جدول بنود الفاتورة مع أبعاد التصنيع */}
             <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full min-w-[900px]">
+              <table className="w-full min-w-[850px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 text-xs font-medium text-right">الوصف</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-20">الوحدة</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-16">الطول</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-16">العرض</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-16">السماكة</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-20">الكمية</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-20">السعر</th>
-                    <th className="px-2 py-2 text-xs font-medium text-right w-24">المجموع</th>
+                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (م)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (م)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (مم)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>
                     <th className="px-2 py-2 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={index} className="border-t">
+                    <tr key={index} className="border-t align-middle">
                       {/* الوصف */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           value={item.description}
                           onChange={(e) => handleItemChange(index, "description", e.target.value)}
@@ -323,11 +316,11 @@ export function QuickInvoiceDialog({
                         />
                       </td>
                       {/* الوحدة - Unit dropdown */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <select
                           value={item.unit || 'piece'}
                           onChange={(e) => handleItemChange(index, "unit", e.target.value as InvoiceItemUnit)}
-                          className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                          className="flex h-8 w-full rounded-md border border-input bg-background px-1 py-1 text-sm text-center"
                         >
                           <option value="m">متر طولي</option>
                           <option value="m2">متر مربع</option>
@@ -335,66 +328,63 @@ export function QuickInvoiceDialog({
                         </select>
                       </td>
                       {/* الطول - Length */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           type="number"
                           step="0.01"
                           value={item.length ?? ''}
                           onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          placeholder="م"
-                          className="h-8 text-sm"
+                          className="h-8 text-sm text-center w-full"
                         />
                       </td>
                       {/* العرض - Width */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           type="number"
                           step="0.01"
                           value={item.width ?? ''}
                           onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          placeholder="م"
-                          className="h-8 text-sm"
+                          className="h-8 text-sm text-center w-full"
                         />
                       </td>
                       {/* السماكة - Thickness (CRITICAL) */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           type="number"
                           step="0.01"
                           value={item.thickness ?? ''}
                           onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          placeholder="مم"
-                          className="h-8 text-sm"
+                          className="h-8 text-sm text-center w-full"
                         />
                       </td>
                       {/* الكمية - Quantity */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           type="number"
                           step="0.01"
                           value={item.quantity}
                           onChange={(e) => handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)}
                           required
-                          className="h-8 text-sm"
+                          className="h-8 text-sm text-center w-full"
                         />
                       </td>
                       {/* السعر - Price */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Input
                           type="number"
                           step="0.01"
                           value={item.unitPrice}
                           onChange={(e) => handleItemChange(index, "unitPrice", parseFloat(e.target.value) || 0)}
                           required
-                          className="h-8 text-sm"
+                          className="h-8 text-sm text-center w-full"
                         />
                       </td>
                       {/* المجموع - Total */}
-                      <td className="px-1 py-1">
-                        <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm bg-gray-50" />
+                      <td className="px-1 py-1.5">
+                        <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm text-center bg-gray-50 w-full" />
                       </td>
                       {/* حذف - Delete */}
-                      <td className="px-1 py-1">
+                      <td className="px-1 py-1.5">
                         <Button
                           type="button"
                           variant="ghost"
