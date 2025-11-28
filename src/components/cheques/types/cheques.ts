@@ -9,6 +9,7 @@ export interface Cheque {
   chequeImageUrl?: string;
   endorsedTo?: string;
   endorsedDate?: Date;
+  endorsedToOutgoingId?: string;
   isEndorsedCheque?: boolean;
   endorsedFromId?: string;
   linkedTransactionId: string;

@@ -302,11 +302,11 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
     try {
       // 1. Delete the outgoing cheque entry if it exists
-      if ((cheque as any).endorsedToOutgoingId) {
+      if (cheque.endorsedToOutgoingId) {
         const outgoingChequeRef = doc(
           firestore,
           `users/${user.uid}/cheques`,
-          (cheque as any).endorsedToOutgoingId
+          cheque.endorsedToOutgoingId
         );
         await deleteDoc(outgoingChequeRef);
       }

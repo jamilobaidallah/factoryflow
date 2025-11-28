@@ -125,6 +125,41 @@ export interface InventoryRelatedFormData {
 }
 
 /**
+ * Inventory Movement Document Data (from Firestore)
+ */
+export interface InventoryMovementData {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  type: string; // 'دخول' (entry) or 'خروج' (exit)
+  unit?: string;
+  linkedTransactionId?: string;
+  notes?: string;
+  createdAt?: Date;
+}
+
+/**
+ * Inventory Item Document Data (from Firestore)
+ */
+export interface InventoryItemData {
+  itemName: string;
+  category?: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  thickness?: number | null;
+  width?: number | null;
+  length?: number | null;
+  minStock?: number;
+  location?: string;
+  notes?: string;
+  createdAt?: Date;
+  lastPurchasePrice?: number;
+  lastPurchaseDate?: Date;
+  lastPurchaseAmount?: number;
+}
+
+/**
  * Initial form data
  */
 export const initialLedgerFormData: LedgerFormData = {
