@@ -6,6 +6,7 @@
 
 import { FirebaseError } from 'firebase/app';
 import { z } from 'zod';
+import { captureAppError, captureException } from './error-reporting';
 
 // ======================
 // Error Types
@@ -183,14 +184,14 @@ export function handleError(error: unknown): AppError {
 export interface ErrorLog {
   timestamp: Date;
   error: AppError;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   userId?: string;
 }
 
 /**
- * Log error for debugging (console in development, could send to service in production)
+ * Log error for debugging and send to error tracking service in production
  */
-export function logError(error: AppError, context?: Record<string, any>, userId?: string): void {
+export function logError(error: AppError, context?: Record<string, unknown>, userId?: string): void {
   const errorLog: ErrorLog = {
     timestamp: new Date(),
     error,
@@ -203,10 +204,30 @@ export function logError(error: AppError, context?: Record<string, any>, userId?
     console.error('Error logged:', errorLog);
   }
 
-  // In production, you could send to error tracking service (Sentry, LogRocket, etc.)
-  // if (process.env.NODE_ENV === 'production') {
-  //   sendToErrorTrackingService(errorLog);
-  // }
+  // Send to error tracking service (Sentry)
+  captureAppError(error, {
+    extra: context,
+    user: userId ? { id: userId } : undefined,
+  });
+}
+
+/**
+ * Log and report any error (not just AppError)
+ */
+export function reportError(error: unknown, context?: Record<string, unknown>, userId?: string): void {
+  // Convert to AppError for consistent handling
+  const appError = handleError(error);
+
+  // Log the error
+  logError(appError, context, userId);
+
+  // Also capture the original error for full stack trace
+  if (error instanceof Error && !(error instanceof FirebaseError) && !(error instanceof z.ZodError)) {
+    captureException(error, {
+      extra: { ...context, appError },
+      user: userId ? { id: userId } : undefined,
+    });
+  }
 }
 
 // ======================

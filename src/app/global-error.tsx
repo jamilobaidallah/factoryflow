@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Global Error Page
@@ -17,8 +18,23 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to an error reporting service
-    console.error('Global application error:', error);
+    // Log the error to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Global application error:', error);
+    }
+
+    // Send to error reporting service (Sentry)
+    // Using Sentry directly here since this is the global error handler
+    // and the error-reporting module might not be available if the root layout failed
+    if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      Sentry.captureException(error, {
+        tags: {
+          errorType: 'global_error',
+          digest: error.digest || 'none',
+        },
+        level: 'fatal',
+      });
+    }
   }, [error]);
 
   return (

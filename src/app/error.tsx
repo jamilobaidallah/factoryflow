@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { capturePageError } from '@/lib/error-reporting';
 
 /**
  * Error Page
@@ -18,8 +19,13 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to an error reporting service
-    console.error('Application error:', error);
+    // Log the error to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Application error:', error);
+    }
+
+    // Send to error reporting service (Sentry)
+    capturePageError(error, window?.location?.pathname);
   }, [error]);
 
   return (
