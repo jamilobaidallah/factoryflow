@@ -5,7 +5,7 @@
 
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { firestore } from "@/firebase/config";
+import { firestore, storage } from "@/firebase/config";
 import {
   collection,
   addDoc,
@@ -17,58 +17,20 @@ import {
   getDocs,
   query,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { getCategoryType, generateTransactionId } from "../utils/ledger-helpers";
-
-export interface LedgerFormData {
-  description: string;
-  amount: string;
-  category: string;
-  subCategory: string;
-  date: string;
-  associatedParty: string;
-  ownerName: string;
-  reference: string;
-  notes: string;
-  trackARAP: boolean;
-  immediateSettlement: boolean;
-}
-
-export interface CheckFormData {
-  chequeNumber: string;
-  chequeAmount: string;
-  bankName: string;
-  dueDate: string;
-  accountingType?: 'cashed' | 'postponed' | 'endorsed';
-  endorsedToName?: string;
-}
-
-export interface OutgoingCheckFormData {
-  chequeNumber: string;
-  chequeAmount: string;
-  bankName: string;
-  dueDate: string;
-  accountingType?: 'cashed' | 'postponed' | 'endorsed';
-  endorsedFromName?: string;
-}
-
-export interface InventoryFormData {
-  itemName: string;
-  quantity: string;
-  unit: string;
-  thickness: string;
-  width: string;
-  length: string;
-  shippingCost: string;
-  otherCosts: string;
-}
-
-export interface FixedAssetFormData {
-  assetName: string;
-  usefulLifeYears: string;
-  salvageValue: string;
-  depreciationMethod: string;
-}
+import { handleError, getErrorTitle } from "@/lib/error-handling";
+import type {
+  LedgerFormData,
+  CheckFormData,
+  OutgoingCheckFormData,
+  InventoryFormData,
+  FixedAssetFormData,
+  PaymentFormData,
+  ChequeRelatedFormData,
+  InventoryRelatedFormData,
+} from "../types/ledger";
 
 export function useLedgerOperations() {
   const { user } = useUser();
@@ -371,24 +333,399 @@ export function useLedgerOperations() {
   };
 
   /**
-   * Delete a ledger entry
+   * Delete a ledger entry and all related records
    */
-  const deleteLedgerEntry = async (entryId: string): Promise<boolean> => {
+  const deleteLedgerEntry = async (
+    entry: LedgerEntry,
+    entries: LedgerEntry[]
+  ): Promise<boolean> => {
     if (!user) { return false; }
-    if (!confirm("هل أنت متأكد من حذف هذه الحركة المالية؟")) { return false; }
 
     try {
-      await deleteDoc(doc(firestore, `users/${user.uid}/ledger`, entryId));
+      const batch = writeBatch(firestore);
+
+      // 1. Delete the ledger entry
+      const entryRef = doc(firestore, `users/${user.uid}/ledger`, entry.id);
+      batch.delete(entryRef);
+
+      // 2. Delete related payments
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsQuery = query(paymentsRef, where("linkedTransactionId", "==", entry.transactionId));
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      paymentsSnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // 3. Delete related cheques
+      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      const chequesQuery = query(chequesRef, where("linkedTransactionId", "==", entry.transactionId));
+      const chequesSnapshot = await getDocs(chequesQuery);
+      chequesSnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // 4. Revert inventory quantities and delete related inventory movements
+      const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+      const movementsQuery = query(movementsRef, where("linkedTransactionId", "==", entry.transactionId));
+      const movementsSnapshot = await getDocs(movementsQuery);
+
+      // Revert quantities before deleting movements
+      for (const movementDoc of movementsSnapshot.docs) {
+        const movement = movementDoc.data() as any;
+        const itemId = movement.itemId;
+        const quantity = movement.quantity || 0;
+        const movementType = movement.type; // 'entry' or 'exit'
+
+        if (itemId) {
+          // Find the inventory item
+          const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+          const itemQuery = query(inventoryRef, where("__name__", "==", itemId));
+          const itemSnapshot = await getDocs(itemQuery);
+
+          if (!itemSnapshot.empty) {
+            const itemDoc = itemSnapshot.docs[0];
+            const currentQuantity = (itemDoc.data() as any).quantity || 0;
+
+            // Revert the quantity change
+            // If it was دخول/entry (+), we subtract to revert
+            // If it was خروج/exit (-), we add back to revert
+            const revertedQuantity = movementType === "دخول"
+              ? currentQuantity - quantity
+              : currentQuantity + quantity;
+
+            const itemDocRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
+            batch.update(itemDocRef, { quantity: Math.max(0, revertedQuantity) });
+          }
+        }
+
+        // Delete the movement record
+        batch.delete(movementDoc.ref);
+      }
+
+      // 5. Delete auto-generated COGS entries
+      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const cogsQuery = query(ledgerRef, where("transactionId", "==", `COGS-${entry.transactionId}`));
+      const cogsSnapshot = await getDocs(cogsQuery);
+      cogsSnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // Commit all deletions
+      await batch.commit();
+
+      const deletedCount = paymentsSnapshot.size + chequesSnapshot.size + movementsSnapshot.size + cogsSnapshot.size;
       toast({
-        title: "تم الحذف بنجاح",
-        description: "تم حذف الحركة المالية",
+        title: "تم الحذف",
+        description: deletedCount > 0
+          ? `تم حذف الحركة المالية و ${deletedCount} سجل مرتبط`
+          : "تم حذف الحركة المالية بنجاح",
       });
       return true;
     } catch (error) {
-      console.error("Error deleting ledger entry:", error);
+      const appError = handleError(error);
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حذف الحركة المالية",
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  /**
+   * Add a payment to an existing ledger entry
+   */
+  const addPaymentToEntry = async (
+    entry: LedgerEntry,
+    formData: PaymentFormData
+  ): Promise<boolean> => {
+    if (!user) { return false; }
+
+    try {
+      const paymentAmount = parseFloat(formData.amount);
+
+      // Validate payment amount
+      if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
+        if (paymentAmount > entry.remainingBalance) {
+          toast({
+            title: "خطأ في المبلغ",
+            description: `المبلغ المتبقي هو ${entry.remainingBalance.toFixed(2)} دينار فقط`,
+            variant: "destructive",
+          });
+          return false;
+        }
+      }
+
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+
+      await addDoc(paymentsRef, {
+        clientName: entry.associatedParty || "غير محدد",
+        amount: paymentAmount,
+        type: paymentType,
+        linkedTransactionId: entry.transactionId,
+        date: new Date(),
+        notes: formData.notes,
+        createdAt: new Date(),
+      });
+
+      // Update ledger entry AR/AP tracking if enabled
+      if (entry.isARAPEntry) {
+        const newTotalPaid = (entry.totalPaid || 0) + paymentAmount;
+        const newRemainingBalance = entry.amount - newTotalPaid;
+        let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+
+        if (newRemainingBalance <= 0) {
+          newStatus = "paid";
+        } else if (newTotalPaid > 0) {
+          newStatus = "partial";
+        }
+
+        const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, entry.id);
+        await updateDoc(ledgerEntryRef, {
+          totalPaid: newTotalPaid,
+          remainingBalance: newRemainingBalance,
+          paymentStatus: newStatus,
+        });
+      }
+
+      toast({
+        title: "تمت الإضافة بنجاح",
+        description: entry.isARAPEntry
+          ? `تم إضافة الدفعة وتحديث الرصيد المتبقي`
+          : "تم إضافة الدفعة المرتبطة بالمعاملة",
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  /**
+   * Add a cheque to an existing ledger entry
+   */
+  const addChequeToEntry = async (
+    entry: LedgerEntry,
+    formData: ChequeRelatedFormData
+  ): Promise<boolean> => {
+    if (!user) { return false; }
+
+    try {
+      let chequeImageUrl = "";
+
+      // Upload cheque image if provided
+      if (formData.chequeImage) {
+        const imageRef = ref(
+          storage,
+          `users/${user.uid}/cheques/${Date.now()}_${formData.chequeImage.name}`
+        );
+        await uploadBytes(imageRef, formData.chequeImage);
+        chequeImageUrl = await getDownloadURL(imageRef);
+      }
+
+      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const chequeDirection = entry.type === "دخل" ? "وارد" : "صادر";
+      const chequeAmount = parseFloat(formData.amount);
+      const accountingType = formData.accountingType || "cashed";
+
+      // Determine the correct status based on accounting type
+      let chequeStatus = formData.status;
+      if (accountingType === "cashed") {
+        // Cashed cheques: 'cleared' for incoming, 'cashed' for outgoing
+        chequeStatus = chequeDirection === "وارد" ? "تم الصرف" : "تم الصرف";
+      } else if (accountingType === "postponed") {
+        chequeStatus = "قيد الانتظار";
+      } else if (accountingType === "endorsed") {
+        chequeStatus = "مجيّر";
+      }
+
+      // Validate endorsee name for endorsed cheques
+      if (accountingType === "endorsed" && !formData.endorsedToName?.trim()) {
+        toast({
+          title: "خطأ",
+          description: "يرجى إدخال اسم الجهة المظهر لها الشيك",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      // Create the cheque record
+      const chequeData: Record<string, unknown> = {
+        chequeNumber: formData.chequeNumber,
+        clientName: entry.associatedParty || "غير محدد",
+        amount: chequeAmount,
+        type: chequeDirection,
+        chequeType: accountingType === "endorsed" ? "مجير" : formData.chequeType,
+        status: chequeStatus,
+        chequeImageUrl: chequeImageUrl,
+        linkedTransactionId: entry.transactionId,
+        issueDate: new Date(),
+        dueDate: new Date(formData.dueDate),
+        bankName: formData.bankName,
+        notes: `مرتبط بالمعاملة: ${entry.description}`,
+        createdAt: new Date(),
+        // Store accounting type for future reference
+        accountingType: accountingType,
+      };
+
+      // Add endorsee info for endorsed cheques
+      if (accountingType === "endorsed") {
+        chequeData.endorsedTo = formData.endorsedToName;
+        chequeData.endorsedDate = new Date();
+      }
+
+      await addDoc(chequesRef, chequeData);
+
+      // Handle different accounting flows based on cheque type
+      if (accountingType === "cashed") {
+        // CASHED CHEQUE: Create payment record AND update AR/AP immediately
+
+        // Create payment record
+        const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+        await addDoc(paymentsRef, {
+          clientName: entry.associatedParty || "غير محدد",
+          amount: chequeAmount,
+          type: paymentType,
+          method: "cheque",
+          linkedTransactionId: entry.transactionId,
+          date: new Date(),
+          notes: `شيك صرف رقم ${formData.chequeNumber} - ${entry.description}`,
+          createdAt: new Date(),
+        });
+
+        // Update AR/AP tracking if enabled
+        if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
+          if (chequeAmount > entry.remainingBalance) {
+            toast({
+              title: "تحذير",
+              description: `المبلغ المتبقي هو ${entry.remainingBalance.toFixed(2)} دينار فقط`,
+              variant: "destructive",
+            });
+          } else {
+            const newTotalPaid = (entry.totalPaid || 0) + chequeAmount;
+            const newRemainingBalance = entry.amount - newTotalPaid;
+            let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+
+            if (newRemainingBalance <= 0) {
+              newStatus = "paid";
+            } else if (newTotalPaid > 0) {
+              newStatus = "partial";
+            }
+
+            const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, entry.id);
+            await updateDoc(ledgerEntryRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newStatus,
+            });
+          }
+        }
+
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: "تم إضافة شيك الصرف وتسجيل الدفعة وتحديث الرصيد",
+        });
+
+      } else if (accountingType === "postponed") {
+        // POSTPONED CHEQUE: Only create cheque record, NO payment, NO AR/AP update
+        // The payment and AR/AP update will happen when the cheque is cleared later
+
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: "تم تسجيل الشيك المؤجل. لن يؤثر على الرصيد حتى يتم تأكيد التحصيل من صفحة الشيكات.",
+        });
+
+      } else if (accountingType === "endorsed") {
+        // ENDORSED CHEQUE: Create endorsement records, NO AR/AP update on original entry
+        // The cheque is passed to a third party
+
+        // Create two payment records with noCashMovement flag
+        // 1. Receipt from original client (records the endorsement)
+        await addDoc(paymentsRef, {
+          clientName: entry.associatedParty || "غير محدد",
+          amount: chequeAmount,
+          type: "قبض",
+          linkedTransactionId: entry.transactionId,
+          date: new Date(),
+          notes: `تظهير شيك رقم ${formData.chequeNumber} للجهة: ${formData.endorsedToName}`,
+          createdAt: new Date(),
+          isEndorsement: true,
+          noCashMovement: true,
+        });
+
+        // 2. Disbursement to endorsed party
+        await addDoc(paymentsRef, {
+          clientName: formData.endorsedToName,
+          amount: chequeAmount,
+          type: "صرف",
+          linkedTransactionId: entry.transactionId,
+          date: new Date(),
+          notes: `استلام شيك مظهر رقم ${formData.chequeNumber} من العميل: ${entry.associatedParty}`,
+          createdAt: new Date(),
+          isEndorsement: true,
+          noCashMovement: true,
+        });
+
+        toast({
+          title: "تم التظهير بنجاح",
+          description: `تم تظهير الشيك رقم ${formData.chequeNumber} إلى ${formData.endorsedToName}`,
+        });
+      }
+
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  /**
+   * Add inventory movement to an existing ledger entry
+   */
+  const addInventoryToEntry = async (
+    entry: LedgerEntry,
+    formData: InventoryRelatedFormData
+  ): Promise<boolean> => {
+    if (!user) { return false; }
+
+    try {
+      const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+      const movementType = entry.type === "مصروف" ? "خروج" : "دخول";
+      await addDoc(movementsRef, {
+        itemId: "",
+        itemName: formData.itemName,
+        type: movementType,
+        quantity: parseFloat(formData.quantity),
+        unit: formData.unit,
+        thickness: formData.thickness ? parseFloat(formData.thickness) : null,
+        width: formData.width ? parseFloat(formData.width) : null,
+        length: formData.length ? parseFloat(formData.length) : null,
+        linkedTransactionId: entry.transactionId,
+        notes: formData.notes || `مرتبط بالمعاملة: ${entry.description}`,
+        createdAt: new Date(),
+      });
+      toast({
+        title: "تمت الإضافة بنجاح",
+        description: "تم إضافة حركة المخزون المرتبطة بالمعاملة",
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
         variant: "destructive",
       });
       return false;
@@ -398,6 +735,9 @@ export function useLedgerOperations() {
   return {
     submitLedgerEntry,
     deleteLedgerEntry,
+    addPaymentToEntry,
+    addChequeToEntry,
+    addInventoryToEntry,
   };
 }
 

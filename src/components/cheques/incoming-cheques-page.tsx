@@ -1,74 +1,69 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Image from "next/image";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, X, Upload } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
-import { useUser } from "@/firebase/provider";
-import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  where,
-  getDocs,
-  limit,
-} from "firebase/firestore";
-import { firestore, storage } from "@/firebase/config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { TableSkeleton } from "@/components/ui/loading-skeleton";
 
-interface Cheque {
-  id: string;
-  chequeNumber: string;
-  clientName: string;
-  amount: number;
-  type: string; // "وارد" or "صادر"
-  chequeType?: string; // "عادي" or "مجير"
-  status: string; // "قيد الانتظار" or "تم الصرف" or "مرفوض" or "مجيّر"
-  chequeImageUrl?: string;
-  endorsedTo?: string;
-  endorsedDate?: Date;
-  linkedTransactionId: string;
-  issueDate: Date;
-  dueDate: Date;
-  bankName: string;
-  notes: string;
-  createdAt: Date;
-}
+// Types and hooks
+import { Cheque, ChequeFormData } from "./types/cheques";
+import { useIncomingChequesData } from "./hooks/useIncomingChequesData";
+import { useIncomingChequesOperations } from "./hooks/useIncomingChequesOperations";
+
+// Components
+import { IncomingChequesTable } from "./components/IncomingChequesTable";
+import { IncomingChequesFormDialog } from "./components/IncomingChequesFormDialog";
+import { ImageViewerDialog, EndorseDialog } from "./components/IncomingChequeDialogs";
+
+const initialFormData: ChequeFormData = {
+  chequeNumber: "",
+  clientName: "",
+  amount: "",
+  type: "وارد",
+  status: "قيد الانتظار",
+  linkedTransactionId: "",
+  issueDate: new Date().toISOString().split("T")[0],
+  dueDate: new Date().toISOString().split("T")[0],
+  bankName: "",
+  notes: "",
+};
 
 export default function IncomingChequesPage() {
-  const { user } = useUser();
-  const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
-  const [cheques, setCheques] = useState<Cheque[]>([]);
+
+  // Data and operations hooks
+  const {
+    cheques,
+    pendingCheques,
+    clearedCheques,
+    endorsedCheques,
+    bouncedCheques,
+    totalPendingValue,
+    totalClearedValue,
+    loading: dataLoading,
+  } = useIncomingChequesData();
+
+  const {
+    submitCheque,
+    deleteCheque,
+    endorseCheque,
+    cancelEndorsement,
+  } = useIncomingChequesOperations();
+
+  // UI state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<Cheque | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState<ChequeFormData>(initialFormData);
+  const [chequeImage, setChequeImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Dialog states
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string>("");
   const [endorseDialogOpen, setEndorseDialogOpen] = useState(false);
@@ -76,248 +71,8 @@ export default function IncomingChequesPage() {
   const [endorseToSupplier, setEndorseToSupplier] = useState("");
   const [endorseTransactionId, setEndorseTransactionId] = useState("");
 
-  const [formData, setFormData] = useState({
-    chequeNumber: "",
-    clientName: "",
-    amount: "",
-    status: "قيد الانتظار",
-    linkedTransactionId: "",
-    issueDate: new Date().toISOString().split("T")[0],
-    dueDate: new Date().toISOString().split("T")[0],
-    bankName: "",
-    notes: "",
-  });
-  const [chequeImage, setChequeImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-
-  useEffect(() => {
-    if (!user) {return;}
-
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-    // Limit to 1000 most recent cheques, filter client-side for type
-    const q = query(chequesRef, orderBy("dueDate", "desc"), limit(1000));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chequesData: Cheque[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        // Filter for incoming cheques only
-        if (data.type === "وارد") {
-          chequesData.push({
-            id: doc.id,
-            ...data,
-            issueDate: data.issueDate?.toDate ? data.issueDate.toDate() : new Date(),
-            dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-          } as Cheque);
-        }
-      });
-      setCheques(chequesData);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {return;}
-
-    setLoading(true);
-    try {
-      // Upload image if provided
-      let chequeImageUrl: string | undefined = undefined;
-      if (chequeImage) {
-        setUploadingImage(true);
-        const imageRef = ref(
-          storage,
-          `users/${user.uid}/cheques/${Date.now()}_${chequeImage.name}`
-        );
-        await uploadBytes(imageRef, chequeImage);
-        chequeImageUrl = await getDownloadURL(imageRef);
-        setUploadingImage(false);
-      }
-
-      if (editingCheque) {
-        const chequeRef = doc(firestore, `users/${user.uid}/cheques`, editingCheque.id);
-        const updateData: Record<string, unknown> = {
-          chequeNumber: formData.chequeNumber,
-          clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
-          status: formData.status,
-          linkedTransactionId: formData.linkedTransactionId,
-          issueDate: new Date(formData.issueDate),
-          dueDate: new Date(formData.dueDate),
-          bankName: formData.bankName,
-          notes: formData.notes,
-        };
-        // Only update image URL if a new image was uploaded
-        if (chequeImageUrl) {
-          updateData.chequeImageUrl = chequeImageUrl;
-        }
-
-        // Check if status changed from pending to cleared
-        const oldStatus = editingCheque.status;
-        const newStatus = formData.status;
-        const pendingStatuses = ["قيد الانتظار", "pending"];
-        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
-        const wasPending = pendingStatuses.includes(oldStatus);
-        const isNowCleared = clearedStatuses.includes(newStatus);
-
-        if (wasPending && isNowCleared) {
-          // Add cleared date when status changes to cleared
-          updateData.clearedDate = new Date();
-
-          // Create a Payment record (receipt for incoming cheque)
-          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-          const chequeAmount = parseFloat(formData.amount);
-
-          await addDoc(paymentsRef, {
-            clientName: formData.clientName,
-            amount: chequeAmount,
-            type: "قبض", // Receipt - client paid us
-            method: "cheque",
-            linkedTransactionId: formData.linkedTransactionId || "",
-            date: new Date(),
-            notes: `تحصيل شيك رقم ${formData.chequeNumber}`,
-            createdAt: new Date(),
-          });
-
-          // Update AR/AP tracking if linkedTransactionId exists
-          if (formData.linkedTransactionId) {
-            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-            const ledgerQuery = query(
-              ledgerRef,
-              where("transactionId", "==", formData.linkedTransactionId.trim())
-            );
-            const ledgerSnapshot = await getDocs(ledgerQuery);
-
-            if (!ledgerSnapshot.empty) {
-              const ledgerDoc = ledgerSnapshot.docs[0];
-              const ledgerData = ledgerDoc.data();
-
-              if (ledgerData.isARAPEntry) {
-                const currentTotalPaid = ledgerData.totalPaid || 0;
-                const transactionAmount = ledgerData.amount || 0;
-                const newTotalPaid = currentTotalPaid + chequeAmount;
-                const newRemainingBalance = transactionAmount - newTotalPaid;
-
-                let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
-                if (newRemainingBalance <= 0) {
-                  newPaymentStatus = "paid";
-                } else if (newTotalPaid > 0) {
-                  newPaymentStatus = "partial";
-                }
-
-                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
-                  totalPaid: newTotalPaid,
-                  remainingBalance: newRemainingBalance,
-                  paymentStatus: newPaymentStatus,
-                });
-              }
-            }
-          }
-        }
-
-        await updateDoc(chequeRef, updateData);
-        toast({
-          title: "تم التحديث بنجاح",
-          description: wasPending && isNowCleared
-            ? `تم تحصيل الشيك رقم ${formData.chequeNumber} وإنشاء سند قبض`
-            : "تم تحديث بيانات الشيك الوارد",
-        });
-      } else {
-        const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-        await addDoc(chequesRef, {
-          chequeNumber: formData.chequeNumber,
-          clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
-          type: "وارد", // Always incoming
-          status: formData.status,
-          linkedTransactionId: formData.linkedTransactionId,
-          issueDate: new Date(formData.issueDate),
-          dueDate: new Date(formData.dueDate),
-          bankName: formData.bankName,
-          notes: formData.notes,
-          createdAt: new Date(),
-          ...(chequeImageUrl && { chequeImageUrl }),
-        });
-        toast({
-          title: "تمت الإضافة بنجاح",
-          description: "تم إضافة شيك وارد جديد",
-        });
-      }
-
-      resetForm();
-      setIsDialogOpen(false);
-    } catch (error) {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (cheque: Cheque) => {
-    setEditingCheque(cheque);
-    setFormData({
-      chequeNumber: cheque.chequeNumber || "",
-      clientName: cheque.clientName || "",
-      amount: (cheque.amount || 0).toString(),
-      status: cheque.status || "قيد الانتظار",
-      linkedTransactionId: cheque.linkedTransactionId || "",
-      issueDate: cheque.issueDate ? new Date(cheque.issueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-      dueDate: cheque.dueDate ? new Date(cheque.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-      bankName: cheque.bankName || "",
-      notes: cheque.notes || "",
-    });
-    // Set image preview if cheque has an existing image
-    setChequeImage(null);
-    setImagePreview(cheque.chequeImageUrl || null);
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = (chequeId: string) => {
-    if (!user) {return;}
-
-    confirm(
-      "حذف الشيك",
-      "هل أنت متأكد من حذف هذا الشيك؟ لا يمكن التراجع عن هذا الإجراء.",
-      async () => {
-        try {
-          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
-          await deleteDoc(chequeRef);
-          toast({
-            title: "تم الحذف",
-            description: "تم حذف الشيك بنجاح",
-          });
-        } catch (error) {
-          toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء الحذف",
-            variant: "destructive",
-          });
-        }
-      },
-      "destructive"
-    );
-  };
-
   const resetForm = () => {
-    setFormData({
-      chequeNumber: "",
-      clientName: "",
-      amount: "",
-      status: "قيد الانتظار",
-      linkedTransactionId: "",
-      issueDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date().toISOString().split("T")[0],
-      bankName: "",
-      notes: "",
-    });
+    setFormData(initialFormData);
     setEditingCheque(null);
     setChequeImage(null);
     setImagePreview(null);
@@ -328,196 +83,76 @@ export default function IncomingChequesPage() {
     setIsDialogOpen(true);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "تم الصرف":
-        return "bg-green-100 text-green-700";
-      case "قيد الانتظار":
-        return "bg-yellow-100 text-yellow-700";
-      case "مجيّر":
-        return "bg-purple-100 text-purple-700";
-      case "مرفوض":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+  const handleEdit = (cheque: Cheque) => {
+    setEditingCheque(cheque);
+    setFormData({
+      chequeNumber: cheque.chequeNumber || "",
+      clientName: cheque.clientName || "",
+      amount: (cheque.amount || 0).toString(),
+      type: "وارد",
+      status: cheque.status || "قيد الانتظار",
+      linkedTransactionId: cheque.linkedTransactionId || "",
+      issueDate: cheque.issueDate ? new Date(cheque.issueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      dueDate: cheque.dueDate ? new Date(cheque.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      bankName: cheque.bankName || "",
+      notes: cheque.notes || "",
+    });
+    setChequeImage(null);
+    setImagePreview(cheque.chequeImageUrl || null);
+    setIsDialogOpen(true);
   };
 
-  const handleViewImage = (imageUrl: string) => {
-    setSelectedImageUrl(imageUrl);
-    setImageViewerOpen(true);
-  };
-
-  const openEndorseDialog = (cheque: Cheque) => {
-    setChequeToEndorse(cheque);
-    setEndorseToSupplier("");
-    setEndorseTransactionId("");
-    setEndorseDialogOpen(true);
-  };
-
-  const handleEndorseCheque = async () => {
-    if (!user || !chequeToEndorse || !endorseToSupplier.trim()) {
-      toast({
-        title: "خطأ",
-        description: "الرجاء إدخال اسم المورد",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    try {
-      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    if (chequeImage) setUploadingImage(true);
 
-      // 1. Update incoming cheque status and type
-      const incomingChequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToEndorse.id);
-      await updateDoc(incomingChequeRef, {
-        chequeType: "مجير",
-        status: "مجيّر",
-        endorsedTo: endorseToSupplier,
-        endorsedDate: new Date(),
-      });
+    const success = await submitCheque(formData, editingCheque, chequeImage);
 
-      // 2. Create outgoing cheque entry (NEW!)
-      const outgoingChequeDoc = await addDoc(chequesRef, {
-        chequeNumber: chequeToEndorse.chequeNumber,
-        clientName: endorseToSupplier, // Supplier name as recipient
-        amount: chequeToEndorse.amount,
-        type: "صادر", // Outgoing
-        chequeType: "مجير", // Mark as endorsed check
-        status: "قيد الانتظار", // Can be linked to ledger/invoice
-        linkedTransactionId: endorseTransactionId.trim() || "", // Link to supplier invoice if provided
-        issueDate: chequeToEndorse.issueDate,
-        dueDate: chequeToEndorse.dueDate,
-        bankName: chequeToEndorse.bankName,
-        notes: `شيك مظهر من العميل: ${chequeToEndorse.clientName}`,
-        createdAt: new Date(),
-        endorsedFromId: chequeToEndorse.id, // Link back to incoming cheque
-        isEndorsedCheque: true, // Special flag
-      });
+    if (success) {
+      resetForm();
+      setIsDialogOpen(false);
+    }
+    setLoading(false);
+    setUploadingImage(false);
+  };
 
-      // 3. Update incoming cheque with outgoing reference
-      await updateDoc(incomingChequeRef, {
-        endorsedToOutgoingId: outgoingChequeDoc.id,
-      });
+  const handleDelete = (chequeId: string) => {
+    confirm(
+      "حذف الشيك",
+      "هل أنت متأكد من حذف هذا الشيك؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        await deleteCheque(chequeId);
+      },
+      "destructive"
+    );
+  };
 
-      // 4. Create payment record for original client (decrease receivable)
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      await addDoc(paymentsRef, {
-        clientName: chequeToEndorse.clientName,
-        amount: chequeToEndorse.amount,
-        type: "قبض",
-        linkedTransactionId: chequeToEndorse.linkedTransactionId || "",
-        date: new Date(),
-        notes: `تظهير شيك رقم ${chequeToEndorse.chequeNumber} للمورد: ${endorseToSupplier}`,
-        createdAt: new Date(),
-        isEndorsement: true,
-        noCashMovement: true,
-        endorsementChequeId: chequeToEndorse.id, // Link to cheque for reversal
-      });
-
-      // 5. Create payment record for supplier (decrease payable)
-      await addDoc(paymentsRef, {
-        clientName: endorseToSupplier,
-        amount: chequeToEndorse.amount,
-        type: "صرف",
-        linkedTransactionId: endorseTransactionId.trim() || chequeToEndorse.linkedTransactionId || "",
-        date: new Date(),
-        notes: `استلام شيك مجيّر رقم ${chequeToEndorse.chequeNumber} من العميل: ${chequeToEndorse.clientName}`,
-        createdAt: new Date(),
-        isEndorsement: true,
-        noCashMovement: true,
-        endorsementChequeId: chequeToEndorse.id, // Link to cheque for reversal
-      });
-
-      toast({
-        title: "تم التظهير بنجاح",
-        description: `تم تظهير الشيك رقم ${chequeToEndorse.chequeNumber} إلى ${endorseToSupplier}`,
-      });
-
+  const handleEndorse = async () => {
+    if (!chequeToEndorse) return;
+    setLoading(true);
+    const success = await endorseCheque(chequeToEndorse, endorseToSupplier, endorseTransactionId);
+    if (success) {
       setEndorseDialogOpen(false);
       setChequeToEndorse(null);
       setEndorseToSupplier("");
       setEndorseTransactionId("");
-    } catch (error) {
-      console.error("Error endorsing cheque:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء تظهير الشيك",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   const handleCancelEndorsement = (cheque: Cheque) => {
-    if (!user) {return;}
-
     confirm(
       "إلغاء التظهير",
       `هل أنت متأكد من إلغاء تظهير الشيك رقم ${cheque.chequeNumber}؟ سيتم حذف حركات التظهير المرتبطة والشيك من الصادرة.`,
       async () => {
         setLoading(true);
-        try {
-          // 1. Delete the outgoing cheque entry if it exists
-          if ((cheque as any).endorsedToOutgoingId) {
-            const outgoingChequeRef = doc(
-              firestore,
-              `users/${user.uid}/cheques`,
-              (cheque as any).endorsedToOutgoingId
-            );
-            await deleteDoc(outgoingChequeRef);
-          }
-
-          // 2. Revert incoming cheque to pending status
-          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
-          await updateDoc(chequeRef, {
-            chequeType: "عادي",
-            status: "قيد الانتظار",
-            endorsedTo: null,
-            endorsedDate: null,
-            endorsedToOutgoingId: null,
-          });
-
-          // 3. Delete endorsement payment records
-          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-          const paymentsSnapshot = await getDocs(
-            query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
-          );
-
-          const deletePromises = paymentsSnapshot.docs.map((doc) =>
-            deleteDoc(doc.ref)
-          );
-          await Promise.all(deletePromises);
-
-          toast({
-            title: "تم إلغاء التظهير",
-            description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} بنجاح`,
-          });
-        } catch (error) {
-          console.error("Error canceling endorsement:", error);
-          toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء إلغاء التظهير",
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
-        }
+        await cancelEndorsement(cheque);
+        setLoading(false);
       },
       "warning"
     );
   };
-
-  // Calculate summary statistics
-  const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
-  const clearedCheques = cheques.filter(c => c.status === "تم الصرف");
-  const endorsedCheques = cheques.filter(c => c.status === "مجيّر");
-  const bouncedCheques = cheques.filter(c => c.status === "مرفوض");
-
-  const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
-  const totalClearedValue = clearedCheques.reduce((sum, c) => sum + c.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -577,428 +212,61 @@ export default function IncomingChequesPage() {
           <CardTitle>سجل الشيكات الواردة ({cheques.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {cheques.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد شيكات واردة مسجلة. اضغط على &quot;إضافة شيك وارد&quot; للبدء.
-            </p>
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>رقم الشيك</TableHead>
-                  <TableHead>اسم العميل</TableHead>
-                  <TableHead>البنك</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>تصنيف الشيك</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>تاريخ الاستحقاق</TableHead>
-                  <TableHead>رقم المعاملة</TableHead>
-                  <TableHead>صورة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cheques.map((cheque) => (
-                  <TableRow key={cheque.id}>
-                    <TableCell className="font-medium">
-                      {cheque.chequeNumber}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="font-medium">{cheque.clientName}</div>
-                        {cheque.endorsedTo && (
-                          <div className="flex items-center gap-1">
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                              ← مظهر إلى: {cheque.endorsedTo}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{cheque.bankName}</TableCell>
-                    <TableCell>{cheque.amount || 0} دينار</TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {cheque.chequeType === "مجير" ? "شيك مجير" : "عادي"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
-                          cheque.status
-                        )}`}
-                      >
-                        {cheque.status}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {cheque.linkedTransactionId || "-"}
-                    </TableCell>
-                    <TableCell>
-                      {cheque.chequeImageUrl ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewImage(cheque.chequeImageUrl!)}
-                          title="عرض صورة الشيك"
-                        >
-                          <ImageIcon className="w-4 h-4 text-blue-600" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {/* Show endorse button only for pending cheques that are not endorsed */}
-                        {cheque.status === "قيد الانتظار" &&
-                          cheque.chequeType !== "مجير" && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => openEndorseDialog(cheque)}
-                              title="تظهير الشيك"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </Button>
-                          )}
-                        {/* Show cancel endorsement button for endorsed cheques */}
-                        {cheque.status === "مجيّر" &&
-                          cheque.chequeType === "مجير" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCancelEndorsement(cheque)}
-                              title="إلغاء التظهير"
-                              className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(cheque)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(cheque.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <IncomingChequesTable
+              cheques={cheques}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onEndorse={(cheque) => {
+                setChequeToEndorse(cheque);
+                setEndorseToSupplier("");
+                setEndorseTransactionId("");
+                setEndorseDialogOpen(true);
+              }}
+              onCancelEndorsement={handleCancelEndorsement}
+              onViewImage={(url) => {
+                setSelectedImageUrl(url);
+                setImageViewerOpen(true);
+              }}
+            />
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCheque ? "تعديل الشيك الوارد" : "إضافة شيك وارد جديد"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCheque
-                ? "قم بتعديل بيانات الشيك أدناه"
-                : "أدخل بيانات الشيك الوارد الجديد أدناه"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="chequeNumber">رقم الشيك</Label>
-                  <Input
-                    id="chequeNumber"
-                    value={formData.chequeNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, chequeNumber: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="clientName">اسم العميل</Label>
-                  <Input
-                    id="clientName"
-                    value={formData.clientName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, clientName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">المبلغ (دينار)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, amount: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bankName">اسم البنك</Label>
-                  <Input
-                    id="bankName"
-                    value={formData.bankName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bankName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">الحالة</Label>
-                <select
-                  id="status"
-                  value={formData.status}
-                  onChange={(e) =>
-                    setFormData({ ...formData, status: e.target.value })
-                  }
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="قيد الانتظار">قيد الانتظار</option>
-                  <option value="تم الصرف">تم الصرف</option>
-                  <option value="مرفوض">مرفوض</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="issueDate">تاريخ الإصدار</Label>
-                  <Input
-                    id="issueDate"
-                    type="date"
-                    value={formData.issueDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, issueDate: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dueDate">تاريخ الاستحقاق</Label>
-                  <Input
-                    id="dueDate"
-                    type="date"
-                    value={formData.dueDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dueDate: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="linkedTransactionId">رقم المعاملة المرتبطة (اختياري)</Label>
-                <Input
-                  id="linkedTransactionId"
-                  value={formData.linkedTransactionId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, linkedTransactionId: e.target.value })
-                  }
-                  placeholder="TXN-20250109-123456-789"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="chequeImage">صورة الشيك (اختياري)</Label>
-                <div className="space-y-2">
-                  {imagePreview && (
-                    <div className="relative inline-block">
-                      <img
-                        src={imagePreview}
-                        alt="معاينة صورة الشيك"
-                        className="max-h-32 rounded-md border object-contain"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
-                        onClick={() => {
-                          setChequeImage(null);
-                          setImagePreview(null);
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="chequeImage"
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setChequeImage(file);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setImagePreview(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="cursor-pointer"
-                    />
-                    <Upload className="h-4 w-4 text-gray-400" />
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {editingCheque?.chequeImageUrl && !chequeImage
-                      ? "الصورة الحالية محفوظة. اختر صورة جديدة لاستبدالها"
-                      : "يمكنك رفع صورة الشيك بصيغة JPG أو PNG"}
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">ملاحظات</Label>
-                <Input
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-              >
-                إلغاء
-              </Button>
-              <Button type="submit" disabled={loading || uploadingImage}>
-                {uploadingImage ? "جاري رفع الصورة..." : loading ? "جاري الحفظ..." : editingCheque ? "تحديث" : "إضافة"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <IncomingChequesFormDialog
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        editingCheque={editingCheque}
+        formData={formData}
+        setFormData={setFormData}
+        chequeImage={chequeImage}
+        setChequeImage={setChequeImage}
+        imagePreview={imagePreview}
+        setImagePreview={setImagePreview}
+        loading={loading}
+        uploadingImage={uploadingImage}
+        onSubmit={handleSubmit}
+      />
 
-      {/* Image Viewer Dialog */}
-      <Dialog open={imageViewerOpen} onOpenChange={setImageViewerOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>صورة الشيك</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center p-4">
-            {selectedImageUrl && (
-              <div className="relative w-full h-[70vh]">
-                <Image
-                  src={selectedImageUrl}
-                  alt="Cheque"
-                  fill
-                  className="object-contain rounded-lg shadow-lg"
-                  unoptimized
-                />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setImageViewerOpen(false)}
-            >
-              إغلاق
-            </Button>
-            {selectedImageUrl && (
-              <Button
-                type="button"
-                onClick={() => window.open(selectedImageUrl, '_blank')}
-              >
-                فتح في تبويب جديد
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImageViewerDialog
+        isOpen={imageViewerOpen}
+        onClose={() => setImageViewerOpen(false)}
+        imageUrl={selectedImageUrl}
+      />
 
-      {/* Endorse Cheque Dialog */}
-      <Dialog open={endorseDialogOpen} onOpenChange={setEndorseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>تظهير الشيك</DialogTitle>
-            <DialogDescription>
-              {chequeToEndorse && (
-                <div className="text-sm mt-2 space-y-1">
-                  <p><strong>رقم الشيك:</strong> {chequeToEndorse.chequeNumber}</p>
-                  <p><strong>من العميل:</strong> {chequeToEndorse.clientName}</p>
-                  <p><strong>المبلغ:</strong> {chequeToEndorse.amount} دينار</p>
-                  <p className="text-amber-600 mt-2">
-                    ⚠️ سيتم تسجيل دفعة للعميل وللمورد دون حركة نقدية فعلية
-                  </p>
-                </div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="endorseToSupplier">اسم المورد المظهر له الشيك</Label>
-              <Input
-                id="endorseToSupplier"
-                value={endorseToSupplier}
-                onChange={(e) => setEndorseToSupplier(e.target.value)}
-                placeholder="أدخل اسم المورد"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endorseTransactionId">
-                رقم المعاملة / الفاتورة (اختياري)
-                <span className="text-xs text-gray-500 block mt-1">
-                  لربط الشيك بفاتورة المورد في دفتر الأستاذ
-                </span>
-              </Label>
-              <Input
-                id="endorseTransactionId"
-                value={endorseTransactionId}
-                onChange={(e) => setEndorseTransactionId(e.target.value)}
-                placeholder="TXN-20250109-123456-789"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEndorseDialogOpen(false)}
-              disabled={loading}
-            >
-              إلغاء
-            </Button>
-            <Button
-              type="button"
-              onClick={handleEndorseCheque}
-              disabled={loading || !endorseToSupplier.trim()}
-            >
-              {loading ? "جاري التظهير..." : "تظهير الشيك"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EndorseDialog
+        isOpen={endorseDialogOpen}
+        onClose={() => setEndorseDialogOpen(false)}
+        cheque={chequeToEndorse}
+        supplierName={endorseToSupplier}
+        setSupplierName={setEndorseToSupplier}
+        transactionId={endorseTransactionId}
+        setTransactionId={setEndorseTransactionId}
+        loading={loading}
+        onEndorse={handleEndorse}
+      />
 
       {confirmationDialog}
     </div>

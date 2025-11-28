@@ -1,18 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -23,259 +13,43 @@ import {
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download, Eye } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
-import { useUser } from "@/firebase/provider";
-import { useToast } from "@/hooks/use-toast";
-import { handleError, getErrorTitle } from "@/lib/error-handling";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-} from "firebase/firestore";
-import { firestore } from "@/firebase/config";
 
-// وحدات القياس للمصنع
-// Unit types for manufacturing
-type InvoiceItemUnit = 'm' | 'm2' | 'piece';
+// Types and hooks
+import { Invoice, InvoiceFormData, InvoiceItem, initialFormData, initialInvoiceItem } from "./types/invoices";
+import { useInvoicesData } from "./hooks/useInvoicesData";
+import { useInvoicesOperations } from "./hooks/useInvoicesOperations";
 
-interface InvoiceItem {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-  // بيانات التصنيع - Manufacturing data
-  unit?: InvoiceItemUnit;
-  length?: number;    // الطول (سم)
-  width?: number;     // العرض (سم)
-  thickness?: number; // السماكة (سم)
-}
-
-// نوع البيانات للحفظ في Firestore - Clean item type for Firestore save
-interface CleanInvoiceItem {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-  unit: InvoiceItemUnit;
-  length?: number;
-  width?: number;
-  thickness?: number;
-}
-
-interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  clientName: string;
-  clientAddress?: string;
-  clientPhone?: string;
-  invoiceDate: Date;
-  dueDate: Date;
-  items: InvoiceItem[];
-  subtotal: number;
-  taxRate: number;
-  taxAmount: number;
-  total: number;
-  status: "draft" | "sent" | "paid" | "overdue";
-  notes?: string;
-  linkedTransactionId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Components
+import { InvoicesFormDialog } from "./components/InvoicesFormDialog";
+import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
 
 export default function InvoicesPage() {
-  const { user } = useUser();
-  const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+
+  // Data and operations hooks
+  const { invoices, loading: dataLoading } = useInvoicesData();
+  const { submitInvoice, deleteInvoice, updateStatus, exportPDF } = useInvoicesOperations();
+
+  // UI state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    clientName: "",
-    clientAddress: "",
-    clientPhone: "",
-    invoiceDate: new Date().toISOString().split("T")[0],
-    taxRate: "0",
-    notes: "",
-  });
+  // Form state
+  const [formData, setFormData] = useState<InvoiceFormData>(initialFormData);
+  const [items, setItems] = useState<InvoiceItem[]>([initialInvoiceItem]);
 
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined },
-  ]);
-
-  useEffect(() => {
-    if (!user) {return;}
-
-    const invoicesRef = collection(firestore, `users/${user.uid}/invoices`);
-    // Limit to 1000 most recent invoices
-    const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(1000));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const invoicesData: Invoice[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        invoicesData.push({
-          id: doc.id,
-          ...data,
-          invoiceDate: data.invoiceDate?.toDate ? data.invoiceDate.toDate() : new Date(),
-          dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
-        } as Invoice);
-      });
-      setInvoices(invoicesData);
-
-      // Auto-update overdue status
-      invoicesData.forEach(async (invoice) => {
-        if (invoice.status === "sent" && new Date() > invoice.dueDate) {
-          const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, invoice.id);
-          await updateDoc(invoiceRef, { status: "overdue" });
-        }
-      });
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const generateInvoiceNumber = () => {
-    const year = new Date().getFullYear();
-    const random = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-    return `INV-${year}-${random}`;
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setItems([initialInvoiceItem]);
+    setEditingInvoice(null);
   };
 
-  const calculateTotals = (itemsList: InvoiceItem[], taxRate: number) => {
-    const subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
-    const taxAmount = (subtotal * taxRate) / 100;
-    const total = subtotal + taxAmount;
-    return { subtotal, taxAmount, total };
-  };
-
-  const handleAddItem = () => {
-    setItems([...items, { description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined }]);
-  };
-
-  const handleRemoveItem = (index: number) => {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== index));
-    }
-  };
-
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | undefined) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-
-    if (field === "quantity" || field === "unitPrice") {
-      newItems[index].total = newItems[index].quantity * newItems[index].unitPrice;
-    }
-
-    setItems(newItems);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {return;}
-
-    setLoading(true);
-    try {
-      const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
-
-      // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
-      // Clean items from undefined values - Firestore doesn't accept undefined
-      const cleanedItems: CleanInvoiceItem[] = items.map(item => {
-        const cleanItem: CleanInvoiceItem = {
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total,
-          unit: item.unit || 'piece',
-        };
-        // فقط أضف الأبعاد إذا كانت موجودة
-        // Only add dimensions if they have values
-        if (item.length !== undefined && item.length !== null) {
-          cleanItem.length = item.length;
-        }
-        if (item.width !== undefined && item.width !== null) {
-          cleanItem.width = item.width;
-        }
-        if (item.thickness !== undefined && item.thickness !== null) {
-          cleanItem.thickness = item.thickness;
-        }
-        return cleanItem;
-      });
-
-      // تعيين تاريخ الاستحقاق تلقائياً (30 يوم من تاريخ الفاتورة)
-      // Auto-set due date to 30 days from invoice date
-      const invoiceDate = new Date(formData.invoiceDate);
-      const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      if (editingInvoice) {
-        const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, editingInvoice.id);
-        await updateDoc(invoiceRef, {
-          clientName: formData.clientName,
-          clientAddress: formData.clientAddress,
-          clientPhone: formData.clientPhone,
-          invoiceDate,
-          dueDate,
-          items: cleanedItems,
-          subtotal,
-          taxRate: parseFloat(formData.taxRate),
-          taxAmount,
-          total,
-          notes: formData.notes,
-          updatedAt: new Date(),
-        });
-
-        toast({
-          title: "تم التحديث",
-          description: "تم تحديث الفاتورة بنجاح",
-        });
-      } else {
-        const invoiceNumber = generateInvoiceNumber();
-
-        await addDoc(collection(firestore, `users/${user.uid}/invoices`), {
-          invoiceNumber,
-          clientName: formData.clientName,
-          clientAddress: formData.clientAddress,
-          clientPhone: formData.clientPhone,
-          invoiceDate,
-          dueDate,
-          items: cleanedItems,
-          subtotal,
-          taxRate: parseFloat(formData.taxRate),
-          taxAmount,
-          total,
-          status: "draft",
-          notes: formData.notes,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-        toast({
-          title: "تمت الإضافة",
-          description: `تم إنشاء الفاتورة ${invoiceNumber} بنجاح`,
-        });
-      }
-
-      resetForm();
-      setIsDialogOpen(false);
-    } catch (error) {
-      const appError = handleError(error);
-      toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const openAddDialog = () => {
+    resetForm();
+    setIsDialogOpen(true);
   };
 
   const handleEdit = (invoice: Invoice) => {
@@ -292,201 +66,37 @@ export default function InvoicesPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (invoiceId: string) => {
-    if (!user) {return;}
+  const handlePreview = (invoice: Invoice) => {
+    setViewInvoice(invoice);
+    setIsPreviewOpen(true);
+  };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const success = await submitInvoice(formData, items, editingInvoice);
+
+    if (success) {
+      resetForm();
+      setIsDialogOpen(false);
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = (invoiceId: string) => {
     confirm(
       "حذف الفاتورة",
       "هل أنت متأكد من حذف هذه الفاتورة؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
-        try {
-          await deleteDoc(doc(firestore, `users/${user.uid}/invoices`, invoiceId));
-          toast({
-            title: "تم الحذف",
-            description: "تم حذف الفاتورة بنجاح",
-          });
-        } catch (error) {
-          const appError = handleError(error);
-          toast({
-            title: getErrorTitle(appError),
-            description: appError.message,
-            variant: "destructive",
-          });
-        }
+        await deleteInvoice(invoiceId);
       },
       "destructive"
     );
   };
 
   const handleUpdateStatus = async (invoiceId: string, newStatus: Invoice["status"]) => {
-    if (!user) {return;}
-
-    try {
-      const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, invoiceId);
-      await updateDoc(invoiceRef, {
-        status: newStatus,
-        updatedAt: new Date(),
-      });
-
-      // If marked as paid, create ledger entry
-      if (newStatus === "paid") {
-        const invoice = invoices.find((inv) => inv.id === invoiceId);
-        if (invoice) {
-          const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
-          await addDoc(ledgerRef, {
-            transactionId: `PAY-${invoice.invoiceNumber}`,
-            description: `دفعة فاتورة ${invoice.invoiceNumber} - ${invoice.clientName}`,
-            type: "دخل",
-            amount: invoice.total,
-            category: "إيرادات المبيعات",
-            subCategory: "مبيعات منتجات",
-            associatedParty: invoice.clientName,
-            date: new Date(),
-            reference: invoice.invoiceNumber,
-            notes: `دفعة فاتورة مرتبطة`,
-            createdAt: new Date(),
-          });
-        }
-      }
-
-      toast({
-        title: "تم التحديث",
-        description: `تم تحديث حالة الفاتورة إلى: ${getStatusLabel(newStatus)}`,
-      });
-    } catch (error) {
-      const appError = handleError(error);
-      toast({
-        title: getErrorTitle(appError),
-        description: appError.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleExportPDF = (invoice: Invoice) => {
-    // Create a simple HTML invoice for print
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {return;}
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>فاتورة ${invoice.invoiceNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 40px; direction: rtl; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-          .company-name { font-size: 24px; font-weight: bold; color: #2563eb; }
-          .invoice-title { font-size: 20px; margin-top: 10px; }
-          .info-section { display: flex; justify-content: space-between; margin: 30px 0; }
-          .info-block { width: 48%; }
-          .info-block h3 { font-size: 14px; color: #666; margin-bottom: 10px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
-          th { background-color: #f3f4f6; font-weight: bold; }
-          .totals { margin-top: 30px; text-align: left; }
-          .totals-table { width: 300px; margin-right: auto; }
-          .totals-table td { border: none; padding: 8px; }
-          .total-row { font-size: 18px; font-weight: bold; background-color: #f3f4f6; }
-          .notes { margin-top: 30px; padding: 15px; background-color: #f9fafb; border-radius: 5px; }
-          .footer { margin-top: 50px; text-align: center; color: #666; font-size: 12px; }
-          @media print { button { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="company-name">FactoryFlow</div>
-          <div class="invoice-title">فاتورة رقم: ${invoice.invoiceNumber}</div>
-        </div>
-
-        <div class="info-section">
-          <div class="info-block">
-            <h3>معلومات العميل:</h3>
-            <p><strong>الاسم:</strong> ${invoice.clientName}</p>
-            ${invoice.clientAddress ? `<p><strong>العنوان:</strong> ${invoice.clientAddress}</p>` : ""}
-            ${invoice.clientPhone ? `<p><strong>الهاتف:</strong> ${invoice.clientPhone}</p>` : ""}
-          </div>
-          <div class="info-block">
-            <h3>معلومات الفاتورة:</h3>
-            <p><strong>تاريخ الفاتورة:</strong> ${invoice.invoiceDate.toLocaleDateString("ar-JO")}</p>
-            <p><strong>تاريخ الاستحقاق:</strong> ${invoice.dueDate.toLocaleDateString("ar-JO")}</p>
-            <p><strong>الحالة:</strong> ${getStatusLabel(invoice.status)}</p>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>الوصف</th>
-              <th>الوحدة</th>
-              <th>الأبعاد (ط×ع×س) سم</th>
-              <th>الكمية</th>
-              <th>سعر الوحدة</th>
-              <th>المجموع</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${invoice.items.map(item => {
-              // تحويل الوحدة للعرض - Unit display conversion
-              const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
-              // تنسيق الأبعاد بشكل موضعي ثابت - Strict positional dimension formatting
-              // Format: Length × Width × Thickness (use dash for missing values)
-              const l = (item.length && item.length > 0) ? `${item.length}` : '-';
-              const w = (item.width && item.width > 0) ? `${item.width}` : '-';
-              const t = (item.thickness && item.thickness > 0) ? `${item.thickness}` : '-';
-              const dims = `${l} × ${w} × ${t}`;
-              return `
-              <tr>
-                <td>${item.description}</td>
-                <td>${unitDisplay}</td>
-                <td style="font-family: monospace;">${dims}</td>
-                <td>${item.quantity}</td>
-                <td>${item.unitPrice.toFixed(2)} دينار</td>
-                <td>${item.total.toFixed(2)} دينار</td>
-              </tr>
-            `;}).join("")}
-          </tbody>
-        </table>
-
-        <div class="totals">
-          <table class="totals-table">
-            <tr>
-              <td>المجموع الفرعي:</td>
-              <td style="text-align: left;">${invoice.subtotal.toFixed(2)} دينار</td>
-            </tr>
-            <tr>
-              <td>الضريبة (${invoice.taxRate}%):</td>
-              <td style="text-align: left;">${invoice.taxAmount.toFixed(2)} دينار</td>
-            </tr>
-            <tr class="total-row">
-              <td>المجموع الكلي:</td>
-              <td style="text-align: left;">${invoice.total.toFixed(2)} دينار</td>
-            </tr>
-          </table>
-        </div>
-
-        ${invoice.notes ? `
-          <div class="notes">
-            <strong>ملاحظات:</strong><br>
-            ${invoice.notes}
-          </div>
-        ` : ""}
-
-        <div class="footer">
-          <p>شكراً لتعاملكم معنا</p>
-          <p>تم إنشاء هذه الفاتورة بواسطة نظام FactoryFlow</p>
-        </div>
-
-        <button onclick="window.print()" style="margin: 20px auto; display: block; padding: 10px 30px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
-          طباعة / حفظ كـ PDF
-        </button>
-      </body>
-      </html>
-    `);
-
-    printWindow.document.close();
+    await updateStatus(invoiceId, newStatus, invoices);
   };
 
   const getStatusLabel = (status: Invoice["status"]) => {
@@ -508,40 +118,6 @@ export default function InvoicesPage() {
     };
     return colors[status];
   };
-
-  // تنسيق الأبعاد بشكل موضعي ثابت - Strict positional dimension formatting
-  // Format: Length × Width × Thickness (use dash for missing values)
-  const formatDimensions = (length?: number, width?: number, thickness?: number): string => {
-    const l = (length && length > 0) ? `${length}` : '-';
-    const w = (width && width > 0) ? `${width}` : '-';
-    const t = (thickness && thickness > 0) ? `${thickness}` : '-';
-    return `${l} × ${w} × ${t}`;
-  };
-
-  const handlePreview = (invoice: Invoice) => {
-    setViewInvoice(invoice);
-    setIsPreviewOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      clientName: "",
-      clientAddress: "",
-      clientPhone: "",
-      invoiceDate: new Date().toISOString().split("T")[0],
-      taxRate: "0",
-      notes: "",
-    });
-    setItems([{ description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined }]);
-    setEditingInvoice(null);
-  };
-
-  const openAddDialog = () => {
-    resetForm();
-    setIsDialogOpen(true);
-  };
-
-  const totals = calculateTotals(items, parseFloat(formData.taxRate));
 
   return (
     <div className="space-y-6">
@@ -650,7 +226,7 @@ export default function InvoicesPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleExportPDF(invoice)}
+                          onClick={() => exportPDF(invoice)}
                           title="تصدير PDF"
                         >
                           <Download className="w-4 h-4" />
@@ -694,355 +270,25 @@ export default function InvoicesPage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingInvoice ? "تعديل الفاتورة" : "فاتورة جديدة"}
-            </DialogTitle>
-            <DialogDescription>
-              املأ بيانات الفاتورة والبنود بالأسفل
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="clientName">اسم العميل *</Label>
-                <Input
-                  id="clientName"
-                  value={formData.clientName}
-                  onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="clientPhone">رقم الهاتف</Label>
-                <Input
-                  id="clientPhone"
-                  value={formData.clientPhone}
-                  onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
-                />
-              </div>
-            </div>
+      {/* Dialogs */}
+      <InvoicesFormDialog
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        editingInvoice={editingInvoice}
+        formData={formData}
+        setFormData={setFormData}
+        items={items}
+        setItems={setItems}
+        loading={loading}
+        onSubmit={handleSubmit}
+      />
 
-            <div className="space-y-2">
-              <Label htmlFor="clientAddress">العنوان</Label>
-              <Input
-                id="clientAddress"
-                value={formData.clientAddress}
-                onChange={(e) => setFormData({ ...formData, clientAddress: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="invoiceDate">تاريخ الفاتورة</Label>
-                <Input
-                  id="invoiceDate"
-                  type="date"
-                  value={formData.invoiceDate}
-                  onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="taxRate">نسبة الضريبة (%)</Label>
-                <Input
-                  id="taxRate"
-                  type="number"
-                  step="0.1"
-                  value={formData.taxRate}
-                  onChange={(e) => setFormData({ ...formData, taxRate: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>بنود الفاتورة</Label>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
-                  <Plus className="w-4 h-4 ml-2" />
-                  إضافة بند
-                </Button>
-              </div>
-
-              {/* جدول بنود الفاتورة مع أبعاد التصنيع */}
-              {/* Invoice items table with manufacturing dimensions */}
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full min-w-[850px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>
-                      <th className="px-2 py-2 w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, index) => (
-                      <tr key={index} className="border-t align-middle">
-                        {/* الوصف */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            value={item.description}
-                            onChange={(e) => handleItemChange(index, "description", e.target.value)}
-                            placeholder="وصف المنتج"
-                            required
-                            className="h-8 text-sm"
-                          />
-                        </td>
-                        {/* الوحدة - Unit dropdown */}
-                        <td className="px-1 py-1.5">
-                          <select
-                            value={item.unit || 'piece'}
-                            onChange={(e) => handleItemChange(index, "unit", e.target.value as InvoiceItemUnit)}
-                            className="flex h-8 w-full rounded-md border border-input bg-background px-1 py-1 text-sm text-center"
-                          >
-                            <option value="m">متر طولي</option>
-                            <option value="m2">متر مربع</option>
-                            <option value="piece">عدد</option>
-                          </select>
-                        </td>
-                        {/* الطول - Length (اختياري - optional) */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={item.length ?? ''}
-                            onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
-                            className="h-8 text-sm text-center w-full"
-                          />
-                        </td>
-                        {/* العرض - Width (اختياري - optional) */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={item.width ?? ''}
-                            onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
-                            className="h-8 text-sm text-center w-full"
-                          />
-                        </td>
-                        {/* السماكة - Thickness (اختياري - optional) */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={item.thickness ?? ''}
-                            onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
-                            className="h-8 text-sm text-center w-full"
-                          />
-                        </td>
-                        {/* الكمية - Quantity */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)}
-                            required
-                            className="h-8 text-sm text-center w-full"
-                          />
-                        </td>
-                        {/* السعر - Price */}
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.unitPrice}
-                            onChange={(e) => handleItemChange(index, "unitPrice", parseFloat(e.target.value) || 0)}
-                            required
-                            className="h-8 text-sm text-center w-full"
-                          />
-                        </td>
-                        {/* المجموع - Total */}
-                        <td className="px-1 py-1.5">
-                          <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm text-center bg-gray-50 w-full" />
-                        </td>
-                        {/* حذف - Delete */}
-                        <td className="px-1 py-1.5">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveItem(index)}
-                            disabled={items.length === 1}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>المجموع الفرعي:</span>
-                <span className="font-medium">{totals.subtotal.toFixed(2)} دينار</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>الضريبة ({formData.taxRate}%):</span>
-                <span className="font-medium">{totals.taxAmount.toFixed(2)} دينار</span>
-              </div>
-              <div className="flex justify-between text-lg font-bold border-t pt-2">
-                <span>المجموع الكلي:</span>
-                <span className="text-primary">{totals.total.toFixed(2)} دينار</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">ملاحظات</Label>
-              <textarea
-                id="notes"
-                className="w-full min-h-[80px] px-3 py-2 border rounded-md"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="ملاحظات إضافية للفاتورة..."
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                إلغاء
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري الحفظ..." : editingInvoice ? "تحديث" : "حفظ"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Invoice Preview Modal - Read-only view */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>معاينة الفاتورة</DialogTitle>
-            <DialogDescription>
-              فاتورة رقم: {viewInvoice?.invoiceNumber}
-            </DialogDescription>
-          </DialogHeader>
-
-          {viewInvoice && (
-            <div className="space-y-6">
-              {/* Client & Invoice Info */}
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-700">معلومات العميل</h3>
-                  <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
-                    <p><span className="text-gray-500">الاسم:</span> {viewInvoice.clientName}</p>
-                    {viewInvoice.clientAddress && (
-                      <p><span className="text-gray-500">العنوان:</span> {viewInvoice.clientAddress}</p>
-                    )}
-                    {viewInvoice.clientPhone && (
-                      <p><span className="text-gray-500">الهاتف:</span> {viewInvoice.clientPhone}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-700">معلومات الفاتورة</h3>
-                  <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
-                    <p><span className="text-gray-500">التاريخ:</span> {viewInvoice.invoiceDate.toLocaleDateString("ar-JO")}</p>
-                    <p><span className="text-gray-500">الاستحقاق:</span> {viewInvoice.dueDate.toLocaleDateString("ar-JO")}</p>
-                    <p>
-                      <span className="text-gray-500">الحالة:</span>{" "}
-                      <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(viewInvoice.status)}`}>
-                        {getStatusLabel(viewInvoice.status)}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Invoice Items Table */}
-              <div className="space-y-2">
-                <h3 className="font-semibold text-gray-700">بنود الفاتورة</h3>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>الوصف</TableHead>
-                        <TableHead className="text-center">الوحدة</TableHead>
-                        <TableHead className="text-center">الأبعاد (ط×ع×س) سم</TableHead>
-                        <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-center">السعر</TableHead>
-                        <TableHead className="text-center">المجموع</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {viewInvoice.items.map((item, index) => {
-                        const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
-                        return (
-                          <TableRow key={index}>
-                            <TableCell>{item.description}</TableCell>
-                            <TableCell className="text-center">{unitDisplay}</TableCell>
-                            <TableCell className="text-center font-mono">
-                              {formatDimensions(item.length, item.width, item.thickness)}
-                            </TableCell>
-                            <TableCell className="text-center">{item.quantity}</TableCell>
-                            <TableCell className="text-center">{item.unitPrice.toFixed(2)} دينار</TableCell>
-                            <TableCell className="text-center">{item.total.toFixed(2)} دينار</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>المجموع الفرعي:</span>
-                  <span className="font-medium">{viewInvoice.subtotal.toFixed(2)} دينار</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>الضريبة ({viewInvoice.taxRate}%):</span>
-                  <span className="font-medium">{viewInvoice.taxAmount.toFixed(2)} دينار</span>
-                </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>المجموع الكلي:</span>
-                  <span className="text-primary">{viewInvoice.total.toFixed(2)} دينار</span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {viewInvoice.notes && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-700">ملاحظات</h3>
-                  <div className="bg-gray-50 p-3 rounded-lg text-sm">
-                    {viewInvoice.notes}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
-                  إغلاق
-                </Button>
-                <Button onClick={() => {
-                  handleExportPDF(viewInvoice);
-                  setIsPreviewOpen(false);
-                }}>
-                  <Download className="w-4 h-4 ml-2" />
-                  تصدير PDF
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <InvoicePreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        invoice={viewInvoice}
+        onExportPDF={exportPDF}
+      />
 
       {confirmationDialog}
     </div>
