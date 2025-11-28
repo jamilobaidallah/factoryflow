@@ -195,31 +195,14 @@ export default function ChequesPage() {
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
 
-        // Debug logging - to be removed after fixing
-        console.log("=== CHEQUE EDIT STATUS CHANGE DEBUG ===");
-        console.log("Old status from editingCheque:", JSON.stringify(oldStatus));
-        console.log("New status from formData:", JSON.stringify(newStatus));
-        console.log("Old status type:", typeof oldStatus);
-        console.log("New status type:", typeof newStatus);
-        console.log("Old status length:", oldStatus?.length);
-        console.log("New status length:", newStatus?.length);
-        console.log("Old status char codes:", oldStatus ? [...oldStatus].map(c => c.charCodeAt(0)) : "null");
-        console.log("New status char codes:", newStatus ? [...newStatus].map(c => c.charCodeAt(0)) : "null");
-
-        // Use includes for more flexible matching to handle any whitespace/encoding issues
+        // Use flexible matching to handle various status value formats
         const pendingValues = ["قيد الانتظار", "pending", "Pending", "PENDING"];
         const clearedValues = ["تم الصرف", "cleared", "Cleared", "CLEARED", "محصل", "cashed", "Cashed", "CASHED"];
 
         const wasPending = pendingValues.some(v => oldStatus?.trim() === v || oldStatus?.includes(v));
         const isNowCleared = clearedValues.some(v => newStatus?.trim() === v || newStatus?.includes(v));
 
-        console.log("wasPending:", wasPending);
-        console.log("isNowCleared:", isNowCleared);
-        console.log("Will create payment:", wasPending && isNowCleared);
-        console.log("=== END DEBUG ===");
-
         if (wasPending && isNowCleared) {
-          console.log(">>> ENTERING PAYMENT CREATION BLOCK <<<");
           // Add cleared date
           updateData.clearedDate = new Date();
 
@@ -227,7 +210,7 @@ export default function ChequesPage() {
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
           const paymentType = formData.type === "وارد" ? "قبض" : "صرف";
 
-          const paymentData = {
+          await addDoc(paymentsRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
             type: paymentType,
@@ -236,10 +219,7 @@ export default function ChequesPage() {
             date: new Date(),
             notes: `تحصيل شيك مؤجل رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
-          };
-          console.log(">>> Creating payment with data:", paymentData);
-          const paymentDocRef = await addDoc(paymentsRef, paymentData);
-          console.log(">>> Payment created successfully with ID:", paymentDocRef.id);
+          });
 
           // Update AR/AP tracking if linkedTransactionId exists
           if (formData.linkedTransactionId) {
@@ -351,7 +331,6 @@ export default function ChequesPage() {
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
-      console.error("!!! ERROR in handleSubmit:", error);
       const appError = handleError(error);
       toast({
         title: getErrorTitle(appError),
