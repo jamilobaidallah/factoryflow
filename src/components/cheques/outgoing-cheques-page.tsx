@@ -36,6 +36,8 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import { firestore, storage } from "@/firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -152,10 +154,76 @@ export default function OutgoingChequesPage() {
         if (chequeImageUrl) {
           updateData.chequeImageUrl = chequeImageUrl;
         }
+
+        // Check if status changed from pending to cleared/cashed
+        const oldStatus = editingCheque.status;
+        const newStatus = formData.status;
+        const pendingStatuses = ["قيد الانتظار", "pending"];
+        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+        const wasPending = pendingStatuses.includes(oldStatus);
+        const isNowCleared = clearedStatuses.includes(newStatus);
+
+        if (wasPending && isNowCleared) {
+          // Add cleared date when status changes to cleared
+          updateData.clearedDate = new Date();
+
+          // Create a Payment record (disbursement for outgoing cheque)
+          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const chequeAmount = parseFloat(formData.amount);
+
+          await addDoc(paymentsRef, {
+            clientName: formData.clientName,
+            amount: chequeAmount,
+            type: "صرف", // Disbursement - we paid the supplier
+            method: "cheque",
+            linkedTransactionId: formData.linkedTransactionId || "",
+            date: new Date(),
+            notes: `صرف شيك رقم ${formData.chequeNumber}`,
+            createdAt: new Date(),
+          });
+
+          // Update AR/AP tracking if linkedTransactionId exists
+          if (formData.linkedTransactionId) {
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = currentTotalPaid + chequeAmount;
+                const newRemainingBalance = transactionAmount - newTotalPaid;
+
+                let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
+                if (newRemainingBalance <= 0) {
+                  newPaymentStatus = "paid";
+                } else if (newTotalPaid > 0) {
+                  newPaymentStatus = "partial";
+                }
+
+                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
+          }
+        }
+
         await updateDoc(chequeRef, updateData);
         toast({
           title: "تم التحديث بنجاح",
-          description: "تم تحديث بيانات الشيك الصادر",
+          description: wasPending && isNowCleared
+            ? `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`
+            : "تم تحديث بيانات الشيك الصادر",
         });
       } else {
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
