@@ -173,10 +173,11 @@ export default function ChequesPage() {
 
       if (editingCheque) {
         const chequeRef = doc(firestore, `users/${user.uid}/cheques`, editingCheque.id);
+        const chequeAmount = parseFloat(formData.amount);
         const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: chequeAmount,
           type: formData.type,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
@@ -189,10 +190,74 @@ export default function ChequesPage() {
         if (chequeImageUrl) {
           updateData.chequeImageUrl = chequeImageUrl;
         }
+
+        // Check if status changed from pending to cleared
+        const oldStatus = editingCheque.status;
+        const newStatus = formData.status;
+        const wasPending = oldStatus === "قيد الانتظار" || oldStatus === "pending";
+        const isNowCleared = newStatus === "تم الصرف" || newStatus === "cleared" || newStatus === "محصل";
+
+        if (wasPending && isNowCleared) {
+          // Add cleared date
+          updateData.clearedDate = new Date();
+
+          // Create a Payment record
+          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const paymentType = formData.type === "وارد" ? "قبض" : "صرف";
+
+          await addDoc(paymentsRef, {
+            clientName: formData.clientName,
+            amount: chequeAmount,
+            type: paymentType,
+            method: "cheque",
+            linkedTransactionId: formData.linkedTransactionId || "",
+            date: new Date(),
+            notes: `تحصيل شيك مؤجل رقم ${formData.chequeNumber}`,
+            createdAt: new Date(),
+          });
+
+          // Update AR/AP tracking if linkedTransactionId exists
+          if (formData.linkedTransactionId) {
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = currentTotalPaid + chequeAmount;
+                const newRemainingBalance = transactionAmount - newTotalPaid;
+
+                let paymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
+                if (newRemainingBalance <= 0) {
+                  paymentStatus = "paid";
+                } else if (newTotalPaid > 0) {
+                  paymentStatus = "partial";
+                }
+
+                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: paymentStatus,
+                });
+              }
+            }
+          }
+        }
+
         await updateDoc(chequeRef, updateData);
         toast({
           title: "تم التحديث بنجاح",
-          description: "تم تحديث بيانات الشيك",
+          description: wasPending && isNowCleared
+            ? "تم تحديث الشيك وإنشاء سجل الدفع وتحديث الرصيد"
+            : "تم تحديث بيانات الشيك",
         });
       } else {
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
