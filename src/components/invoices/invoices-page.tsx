@@ -395,17 +395,17 @@ export default function InvoicesPage() {
             ${invoice.items.map(item => {
               // تحويل الوحدة للعرض - Unit display conversion
               const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
-              // تنسيق الأبعاد - Format dimensions
+              // تنسيق الأبعاد بالسنتيمتر - Format dimensions in cm
               const dims = [
-                item.length ? `${item.length}م` : '',
-                item.width ? `${item.width}م` : '',
-                item.thickness ? `${item.thickness}مم` : ''
+                item.length ? `${item.length}` : '',
+                item.width ? `${item.width}` : '',
+                item.thickness ? `${item.thickness}` : ''
               ].filter(Boolean).join(' × ') || '-';
               return `
               <tr>
                 <td>${item.description}</td>
                 <td>${unitDisplay}</td>
-                <td>${dims}</td>
+                <td>${dims !== '-' ? dims + ' سم' : dims}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unitPrice.toFixed(2)} دينار</td>
                 <td>${item.total.toFixed(2)} دينار</td>
@@ -715,9 +715,9 @@ export default function InvoicesPage() {
                     <tr>
                       <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
                       <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (م)</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (م)</th>
-                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (مم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
                       <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
                       <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
                       <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>

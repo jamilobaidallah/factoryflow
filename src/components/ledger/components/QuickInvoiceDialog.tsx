@@ -18,7 +18,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
@@ -293,9 +293,9 @@ export function QuickInvoiceDialog({
                   <tr>
                     <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (م)</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (م)</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (مم)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>
@@ -418,6 +418,41 @@ export function QuickInvoiceDialog({
               <span className="text-primary">{totals.total.toFixed(2)} دينار</span>
             </div>
           </div>
+
+          {/* مطابقة القيد - Ledger Reconciliation */}
+          {pendingData && (
+            <div className={`p-3 rounded-lg border ${
+              Math.abs(totals.total - pendingData.amount) < 0.01
+                ? 'bg-green-50 border-green-200'
+                : 'bg-yellow-50 border-yellow-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">المبلغ من القيد:</span>
+                    <span className="font-medium">{pendingData.amount.toFixed(2)} دينار</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">مجموع الفاتورة:</span>
+                    <span className="font-medium">{totals.total.toFixed(2)} دينار</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {Math.abs(totals.total - pendingData.amount) < 0.01 ? (
+                    <>
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="text-green-700 font-medium text-sm">مطابق</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                      <span className="text-yellow-700 font-medium text-sm">غير مطابق</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ملاحظات - Notes */}
           <div className="space-y-2">
