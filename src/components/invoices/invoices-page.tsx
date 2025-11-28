@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download, Eye, Send } from "lucide-react";
+import { Plus, Edit, Trash2, Download } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +35,6 @@ import {
   onSnapshot,
   query,
   orderBy,
-  writeBatch,
   limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
@@ -51,9 +50,21 @@ interface InvoiceItem {
   total: number;
   // بيانات التصنيع - Manufacturing data
   unit?: InvoiceItemUnit;
-  length?: number;    // الطول (متر)
-  width?: number;     // العرض (متر)
-  thickness?: number; // السماكة (مم) - CRITICAL FIELD
+  length?: number;    // الطول (سم)
+  width?: number;     // العرض (سم)
+  thickness?: number; // السماكة (سم)
+}
+
+// نوع البيانات للحفظ في Firestore - Clean item type for Firestore save
+interface CleanInvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  unit: InvoiceItemUnit;
+  length?: number;
+  width?: number;
+  thickness?: number;
 }
 
 interface Invoice {
@@ -156,7 +167,7 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
+  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | undefined) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
@@ -177,8 +188,8 @@ export default function InvoicesPage() {
 
       // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
       // Clean items from undefined values - Firestore doesn't accept undefined
-      const cleanedItems = items.map(item => {
-        const cleanItem: Record<string, any> = {
+      const cleanedItems: CleanInvoiceItem[] = items.map(item => {
+        const cleanItem: CleanInvoiceItem = {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,

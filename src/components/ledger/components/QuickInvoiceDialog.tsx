@@ -39,6 +39,18 @@ interface InvoiceItem {
   thickness?: number;
 }
 
+// نوع البيانات للحفظ في Firestore
+interface CleanInvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  unit: InvoiceItemUnit;
+  length?: number;
+  width?: number;
+  thickness?: number;
+}
+
 interface PendingInvoiceData {
   clientName: string;
   amount: number;
@@ -125,7 +137,7 @@ export function QuickInvoiceDialog({
     }
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
+  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | undefined) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
@@ -147,8 +159,8 @@ export function QuickInvoiceDialog({
 
       // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
       // Clean items from undefined values - Firestore doesn't accept undefined
-      const cleanedItems = items.map(item => {
-        const cleanItem: Record<string, any> = {
+      const cleanedItems: CleanInvoiceItem[] = items.map(item => {
+        const cleanItem: CleanInvoiceItem = {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
