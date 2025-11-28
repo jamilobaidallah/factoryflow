@@ -58,6 +58,9 @@ interface LedgerFormDialogProps {
   setInventoryFormData: (data: any) => void;
   fixedAssetFormData: any;
   setFixedAssetFormData: (data: any) => void;
+  // جسر إنشاء الفاتورة - Invoice creation bridge
+  createInvoice?: boolean;
+  setCreateInvoice?: (value: boolean) => void;
 }
 
 export function LedgerFormDialog({
@@ -90,6 +93,8 @@ export function LedgerFormDialog({
   setInventoryFormData,
   fixedAssetFormData,
   setFixedAssetFormData,
+  createInvoice,
+  setCreateInvoice,
 }: LedgerFormDialogProps) {
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
 
@@ -747,6 +752,32 @@ export function LedgerFormDialog({
                           </p>
                         )}
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/*
+                  خيار إنشاء فاتورة - للقبض مع عميل محدد فقط
+                  Create Invoice Option - for income with client only
+                */}
+                {currentEntryType === "دخل" && formData.associatedParty && setCreateInvoice && (
+                  <div className="space-y-2 p-3 bg-blue-50 rounded-md border border-blue-200">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input
+                        type="checkbox"
+                        id="createInvoice"
+                        checked={createInvoice || false}
+                        onChange={(e) => setCreateInvoice(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="createInvoice" className="cursor-pointer font-medium">
+                        إنشاء فاتورة لهذه الدفعة
+                      </Label>
+                    </div>
+                    {createInvoice && (
+                      <p className="text-xs text-blue-700 pr-6">
+                        سيتم فتح نموذج إنشاء فاتورة جديدة للعميل &quot;{formData.associatedParty}&quot; بعد حفظ هذه الحركة.
+                      </p>
                     )}
                   </div>
                 )}
