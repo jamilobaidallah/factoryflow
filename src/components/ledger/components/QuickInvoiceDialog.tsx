@@ -327,31 +327,31 @@ export function QuickInvoiceDialog({
                           <option value="piece">عدد</option>
                         </select>
                       </td>
-                      {/* الطول - Length */}
+                      {/* الطول - Length (اختياري - optional) */}
                       <td className="px-1 py-1.5">
                         <Input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={item.length ?? ''}
                           onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>
-                      {/* العرض - Width */}
+                      {/* العرض - Width (اختياري - optional) */}
                       <td className="px-1 py-1.5">
                         <Input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={item.width ?? ''}
                           onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>
-                      {/* السماكة - Thickness (CRITICAL) */}
+                      {/* السماكة - Thickness (اختياري - optional) */}
                       <td className="px-1 py-1.5">
                         <Input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={item.thickness ?? ''}
                           onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
                           className="h-8 text-sm text-center w-full"
