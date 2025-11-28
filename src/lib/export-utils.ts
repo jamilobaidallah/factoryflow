@@ -5,6 +5,16 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 /**
+ * Extended jsPDF interface with autoTable support
+ * jspdf-autotable adds the lastAutoTable property to track table positioning
+ */
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable: {
+    finalY: number;
+  };
+}
+
+/**
  * Translate Arabic text to English for PDF export
  * @param text Text to translate
  * @returns English translation
@@ -237,7 +247,7 @@ export function exportIncomeStatementToPDF(
   });
 
   // Expenses section
-  const finalY = (doc as any).lastAutoTable.finalY || 50;
+  const finalY = (doc as jsPDFWithAutoTable).lastAutoTable.finalY || 50;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.text('Expenses', 20, finalY + 15);
@@ -259,7 +269,7 @@ export function exportIncomeStatementToPDF(
   });
 
   // Net income
-  const finalY2 = (doc as any).lastAutoTable.finalY || 100;
+  const finalY2 = (doc as jsPDFWithAutoTable).lastAutoTable.finalY || 100;
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   const netIncomeText = `Net Income: ${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -443,7 +453,7 @@ export function exportLedgerToPDF(entries: any[], filename: string = 'ledger-ent
   });
 
   if (entries.length > 50) {
-    const finalY = (doc as any).lastAutoTable.finalY || 30;
+    const finalY = (doc as jsPDFWithAutoTable).lastAutoTable.finalY || 30;
     doc.setFontSize(10);
     doc.text(`Note: Showing first 50 of ${entries.length} entries`, 20, finalY + 10);
   }
@@ -495,7 +505,7 @@ export function exportBalanceSheetToPDF(
   });
 
   // Liabilities
-  const finalY1 = (doc as any).lastAutoTable.finalY || 50;
+  const finalY1 = (doc as jsPDFWithAutoTable).lastAutoTable.finalY || 50;
   doc.setFontSize(14);
   doc.text('Liabilities / الخصوم', 20, finalY1 + 15);
 
@@ -513,7 +523,7 @@ export function exportBalanceSheetToPDF(
   });
 
   // Equity
-  const finalY2 = (doc as any).lastAutoTable.finalY || 100;
+  const finalY2 = (doc as jsPDFWithAutoTable).lastAutoTable.finalY || 100;
   doc.setFontSize(14);
   doc.text('Equity / حقوق الملكية', 20, finalY2 + 15);
 

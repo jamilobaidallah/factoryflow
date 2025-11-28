@@ -10,6 +10,7 @@ export interface LedgerEntry {
     category: string;
     subCategory: string;
     associatedParty: string;
+    ownerName?: string;
     date: Date;
     reference: string;
     notes: string;

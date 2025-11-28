@@ -30,6 +30,8 @@ import type {
   PaymentFormData,
   ChequeRelatedFormData,
   InventoryRelatedFormData,
+  InventoryMovementData,
+  InventoryItemData,
 } from "../types/ledger";
 
 export function useLedgerOperations() {
@@ -371,7 +373,7 @@ export function useLedgerOperations() {
 
       // Revert quantities before deleting movements
       for (const movementDoc of movementsSnapshot.docs) {
-        const movement = movementDoc.data() as any;
+        const movement = movementDoc.data() as InventoryMovementData;
         const itemId = movement.itemId;
         const quantity = movement.quantity || 0;
         const movementType = movement.type; // 'entry' or 'exit'
@@ -384,7 +386,7 @@ export function useLedgerOperations() {
 
           if (!itemSnapshot.empty) {
             const itemDoc = itemSnapshot.docs[0];
-            const currentQuantity = (itemDoc.data() as any).quantity || 0;
+            const currentQuantity = (itemDoc.data() as InventoryItemData).quantity || 0;
 
             // Revert the quantity change
             // If it was دخول/entry (+), we subtract to revert
@@ -915,8 +917,9 @@ async function handleInventoryUpdateBatch(
     // Item exists - update quantity
     const existingItem = itemSnapshot.docs[0];
     itemId = existingItem.id;
-    const currentQuantity = (existingItem.data() as any).quantity || 0;
-    const currentUnitPrice = (existingItem.data() as any).unitPrice || 0;
+    const existingItemData = existingItem.data() as InventoryItemData;
+    const currentQuantity = existingItemData.quantity || 0;
+    const currentUnitPrice = existingItemData.unitPrice || 0;
     const newQuantity =
       movementType === "دخول" ? currentQuantity + quantityChange : currentQuantity - quantityChange;
 
@@ -954,7 +957,7 @@ async function handleInventoryUpdateBatch(
 
     // Auto-record COGS when selling
     if (entryType === "إيراد" && movementType === "خروج") {
-      const unitCost = (existingItem.data() as any).unitPrice || 0;
+      const unitCost = existingItemData.unitPrice || 0;
       const cogsAmount = quantityChange * unitCost;
 
       const cogsDocRef = doc(ledgerRef);
