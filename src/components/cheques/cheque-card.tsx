@@ -226,7 +226,7 @@ export function ChequeCard({
 
       {/* ورقة التفاصيل من الأسفل - Bottom detail sheet */}
       <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
+        <SheetContent className="max-h-[85vh] overflow-y-auto">
           <SheetHeader className="text-right pt-4">
             <SheetTitle className="text-xl">تفاصيل الشيك</SheetTitle>
             <SheetDescription>
