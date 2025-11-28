@@ -328,7 +328,7 @@ describe('LedgerTable', () => {
       const deleteButton = buttons[buttons.length - 1]; // Last button is delete
 
       fireEvent.click(deleteButton);
-      expect(mockOnDelete).toHaveBeenCalledWith('1');
+      expect(mockOnDelete).toHaveBeenCalledWith(mockIncomeEntry);
     });
 
     it('should call onViewRelated when view related button is clicked', () => {
