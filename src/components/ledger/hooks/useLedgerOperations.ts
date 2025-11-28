@@ -161,12 +161,15 @@ export function useLedgerOperations() {
       }
 
       // Use batch for atomic operations
+      // Include trackARAP and immediateSettlement to ensure AR/AP fields and payments are created
       const needsBatch =
         options.hasIncomingCheck ||
         options.hasOutgoingCheck ||
         options.hasInventoryUpdate ||
         options.hasFixedAsset ||
-        options.hasInitialPayment;
+        options.hasInitialPayment ||
+        formData.trackARAP ||
+        formData.immediateSettlement;
 
       if (needsBatch) {
         const batch = writeBatch(firestore);
