@@ -315,6 +315,84 @@ export default function OutgoingChequesPage() {
     }
   };
 
+  // Handle confirm cheque as cashed
+  const handleConfirmCashed = (cheque: Cheque) => {
+    if (!user) { return; }
+
+    confirm(
+      "تأكيد صرف الشيك",
+      `هل أنت متأكد من تأكيد صرف الشيك رقم ${cheque.chequeNumber} بمبلغ ${cheque.amount} دينار؟ سيتم إنشاء سجل دفع تلقائياً.`,
+      async () => {
+        try {
+          // Update cheque status to cashed
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+          await updateDoc(chequeRef, {
+            status: "تم الصرف",
+            cashedDate: new Date(),
+          });
+
+          // Create payment record
+          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          await addDoc(paymentsRef, {
+            clientName: cheque.clientName || "غير محدد",
+            amount: cheque.amount,
+            type: "صرف",
+            method: "cheque",
+            linkedTransactionId: cheque.linkedTransactionId || "",
+            date: new Date(),
+            notes: `صرف شيك رقم ${cheque.chequeNumber}`,
+            createdAt: new Date(),
+            chequeId: cheque.id,
+          });
+
+          toast({
+            title: "تم تأكيد الصرف",
+            description: `تم تأكيد صرف الشيك وإنشاء سجل الدفع`,
+          });
+        } catch (error) {
+          console.error("Error confirming cheque cashed:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء تأكيد صرف الشيك",
+            variant: "destructive",
+          });
+        }
+      }
+    );
+  };
+
+  // Handle cancel cheque
+  const handleCancelCheque = (cheque: Cheque) => {
+    if (!user) { return; }
+
+    confirm(
+      "إلغاء الشيك",
+      `هل أنت متأكد من إلغاء الشيك رقم ${cheque.chequeNumber}؟ لن يتم إنشاء أي سجل دفع.`,
+      async () => {
+        try {
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+          await updateDoc(chequeRef, {
+            status: "ملغي",
+            cancelledDate: new Date(),
+          });
+
+          toast({
+            title: "تم إلغاء الشيك",
+            description: "تم تغيير حالة الشيك إلى ملغي",
+          });
+        } catch (error) {
+          console.error("Error cancelling cheque:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء إلغاء الشيك",
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
+  };
+
   // Calculate summary statistics
   const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
   const cashedCheques = cheques.filter(c => c.status === "تم الصرف");
@@ -461,13 +539,38 @@ export default function OutgoingChequesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1 flex-wrap">
+                        {/* Confirm/Cancel buttons for pending cheques */}
+                        {cheque.status === "قيد الانتظار" && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleConfirmCashed(cheque)}
+                              title="تأكيد الصرف"
+                              className="border-green-300 text-green-700 hover:bg-green-50"
+                            >
+                              تأكيد
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelCheque(cheque)}
+                              title="إلغاء الشيك"
+                              className="border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                              إلغاء
+                            </Button>
+                          </>
+                        )}
+                        {/* Edit/Delete for non-endorsed cheques */}
                         {!cheque.isEndorsedCheque ? (
                           <>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleEdit(cheque)}
+                              title="تعديل"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
@@ -475,6 +578,7 @@ export default function OutgoingChequesPage() {
                               variant="destructive"
                               size="sm"
                               onClick={() => handleDelete(cheque.id)}
+                              title="حذف"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>

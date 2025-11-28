@@ -59,6 +59,24 @@ export interface FixedAssetFormData {
   depreciationMethod: string;
 }
 
+export interface OutgoingChequeFormData {
+  chequeNumber: string;
+  chequeAmount: string;
+  bankName: string;
+  dueDate: string;
+  chequeType: 'cashed' | 'postponed' | 'endorsed';
+  chequeToEndorseId: string;
+}
+
+export interface PendingIncomingCheque {
+  id: string;
+  chequeNumber: string;
+  clientName: string;
+  amount: number;
+  dueDate: Date | string;
+  bankName: string;
+}
+
 export function useLedgerOperations() {
   const { user } = useUser();
   const { toast } = useToast();
@@ -72,6 +90,9 @@ export function useLedgerOperations() {
     options: {
       hasIncomingCheck?: boolean;
       checkFormData?: CheckFormData;
+      hasOutgoingCheque?: boolean;
+      outgoingChequeFormData?: OutgoingChequeFormData;
+      pendingIncomingCheques?: PendingIncomingCheque[];
       hasInventoryUpdate?: boolean;
       inventoryFormData?: InventoryFormData;
       hasFixedAsset?: boolean;
@@ -150,6 +171,7 @@ export function useLedgerOperations() {
       // Use batch for atomic operations
       const needsBatch =
         options.hasIncomingCheck ||
+        options.hasOutgoingCheque ||
         options.hasInventoryUpdate ||
         options.hasFixedAsset ||
         options.hasInitialPayment;
@@ -211,6 +233,29 @@ export function useLedgerOperations() {
             formData,
             entryType
           );
+        }
+
+        // Handle outgoing cheque
+        if (options.hasOutgoingCheque && options.outgoingChequeFormData) {
+          const result = await handleOutgoingChequeBatch(
+            batch,
+            user.uid,
+            transactionId,
+            options.outgoingChequeFormData,
+            formData,
+            entryType,
+            options.pendingIncomingCheques || [],
+            toast
+          );
+          if (!result.success) {
+            return false;
+          }
+          // Update AR/AP tracking for outgoing cheque if it's a cashed type
+          if (options.outgoingChequeFormData.chequeType === 'cashed' && formData.trackARAP) {
+            const chequeAmount = parseFloat(options.outgoingChequeFormData.chequeAmount);
+            initialPaid += chequeAmount;
+            initialStatus = initialPaid >= totalAmount ? "paid" : "partial";
+          }
         }
 
         // Handle immediate settlement
@@ -606,4 +651,161 @@ async function handleFixedAssetBatch(
     notes: `مرتبط بالمعاملة: ${formData.description}`,
     createdAt: new Date(),
   });
+}
+
+/**
+ * Handle outgoing cheque batch operations
+ * Supports three types:
+ * - cashed: Creates cheque with 'cashed' status + payment record immediately
+ * - postponed: Creates cheque with 'pending' status, no payment record yet
+ * - endorsed: Updates existing incoming cheque as endorsed to the supplier
+ */
+async function handleOutgoingChequeBatch(
+  batch: any,
+  userId: string,
+  transactionId: string,
+  outgoingChequeFormData: OutgoingChequeFormData,
+  formData: LedgerFormData,
+  entryType: string,
+  pendingIncomingCheques: PendingIncomingCheque[],
+  toast: any
+): Promise<{ success: boolean }> {
+  const chequesRef = collection(firestore, `users/${userId}/cheques`);
+  const paymentsRef = collection(firestore, `users/${userId}/payments`);
+
+  const chequeType = outgoingChequeFormData.chequeType;
+
+  if (chequeType === 'cashed' || chequeType === 'postponed') {
+    // Create a new outgoing cheque
+    const chequeDocRef = doc(chequesRef);
+    const chequeAmount = parseFloat(outgoingChequeFormData.chequeAmount);
+    const chequeStatus = chequeType === 'cashed' ? 'تم الصرف' : 'قيد الانتظار';
+
+    batch.set(chequeDocRef, {
+      chequeNumber: outgoingChequeFormData.chequeNumber,
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "صادر",
+      chequeType: chequeType === 'cashed' ? 'صرف' : 'مؤجل',
+      status: chequeStatus,
+      linkedTransactionId: transactionId,
+      issueDate: new Date(formData.date),
+      dueDate: new Date(outgoingChequeFormData.dueDate),
+      bankName: outgoingChequeFormData.bankName,
+      notes: `مرتبط بالمعاملة: ${formData.description}`,
+      createdAt: new Date(),
+    });
+
+    // For cashed cheques, also create a payment record immediately
+    if (chequeType === 'cashed') {
+      const paymentDocRef = doc(paymentsRef);
+      batch.set(paymentDocRef, {
+        clientName: formData.associatedParty || "غير محدد",
+        amount: chequeAmount,
+        type: "صرف",
+        method: "cheque",
+        linkedTransactionId: transactionId,
+        date: new Date(formData.date),
+        notes: `شيك صرف رقم ${outgoingChequeFormData.chequeNumber} - ${formData.description}`,
+        category: formData.category,
+        subCategory: formData.subCategory,
+        createdAt: new Date(),
+      });
+    }
+    // For postponed cheques, do NOT create a payment record yet
+    // Payment will be created when the cheque is marked as cashed later
+  } else if (chequeType === 'endorsed') {
+    // Endorse an existing incoming cheque to the supplier
+    const chequeToEndorseId = outgoingChequeFormData.chequeToEndorseId;
+
+    if (!chequeToEndorseId) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء اختيار شيك للتظهير",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+
+    // Find the cheque in pending cheques list
+    const selectedCheque = pendingIncomingCheques.find(c => c.id === chequeToEndorseId);
+    if (!selectedCheque) {
+      toast({
+        title: "خطأ",
+        description: "الشيك المحدد غير موجود أو غير متاح للتظهير",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+
+    // Update the existing incoming cheque to endorsed status
+    const incomingChequeRef = doc(firestore, `users/${userId}/cheques`, chequeToEndorseId);
+    batch.update(incomingChequeRef, {
+      status: "مجيّر",
+      chequeType: "مجير",
+      endorsedTo: formData.associatedParty || "غير محدد",
+      endorsedDate: new Date(),
+      endorsedToTransactionId: transactionId,
+    });
+
+    // Create an outgoing cheque entry for tracking
+    const outgoingChequeDocRef = doc(chequesRef);
+    batch.set(outgoingChequeDocRef, {
+      chequeNumber: selectedCheque.chequeNumber,
+      clientName: formData.associatedParty || "غير محدد", // The supplier receiving the endorsed cheque
+      amount: selectedCheque.amount,
+      type: "صادر",
+      chequeType: "مجير",
+      status: "قيد الانتظار", // The endorsed cheque is still pending until it clears
+      linkedTransactionId: transactionId,
+      issueDate: new Date(formData.date),
+      dueDate: selectedCheque.dueDate instanceof Date ? selectedCheque.dueDate : new Date(selectedCheque.dueDate),
+      bankName: selectedCheque.bankName,
+      notes: `شيك مظهر من العميل: ${selectedCheque.clientName}`,
+      createdAt: new Date(),
+      isEndorsedCheque: true,
+      endorsedFromId: chequeToEndorseId,
+    });
+
+    // Update the incoming cheque with reference to the outgoing entry
+    batch.update(incomingChequeRef, {
+      endorsedToOutgoingId: outgoingChequeDocRef.id,
+    });
+
+    // Create payment record for original client (decrease receivable) - no cash movement
+    const clientPaymentRef = doc(paymentsRef);
+    batch.set(clientPaymentRef, {
+      clientName: selectedCheque.clientName,
+      amount: selectedCheque.amount,
+      type: "قبض",
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `تظهير شيك رقم ${selectedCheque.chequeNumber} للمورد: ${formData.associatedParty}`,
+      createdAt: new Date(),
+      isEndorsement: true,
+      noCashMovement: true,
+      endorsementChequeId: chequeToEndorseId,
+    });
+
+    // Create payment record for supplier (decrease payable) - no cash movement
+    const supplierPaymentRef = doc(paymentsRef);
+    batch.set(supplierPaymentRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: selectedCheque.amount,
+      type: "صرف",
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `استلام شيك مظهر رقم ${selectedCheque.chequeNumber} من العميل: ${selectedCheque.clientName}`,
+      category: formData.category,
+      subCategory: formData.subCategory,
+      createdAt: new Date(),
+      isEndorsement: true,
+      noCashMovement: true,
+      endorsementChequeId: chequeToEndorseId,
+    });
+  }
+
+  return { success: true };
 }

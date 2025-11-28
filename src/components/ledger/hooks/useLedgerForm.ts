@@ -70,6 +70,15 @@ export interface InventoryRelatedFormState {
   notes: string;
 }
 
+export interface OutgoingChequeFormState {
+  chequeNumber: string;
+  chequeAmount: string;
+  bankName: string;
+  dueDate: string;
+  chequeType: 'cashed' | 'postponed' | 'endorsed';
+  chequeToEndorseId: string; // For endorsed cheques, the ID of the incoming cheque to endorse
+}
+
 const initialFormData: LedgerFormState = {
   description: "",
   amount: "",
@@ -134,12 +143,22 @@ const initialInventoryRelatedFormData: InventoryRelatedFormState = {
   notes: "",
 };
 
+const initialOutgoingChequeFormData: OutgoingChequeFormState = {
+  chequeNumber: "",
+  chequeAmount: "",
+  bankName: "",
+  dueDate: new Date().toISOString().split("T")[0],
+  chequeType: 'cashed',
+  chequeToEndorseId: "",
+};
+
 export function useLedgerForm(editingEntry?: LedgerEntry | null) {
   // Main ledger entry form
   const [formData, setFormData] = useState<LedgerFormState>(initialFormData);
 
   // Additional options flags
   const [hasIncomingCheck, setHasIncomingCheck] = useState(false);
+  const [hasOutgoingCheque, setHasOutgoingCheque] = useState(false);
   const [hasInventoryUpdate, setHasInventoryUpdate] = useState(false);
   const [hasFixedAsset, setHasFixedAsset] = useState(false);
   const [hasInitialPayment, setHasInitialPayment] = useState(false);
@@ -147,6 +166,7 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
 
   // Related forms for batch operations
   const [checkFormData, setCheckFormData] = useState<CheckFormState>(initialCheckFormData);
+  const [outgoingChequeFormData, setOutgoingChequeFormData] = useState<OutgoingChequeFormState>(initialOutgoingChequeFormData);
   const [inventoryFormData, setInventoryFormData] = useState<InventoryFormState>(initialInventoryFormData);
   const [fixedAssetFormData, setFixedAssetFormData] = useState<FixedAssetFormState>(initialFixedAssetFormData);
 
@@ -161,16 +181,25 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
   const resetAllForms = () => {
     setFormData(initialFormData);
     setHasIncomingCheck(false);
+    setHasOutgoingCheque(false);
     setHasInventoryUpdate(false);
     setHasFixedAsset(false);
     setHasInitialPayment(false);
     setInitialPaymentAmount("");
     setCheckFormData(initialCheckFormData);
+    setOutgoingChequeFormData(initialOutgoingChequeFormData);
     setInventoryFormData(initialInventoryFormData);
     setFixedAssetFormData(initialFixedAssetFormData);
     setPaymentFormData(initialPaymentFormData);
     setChequeRelatedFormData(initialChequeRelatedFormData);
     setInventoryRelatedFormData(initialInventoryRelatedFormData);
+  };
+
+  /**
+   * Reset outgoing cheque form
+   */
+  const resetOutgoingChequeForm = () => {
+    setOutgoingChequeFormData(initialOutgoingChequeFormData);
   };
 
   /**
@@ -223,6 +252,8 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
     // Additional options
     hasIncomingCheck,
     setHasIncomingCheck,
+    hasOutgoingCheque,
+    setHasOutgoingCheque,
     hasInventoryUpdate,
     setHasInventoryUpdate,
     hasFixedAsset,
@@ -235,6 +266,8 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
     // Related forms
     checkFormData,
     setCheckFormData,
+    outgoingChequeFormData,
+    setOutgoingChequeFormData,
     inventoryFormData,
     setInventoryFormData,
     fixedAssetFormData,
@@ -253,6 +286,7 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
     loadEntryForEdit,
     resetPaymentForm,
     resetChequeForm,
+    resetOutgoingChequeForm,
     resetInventoryForm,
   };
 }

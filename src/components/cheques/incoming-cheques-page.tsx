@@ -270,6 +270,8 @@ export default function IncomingChequesPage() {
         return "bg-yellow-100 text-yellow-700";
       case "مجيّر":
         return "bg-purple-100 text-purple-700";
+      case "محصل":
+        return "bg-blue-100 text-blue-700";
       case "مرفوض":
         return "bg-red-100 text-red-700";
       default:
@@ -383,6 +385,54 @@ export default function IncomingChequesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle endorsed cheque collected - when the endorsed cheque is finally cashed by the recipient
+  const handleEndorsedChequeCollected = (cheque: Cheque) => {
+    if (!user) { return; }
+
+    confirm(
+      "تأكيد تحصيل الشيك المظهر",
+      `هل أنت متأكد أن الشيك المظهر رقم ${cheque.chequeNumber} قد تم تحصيله بنجاح من قبل ${(cheque as any).endorsedTo}؟`,
+      async () => {
+        setLoading(true);
+        try {
+          // Update incoming cheque status to collected
+          const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+          await updateDoc(chequeRef, {
+            status: "محصل",
+            collectedDate: new Date(),
+          });
+
+          // Also update the outgoing cheque entry if it exists
+          if ((cheque as any).endorsedToOutgoingId) {
+            const outgoingChequeRef = doc(
+              firestore,
+              `users/${user.uid}/cheques`,
+              (cheque as any).endorsedToOutgoingId
+            );
+            await updateDoc(outgoingChequeRef, {
+              status: "تم الصرف",
+              cashedDate: new Date(),
+            });
+          }
+
+          toast({
+            title: "تم تأكيد التحصيل",
+            description: `تم تأكيد تحصيل الشيك المظهر رقم ${cheque.chequeNumber}`,
+          });
+        } catch (error) {
+          console.error("Error confirming endorsed cheque collected:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء تأكيد التحصيل",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
   };
 
   const handleCancelEndorsement = (cheque: Cheque) => {
@@ -599,18 +649,29 @@ export default function IncomingChequesPage() {
                               <RefreshCw className="w-4 h-4" />
                             </Button>
                           )}
-                        {/* Show cancel endorsement button for endorsed cheques */}
+                        {/* Show confirm collection button for endorsed cheques */}
                         {cheque.status === "مجيّر" &&
                           cheque.chequeType === "مجير" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCancelEndorsement(cheque)}
-                              title="إلغاء التظهير"
-                              className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEndorsedChequeCollected(cheque)}
+                                title="تم تحصيل الشيك المظهر"
+                                className="border-green-300 text-green-700 hover:bg-green-50"
+                              >
+                                تم التحصيل
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelEndorsement(cheque)}
+                                title="إلغاء التظهير"
+                                className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </>
                           )}
                         <Button
                           variant="outline"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ import {
   where,
   getDocs,
   query,
+  onSnapshot,
 } from "firebase/firestore";
 import { firestore, storage } from "@/firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -92,6 +93,16 @@ export default function LedgerPage() {
   const [isQuickPayDialogOpen, setIsQuickPayDialogOpen] = useState(false);
   const [quickPayEntry, setQuickPayEntry] = useState<LedgerEntry | null>(null);
 
+  // Pending incoming cheques for endorsement in outgoing cheque form
+  const [pendingIncomingCheques, setPendingIncomingCheques] = useState<{
+    id: string;
+    chequeNumber: string;
+    clientName: string;
+    amount: number;
+    dueDate: Date | string;
+    bankName: string;
+  }[]>([]);
+
   // Use custom hooks for form state and operations
   const formHook = useLedgerForm();
   const { submitLedgerEntry, deleteLedgerEntry } = useLedgerOperations();
@@ -102,6 +113,8 @@ export default function LedgerPage() {
     setFormData,
     hasIncomingCheck,
     setHasIncomingCheck,
+    hasOutgoingCheque,
+    setHasOutgoingCheque,
     hasInventoryUpdate,
     setHasInventoryUpdate,
     hasFixedAsset,
@@ -112,6 +125,8 @@ export default function LedgerPage() {
     setInitialPaymentAmount,
     checkFormData,
     setCheckFormData,
+    outgoingChequeFormData,
+    setOutgoingChequeFormData,
     inventoryFormData: inventoryFormDataNew,
     setInventoryFormData: setInventoryFormDataNew,
     fixedAssetFormData,
@@ -126,11 +141,38 @@ export default function LedgerPage() {
     loadEntryForEdit,
     resetPaymentForm,
     resetChequeForm,
+    resetOutgoingChequeForm,
     resetInventoryForm,
   } = formHook;
 
   // Calculate current entry type based on selected category for UI rendering
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
+
+  // Fetch pending incoming cheques for endorsement dropdown
+  useEffect(() => {
+    if (!user) { return; }
+
+    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const q = query(chequesRef, where("type", "==", "وارد"), where("status", "==", "قيد الانتظار"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const pendingCheques: typeof pendingIncomingCheques = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        pendingCheques.push({
+          id: doc.id,
+          chequeNumber: data.chequeNumber || "",
+          clientName: data.clientName || "",
+          amount: data.amount || 0,
+          dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
+          bankName: data.bankName || "",
+        });
+      });
+      setPendingIncomingCheques(pendingCheques);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,6 +181,9 @@ export default function LedgerPage() {
       const success = await submitLedgerEntry(formData, editingEntry, {
         hasIncomingCheck,
         checkFormData,
+        hasOutgoingCheque,
+        outgoingChequeFormData,
+        pendingIncomingCheques,
         hasInventoryUpdate,
         inventoryFormData: inventoryFormDataNew,
         hasFixedAsset,
@@ -691,6 +736,8 @@ export default function LedgerPage() {
         setFormData={setFormData}
         hasIncomingCheck={hasIncomingCheck}
         setHasIncomingCheck={setHasIncomingCheck}
+        hasOutgoingCheque={hasOutgoingCheque}
+        setHasOutgoingCheque={setHasOutgoingCheque}
         hasInventoryUpdate={hasInventoryUpdate}
         setHasInventoryUpdate={setHasInventoryUpdate}
         hasFixedAsset={hasFixedAsset}
@@ -701,10 +748,13 @@ export default function LedgerPage() {
         setInitialPaymentAmount={setInitialPaymentAmount}
         checkFormData={checkFormData}
         setCheckFormData={setCheckFormData}
+        outgoingChequeFormData={outgoingChequeFormData}
+        setOutgoingChequeFormData={setOutgoingChequeFormData}
         inventoryFormData={inventoryFormDataNew}
         setInventoryFormData={setInventoryFormDataNew}
         fixedAssetFormData={fixedAssetFormData}
         setFixedAssetFormData={setFixedAssetFormData}
+        pendingIncomingCheques={pendingIncomingCheques}
       />
 
       {/* Related Records Management Dialog */}

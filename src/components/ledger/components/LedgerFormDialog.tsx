@@ -27,6 +27,15 @@ interface Partner {
   name: string;
 }
 
+interface PendingIncomingCheque {
+  id: string;
+  chequeNumber: string;
+  clientName: string;
+  amount: number;
+  dueDate: Date | string;
+  bankName: string;
+}
+
 interface LedgerFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,6 +49,8 @@ interface LedgerFormDialogProps {
   setFormData: (data: any) => void;
   hasIncomingCheck: boolean;
   setHasIncomingCheck: (value: boolean) => void;
+  hasOutgoingCheque: boolean;
+  setHasOutgoingCheque: (value: boolean) => void;
   hasInventoryUpdate: boolean;
   setHasInventoryUpdate: (value: boolean) => void;
   hasFixedAsset: boolean;
@@ -50,10 +61,14 @@ interface LedgerFormDialogProps {
   setInitialPaymentAmount: (value: string) => void;
   checkFormData: any;
   setCheckFormData: (data: any) => void;
+  outgoingChequeFormData: any;
+  setOutgoingChequeFormData: (data: any) => void;
   inventoryFormData: any;
   setInventoryFormData: (data: any) => void;
   fixedAssetFormData: any;
   setFixedAssetFormData: (data: any) => void;
+  // Pending incoming cheques for endorsement
+  pendingIncomingCheques?: PendingIncomingCheque[];
 }
 
 export function LedgerFormDialog({
@@ -68,6 +83,8 @@ export function LedgerFormDialog({
   setFormData,
   hasIncomingCheck,
   setHasIncomingCheck,
+  hasOutgoingCheque,
+  setHasOutgoingCheque,
   hasInventoryUpdate,
   setHasInventoryUpdate,
   hasFixedAsset,
@@ -78,10 +95,13 @@ export function LedgerFormDialog({
   setInitialPaymentAmount,
   checkFormData,
   setCheckFormData,
+  outgoingChequeFormData,
+  setOutgoingChequeFormData,
   inventoryFormData,
   setInventoryFormData,
   fixedAssetFormData,
   setFixedAssetFormData,
+  pendingIncomingCheques = [],
 }: LedgerFormDialogProps) {
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
 
@@ -374,6 +394,143 @@ export function LedgerFormDialog({
                           }
                           required={hasIncomingCheck}
                         />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Outgoing Cheque Option - Only for expense entries */}
+                {currentEntryType === "مصروف" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input type="checkbox"
+                        id="hasOutgoingCheque"
+                        checked={hasOutgoingCheque}
+                        onChange={(e) =>
+                          setHasOutgoingCheque(e.target.checked)
+                        }
+                      />
+                      <Label htmlFor="hasOutgoingCheque" className="cursor-pointer">
+                        إضافة شيك صادر
+                      </Label>
+                    </div>
+
+                    {hasOutgoingCheque && (
+                      <div className="pr-6 space-y-3">
+                        {/* Cheque Type Selection */}
+                        <div className="space-y-2">
+                          <Label htmlFor="outgoingChequeType">نوع الشيك</Label>
+                          <select
+                            id="outgoingChequeType"
+                            value={outgoingChequeFormData.chequeType}
+                            onChange={(e) =>
+                              setOutgoingChequeFormData({
+                                ...outgoingChequeFormData,
+                                chequeType: e.target.value as 'cashed' | 'postponed' | 'endorsed',
+                                chequeToEndorseId: '' // Reset endorsement selection when type changes
+                              })
+                            }
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            required={hasOutgoingCheque}
+                          >
+                            <option value="cashed">صرف (شيك فوري)</option>
+                            <option value="postponed">مؤجل (شيك لتاريخ مستقبلي)</option>
+                            <option value="endorsed">مظهر (تظهير شيك وارد)</option>
+                          </select>
+                        </div>
+
+                        {/* For Cashed or Postponed Cheques - Show cheque details */}
+                        {(outgoingChequeFormData.chequeType === 'cashed' || outgoingChequeFormData.chequeType === 'postponed') && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <Input
+                              type="text"
+                              placeholder="رقم الشيك"
+                              value={outgoingChequeFormData.chequeNumber}
+                              onChange={(e) =>
+                                setOutgoingChequeFormData({ ...outgoingChequeFormData, chequeNumber: e.target.value })
+                              }
+                              required={hasOutgoingCheque && outgoingChequeFormData.chequeType !== 'endorsed'}
+                            />
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="مبلغ الشيك"
+                              value={outgoingChequeFormData.chequeAmount}
+                              onChange={(e) =>
+                                setOutgoingChequeFormData({ ...outgoingChequeFormData, chequeAmount: e.target.value })
+                              }
+                              required={hasOutgoingCheque && outgoingChequeFormData.chequeType !== 'endorsed'}
+                            />
+                            <Input
+                              type="text"
+                              placeholder="اسم البنك"
+                              value={outgoingChequeFormData.bankName}
+                              onChange={(e) =>
+                                setOutgoingChequeFormData({ ...outgoingChequeFormData, bankName: e.target.value })
+                              }
+                              required={hasOutgoingCheque && outgoingChequeFormData.chequeType !== 'endorsed'}
+                            />
+                            <div className="space-y-1">
+                              <Input
+                                type="date"
+                                value={outgoingChequeFormData.dueDate}
+                                onChange={(e) =>
+                                  setOutgoingChequeFormData({ ...outgoingChequeFormData, dueDate: e.target.value })
+                                }
+                                required={hasOutgoingCheque && outgoingChequeFormData.chequeType !== 'endorsed'}
+                              />
+                              {outgoingChequeFormData.chequeType === 'postponed' && (
+                                <p className="text-xs text-gray-500">تاريخ الاستحقاق المستقبلي</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* For Endorsed Cheques - Show dropdown of pending incoming cheques */}
+                        {outgoingChequeFormData.chequeType === 'endorsed' && (
+                          <div className="space-y-2">
+                            <Label htmlFor="chequeToEndorse">اختر الشيك للتظهير</Label>
+                            {pendingIncomingCheques.length > 0 ? (
+                              <select
+                                id="chequeToEndorse"
+                                value={outgoingChequeFormData.chequeToEndorseId}
+                                onChange={(e) =>
+                                  setOutgoingChequeFormData({ ...outgoingChequeFormData, chequeToEndorseId: e.target.value })
+                                }
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                required={hasOutgoingCheque && outgoingChequeFormData.chequeType === 'endorsed'}
+                              >
+                                <option value="">-- اختر شيك --</option>
+                                {pendingIncomingCheques.map((cheque) => (
+                                  <option key={cheque.id} value={cheque.id}>
+                                    {cheque.chequeNumber} - {cheque.clientName} - {cheque.amount} دينار - {
+                                      cheque.dueDate instanceof Date
+                                        ? cheque.dueDate.toLocaleDateString('ar-EG')
+                                        : new Date(cheque.dueDate).toLocaleDateString('ar-EG')
+                                    }
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
+                                لا توجد شيكات واردة معلقة متاحة للتظهير
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Type explanation */}
+                        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                          {outgoingChequeFormData.chequeType === 'cashed' && (
+                            <p>شيك صرف: شيك يمكن للمستفيد صرفه فوراً - سيتم إنشاء سجل دفع فوري</p>
+                          )}
+                          {outgoingChequeFormData.chequeType === 'postponed' && (
+                            <p>شيك مؤجل: شيك بتاريخ استحقاق مستقبلي - لن يتم إنشاء سجل دفع حتى تأكيد الصرف</p>
+                          )}
+                          {outgoingChequeFormData.chequeType === 'endorsed' && (
+                            <p>شيك مظهر: تظهير شيك وارد سابق للمورد - سيتم تحديث حالة الشيك الوارد</p>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

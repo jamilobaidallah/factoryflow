@@ -116,13 +116,36 @@ export interface TransactionFormData {
   amount: number;
   // Additional fields for linked operations
   linkedOperation?: 'payment' | 'incoming_cheque' | 'outgoing_cheque' | 'inventory';
-  paymentMethod?: 'cash' | 'bank_transfer';
+  paymentMethod?: 'cash' | 'bank_transfer' | 'cheque';
+
+  // Cheque details (applies to both incoming and outgoing)
+  chequeType?: 'cashed' | 'postponed' | 'endorsed';
   chequeNumber?: string;
   chequeDueDate?: Date;
+  chequeBankName?: string;
+
+  // For endorsed cheques - ID of existing incoming cheque to endorse (for outgoing endorsed)
+  chequeToEndorseId?: string;
+
+  // Inventory details
   inventoryItemId?: string;
   inventoryQuantity?: number;
   inventoryWidth?: number;
   inventoryLength?: number;
+}
+
+// Outgoing Cheque Form Data for ledger integration
+export interface OutgoingChequeFormData {
+  date: Date;
+  clientId: string;
+  amount: number;
+  chequeNumber: string;
+  dueDate: Date;
+  bankName: string;
+  chequeType: 'cashed' | 'postponed' | 'endorsed';
+  chequeToEndorseId?: string; // For endorsed cheques, the ID of the incoming cheque to endorse
+  status: 'pending' | 'cashed' | 'cancelled';
+  file?: File;
 }
 
 export interface PaymentFormData {
