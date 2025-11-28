@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useReducer } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,23 +21,16 @@ import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleto
 // Types and hooks
 import {
   LedgerEntry,
-  LedgerFormData,
-  CheckFormData,
-  OutgoingCheckFormData,
-  InventoryFormData,
-  FixedAssetFormData,
   initialPaymentFormData,
   initialChequeRelatedFormData,
   initialInventoryRelatedFormData,
-  initialLedgerFormData,
-  initialCheckFormData,
-  initialOutgoingCheckFormData,
-  initialInventoryFormData,
-  initialFixedAssetFormData,
 } from "./types/ledger";
 import { useLedgerData } from "./hooks/useLedgerData";
 import { useLedgerForm } from "./hooks/useLedgerForm";
 import { useLedgerOperations } from "./hooks/useLedgerOperations";
+
+// Reducer
+import { ledgerPageReducer, initialLedgerPageState } from "./reducers/ledgerPageReducer";
 
 // Components
 import { QuickPayDialog } from "./components/QuickPayDialog";
@@ -54,52 +47,16 @@ export default function LedgerPage() {
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(50);
+  // Consolidated state management
+  const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
 
   // Data and operations hooks
   const { entries, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
-    pageSize,
-    currentPage,
+    pageSize: state.pagination.pageSize,
+    currentPage: state.pagination.currentPage,
   });
   const { submitLedgerEntry, deleteLedgerEntry, addPaymentToEntry, addChequeToEntry, addInventoryToEntry } = useLedgerOperations();
   const formHook = useLedgerForm();
-
-  // UI state
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  // Related records management
-  const [isRelatedDialogOpen, setIsRelatedDialogOpen] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
-  const [relatedTab, setRelatedTab] = useState<"payments" | "cheques" | "inventory">("payments");
-
-  // Quick payment dialog
-  const [isQuickPayDialogOpen, setIsQuickPayDialogOpen] = useState(false);
-  const [quickPayEntry, setQuickPayEntry] = useState<LedgerEntry | null>(null);
-
-  // Invoice creation bridge
-  const [createInvoice, setCreateInvoice] = useState(false);
-  const [isQuickInvoiceDialogOpen, setIsQuickInvoiceDialogOpen] = useState(false);
-  const [pendingInvoiceData, setPendingInvoiceData] = useState<{
-    clientName: string;
-    amount: number;
-  } | null>(null);
-
-  // Form state using local state for context-based approach
-  const [formData, setFormData] = useState<LedgerFormData>(initialLedgerFormData);
-  const [hasIncomingCheck, setHasIncomingCheck] = useState(false);
-  const [hasOutgoingCheck, setHasOutgoingCheck] = useState(false);
-  const [hasInventoryUpdate, setHasInventoryUpdate] = useState(false);
-  const [hasFixedAsset, setHasFixedAsset] = useState(false);
-  const [hasInitialPayment, setHasInitialPayment] = useState(false);
-  const [initialPaymentAmount, setInitialPaymentAmount] = useState("");
-  const [checkFormData, setCheckFormData] = useState<CheckFormData>(initialCheckFormData);
-  const [outgoingCheckFormData, setOutgoingCheckFormData] = useState<OutgoingCheckFormData>(initialOutgoingCheckFormData);
-  const [inventoryFormDataNew, setInventoryFormDataNew] = useState<InventoryFormData>(initialInventoryFormData);
-  const [fixedAssetFormData, setFixedAssetFormData] = useState<FixedAssetFormData>(initialFixedAssetFormData);
 
   // Related records forms (from original hook)
   const {
@@ -111,76 +68,33 @@ export default function LedgerPage() {
     setInventoryRelatedFormData: setInventoryFormData,
   } = formHook;
 
-  // Reset all forms helper
-  const resetAllForms = () => {
-    setFormData(initialLedgerFormData);
-    setHasIncomingCheck(false);
-    setHasOutgoingCheck(false);
-    setHasInventoryUpdate(false);
-    setHasFixedAsset(false);
-    setHasInitialPayment(false);
-    setInitialPaymentAmount("");
-    setCheckFormData(initialCheckFormData);
-    setOutgoingCheckFormData(initialOutgoingCheckFormData);
-    setInventoryFormDataNew(initialInventoryFormData);
-    setFixedAssetFormData(initialFixedAssetFormData);
-  };
-
-  // Load entry for editing
-  const loadEntryForEdit = (entry: LedgerEntry) => {
-    setFormData({
-      description: entry.description,
-      amount: entry.amount.toString(),
-      category: entry.category,
-      subCategory: entry.subCategory,
-      date: entry.date instanceof Date
-        ? entry.date.toISOString().split("T")[0]
-        : new Date(entry.date).toISOString().split("T")[0],
-      associatedParty: entry.associatedParty || "",
-      ownerName: entry.ownerName || "",
-      reference: entry.reference || "",
-      notes: entry.notes || "",
-      trackARAP: entry.isARAPEntry || false,
-      immediateSettlement: false,
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    dispatch({ type: "SET_LOADING", payload: true });
 
     // Save pending invoice data before submission
-    const shouldCreateInvoice = createInvoice && formData.associatedParty && parseFloat(formData.amount) > 0;
+    const shouldCreateInvoice = state.ui.createInvoice && state.form.formData.associatedParty && parseFloat(state.form.formData.amount) > 0;
     const invoiceData = shouldCreateInvoice ? {
-      clientName: formData.associatedParty,
-      amount: parseFloat(formData.amount),
+      clientName: state.form.formData.associatedParty,
+      amount: parseFloat(state.form.formData.amount),
     } : null;
 
     try {
-      const success = await submitLedgerEntry(formData, editingEntry, {
-        hasIncomingCheck,
-        checkFormData,
-        hasOutgoingCheck,
-        outgoingCheckFormData,
-        hasInventoryUpdate,
-        inventoryFormData: inventoryFormDataNew,
-        hasFixedAsset,
-        fixedAssetFormData,
-        hasInitialPayment,
-        initialPaymentAmount,
+      const success = await submitLedgerEntry(state.form.formData, state.data.editingEntry, {
+        hasIncomingCheck: state.form.hasIncomingCheck,
+        checkFormData: state.form.checkFormData,
+        hasOutgoingCheck: state.form.hasOutgoingCheck,
+        outgoingCheckFormData: state.form.outgoingCheckFormData,
+        hasInventoryUpdate: state.form.hasInventoryUpdate,
+        inventoryFormData: state.form.inventoryFormData,
+        hasFixedAsset: state.form.hasFixedAsset,
+        fixedAssetFormData: state.form.fixedAssetFormData,
+        hasInitialPayment: state.form.hasInitialPayment,
+        initialPaymentAmount: state.form.initialPaymentAmount,
       });
 
       if (success) {
-        resetAllForms();
-        setEditingEntry(null);
-        setIsDialogOpen(false);
-        setCreateInvoice(false);
-
-        // Open invoice creation dialog if option was enabled
-        if (invoiceData) {
-          setPendingInvoiceData(invoiceData);
-          setIsQuickInvoiceDialogOpen(true);
-        }
+        dispatch({ type: "SUBMIT_SUCCESS", payload: invoiceData ?? undefined });
       }
     } catch (error) {
       const appError = handleError(error);
@@ -190,77 +104,98 @@ export default function LedgerPage() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      dispatch({ type: "SET_LOADING", payload: false });
     }
   };
 
-  const handleEdit = (entry: LedgerEntry) => { setEditingEntry(entry); loadEntryForEdit(entry); setIsDialogOpen(true); };
-  const handleDelete = (entry: LedgerEntry) => confirm("حذف الحركة المالية", "هل أنت متأكد من حذف هذه الحركة؟ سيتم حذف جميع السجلات المرتبطة (مدفوعات، شيكات، حركات مخزون). لا يمكن التراجع عن هذا الإجراء.", async () => { await deleteLedgerEntry(entry, entries); }, "destructive");
+  const handleEdit = (entry: LedgerEntry) => {
+    dispatch({ type: "START_EDIT", payload: entry });
+  };
 
-  const openAddDialog = () => { resetAllForms(); setEditingEntry(null); setCreateInvoice(false); setIsDialogOpen(true); };
-  const openRelatedDialog = (entry: LedgerEntry) => { setSelectedEntry(entry); setIsRelatedDialogOpen(true); };
-  const openQuickPayDialog = (entry: LedgerEntry) => { setQuickPayEntry(entry); setIsQuickPayDialogOpen(true); };
+  const handleDelete = (entry: LedgerEntry) => {
+    confirm(
+      "حذف الحركة المالية",
+      "هل أنت متأكد من حذف هذه الحركة؟ سيتم حذف جميع السجلات المرتبطة (مدفوعات، شيكات، حركات مخزون). لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        await deleteLedgerEntry(entry, entries);
+      },
+      "destructive"
+    );
+  };
+
+  const openAddDialog = () => dispatch({ type: "OPEN_ADD_DIALOG" });
+  const openRelatedDialog = (entry: LedgerEntry) => dispatch({ type: "OPEN_RELATED_DIALOG", payload: entry });
+  const openQuickPayDialog = (entry: LedgerEntry) => dispatch({ type: "OPEN_QUICK_PAY_DIALOG", payload: entry });
 
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEntry) return;
-    setLoading(true);
-    const success = await addPaymentToEntry(selectedEntry, paymentFormData);
-    if (success) { setPaymentFormData(initialPaymentFormData); setIsRelatedDialogOpen(false); }
-    setLoading(false);
+    if (!state.data.selectedEntry) return;
+    dispatch({ type: "SET_LOADING", payload: true });
+    const success = await addPaymentToEntry(state.data.selectedEntry, paymentFormData);
+    if (success) {
+      setPaymentFormData(initialPaymentFormData);
+      dispatch({ type: "CLOSE_RELATED_DIALOG" });
+    }
+    dispatch({ type: "SET_LOADING", payload: false });
   };
 
   const handleAddCheque = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEntry) return;
-    setLoading(true);
-    const success = await addChequeToEntry(selectedEntry, chequeFormData);
-    if (success) { setChequeFormData(initialChequeRelatedFormData); setIsRelatedDialogOpen(false); }
-    setLoading(false);
+    if (!state.data.selectedEntry) return;
+    dispatch({ type: "SET_LOADING", payload: true });
+    const success = await addChequeToEntry(state.data.selectedEntry, chequeFormData);
+    if (success) {
+      setChequeFormData(initialChequeRelatedFormData);
+      dispatch({ type: "CLOSE_RELATED_DIALOG" });
+    }
+    dispatch({ type: "SET_LOADING", payload: false });
   };
 
   const handleAddInventory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEntry) return;
-    setLoading(true);
-    const success = await addInventoryToEntry(selectedEntry, inventoryFormData);
-    if (success) { setInventoryFormData(initialInventoryRelatedFormData); setIsRelatedDialogOpen(false); }
-    setLoading(false);
+    if (!state.data.selectedEntry) return;
+    dispatch({ type: "SET_LOADING", payload: true });
+    const success = await addInventoryToEntry(state.data.selectedEntry, inventoryFormData);
+    if (success) {
+      setInventoryFormData(initialInventoryRelatedFormData);
+      dispatch({ type: "CLOSE_RELATED_DIALOG" });
+    }
+    dispatch({ type: "SET_LOADING", payload: false });
   };
 
   // Context value for LedgerFormDialog - eliminates prop drilling
   const ledgerFormContextValue: LedgerFormContextValue = {
-    isOpen: isDialogOpen,
-    onClose: () => setIsDialogOpen(false),
-    editingEntry,
+    isOpen: state.dialogs.form,
+    onClose: () => dispatch({ type: "CLOSE_FORM_DIALOG" }),
+    editingEntry: state.data.editingEntry,
     onSubmit: handleSubmit,
-    loading,
+    loading: state.ui.loading,
     clients,
     partners,
-    formData,
-    setFormData,
-    hasIncomingCheck,
-    setHasIncomingCheck,
-    hasOutgoingCheck,
-    setHasOutgoingCheck,
-    hasInventoryUpdate,
-    setHasInventoryUpdate,
-    hasFixedAsset,
-    setHasFixedAsset,
-    hasInitialPayment,
-    setHasInitialPayment,
-    initialPaymentAmount,
-    setInitialPaymentAmount,
-    checkFormData,
-    setCheckFormData,
-    outgoingCheckFormData,
-    setOutgoingCheckFormData,
-    inventoryFormData: inventoryFormDataNew,
-    setInventoryFormData: setInventoryFormDataNew,
-    fixedAssetFormData,
-    setFixedAssetFormData,
-    createInvoice,
-    setCreateInvoice,
+    formData: state.form.formData,
+    setFormData: (data) => dispatch({ type: "SET_FORM_DATA", payload: data }),
+    hasIncomingCheck: state.form.hasIncomingCheck,
+    setHasIncomingCheck: (value) => dispatch({ type: "SET_HAS_INCOMING_CHECK", payload: value }),
+    hasOutgoingCheck: state.form.hasOutgoingCheck,
+    setHasOutgoingCheck: (value) => dispatch({ type: "SET_HAS_OUTGOING_CHECK", payload: value }),
+    hasInventoryUpdate: state.form.hasInventoryUpdate,
+    setHasInventoryUpdate: (value) => dispatch({ type: "SET_HAS_INVENTORY_UPDATE", payload: value }),
+    hasFixedAsset: state.form.hasFixedAsset,
+    setHasFixedAsset: (value) => dispatch({ type: "SET_HAS_FIXED_ASSET", payload: value }),
+    hasInitialPayment: state.form.hasInitialPayment,
+    setHasInitialPayment: (value) => dispatch({ type: "SET_HAS_INITIAL_PAYMENT", payload: value }),
+    initialPaymentAmount: state.form.initialPaymentAmount,
+    setInitialPaymentAmount: (value) => dispatch({ type: "SET_INITIAL_PAYMENT_AMOUNT", payload: value }),
+    checkFormData: state.form.checkFormData,
+    setCheckFormData: (data) => dispatch({ type: "SET_CHECK_FORM_DATA", payload: data }),
+    outgoingCheckFormData: state.form.outgoingCheckFormData,
+    setOutgoingCheckFormData: (data) => dispatch({ type: "SET_OUTGOING_CHECK_FORM_DATA", payload: data }),
+    inventoryFormData: state.form.inventoryFormData,
+    setInventoryFormData: (data) => dispatch({ type: "SET_INVENTORY_FORM_DATA", payload: data }),
+    fixedAssetFormData: state.form.fixedAssetFormData,
+    setFixedAssetFormData: (data) => dispatch({ type: "SET_FIXED_ASSET_FORM_DATA", payload: data }),
+    createInvoice: state.ui.createInvoice,
+    setCreateInvoice: (value) => dispatch({ type: "SET_CREATE_INVOICE", payload: value }),
   };
 
   return (
@@ -342,18 +277,42 @@ export default function LedgerPage() {
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
-                    <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); if (currentPage < totalPages) setCurrentPage(currentPage + 1); }}
-                      className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""} />
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (state.pagination.currentPage < totalPages) {
+                          dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage + 1 });
+                        }
+                      }}
+                      className={state.pagination.currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
                   </PaginationItem>
                   {[...Array(Math.min(5, totalPages))].map((_, i) => (
                     <PaginationItem key={i + 1}>
-                      <PaginationLink href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(i + 1); }}
-                        isActive={currentPage === i + 1}>{i + 1}</PaginationLink>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          dispatch({ type: "SET_CURRENT_PAGE", payload: i + 1 });
+                        }}
+                        isActive={state.pagination.currentPage === i + 1}
+                      >
+                        {i + 1}
+                      </PaginationLink>
                     </PaginationItem>
                   ))}
                   <PaginationItem>
-                    <PaginationNext href="#" onClick={(e) => { e.preventDefault(); if (currentPage > 1) setCurrentPage(currentPage - 1); }}
-                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""} />
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (state.pagination.currentPage > 1) {
+                          dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage - 1 });
+                        }
+                      }}
+                      className={state.pagination.currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                    />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
@@ -369,12 +328,12 @@ export default function LedgerPage() {
 
       {/* Related Records Management Dialog */}
       <RelatedRecordsDialog
-        isOpen={isRelatedDialogOpen}
-        onClose={() => setIsRelatedDialogOpen(false)}
-        selectedEntry={selectedEntry}
-        relatedTab={relatedTab}
-        setRelatedTab={setRelatedTab}
-        loading={loading}
+        isOpen={state.dialogs.related}
+        onClose={() => dispatch({ type: "CLOSE_RELATED_DIALOG" })}
+        selectedEntry={state.data.selectedEntry}
+        relatedTab={state.ui.relatedTab}
+        setRelatedTab={(tab) => dispatch({ type: "SET_RELATED_TAB", payload: tab })}
+        loading={state.ui.loading}
         onAddPayment={handleAddPayment}
         onAddCheque={handleAddCheque}
         onAddInventory={handleAddInventory}
@@ -388,24 +347,20 @@ export default function LedgerPage() {
 
       {/* Quick Payment Dialog */}
       <QuickPayDialog
-        isOpen={isQuickPayDialogOpen}
-        onClose={() => setIsQuickPayDialogOpen(false)}
-        entry={quickPayEntry}
+        isOpen={state.dialogs.quickPay}
+        onClose={() => dispatch({ type: "CLOSE_QUICK_PAY_DIALOG" })}
+        entry={state.data.quickPayEntry}
         onSuccess={() => {
           // Data will refresh automatically via onSnapshot in useLedgerData
-          setIsQuickPayDialogOpen(false);
-          setQuickPayEntry(null);
+          dispatch({ type: "CLOSE_QUICK_PAY_DIALOG" });
         }}
       />
 
       {/* Quick Invoice Creation Dialog */}
       <QuickInvoiceDialog
-        isOpen={isQuickInvoiceDialogOpen}
-        onClose={() => {
-          setIsQuickInvoiceDialogOpen(false);
-          setPendingInvoiceData(null);
-        }}
-        pendingData={pendingInvoiceData}
+        isOpen={state.dialogs.quickInvoice}
+        onClose={() => dispatch({ type: "CLOSE_QUICK_INVOICE_DIALOG" })}
+        pendingData={state.data.pendingInvoiceData}
       />
 
       {confirmationDialog}
