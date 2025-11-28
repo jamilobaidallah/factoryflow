@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
+import MobileNav from "@/components/layout/mobile-nav";
 
 export default function MainLayout({
   children,
@@ -34,13 +35,19 @@ export default function MainLayout({
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar />
+      {/* الشريط الجانبي - مخفي على الشاشات الصغيرة */}
+      <div className="hidden md:flex">
+        <Sidebar />
+      </div>
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* المحتوى الرئيسي - مع مساحة سفلية للتنقل على الجوال */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
           {children}
         </main>
       </div>
+      {/* شريط التنقل السفلي للجوال */}
+      <MobileNav />
     </div>
   );
 }
