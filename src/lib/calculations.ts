@@ -44,14 +44,16 @@ export function calculateClientBalance(
   balance += disbursements.reduce((sum, p) => sum + p.amount, 0);
 
   // Subtract cleared incoming cheques (client paid us with cleared cheque)
+  // Handle both English ('cleared') and Arabic ('تم الصرف') status values
   const clearedIncomingCheques = incomingCheques.filter(
-    c => c.clientId === clientId && c.status === 'cleared'
+    c => c.clientId === clientId && (c.status === 'cleared' || c.status === 'تم الصرف')
   );
   balance -= clearedIncomingCheques.reduce((sum, c) => sum + c.amount, 0);
 
   // Add cashed outgoing cheques (we paid client with cashed cheque)
+  // Handle both English ('cashed') and Arabic ('تم الصرف') status values
   const cashedOutgoingCheques = outgoingCheques.filter(
-    c => c.clientId === clientId && c.status === 'cashed'
+    c => c.clientId === clientId && (c.status === 'cashed' || c.status === 'تم الصرف')
   );
   balance += cashedOutgoingCheques.reduce((sum, c) => sum + c.amount, 0);
 
@@ -94,16 +96,18 @@ export function calculateAllClientBalances(
   });
 
   // Process cleared incoming cheques
+  // Handle both English ('cleared') and Arabic ('تم الصرف') status values
   incomingCheques
-    .filter(c => c.status === 'cleared')
+    .filter(c => c.status === 'cleared' || c.status === 'تم الصرف')
     .forEach(cheque => {
       const currentBalance = balanceMap.get(cheque.clientId) || 0;
       balanceMap.set(cheque.clientId, currentBalance - cheque.amount);
     });
 
   // Process cashed outgoing cheques
+  // Handle both English ('cashed') and Arabic ('تم الصرف') status values
   outgoingCheques
-    .filter(c => c.status === 'cashed')
+    .filter(c => c.status === 'cashed' || c.status === 'تم الصرف')
     .forEach(cheque => {
       const currentBalance = balanceMap.get(cheque.clientId) || 0;
       balanceMap.set(cheque.clientId, currentBalance + cheque.amount);
@@ -200,16 +204,17 @@ export function calculateCategoryTotals(
 }
 
 // Calculate pending cheques value
+// Handle both English ('pending') and Arabic ('قيد الانتظار') status values
 export function calculatePendingChequesValue(
   incomingCheques: IncomingCheque[],
   outgoingCheques: OutgoingCheque[]
 ): { incoming: number; outgoing: number; net: number } {
   const pendingIncoming = incomingCheques
-    .filter(c => c.status === 'pending')
+    .filter(c => c.status === 'pending' || c.status === 'قيد الانتظار')
     .reduce((sum, c) => sum + c.amount, 0);
 
   const pendingOutgoing = outgoingCheques
-    .filter(c => c.status === 'pending')
+    .filter(c => c.status === 'pending' || c.status === 'قيد الانتظار')
     .reduce((sum, c) => sum + c.amount, 0);
 
   return {
@@ -302,6 +307,7 @@ export function getTopClients(
 }
 
 // Calculate overdue cheques
+// Handle both English ('pending') and Arabic ('قيد الانتظار') status values
 export function getOverdueCheques(
   incomingCheques: IncomingCheque[],
   outgoingCheques: OutgoingCheque[]
@@ -315,15 +321,17 @@ export function getOverdueCheques(
 
   const overdueIncoming = incomingCheques.filter(c => {
     const dueDate = typeof c.dueDate === 'string' ? new Date(c.dueDate) : c.dueDate;
-    return c.status === 'pending' && dueDate < today;
+    const isPending = c.status === 'pending' || c.status === 'قيد الانتظار';
+    return isPending && dueDate < today;
   });
 
   const overdueOutgoing = outgoingCheques.filter(c => {
     const dueDate = typeof c.dueDate === 'string' ? new Date(c.dueDate) : c.dueDate;
-    return c.status === 'pending' && dueDate < today;
+    const isPending = c.status === 'pending' || c.status === 'قيد الانتظار';
+    return isPending && dueDate < today;
   });
 
-  const totalAmount = 
+  const totalAmount =
     overdueIncoming.reduce((sum, c) => sum + c.amount, 0) +
     overdueOutgoing.reduce((sum, c) => sum + c.amount, 0);
 

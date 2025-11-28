@@ -305,6 +305,8 @@ export default function LedgerPage() {
       chequeAmount: "",
       bankName: "",
       dueDate: new Date().toISOString().split("T")[0],
+      accountingType: "cashed",
+      endorsedToName: "",
     });
     setInventoryFormDataNew({
       itemName: "",
@@ -432,16 +434,41 @@ export default function LedgerPage() {
       }
 
       const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const chequeDirection = selectedEntry.type === "دخل" ? "وارد" : "صادر";
       const chequeAmount = parseFloat(chequeFormData.amount);
+      const accountingType = chequeFormData.accountingType || "cashed";
 
-      await addDoc(chequesRef, {
+      // Determine the correct status based on accounting type
+      let chequeStatus = chequeFormData.status;
+      if (accountingType === "cashed") {
+        // Cashed cheques: 'cleared' for incoming, 'cashed' for outgoing
+        chequeStatus = chequeDirection === "وارد" ? "تم الصرف" : "تم الصرف";
+      } else if (accountingType === "postponed") {
+        chequeStatus = "قيد الانتظار";
+      } else if (accountingType === "endorsed") {
+        chequeStatus = "مجيّر";
+      }
+
+      // Validate endorsee name for endorsed cheques
+      if (accountingType === "endorsed" && !chequeFormData.endorsedToName?.trim()) {
+        toast({
+          title: "خطأ",
+          description: "يرجى إدخال اسم الجهة المظهر لها الشيك",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Create the cheque record
+      const chequeData: Record<string, unknown> = {
         chequeNumber: chequeFormData.chequeNumber,
         clientName: selectedEntry.associatedParty || "غير محدد",
         amount: chequeAmount,
         type: chequeDirection,
-        chequeType: chequeFormData.chequeType,
-        status: chequeFormData.status,
+        chequeType: accountingType === "endorsed" ? "مجير" : chequeFormData.chequeType,
+        status: chequeStatus,
         chequeImageUrl: chequeImageUrl,
         linkedTransactionId: selectedEntry.transactionId,
         issueDate: new Date(),
@@ -449,43 +476,115 @@ export default function LedgerPage() {
         bankName: chequeFormData.bankName,
         notes: `مرتبط بالمعاملة: ${selectedEntry.description}`,
         createdAt: new Date(),
-      });
+        // Store accounting type for future reference
+        accountingType: accountingType,
+      };
 
-      // Update AR/AP tracking if enabled for this transaction
-      if (selectedEntry.isARAPEntry && selectedEntry.remainingBalance !== undefined) {
-        // Validate cheque amount
-        if (chequeAmount > selectedEntry.remainingBalance) {
-          toast({
-            title: "تحذير",
-            description: `المبلغ المتبقي هو ${selectedEntry.remainingBalance.toFixed(2)} دينار فقط`,
-            variant: "destructive",
-          });
-        } else {
-          const newTotalPaid = (selectedEntry.totalPaid || 0) + chequeAmount;
-          const newRemainingBalance = selectedEntry.amount - newTotalPaid;
-          let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-
-          if (newRemainingBalance <= 0) {
-            newStatus = "paid";
-          } else if (newTotalPaid > 0) {
-            newStatus = "partial";
-          }
-
-          const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, selectedEntry.id);
-          await updateDoc(ledgerEntryRef, {
-            totalPaid: newTotalPaid,
-            remainingBalance: newRemainingBalance,
-            paymentStatus: newStatus,
-          });
-        }
+      // Add endorsee info for endorsed cheques
+      if (accountingType === "endorsed") {
+        chequeData.endorsedTo = chequeFormData.endorsedToName;
+        chequeData.endorsedDate = new Date();
       }
 
-      toast({
-        title: "تمت الإضافة بنجاح",
-        description: selectedEntry.isARAPEntry
-          ? "تم إضافة الشيك وتحديث الرصيد المتبقي"
-          : "تم إضافة الشيك المرتبط بالمعاملة",
-      });
+      await addDoc(chequesRef, chequeData);
+
+      // Handle different accounting flows based on cheque type
+      if (accountingType === "cashed") {
+        // CASHED CHEQUE: Create payment record AND update AR/AP immediately
+
+        // Create payment record
+        const paymentType = selectedEntry.type === "دخل" ? "قبض" : "صرف";
+        await addDoc(paymentsRef, {
+          clientName: selectedEntry.associatedParty || "غير محدد",
+          amount: chequeAmount,
+          type: paymentType,
+          method: "cheque",
+          linkedTransactionId: selectedEntry.transactionId,
+          date: new Date(),
+          notes: `شيك صرف رقم ${chequeFormData.chequeNumber} - ${selectedEntry.description}`,
+          createdAt: new Date(),
+        });
+
+        // Update AR/AP tracking if enabled
+        if (selectedEntry.isARAPEntry && selectedEntry.remainingBalance !== undefined) {
+          if (chequeAmount > selectedEntry.remainingBalance) {
+            toast({
+              title: "تحذير",
+              description: `المبلغ المتبقي هو ${selectedEntry.remainingBalance.toFixed(2)} دينار فقط`,
+              variant: "destructive",
+            });
+          } else {
+            const newTotalPaid = (selectedEntry.totalPaid || 0) + chequeAmount;
+            const newRemainingBalance = selectedEntry.amount - newTotalPaid;
+            let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+
+            if (newRemainingBalance <= 0) {
+              newStatus = "paid";
+            } else if (newTotalPaid > 0) {
+              newStatus = "partial";
+            }
+
+            const ledgerEntryRef = doc(firestore, `users/${user.uid}/ledger`, selectedEntry.id);
+            await updateDoc(ledgerEntryRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newStatus,
+            });
+          }
+        }
+
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: "تم إضافة شيك الصرف وتسجيل الدفعة وتحديث الرصيد",
+        });
+
+      } else if (accountingType === "postponed") {
+        // POSTPONED CHEQUE: Only create cheque record, NO payment, NO AR/AP update
+        // The payment and AR/AP update will happen when the cheque is cleared later
+
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: "تم تسجيل الشيك المؤجل. لن يؤثر على الرصيد حتى يتم تأكيد التحصيل من صفحة الشيكات.",
+        });
+
+      } else if (accountingType === "endorsed") {
+        // ENDORSED CHEQUE: Create endorsement records, NO AR/AP update on original entry
+        // The cheque is passed to a third party
+
+        // Create two payment records with noCashMovement flag
+        // 1. Receipt from original client (records the endorsement)
+        await addDoc(paymentsRef, {
+          clientName: selectedEntry.associatedParty || "غير محدد",
+          amount: chequeAmount,
+          type: "قبض",
+          linkedTransactionId: selectedEntry.transactionId,
+          date: new Date(),
+          notes: `تظهير شيك رقم ${chequeFormData.chequeNumber} للجهة: ${chequeFormData.endorsedToName}`,
+          createdAt: new Date(),
+          isEndorsement: true,
+          noCashMovement: true,
+        });
+
+        // 2. Disbursement to endorsed party
+        await addDoc(paymentsRef, {
+          clientName: chequeFormData.endorsedToName,
+          amount: chequeAmount,
+          type: "صرف",
+          linkedTransactionId: selectedEntry.transactionId,
+          date: new Date(),
+          notes: `استلام شيك مظهر رقم ${chequeFormData.chequeNumber} من العميل: ${selectedEntry.associatedParty}`,
+          createdAt: new Date(),
+          isEndorsement: true,
+          noCashMovement: true,
+        });
+
+        toast({
+          title: "تم التظهير بنجاح",
+          description: `تم تظهير الشيك رقم ${chequeFormData.chequeNumber} إلى ${chequeFormData.endorsedToName}`,
+        });
+      }
+
+      // Reset form
       setChequeFormData({
         chequeNumber: "",
         amount: "",
@@ -493,8 +592,12 @@ export default function LedgerPage() {
         dueDate: new Date().toISOString().split("T")[0],
         status: "قيد الانتظار",
         chequeType: "عادي",
+        accountingType: "cashed",
+        endorsedToId: "",
+        endorsedToName: "",
         chequeImage: null,
       });
+      setIsRelatedDialogOpen(false);
     } catch (error) {
       const appError = handleError(error);
       toast({

@@ -39,6 +39,8 @@ export interface CheckFormData {
   chequeAmount: string;
   bankName: string;
   dueDate: string;
+  accountingType?: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToName?: string;
 }
 
 export interface InventoryFormData {
@@ -165,14 +167,40 @@ export function useLedgerOperations() {
 
         if (formData.trackARAP) {
           if (formData.immediateSettlement) {
-            const cashAmount = options.hasIncomingCheck && options.checkFormData
-              ? totalAmount - parseFloat(options.checkFormData.chequeAmount || "0")
-              : totalAmount;
-            initialPaid = cashAmount;
-            initialStatus = cashAmount >= totalAmount ? "paid" : "partial";
+            // For immediate settlement with incoming check:
+            // - Only count cashed cheques as paid
+            // - Postponed/endorsed cheques don't count toward immediate payment
+            const chequeAccountingType = options.checkFormData?.accountingType || "cashed";
+            const chequeAmount = parseFloat(options.checkFormData?.chequeAmount || "0");
+
+            if (options.hasIncomingCheck && options.checkFormData) {
+              if (chequeAccountingType === "cashed") {
+                // Cashed cheque - counts as paid immediately
+                initialPaid = totalAmount;
+                initialStatus = "paid";
+              } else {
+                // Postponed/endorsed cheque - cash portion only
+                const cashAmount = totalAmount - chequeAmount;
+                initialPaid = cashAmount;
+                initialStatus = cashAmount >= totalAmount ? "paid" : cashAmount > 0 ? "partial" : "unpaid";
+              }
+            } else {
+              initialPaid = totalAmount;
+              initialStatus = "paid";
+            }
           } else if (options.hasInitialPayment && options.initialPaymentAmount) {
             initialPaid = parseFloat(options.initialPaymentAmount);
             initialStatus = initialPaid >= totalAmount ? "paid" : "partial";
+          } else if (options.hasIncomingCheck && options.checkFormData) {
+            // When not immediate settlement but has incoming check with AR/AP tracking:
+            // Only count cashed cheques as paid
+            const chequeAccountingType = options.checkFormData.accountingType || "cashed";
+            if (chequeAccountingType === "cashed") {
+              const chequeAmount = parseFloat(options.checkFormData.chequeAmount || "0");
+              initialPaid = chequeAmount;
+              initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+            }
+            // For postponed/endorsed, initialPaid stays 0 and status stays unpaid
           }
         } else if (formData.immediateSettlement) {
           initialPaid = totalAmount;
@@ -345,36 +373,95 @@ async function handleIncomingCheckBatch(
   formData: LedgerFormData,
   entryType: string
 ) {
+  const accountingType = checkFormData.accountingType || "cashed";
+  const chequeAmount = parseFloat(checkFormData.chequeAmount);
   const chequesRef = collection(firestore, `users/${userId}/cheques`);
+  const paymentsRef = collection(firestore, `users/${userId}/payments`);
+
+  // Determine cheque status based on accounting type
+  let chequeStatus: string;
+  if (accountingType === "cashed") {
+    chequeStatus = "تم الصرف"; // Cleared immediately
+  } else if (accountingType === "postponed") {
+    chequeStatus = "قيد الانتظار"; // Pending until cleared later
+  } else {
+    chequeStatus = "مجيّر"; // Endorsed to third party
+  }
+
+  // Create cheque record
   const chequeDocRef = doc(chequesRef);
-  batch.set(chequeDocRef, {
+  const chequeData: Record<string, unknown> = {
     chequeNumber: checkFormData.chequeNumber,
     clientName: formData.associatedParty || "غير محدد",
-    amount: parseFloat(checkFormData.chequeAmount),
+    amount: chequeAmount,
     type: "وارد",
-    chequeType: "عادي",
-    status: "قيد الانتظار",
+    chequeType: accountingType === "endorsed" ? "مجير" : "عادي",
+    status: chequeStatus,
     linkedTransactionId: transactionId,
     issueDate: new Date(formData.date),
     dueDate: new Date(checkFormData.dueDate),
     bankName: checkFormData.bankName,
     notes: `مرتبط بالمعاملة: ${formData.description}`,
     createdAt: new Date(),
-  });
+    accountingType: accountingType,
+  };
 
-  // Create payment record for the check
-  const paymentsRef = collection(firestore, `users/${userId}/payments`);
-  const paymentDocRef = doc(paymentsRef);
-  batch.set(paymentDocRef, {
-    clientName: formData.associatedParty || "غير محدد",
-    amount: parseFloat(checkFormData.chequeAmount),
-    type: entryType === "دخل" ? "قبض" : "صرف",
-    linkedTransactionId: transactionId,
-    date: new Date(formData.date),
-    notes: `شيك ${entryType === "دخل" ? "وارد" : "صادر"} - ${formData.description}`,
-    createdAt: new Date(),
-    noCashMovement: true,
-  });
+  // Add endorsee info for endorsed cheques
+  if (accountingType === "endorsed" && checkFormData.endorsedToName) {
+    chequeData.endorsedTo = checkFormData.endorsedToName;
+    chequeData.endorsedDate = new Date();
+  }
+
+  batch.set(chequeDocRef, chequeData);
+
+  // Handle payment records based on accounting type
+  if (accountingType === "cashed") {
+    // CASHED CHEQUE: Create a real payment record (affects cash flow and AR/AP)
+    const paymentDocRef = doc(paymentsRef);
+    batch.set(paymentDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: entryType === "دخل" ? "قبض" : "صرف",
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `شيك صرف رقم ${checkFormData.chequeNumber} - ${formData.description}`,
+      createdAt: new Date(),
+    });
+  } else if (accountingType === "postponed") {
+    // POSTPONED CHEQUE: Do NOT create payment record
+    // Payment will be created later when cheque is cleared from the cheques page
+    // No action needed here
+  } else if (accountingType === "endorsed") {
+    // ENDORSED CHEQUE: Create two payment records with noCashMovement flag
+    // 1. Receipt from original client (records the endorsement)
+    const receiptDocRef = doc(paymentsRef);
+    batch.set(receiptDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "قبض",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `تظهير شيك رقم ${checkFormData.chequeNumber} للجهة: ${checkFormData.endorsedToName}`,
+      createdAt: new Date(),
+      isEndorsement: true,
+      noCashMovement: true,
+    });
+
+    // 2. Disbursement to endorsed party
+    const disbursementDocRef = doc(paymentsRef);
+    batch.set(disbursementDocRef, {
+      clientName: checkFormData.endorsedToName,
+      amount: chequeAmount,
+      type: "صرف",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `استلام شيك مظهر رقم ${checkFormData.chequeNumber} من العميل: ${formData.associatedParty}`,
+      createdAt: new Date(),
+      isEndorsement: true,
+      noCashMovement: true,
+    });
+  }
 }
 
 async function handleImmediateSettlementBatch(

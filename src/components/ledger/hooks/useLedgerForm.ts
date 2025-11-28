@@ -25,6 +25,9 @@ export interface CheckFormState {
   chequeAmount: string;
   bankName: string;
   dueDate: string;
+  // Accounting type for proper cheque handling
+  accountingType: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToName: string;
 }
 
 export interface InventoryFormState {
@@ -57,6 +60,10 @@ export interface ChequeRelatedFormState {
   dueDate: string;
   status: string;
   chequeType: string;
+  // Accounting type: 'cashed' (immediate), 'postponed' (post-dated), 'endorsed' (to third party)
+  accountingType: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToId: string;
+  endorsedToName: string;
   chequeImage: File | null;
 }
 
@@ -89,6 +96,8 @@ const initialCheckFormData: CheckFormState = {
   chequeAmount: "",
   bankName: "",
   dueDate: new Date().toISOString().split("T")[0],
+  accountingType: "cashed",
+  endorsedToName: "",
 };
 
 const initialInventoryFormData: InventoryFormState = {
@@ -121,6 +130,9 @@ const initialChequeRelatedFormData: ChequeRelatedFormState = {
   dueDate: new Date().toISOString().split("T")[0],
   status: "قيد الانتظار",
   chequeType: "عادي",
+  accountingType: "cashed",
+  endorsedToId: "",
+  endorsedToName: "",
   chequeImage: null,
 };
 

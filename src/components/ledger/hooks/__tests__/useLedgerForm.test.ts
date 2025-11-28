@@ -45,6 +45,8 @@ describe('useLedgerForm', () => {
         chequeAmount: "",
         bankName: "",
         dueDate: getTodayDate(),
+        accountingType: "cashed",
+        endorsedToName: "",
       });
     });
 
@@ -94,6 +96,9 @@ describe('useLedgerForm', () => {
         status: "قيد الانتظار",
         chequeType: "عادي",
         chequeImage: null,
+        accountingType: "cashed",
+        endorsedToId: "",
+        endorsedToName: "",
       });
     });
 
@@ -153,6 +158,8 @@ describe('useLedgerForm', () => {
           chequeAmount: "500",
           bankName: "بنك الأردن",
           dueDate: "2025-02-01",
+          accountingType: "cashed",
+          endorsedToName: "",
         });
       });
 
@@ -261,6 +268,8 @@ describe('useLedgerForm', () => {
           chequeAmount: "500",
           bankName: "بنك الأردن",
           dueDate: "2025-02-01",
+          accountingType: "cashed",
+          endorsedToName: "",
         });
         result.current.setInventoryFormData({
           ...result.current.inventoryFormData,
@@ -438,6 +447,9 @@ describe('useLedgerForm', () => {
           dueDate: "2025-02-01",
           status: "تم الصرف",
           chequeType: "مجير",
+          accountingType: "cashed",
+          endorsedToId: "",
+          endorsedToName: "",
           chequeImage: null,
         });
       });

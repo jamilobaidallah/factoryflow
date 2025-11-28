@@ -69,7 +69,8 @@ export interface IncomingCheque {
   amount: number;
   chequeNumber: string;
   dueDate: Date | string;
-  status: 'pending' | 'cleared' | 'bounced' | 'endorsed';
+  // Status can be English or Arabic values for backward compatibility
+  status: 'pending' | 'cleared' | 'bounced' | 'endorsed' | 'قيد الانتظار' | 'تم الصرف' | 'مرفوض' | 'مجيّر';
   endorsedToId?: string;
   endorsedToName?: string;
   fileURL?: string;
@@ -86,7 +87,8 @@ export interface OutgoingCheque {
   amount: number;
   chequeNumber: string;
   dueDate: Date | string;
-  status: 'pending' | 'cashed' | 'cancelled';
+  // Status can be English or Arabic values for backward compatibility
+  status: 'pending' | 'cashed' | 'cancelled' | 'قيد الانتظار' | 'تم الصرف' | 'ملغي';
   fileURL?: string;
   fileName?: string;
   txLink?: string;
@@ -119,6 +121,10 @@ export interface TransactionFormData {
   paymentMethod?: 'cash' | 'bank_transfer';
   chequeNumber?: string;
   chequeDueDate?: Date;
+  // Cheque type for proper accounting flow
+  chequeType?: 'cashed' | 'postponed' | 'endorsed';
+  chequeEndorsedToId?: string;
+  chequeEndorsedToName?: string;
   inventoryItemId?: string;
   inventoryQuantity?: number;
   inventoryWidth?: number;

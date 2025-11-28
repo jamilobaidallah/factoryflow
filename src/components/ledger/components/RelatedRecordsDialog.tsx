@@ -199,9 +199,88 @@ export function RelatedRecordsDialog({
                       />
                     </div>
                   </div>
+
+                  {/* Accounting Type Selection - This is the critical field for proper cheque accounting */}
+                  <div className="space-y-2">
+                    <Label htmlFor="accountingType">نوع الشيك المحاسبي</Label>
+                    <select
+                      id="accountingType"
+                      value={chequeFormData.accountingType || "cashed"}
+                      onChange={(e) => {
+                        const accountingType = e.target.value as 'cashed' | 'postponed' | 'endorsed';
+                        let newStatus = chequeFormData.status;
+
+                        // Auto-set status based on accounting type
+                        if (accountingType === 'cashed') {
+                          // For cashed cheques, status depends on transaction type (set on submit)
+                          newStatus = "تم الصرف";
+                        } else if (accountingType === 'postponed') {
+                          newStatus = "قيد الانتظار";
+                        } else if (accountingType === 'endorsed') {
+                          newStatus = "مجيّر";
+                        }
+
+                        setChequeFormData({
+                          ...chequeFormData,
+                          accountingType,
+                          status: newStatus,
+                          // Reset endorsee fields if not endorsed type
+                          endorsedToId: accountingType === 'endorsed' ? chequeFormData.endorsedToId : "",
+                          endorsedToName: accountingType === 'endorsed' ? chequeFormData.endorsedToName : "",
+                        });
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                    >
+                      <option value="cashed">شيك صرف - يُصرف فوراً</option>
+                      <option value="postponed">شيك مؤجل - يُصرف لاحقاً</option>
+                      {/* Only show endorsed option for incoming cheques */}
+                      {selectedEntry?.type === "دخل" && (
+                        <option value="endorsed">شيك مظهر - تحويل لطرف ثالث</option>
+                      )}
+                    </select>
+                    <p className="text-xs text-gray-500">
+                      {chequeFormData.accountingType === 'cashed' &&
+                        "سيتم تسجيل الشيك كمحصل وتحديث رصيد العميل فوراً"}
+                      {chequeFormData.accountingType === 'postponed' &&
+                        "سيتم تسجيل الشيك كمعلق ولن يؤثر على رصيد العميل حتى تاريخ التحصيل"}
+                      {chequeFormData.accountingType === 'endorsed' &&
+                        "سيتم تظهير الشيك لطرف ثالث ولن يؤثر على رصيد العميل الأصلي"}
+                    </p>
+                  </div>
+
+                  {/* Endorsee fields - only show when endorsed type is selected */}
+                  {chequeFormData.accountingType === 'endorsed' && (
+                    <div className="space-y-2 p-4 bg-purple-50 rounded-md border border-purple-200">
+                      <Label htmlFor="endorsedToName">مظهر إلى (اسم المستفيد)</Label>
+                      <Input
+                        id="endorsedToName"
+                        value={chequeFormData.endorsedToName || ""}
+                        onChange={(e) =>
+                          setChequeFormData({ ...chequeFormData, endorsedToName: e.target.value })
+                        }
+                        placeholder="أدخل اسم الجهة المظهر لها الشيك"
+                        required
+                      />
+                      <p className="text-xs text-purple-600">
+                        ⚠️ سيتم تظهير الشيك لهذا الطرف وإنشاء سجلات دفع دون حركة نقدية فعلية
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Due date validation message for postponed cheques */}
+                  {chequeFormData.accountingType === 'postponed' && (
+                    <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                      <p className="text-xs text-yellow-700">
+                        ⏳ الشيك المؤجل: تأكد من أن تاريخ الاستحقاق في المستقبل.
+                        سيظهر الشيك في قائمة الشيكات المعلقة ويمكنك تأكيد التحصيل لاحقاً من صفحة الشيكات.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="chequeType">نوع الشيك</Label>
+                      <Label htmlFor="chequeType">تصنيف الشيك</Label>
                       <select
                         id="chequeType"
                         value={chequeFormData.chequeType}
@@ -224,11 +303,13 @@ export function RelatedRecordsDialog({
                           setChequeFormData({ ...chequeFormData, status: e.target.value })
                         }
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        disabled={chequeFormData.accountingType !== 'cashed'} // Auto-set for non-cashed types
                         required
                       >
                         <option value="قيد الانتظار">قيد الانتظار</option>
                         <option value="تم الصرف">تم الصرف</option>
                         <option value="مرفوض">مرفوض</option>
+                        <option value="مجيّر">مجيّر</option>
                       </select>
                     </div>
                   </div>
