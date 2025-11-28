@@ -105,9 +105,9 @@ export interface ChequeRelatedFormData {
   dueDate: string;
   status: string;
   chequeType: string;
-  accountingType?: 'cashed' | 'postponed' | 'endorsed';
-  endorsedToId?: string;
-  endorsedToName?: string;
+  accountingType: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToId: string;
+  endorsedToName: string;
   chequeImage: File | null;
 }
 
