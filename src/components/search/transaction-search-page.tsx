@@ -24,6 +24,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { toDate, toDateOptional } from "@/lib/firestore-utils";
 
 interface SearchResult {
   type: "ledger" | "payment" | "cheque" | "inventory";
@@ -69,7 +70,7 @@ export default function TransactionSearchPage() {
           id: doc.id,
           data: {
             ...doc.data(),
-            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(),
+            date: toDate(doc.data().date),
           },
         });
       });
@@ -87,7 +88,7 @@ export default function TransactionSearchPage() {
           id: doc.id,
           data: {
             ...doc.data(),
-            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(),
+            date: toDate(doc.data().date),
           },
         });
       });
@@ -105,8 +106,8 @@ export default function TransactionSearchPage() {
           id: doc.id,
           data: {
             ...doc.data(),
-            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(),
-            dueDate: doc.data().dueDate?.toDate ? doc.data().dueDate.toDate() : null,
+            date: toDate(doc.data().date),
+            dueDate: toDateOptional(doc.data().dueDate),
           },
         });
       });
@@ -124,7 +125,7 @@ export default function TransactionSearchPage() {
           id: doc.id,
           data: {
             ...doc.data(),
-            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(),
+            date: toDate(doc.data().date),
           },
         });
       });

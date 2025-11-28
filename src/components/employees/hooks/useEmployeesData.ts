@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Employee, SalaryHistory, PayrollEntry } from "../types/employees";
+import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 
 interface UseEmployeesDataReturn {
   employees: Employee[];
@@ -39,9 +40,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
         const data = doc.data();
         employeesData.push({
           id: doc.id,
-          ...data,
-          hireDate: data.hireDate?.toDate ? data.hireDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Employee);
       });
       setEmployees(employeesData);
@@ -64,9 +63,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
         const data = doc.data();
         historyData.push({
           id: doc.id,
-          ...data,
-          effectiveDate: data.effectiveDate?.toDate ? data.effectiveDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as SalaryHistory);
       });
       setSalaryHistory(historyData);
@@ -88,9 +85,8 @@ export function useEmployeesData(): UseEmployeesDataReturn {
         const data = doc.data();
         payrollData.push({
           id: doc.id,
-          ...data,
-          paidDate: data.paidDate?.toDate ? data.paidDate.toDate() : undefined,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
+          paidDate: toDateOptional(data.paidDate),
         } as PayrollEntry);
       });
       setPayrollEntries(payrollData);

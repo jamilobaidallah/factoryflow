@@ -38,6 +38,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 import PartnersEquityReport from "./partners-equity-report";
 
 interface Partner {
@@ -83,8 +84,7 @@ export default function PartnersPage() {
         const data = doc.data();
         partnersData.push({
           id: doc.id,
-          ...data,
-          joinDate: data.joinDate?.toDate ? data.joinDate.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Partner);
       });
       setPartners(partnersData);

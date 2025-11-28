@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Invoice } from "../types/invoices";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 
 interface UseInvoicesDataReturn {
   invoices: Invoice[];
@@ -40,11 +41,7 @@ export function useInvoicesData(): UseInvoicesDataReturn {
         const data = doc.data();
         invoicesData.push({
           id: doc.id,
-          ...data,
-          invoiceDate: data.invoiceDate?.toDate ? data.invoiceDate.toDate() : new Date(),
-          dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Invoice);
       });
       setInvoices(invoicesData);

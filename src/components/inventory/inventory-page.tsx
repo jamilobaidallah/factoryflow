@@ -49,6 +49,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { firestore } from "@/firebase/config";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 
 interface InventoryItem {
   id: string;
@@ -132,8 +133,7 @@ export default function InventoryPage() {
         const data = doc.data();
         itemsData.push({
           id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as InventoryItem);
       });
       setItems(itemsData);

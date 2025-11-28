@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useToast } from "@/hooks/use-toast";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
 
 interface LedgerEntry {
   id: string;
@@ -98,8 +99,7 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
         const data = doc.data();
         ledgerData.push({
           id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as LedgerEntry);
       });
       setLedgerEntries(ledgerData);
@@ -119,8 +119,7 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
         const data = doc.data();
         paymentsData.push({
           id: doc.id,
-          ...data,
-          date: data.date?.toDate ? data.date.toDate() : new Date(),
+          ...convertFirestoreDates(data),
         } as Payment);
       });
       setPayments(paymentsData);
