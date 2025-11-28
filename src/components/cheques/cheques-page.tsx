@@ -14,17 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Plus, Edit, Trash2, Image as ImageIcon, RefreshCw, Download, Upload, X } from "lucide-react";
+// Table imports removed - now using ChequesList component for table rendering
+import { Plus, Download, Upload, X } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
+import { ChequesList } from "./cheques-list";
+import type { Cheque as ChequeType } from "./cheque-card";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
@@ -100,6 +95,9 @@ export default function ChequesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const totalPages = Math.ceil(totalCount / pageSize);
 
+  // قاموس أرقام هواتف العملاء - Client phone numbers map
+  const [clientPhones, setClientPhones] = useState<Record<string, string>>({});
+
   const [formData, setFormData] = useState({
     chequeNumber: "",
     clientName: "",
@@ -124,6 +122,25 @@ export default function ChequesPage() {
     getCountFromServer(query(chequesRef)).then((snapshot) => {
       setTotalCount(snapshot.data().count);
     });
+  }, [user]);
+
+  // جلب أرقام هواتف العملاء - Fetch client phone numbers
+  useEffect(() => {
+    if (!user) { return; }
+
+    const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+    const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
+      const phones: Record<string, string> = {};
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.phone) {
+          phones[data.name] = data.phone;
+        }
+      });
+      setClientPhones(phones);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   // Fetch cheques with pagination
@@ -453,20 +470,7 @@ export default function ChequesPage() {
     setIsDialogOpen(true);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "تم الصرف":
-        return "bg-green-100 text-green-700";
-      case "قيد الانتظار":
-        return "bg-yellow-100 text-yellow-700";
-      case "مجيّر":
-        return "bg-purple-100 text-purple-700";
-      case "مرفوض":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
-  };
+  // getStatusColor moved to ChequesList component
 
   const handleViewImage = (imageUrl: string) => {
     setSelectedImageUrl(imageUrl);
@@ -680,14 +684,36 @@ export default function ChequesPage() {
     }
   };
 
-  // Check if a cheque is overdue
-  const isOverdue = (cheque: Cheque) => {
-    if (cheque.status !== "قيد الانتظار") {return false;}
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(cheque.dueDate);
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
+  // isOverdue moved to ChequesList component
+
+  // تحضير الشيكات مع أرقام الهواتف - Prepare cheques with phone numbers
+  const chequesWithPhones: ChequeType[] = cheques.map((cheque) => ({
+    ...cheque,
+    clientPhone: clientPhones[cheque.clientName] || undefined,
+  }));
+
+  // دالة التحديث للسحب للتحديث - Refresh function for pull-to-refresh
+  const handleRefresh = async () => {
+    if (!user) { return; }
+
+    // إعادة جلب البيانات - Refetch data
+    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
+    const snapshot = await getDocs(q);
+
+    const chequesData: Cheque[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      chequesData.push({
+        id: doc.id,
+        ...data,
+        issueDate: data.issueDate?.toDate ? data.issueDate.toDate() : new Date(),
+        dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+      } as Cheque);
+    });
+
+    setCheques(chequesData);
   };
 
   return (
@@ -722,174 +748,23 @@ export default function ChequesPage() {
         <CardContent>
           {dataLoading ? (
             <TableSkeleton rows={10} />
-          ) : cheques.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد شيكات مسجلة. اضغط على &quot;إضافة شيك&quot; للبدء.
-            </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>رقم الشيك</TableHead>
-                  <TableHead>اسم العميل</TableHead>
-                  <TableHead>البنك</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead>تصنيف الشيك</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>تاريخ الاستحقاق</TableHead>
-                  <TableHead>رقم المعاملة</TableHead>
-                  <TableHead>صورة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cheques.map((cheque) => (
-                  <TableRow
-                    key={cheque.id}
-                    className={isOverdue(cheque) ? "bg-red-50" : ""}
-                  >
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {cheque.chequeNumber}
-                        {isOverdue(cheque) && (
-                          <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
-                            متأخر
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div>{cheque.clientName}</div>
-                        {cheque.endorsedTo && (
-                          <div className="text-xs text-purple-600 mt-1">
-                            ← مظهر إلى: {cheque.endorsedTo}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{cheque.bankName}</TableCell>
-                    <TableCell>{cheque.amount || 0} دينار</TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${cheque.type === "وارد"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-purple-100 text-purple-700"
-                          }`}
-                      >
-                        {cheque.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {cheque.chequeType === "مجير" ? "شيك مجير" : "عادي"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
-                          cheque.status
-                        )}`}
-                      >
-                        {cheque.status}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {cheque.linkedTransactionId || "-"}
-                    </TableCell>
-                    <TableCell>
-                      {cheque.chequeImageUrl ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewImage(cheque.chequeImageUrl!)}
-                          title="عرض صورة الشيك"
-                        >
-                          <ImageIcon className="w-4 h-4 text-blue-600" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2 flex-wrap">
-                        {/* Show clear (confirm collection) button for pending cheques */}
-                        {cheque.status === "قيد الانتظار" && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => openClearDialog(cheque)}
-                            title="تأكيد التحصيل"
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                          </Button>
-                        )}
-                        {/* Show bounce button for pending cheques */}
-                        {cheque.status === "قيد الانتظار" && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => openBounceDialog(cheque)}
-                            title="شيك مرتجع"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {/* Show endorse button only for incoming pending cheques that are not endorsed */}
-                        {cheque.type === "وارد" &&
-                          cheque.status === "قيد الانتظار" &&
-                          cheque.chequeType !== "مجير" && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => openEndorseDialog(cheque)}
-                              title="تظهير الشيك"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </Button>
-                          )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(cheque)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(cheque.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ChequesList
+              cheques={chequesWithPhones}
+              loading={loading}
+              onRefresh={handleRefresh}
+              onMarkCleared={openClearDialog}
+              onMarkBounced={openBounceDialog}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onEndorse={openEndorseDialog}
+              onViewImage={handleViewImage}
+            />
           )}
 
-          {/* Pagination Controls */}
+          {/* Pagination Controls - Desktop only */}
           {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
+            <div className="hidden md:flex mt-4 items-center justify-between">
               <div className="text-sm text-muted-foreground">
                 عرض {cheques.length} من {totalCount} شيك
               </div>
