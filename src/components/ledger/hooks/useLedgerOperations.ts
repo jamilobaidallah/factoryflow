@@ -21,6 +21,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { getCategoryType, generateTransactionId } from "../utils/ledger-helpers";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import type {
   LedgerFormData,
   CheckFormData,
@@ -533,7 +534,7 @@ export function useLedgerOperations() {
 
       const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const chequeDirection = entry.type === "دخل" ? "وارد" : "صادر";
+      const chequeDirection = entry.type === "دخل" ? CHEQUE_TYPES.INCOMING : CHEQUE_TYPES.OUTGOING;
       const chequeAmount = parseFloat(formData.amount);
       const accountingType = formData.accountingType || "cashed";
 
@@ -541,11 +542,11 @@ export function useLedgerOperations() {
       let chequeStatus = formData.status;
       if (accountingType === "cashed") {
         // Cashed cheques: 'cleared' for incoming, 'cashed' for outgoing
-        chequeStatus = chequeDirection === "وارد" ? "تم الصرف" : "تم الصرف";
+        chequeStatus = chequeDirection === CHEQUE_TYPES.INCOMING ? CHEQUE_STATUS_AR.CASHED : CHEQUE_STATUS_AR.CASHED;
       } else if (accountingType === "postponed") {
-        chequeStatus = "قيد الانتظار";
+        chequeStatus = CHEQUE_STATUS_AR.PENDING;
       } else if (accountingType === "endorsed") {
-        chequeStatus = "مجيّر";
+        chequeStatus = CHEQUE_STATUS_AR.ENDORSED;
       }
 
       // Validate endorsee name for endorsed cheques
@@ -590,7 +591,7 @@ export function useLedgerOperations() {
         // CASHED CHEQUE: Create payment record AND update AR/AP immediately
 
         // Create payment record
-        const paymentType = entry.type === "دخل" ? "قبض" : "صرف";
+        const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
         await addDoc(paymentsRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,

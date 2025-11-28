@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Edit, Trash2, Image as ImageIcon, Link } from "lucide-react";
 import { Cheque } from "../types/cheques";
+import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface OutgoingChequesTableProps {
   cheques: Cheque[];
@@ -30,13 +31,13 @@ export function OutgoingChequesTable({
 }: OutgoingChequesTableProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "تم الصرف":
+      case CHEQUE_STATUS_AR.CASHED:
         return "bg-green-100 text-green-700";
-      case "قيد الانتظار":
+      case CHEQUE_STATUS_AR.PENDING:
         return "bg-yellow-100 text-yellow-700";
-      case "مرتجع":
+      case CHEQUE_STATUS_AR.RETURNED:
         return "bg-orange-100 text-orange-700";
-      case "ملغي":
+      case CHEQUE_STATUS_AR.CANCELLED:
         return "bg-red-100 text-red-700";
       default:
         return "bg-gray-100 text-gray-700";
@@ -44,10 +45,10 @@ export function OutgoingChequesTable({
   };
 
   // Calculate summary statistics
-  const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
-  const cashedCheques = cheques.filter(c => c.status === "تم الصرف");
-  const bouncedCheques = cheques.filter(c => c.status === "مرتجع");
-  const cancelledCheques = cheques.filter(c => c.status === "ملغي");
+  const pendingCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.PENDING);
+  const cashedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CASHED);
+  const bouncedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.RETURNED);
+  const cancelledCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CANCELLED);
   const endorsedCheques = cheques.filter(c => c.isEndorsedCheque);
 
   const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);

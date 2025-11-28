@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, X } from "lucide-react";
 import { Cheque, ChequeFormData } from "../types/cheques";
+import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface OutgoingChequesFormDialogProps {
   isOpen: boolean;
@@ -119,10 +120,10 @@ export function OutgoingChequesFormDialog({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 required
               >
-                <option value="قيد الانتظار">قيد الانتظار</option>
-                <option value="تم الصرف">تم الصرف</option>
-                <option value="مرتجع">مرتجع</option>
-                <option value="ملغي">ملغي</option>
+                <option value={CHEQUE_STATUS_AR.PENDING}>{CHEQUE_STATUS_AR.PENDING}</option>
+                <option value={CHEQUE_STATUS_AR.CASHED}>{CHEQUE_STATUS_AR.CASHED}</option>
+                <option value={CHEQUE_STATUS_AR.RETURNED}>{CHEQUE_STATUS_AR.RETURNED}</option>
+                <option value={CHEQUE_STATUS_AR.CANCELLED}>{CHEQUE_STATUS_AR.CANCELLED}</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">

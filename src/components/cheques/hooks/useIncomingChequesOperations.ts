@@ -15,6 +15,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 
 interface UseIncomingChequesOperationsReturn {
   submitCheque: (
@@ -113,8 +114,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         // Check if status changed from pending to cleared
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
-        const pendingStatuses = ["قيد الانتظار", "pending"];
-        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+        const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
+        const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
         const wasPending = pendingStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
 
@@ -128,7 +129,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           await addDoc(paymentsRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
-            type: "قبض", // Receipt - client paid us
+            type: PAYMENT_TYPES.RECEIPT, // Receipt - client paid us
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
             date: new Date(),
@@ -155,7 +156,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
-          type: "وارد", // Always incoming
+          type: CHEQUE_TYPES.INCOMING, // Always incoming
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),
@@ -224,7 +225,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       const incomingChequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(incomingChequeRef, {
         chequeType: "مجير",
-        status: "مجيّر",
+        status: CHEQUE_STATUS_AR.ENDORSED,
         endorsedTo: supplierName,
         endorsedDate: new Date(),
       });
@@ -234,9 +235,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         chequeNumber: cheque.chequeNumber,
         clientName: supplierName,
         amount: cheque.amount,
-        type: "صادر",
+        type: CHEQUE_TYPES.OUTGOING,
         chequeType: "مجير",
-        status: "قيد الانتظار",
+        status: CHEQUE_STATUS_AR.PENDING,
         linkedTransactionId: transactionId.trim() || "",
         issueDate: cheque.issueDate,
         dueDate: cheque.dueDate,
@@ -257,7 +258,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       await addDoc(paymentsRef, {
         clientName: cheque.clientName,
         amount: cheque.amount,
-        type: "قبض",
+        type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: cheque.linkedTransactionId || "",
         date: new Date(),
         notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
@@ -271,7 +272,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       await addDoc(paymentsRef, {
         clientName: supplierName,
         amount: cheque.amount,
-        type: "صرف",
+        type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: transactionId.trim() || cheque.linkedTransactionId || "",
         date: new Date(),
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
@@ -315,7 +316,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
         chequeType: "عادي",
-        status: "قيد الانتظار",
+        status: CHEQUE_STATUS_AR.PENDING,
         endorsedTo: null,
         endorsedDate: null,
         endorsedToOutgoingId: null,

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { useSwipe } from "@/hooks/use-swipe";
 import { useState } from "react";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
 /**
  * واجهة بيانات الشيك - Cheque data interface
@@ -54,17 +55,17 @@ interface ChequeCardProps {
  */
 function getStatusVariant(status: string): "pending" | "cleared" | "bounced" | "endorsed" | "default" {
   switch (status) {
-    case "تم الصرف":
+    case CHEQUE_STATUS_AR.CASHED:
     case "cleared":
     case "cashed":
       return "cleared";
-    case "قيد الانتظار":
+    case CHEQUE_STATUS_AR.PENDING:
     case "pending":
       return "pending";
-    case "مرفوض":
+    case CHEQUE_STATUS_AR.BOUNCED:
     case "bounced":
       return "bounced";
-    case "مجيّر":
+    case CHEQUE_STATUS_AR.ENDORSED:
     case "endorsed":
       return "endorsed";
     default:
@@ -76,7 +77,7 @@ function getStatusVariant(status: string): "pending" | "cleared" | "bounced" | "
  * التحقق من تأخر الشيك - Check if cheque is overdue
  */
 function isOverdue(cheque: Cheque): boolean {
-  if (cheque.status !== "قيد الانتظار" && cheque.status !== "pending") {
+  if (cheque.status !== CHEQUE_STATUS_AR.PENDING && cheque.status !== "pending") {
     return false;
   }
   const today = new Date();
@@ -116,7 +117,7 @@ export function ChequeCard({
   onCall,
 }: ChequeCardProps) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const isPending = cheque.status === "قيد الانتظار" || cheque.status === "pending";
+  const isPending = cheque.status === CHEQUE_STATUS_AR.PENDING || cheque.status === "pending";
 
   // إعداد السحب - Swipe configuration
   const [swipeState, swipeHandlers] = useSwipe({
@@ -302,7 +303,7 @@ export function ChequeCard({
             {/* النوع - Type */}
             <div className="flex items-center justify-between py-2 border-b">
               <span className="text-gray-500">النوع</span>
-              <Badge variant={cheque.type === "وارد" ? "incoming" : "outgoing"}>
+              <Badge variant={cheque.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing"}>
                 {cheque.type}
               </Badge>
             </div>

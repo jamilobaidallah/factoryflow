@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
 // Types and hooks
 import { Cheque, ChequeFormData, initialChequeFormData } from "./types/cheques";
@@ -28,10 +29,10 @@ export default function OutgoingChequesPage() {
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Form state - override type to always be "صادر" for outgoing cheques
+  // Form state - override type to always be outgoing
   const initialOutgoingFormData: ChequeFormData = {
     ...initialChequeFormData,
-    type: "صادر",
+    type: CHEQUE_TYPES.OUTGOING,
   };
   const [formData, setFormData] = useState<ChequeFormData>(initialOutgoingFormData);
   const [chequeImage, setChequeImage] = useState<File | null>(null);
@@ -62,8 +63,8 @@ export default function OutgoingChequesPage() {
       chequeNumber: cheque.chequeNumber || "",
       clientName: cheque.clientName || "",
       amount: (cheque.amount || 0).toString(),
-      type: "صادر", // Always outgoing
-      status: cheque.status || "قيد الانتظار",
+      type: CHEQUE_TYPES.OUTGOING, // Always outgoing
+      status: cheque.status || CHEQUE_STATUS_AR.PENDING,
       linkedTransactionId: cheque.linkedTransactionId || "",
       issueDate: cheque.issueDate ? new Date(cheque.issueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       dueDate: cheque.dueDate ? new Date(cheque.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],

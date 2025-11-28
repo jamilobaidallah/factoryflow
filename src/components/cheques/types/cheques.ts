@@ -1,3 +1,5 @@
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+
 export interface Cheque {
   id: string;
   chequeNumber: string;
@@ -38,8 +40,8 @@ export const initialChequeFormData: ChequeFormData = {
   chequeNumber: "",
   clientName: "",
   amount: "",
-  type: "وارد",
-  status: "قيد الانتظار",
+  type: CHEQUE_TYPES.INCOMING,
+  status: CHEQUE_STATUS_AR.PENDING,
   linkedTransactionId: "",
   issueDate: new Date().toISOString().split("T")[0],
   dueDate: new Date().toISOString().split("T")[0],

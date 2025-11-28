@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
 /**
  * خصائص مكون قائمة الشيكات - ChequesList props
@@ -34,13 +35,13 @@ interface ChequesListProps {
  */
 function getStatusColor(status: string): string {
   switch (status) {
-    case "تم الصرف":
+    case CHEQUE_STATUS_AR.CASHED:
       return "bg-green-100 text-green-700";
-    case "قيد الانتظار":
+    case CHEQUE_STATUS_AR.PENDING:
       return "bg-yellow-100 text-yellow-700";
-    case "مجيّر":
+    case CHEQUE_STATUS_AR.ENDORSED:
       return "bg-purple-100 text-purple-700";
-    case "مرفوض":
+    case CHEQUE_STATUS_AR.BOUNCED:
       return "bg-red-100 text-red-700";
     default:
       return "bg-gray-100 text-gray-700";
@@ -51,7 +52,7 @@ function getStatusColor(status: string): string {
  * التحقق من تأخر الشيك - Check if cheque is overdue
  */
 function isOverdue(cheque: Cheque): boolean {
-  if (cheque.status !== "قيد الانتظار") {
+  if (cheque.status !== CHEQUE_STATUS_AR.PENDING) {
     return false;
   }
   const today = new Date();
@@ -292,7 +293,7 @@ export function ChequesList({
                   <TableCell>
                     <span
                       className={`px-2 py-1 rounded-full text-xs ${
-                        cheque.type === "وارد"
+                        cheque.type === CHEQUE_TYPES.INCOMING
                           ? "bg-blue-100 text-blue-700"
                           : "bg-purple-100 text-purple-700"
                       }`}
@@ -337,7 +338,7 @@ export function ChequesList({
                   <TableCell>
                     <div className="flex gap-2 flex-wrap">
                       {/* زر التحصيل للشيكات قيد الانتظار - Clear button for pending cheques */}
-                      {cheque.status === "قيد الانتظار" && (
+                      {cheque.status === CHEQUE_STATUS_AR.PENDING && (
                         <Button
                           variant="default"
                           size="sm"
@@ -349,7 +350,7 @@ export function ChequesList({
                         </Button>
                       )}
                       {/* زر الارتجاع للشيكات قيد الانتظار - Bounce button for pending cheques */}
-                      {cheque.status === "قيد الانتظار" && (
+                      {cheque.status === CHEQUE_STATUS_AR.PENDING && (
                         <Button
                           variant="destructive"
                           size="sm"
@@ -360,8 +361,8 @@ export function ChequesList({
                         </Button>
                       )}
                       {/* زر التظهير للشيكات الواردة قيد الانتظار غير المظهرة - Endorse button for pending incoming non-endorsed cheques */}
-                      {cheque.type === "وارد" &&
-                        cheque.status === "قيد الانتظار" &&
+                      {cheque.type === CHEQUE_TYPES.INCOMING &&
+                        cheque.status === CHEQUE_STATUS_AR.PENDING &&
                         cheque.chequeType !== "مجير" &&
                         onEndorse && (
                           <Button

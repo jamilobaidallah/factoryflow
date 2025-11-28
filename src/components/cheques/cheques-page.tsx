@@ -17,6 +17,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
 // Types and hooks
 import { Cheque, ChequeFormData, initialChequeFormData } from "./types/cheques";
@@ -86,8 +87,8 @@ export default function ChequesPage() {
       chequeNumber: cheque.chequeNumber || "",
       clientName: cheque.clientName || "",
       amount: (cheque.amount || 0).toString(),
-      type: cheque.type || "وارد",
-      status: cheque.status || "قيد الانتظار",
+      type: cheque.type || CHEQUE_TYPES.INCOMING,
+      status: cheque.status || CHEQUE_STATUS_AR.PENDING,
       linkedTransactionId: cheque.linkedTransactionId || "",
       issueDate: cheque.issueDate ? new Date(cheque.issueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       dueDate: cheque.dueDate ? new Date(cheque.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],

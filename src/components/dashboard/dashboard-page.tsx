@@ -36,6 +36,7 @@ import { useUser } from "@/firebase/provider";
 import { collection, onSnapshot, query, orderBy, getDocs } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { toDate } from "@/lib/firestore-utils";
+import { CASH_FLOW_LABELS } from "@/lib/constants";
 // Import only what we need from recharts (tree shaking)
 import {
   Line,
@@ -279,8 +280,8 @@ export default function DashboardPage() {
           const date = new Date(parseInt(year), parseInt(monthNum) - 1, 15); // Use day 15 to avoid timezone edge cases
           return {
             month: date.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-            "نقد وارد": data.cashIn,
-            "نقد صادر": data.cashOut,
+            [CASH_FLOW_LABELS.CASH_IN]: data.cashIn,
+            [CASH_FLOW_LABELS.CASH_OUT]: data.cashOut,
             "صافي التدفق": data.cashIn - data.cashOut,
           };
         });
@@ -421,8 +422,8 @@ export default function DashboardPage() {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="نقد وارد" fill="#10b981" />
-                <Bar dataKey="نقد صادر" fill="#ef4444" />
+                <Bar dataKey={CASH_FLOW_LABELS.CASH_IN} fill="#10b981" />
+                <Bar dataKey={CASH_FLOW_LABELS.CASH_OUT} fill="#ef4444" />
                 <Line type="monotone" dataKey="صافي التدفق" stroke="#3b82f6" strokeWidth={2} />
               </LazyComposedChart>
             </ResponsiveContainer>

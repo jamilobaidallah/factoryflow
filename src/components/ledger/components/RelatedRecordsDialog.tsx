@@ -14,6 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface RelatedRecordsDialogProps {
   isOpen: boolean;
@@ -213,11 +214,11 @@ export function RelatedRecordsDialog({
                         // Auto-set status based on accounting type
                         if (accountingType === 'cashed') {
                           // For cashed cheques, status depends on transaction type (set on submit)
-                          newStatus = "تم الصرف";
+                          newStatus = CHEQUE_STATUS_AR.CASHED;
                         } else if (accountingType === 'postponed') {
-                          newStatus = "قيد الانتظار";
+                          newStatus = CHEQUE_STATUS_AR.PENDING;
                         } else if (accountingType === 'endorsed') {
-                          newStatus = "مجيّر";
+                          newStatus = CHEQUE_STATUS_AR.ENDORSED;
                         }
 
                         setChequeFormData({
@@ -306,10 +307,10 @@ export function RelatedRecordsDialog({
                         disabled={chequeFormData.accountingType !== 'cashed'} // Auto-set for non-cashed types
                         required
                       >
-                        <option value="قيد الانتظار">قيد الانتظار</option>
-                        <option value="تم الصرف">تم الصرف</option>
-                        <option value="مرفوض">مرفوض</option>
-                        <option value="مجيّر">مجيّر</option>
+                        <option value={CHEQUE_STATUS_AR.PENDING}>{CHEQUE_STATUS_AR.PENDING}</option>
+                        <option value={CHEQUE_STATUS_AR.CASHED}>{CHEQUE_STATUS_AR.CASHED}</option>
+                        <option value={CHEQUE_STATUS_AR.BOUNCED}>{CHEQUE_STATUS_AR.BOUNCED}</option>
+                        <option value={CHEQUE_STATUS_AR.ENDORSED}>{CHEQUE_STATUS_AR.ENDORSED}</option>
                       </select>
                     </div>
                   </div>
