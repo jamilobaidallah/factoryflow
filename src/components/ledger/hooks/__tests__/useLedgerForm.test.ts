@@ -153,6 +153,8 @@ describe('useLedgerForm', () => {
           chequeAmount: "500",
           bankName: "بنك الأردن",
           dueDate: "2025-02-01",
+          accountingType: "cashed",
+          endorsedToName: "",
         });
       });
 
@@ -261,6 +263,8 @@ describe('useLedgerForm', () => {
           chequeAmount: "500",
           bankName: "بنك الأردن",
           dueDate: "2025-02-01",
+          accountingType: "cashed",
+          endorsedToName: "",
         });
         result.current.setInventoryFormData({
           ...result.current.inventoryFormData,

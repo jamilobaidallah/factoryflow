@@ -305,6 +305,8 @@ export default function LedgerPage() {
       chequeAmount: "",
       bankName: "",
       dueDate: new Date().toISOString().split("T")[0],
+      accountingType: "cashed",
+      endorsedToName: "",
     });
     setInventoryFormDataNew({
       itemName: "",

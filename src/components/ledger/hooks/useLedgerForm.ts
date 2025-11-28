@@ -25,6 +25,9 @@ export interface CheckFormState {
   chequeAmount: string;
   bankName: string;
   dueDate: string;
+  // Accounting type for proper cheque handling
+  accountingType: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToName: string;
 }
 
 export interface InventoryFormState {
@@ -93,6 +96,8 @@ const initialCheckFormData: CheckFormState = {
   chequeAmount: "",
   bankName: "",
   dueDate: new Date().toISOString().split("T")[0],
+  accountingType: "cashed",
+  endorsedToName: "",
 };
 
 const initialInventoryFormData: InventoryFormState = {

@@ -337,43 +337,106 @@ export function LedgerFormDialog({
                     </div>
 
                     {hasIncomingCheck && (
-                      <div className="pr-6 space-y-2 grid grid-cols-2 gap-4">
-                        <Input
-                          type="text"
-                          placeholder="رقم الشيك"
-                          value={checkFormData.chequeNumber}
-                          onChange={(e) =>
-                            setCheckFormData({ ...checkFormData, chequeNumber: e.target.value })
-                          }
-                          required={hasIncomingCheck}
-                        />
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="مبلغ الشيك"
-                          value={checkFormData.chequeAmount}
-                          onChange={(e) =>
-                            setCheckFormData({ ...checkFormData, chequeAmount: e.target.value })
-                          }
-                          required={hasIncomingCheck}
-                        />
-                        <Input
-                          type="text"
-                          placeholder="اسم البنك"
-                          value={checkFormData.bankName}
-                          onChange={(e) =>
-                            setCheckFormData({ ...checkFormData, bankName: e.target.value })
-                          }
-                          required={hasIncomingCheck}
-                        />
-                        <Input
-                          type="date"
-                          value={checkFormData.dueDate}
-                          onChange={(e) =>
-                            setCheckFormData({ ...checkFormData, dueDate: e.target.value })
-                          }
-                          required={hasIncomingCheck}
-                        />
+                      <div className="pr-6 space-y-4">
+                        {/* Cheque Type Selection - Critical for proper accounting */}
+                        <div className="space-y-2">
+                          <Label htmlFor="chequeAccountingType">نوع الشيك المحاسبي</Label>
+                          <select
+                            id="chequeAccountingType"
+                            value={checkFormData.accountingType || "cashed"}
+                            onChange={(e) =>
+                              setCheckFormData({
+                                ...checkFormData,
+                                accountingType: e.target.value as 'cashed' | 'postponed' | 'endorsed',
+                                endorsedToName: e.target.value === 'endorsed' ? checkFormData.endorsedToName : "",
+                              })
+                            }
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            required
+                          >
+                            <option value="cashed">شيك صرف - يُصرف فوراً</option>
+                            <option value="postponed">شيك مؤجل - يُصرف لاحقاً</option>
+                            <option value="endorsed">شيك مظهر - تحويل لطرف ثالث</option>
+                          </select>
+                          <p className="text-xs text-gray-500">
+                            {checkFormData.accountingType === 'cashed' &&
+                              "سيتم تسجيل الشيك كمحصل وتحديث رصيد العميل فوراً"}
+                            {checkFormData.accountingType === 'postponed' &&
+                              "سيتم تسجيل الشيك كمعلق ولن يؤثر على رصيد العميل حتى تاريخ التحصيل"}
+                            {checkFormData.accountingType === 'endorsed' &&
+                              "سيتم تظهير الشيك لطرف ثالث ولن يؤثر على رصيد العميل الأصلي"}
+                          </p>
+                        </div>
+
+                        {/* Endorsee field - only for endorsed cheques */}
+                        {checkFormData.accountingType === 'endorsed' && (
+                          <div className="space-y-2 p-3 bg-purple-50 rounded-md border border-purple-200">
+                            <Label htmlFor="endorsedToName">مظهر إلى (اسم المستفيد)</Label>
+                            <Input
+                              id="endorsedToName"
+                              type="text"
+                              placeholder="أدخل اسم الجهة المظهر لها الشيك"
+                              value={checkFormData.endorsedToName || ""}
+                              onChange={(e) =>
+                                setCheckFormData({ ...checkFormData, endorsedToName: e.target.value })
+                              }
+                              required
+                            />
+                          </div>
+                        )}
+
+                        {/* Postponed cheque warning */}
+                        {checkFormData.accountingType === 'postponed' && (
+                          <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                            <p className="text-xs text-yellow-700">
+                              ⏳ الشيك المؤجل: تأكد من أن تاريخ الاستحقاق في المستقبل.
+                              سيظهر الشيك في قائمة الشيكات المعلقة ويمكنك تأكيد التحصيل لاحقاً.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Cheque details */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input
+                            type="text"
+                            placeholder="رقم الشيك"
+                            value={checkFormData.chequeNumber}
+                            onChange={(e) =>
+                              setCheckFormData({ ...checkFormData, chequeNumber: e.target.value })
+                            }
+                            required={hasIncomingCheck}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="مبلغ الشيك"
+                            value={checkFormData.chequeAmount}
+                            onChange={(e) =>
+                              setCheckFormData({ ...checkFormData, chequeAmount: e.target.value })
+                            }
+                            required={hasIncomingCheck}
+                          />
+                          <Input
+                            type="text"
+                            placeholder="اسم البنك"
+                            value={checkFormData.bankName}
+                            onChange={(e) =>
+                              setCheckFormData({ ...checkFormData, bankName: e.target.value })
+                            }
+                            required={hasIncomingCheck}
+                          />
+                          <div className="space-y-1">
+                            <Input
+                              type="date"
+                              value={checkFormData.dueDate}
+                              onChange={(e) =>
+                                setCheckFormData({ ...checkFormData, dueDate: e.target.value })
+                              }
+                              required={hasIncomingCheck}
+                            />
+                            <p className="text-xs text-gray-500">تاريخ الاستحقاق</p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
