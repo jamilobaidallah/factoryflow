@@ -43,6 +43,15 @@ export interface CheckFormData {
   endorsedToName?: string;
 }
 
+export interface OutgoingCheckFormData {
+  chequeNumber: string;
+  chequeAmount: string;
+  bankName: string;
+  dueDate: string;
+  accountingType?: 'cashed' | 'postponed' | 'endorsed';
+  endorsedFromName?: string;
+}
+
 export interface InventoryFormData {
   itemName: string;
   quantity: string;
@@ -74,6 +83,8 @@ export function useLedgerOperations() {
     options: {
       hasIncomingCheck?: boolean;
       checkFormData?: CheckFormData;
+      hasOutgoingCheck?: boolean;
+      outgoingCheckFormData?: OutgoingCheckFormData;
       hasInventoryUpdate?: boolean;
       inventoryFormData?: InventoryFormData;
       hasFixedAsset?: boolean;
@@ -152,6 +163,7 @@ export function useLedgerOperations() {
       // Use batch for atomic operations
       const needsBatch =
         options.hasIncomingCheck ||
+        options.hasOutgoingCheck ||
         options.hasInventoryUpdate ||
         options.hasFixedAsset ||
         options.hasInitialPayment;
@@ -201,6 +213,16 @@ export function useLedgerOperations() {
               initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
             }
             // For postponed/endorsed, initialPaid stays 0 and status stays unpaid
+          } else if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+            // When has outgoing check with AR/AP tracking (for expenses):
+            // Only count cashed or endorsed cheques as paid
+            const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
+            if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
+              const chequeAmount = parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
+              initialPaid = chequeAmount;
+              initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+            }
+            // For postponed, initialPaid stays 0 and status stays unpaid
           }
         } else if (formData.immediateSettlement) {
           initialPaid = totalAmount;
@@ -236,6 +258,18 @@ export function useLedgerOperations() {
             user.uid,
             transactionId,
             options.checkFormData,
+            formData,
+            entryType
+          );
+        }
+
+        // Handle outgoing check
+        if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+          await handleOutgoingCheckBatch(
+            batch,
+            user.uid,
+            transactionId,
+            options.outgoingCheckFormData,
             formData,
             entryType
           );
@@ -693,4 +727,89 @@ async function handleFixedAssetBatch(
     notes: `مرتبط بالمعاملة: ${formData.description}`,
     createdAt: new Date(),
   });
+}
+
+async function handleOutgoingCheckBatch(
+  batch: any,
+  userId: string,
+  transactionId: string,
+  outgoingCheckFormData: OutgoingCheckFormData,
+  formData: LedgerFormData,
+  entryType: string
+) {
+  const accountingType = outgoingCheckFormData.accountingType || "cashed";
+  const chequeAmount = parseFloat(outgoingCheckFormData.chequeAmount);
+  const chequesRef = collection(firestore, `users/${userId}/cheques`);
+  const paymentsRef = collection(firestore, `users/${userId}/payments`);
+
+  // Determine cheque status based on accounting type
+  let chequeStatus: string;
+  if (accountingType === "cashed") {
+    chequeStatus = "تم الصرف"; // Cleared immediately
+  } else if (accountingType === "postponed") {
+    chequeStatus = "قيد الانتظار"; // Pending until cleared later
+  } else {
+    chequeStatus = "تم الصرف"; // Endorsed cheque is considered cleared
+  }
+
+  // Create cheque record
+  const chequeDocRef = doc(chequesRef);
+  const chequeData: Record<string, unknown> = {
+    chequeNumber: outgoingCheckFormData.chequeNumber,
+    clientName: formData.associatedParty || "غير محدد", // Supplier name
+    amount: chequeAmount,
+    type: "صادر", // Outgoing cheque
+    chequeType: accountingType === "endorsed" ? "مظهر" : "عادي",
+    status: chequeStatus,
+    linkedTransactionId: transactionId,
+    issueDate: new Date(formData.date),
+    dueDate: new Date(outgoingCheckFormData.dueDate),
+    bankName: outgoingCheckFormData.bankName,
+    notes: `مرتبط بالمعاملة: ${formData.description}`,
+    createdAt: new Date(),
+    accountingType: accountingType,
+  };
+
+  // Add endorser info for endorsed cheques
+  if (accountingType === "endorsed" && outgoingCheckFormData.endorsedFromName) {
+    chequeData.isEndorsedCheque = true;
+    chequeData.endorsedFromName = outgoingCheckFormData.endorsedFromName;
+    chequeData.notes = `شيك مظهر من: ${outgoingCheckFormData.endorsedFromName} - مرتبط بالمعاملة: ${formData.description}`;
+  }
+
+  batch.set(chequeDocRef, chequeData);
+
+  // Handle payment records based on accounting type
+  if (accountingType === "cashed") {
+    // CASHED CHEQUE: Create a real payment record (affects cash flow and AP)
+    const paymentDocRef = doc(paymentsRef);
+    batch.set(paymentDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "صرف", // Disbursement - we're paying the supplier
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `شيك صرف رقم ${outgoingCheckFormData.chequeNumber} - ${formData.description}`,
+      createdAt: new Date(),
+    });
+  } else if (accountingType === "postponed") {
+    // POSTPONED CHEQUE: Do NOT create payment record
+    // Payment will be created later when cheque is cleared from the outgoing cheques page
+    // No action needed here
+  } else if (accountingType === "endorsed") {
+    // ENDORSED CHEQUE: Create payment record - we're transferring value via endorsed cheque
+    const paymentDocRef = doc(paymentsRef);
+    batch.set(paymentDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "صرف", // Disbursement
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `شيك مظهر رقم ${outgoingCheckFormData.chequeNumber} من ${outgoingCheckFormData.endorsedFromName} - ${formData.description}`,
+      createdAt: new Date(),
+      isEndorsement: true,
+    });
+  }
 }

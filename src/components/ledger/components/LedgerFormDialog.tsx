@@ -40,6 +40,8 @@ interface LedgerFormDialogProps {
   setFormData: (data: any) => void;
   hasIncomingCheck: boolean;
   setHasIncomingCheck: (value: boolean) => void;
+  hasOutgoingCheck: boolean;
+  setHasOutgoingCheck: (value: boolean) => void;
   hasInventoryUpdate: boolean;
   setHasInventoryUpdate: (value: boolean) => void;
   hasFixedAsset: boolean;
@@ -50,6 +52,8 @@ interface LedgerFormDialogProps {
   setInitialPaymentAmount: (value: string) => void;
   checkFormData: any;
   setCheckFormData: (data: any) => void;
+  outgoingCheckFormData: any;
+  setOutgoingCheckFormData: (data: any) => void;
   inventoryFormData: any;
   setInventoryFormData: (data: any) => void;
   fixedAssetFormData: any;
@@ -68,6 +72,8 @@ export function LedgerFormDialog({
   setFormData,
   hasIncomingCheck,
   setHasIncomingCheck,
+  hasOutgoingCheck,
+  setHasOutgoingCheck,
   hasInventoryUpdate,
   setHasInventoryUpdate,
   hasFixedAsset,
@@ -78,6 +84,8 @@ export function LedgerFormDialog({
   setInitialPaymentAmount,
   checkFormData,
   setCheckFormData,
+  outgoingCheckFormData,
+  setOutgoingCheckFormData,
   inventoryFormData,
   setInventoryFormData,
   fixedAssetFormData,
@@ -433,6 +441,128 @@ export function LedgerFormDialog({
                                 setCheckFormData({ ...checkFormData, dueDate: e.target.value })
                               }
                               required={hasIncomingCheck}
+                            />
+                            <p className="text-xs text-gray-500">تاريخ الاستحقاق</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Outgoing Check Option - for expenses */}
+                {currentEntryType === "مصروف" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input type="checkbox"
+                        id="hasOutgoingCheck"
+                        checked={hasOutgoingCheck}
+                        onChange={(e) =>
+                          setHasOutgoingCheck(e.target.checked)
+                        }
+                      />
+                      <Label htmlFor="hasOutgoingCheck" className="cursor-pointer">
+                        إضافة شيك صادر
+                      </Label>
+                    </div>
+
+                    {hasOutgoingCheck && (
+                      <div className="pr-6 space-y-4">
+                        {/* Cheque Type Selection - Critical for proper accounting */}
+                        <div className="space-y-2">
+                          <Label htmlFor="outgoingChequeAccountingType">نوع الشيك المحاسبي</Label>
+                          <select
+                            id="outgoingChequeAccountingType"
+                            value={outgoingCheckFormData.accountingType || "cashed"}
+                            onChange={(e) =>
+                              setOutgoingCheckFormData({
+                                ...outgoingCheckFormData,
+                                accountingType: e.target.value as 'cashed' | 'postponed' | 'endorsed',
+                                endorsedFromName: e.target.value === 'endorsed' ? outgoingCheckFormData.endorsedFromName : "",
+                              })
+                            }
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            required
+                          >
+                            <option value="cashed">شيك صرف - يُصرف فوراً</option>
+                            <option value="postponed">شيك مؤجل - يُصرف لاحقاً</option>
+                            <option value="endorsed">شيك مظهر - شيك وارد نمرره للمورد</option>
+                          </select>
+                          <p className="text-xs text-gray-500">
+                            {outgoingCheckFormData.accountingType === 'cashed' &&
+                              "سيتم تسجيل الشيك كمصروف وتحديث رصيد المورد فوراً"}
+                            {outgoingCheckFormData.accountingType === 'postponed' &&
+                              "سيتم تسجيل الشيك كمعلق ولن يؤثر على رصيد المورد حتى تاريخ الصرف"}
+                            {outgoingCheckFormData.accountingType === 'endorsed' &&
+                              "سيتم تظهير شيك وارد للمورد - يؤثر على رصيد المورد فوراً"}
+                          </p>
+                        </div>
+
+                        {/* Endorsed from field - only for endorsed cheques */}
+                        {outgoingCheckFormData.accountingType === 'endorsed' && (
+                          <div className="space-y-2 p-3 bg-purple-50 rounded-md border border-purple-200">
+                            <Label htmlFor="endorsedFromName">مظهر من (مصدر الشيك الأصلي)</Label>
+                            <Input
+                              id="endorsedFromName"
+                              type="text"
+                              placeholder="أدخل اسم العميل/الجهة التي استلمنا منها الشيك"
+                              value={outgoingCheckFormData.endorsedFromName || ""}
+                              onChange={(e) =>
+                                setOutgoingCheckFormData({ ...outgoingCheckFormData, endorsedFromName: e.target.value })
+                              }
+                              required
+                            />
+                          </div>
+                        )}
+
+                        {/* Postponed cheque warning */}
+                        {outgoingCheckFormData.accountingType === 'postponed' && (
+                          <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                            <p className="text-xs text-yellow-700">
+                              ⏳ الشيك المؤجل: تأكد من أن تاريخ الاستحقاق في المستقبل.
+                              سيظهر الشيك في قائمة الشيكات الصادرة المعلقة ويمكنك تأكيد الصرف لاحقاً.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Cheque details */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input
+                            type="text"
+                            placeholder="رقم الشيك"
+                            value={outgoingCheckFormData.chequeNumber}
+                            onChange={(e) =>
+                              setOutgoingCheckFormData({ ...outgoingCheckFormData, chequeNumber: e.target.value })
+                            }
+                            required={hasOutgoingCheck}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="مبلغ الشيك"
+                            value={outgoingCheckFormData.chequeAmount}
+                            onChange={(e) =>
+                              setOutgoingCheckFormData({ ...outgoingCheckFormData, chequeAmount: e.target.value })
+                            }
+                            required={hasOutgoingCheck}
+                          />
+                          <Input
+                            type="text"
+                            placeholder="اسم البنك"
+                            value={outgoingCheckFormData.bankName}
+                            onChange={(e) =>
+                              setOutgoingCheckFormData({ ...outgoingCheckFormData, bankName: e.target.value })
+                            }
+                            required={hasOutgoingCheck}
+                          />
+                          <div className="space-y-1">
+                            <Input
+                              type="date"
+                              value={outgoingCheckFormData.dueDate}
+                              onChange={(e) =>
+                                setOutgoingCheckFormData({ ...outgoingCheckFormData, dueDate: e.target.value })
+                              }
+                              required={hasOutgoingCheck}
                             />
                             <p className="text-xs text-gray-500">تاريخ الاستحقاق</p>
                           </div>
