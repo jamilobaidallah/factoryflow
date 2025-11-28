@@ -17,7 +17,7 @@ import { LedgerEntry } from "../utils/ledger-constants";
 interface LedgerTableProps {
   entries: LedgerEntry[];
   onEdit: (entry: LedgerEntry) => void;
-  onDelete: (id: string) => void;
+  onDelete: (entry: LedgerEntry) => void;
   onQuickPay: (entry: LedgerEntry) => void;
   onViewRelated: (entry: LedgerEntry) => void;
 }
@@ -32,7 +32,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
 }: {
   entry: LedgerEntry;
   onEdit: (entry: LedgerEntry) => void;
-  onDelete: (id: string) => void;
+  onDelete: (entry: LedgerEntry) => void;
   onQuickPay: (entry: LedgerEntry) => void;
   onViewRelated: (entry: LedgerEntry) => void;
 }) {
@@ -146,7 +146,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => onDelete(entry.id)}
+            onClick={() => onDelete(entry)}
             aria-label={`حذف ${entry.description}`}
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" />
