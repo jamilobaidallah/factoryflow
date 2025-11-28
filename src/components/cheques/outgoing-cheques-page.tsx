@@ -155,7 +155,8 @@ export default function OutgoingChequesPage() {
           updateData.chequeImageUrl = chequeImageUrl;
         }
 
-        // Check if status changed from pending to cleared/cashed
+        // التحقق من تغيير حالة الشيك - منطق محاسبي مهم
+        // Check if status changed - critical accounting logic
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
         const pendingStatuses = ["قيد الانتظار", "pending"];
@@ -166,8 +167,10 @@ export default function OutgoingChequesPage() {
         const isNowCleared = clearedStatuses.includes(newStatus);
         const isNowBouncedOrReverted = bouncedOrRevertedStatuses.includes(newStatus);
 
+        // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
+        // Important: Create payment record when cheque changes from pending to cleared
         if (wasPending && isNowCleared) {
-          // Add cleared date when status changes to cleared
+          // إضافة تاريخ الصرف عند تغيير الحالة إلى تم الصرف
           updateData.clearedDate = new Date();
 
           // Create a Payment record (disbursement for outgoing cheque)
@@ -189,7 +192,8 @@ export default function OutgoingChequesPage() {
           // Store the payment ID in the cheque for later reference
           updateData.linkedPaymentId = paymentRef.id;
 
-          // Update AR/AP tracking if linkedTransactionId exists
+          // تحديث تتبع الذمم الدائنة (AP) إذا كان هناك قيد مرتبط
+          // Update Accounts Payable tracking if linked to a ledger entry
           if (formData.linkedTransactionId) {
             const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
             const ledgerQuery = query(
@@ -202,12 +206,14 @@ export default function OutgoingChequesPage() {
               const ledgerDoc = ledgerSnapshot.docs[0];
               const ledgerData = ledgerDoc.data();
 
+              // تحديث الذمم فقط إذا كان القيد يتتبع الذمم
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
                 const transactionAmount = ledgerData.amount || 0;
                 const newTotalPaid = currentTotalPaid + chequeAmount;
                 const newRemainingBalance = transactionAmount - newTotalPaid;
 
+                // حساب حالة الدفع الجديدة
                 let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
                 if (newRemainingBalance <= 0) {
                   newPaymentStatus = "paid";
@@ -224,7 +230,9 @@ export default function OutgoingChequesPage() {
             }
           }
         } else if (wasCleared && isNowBouncedOrReverted) {
-          // Handle un-clearing (bounced or reverted to pending) - DELETE payment and update ledger
+          // مهم: حذف سجل الدفع عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
+          // Important: Delete payment record when cheque is bounced or reverted
+          // معالجة إلغاء الصرف - حذف سجل الدفع وتحديث الذمم
           const chequeAmount = parseFloat(formData.amount);
 
           // Delete the associated payment record
@@ -253,11 +261,12 @@ export default function OutgoingChequesPage() {
             }
           }
 
-          // Remove cleared date and payment reference
+          // إزالة تاريخ الصرف ومرجع الدفع من الشيك
           updateData.clearedDate = null;
           updateData.linkedPaymentId = null;
 
-          // Update AR/AP tracking if linkedTransactionId exists - revert the payment
+          // إرجاع تتبع الذمم الدائنة - استرداد المبلغ المدفوع
+          // Revert Accounts Payable tracking - restore the paid amount
           if (formData.linkedTransactionId) {
             const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
             const ledgerQuery = query(
@@ -458,8 +467,7 @@ export default function OutgoingChequesPage() {
       setLinkDialogOpen(false);
       setChequeToLink(null);
       setLinkTransactionId("");
-    } catch (error) {
-      console.error("Error linking transaction:", error);
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء ربط الشيك بالمعاملة",

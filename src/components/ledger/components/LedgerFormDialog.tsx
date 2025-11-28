@@ -450,7 +450,15 @@ export function LedgerFormDialog({
                   </div>
                 )}
 
-                {/* Outgoing Check Option - for expenses */}
+                {/*
+                  خيار الشيك الصادر - للمصروفات فقط
+                  Outgoing Cheque Option - for expenses only
+
+                  أنواع الشيكات الصادرة:
+                  - شيك صرف (cashed): يُنشئ سجل دفع فوري
+                  - شيك مؤجل (postponed): لا يُنشئ سجل دفع حتى يتم صرفه
+                  - شيك مظهر (endorsed): شيك وارد نمرره للمورد - يُنشئ سجل دفع فوري
+                */}
                 {currentEntryType === "مصروف" && (
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2 space-x-reverse">
@@ -468,7 +476,7 @@ export function LedgerFormDialog({
 
                     {hasOutgoingCheck && (
                       <div className="pr-6 space-y-4">
-                        {/* Cheque Type Selection - Critical for proper accounting */}
+                        {/* اختيار نوع الشيك المحاسبي - مهم للمعالجة الصحيحة */}
                         <div className="space-y-2">
                           <Label htmlFor="outgoingChequeAccountingType">نوع الشيك المحاسبي</Label>
                           <select

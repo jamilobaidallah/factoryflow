@@ -729,6 +729,21 @@ async function handleFixedAssetBatch(
   });
 }
 
+/**
+ * معالجة الشيكات الصادرة ضمن دفعة واحدة (Batch Operation)
+ *
+ * هذه الدالة تُنشئ سجل شيك صادر وسجل دفع حسب نوع الشيك:
+ * - شيك صرف (cashed): يُنشئ سجل دفع فوري
+ * - شيك مؤجل (postponed): لا يُنشئ سجل دفع - ينتظر التصريف لاحقاً
+ * - شيك مظهر (endorsed): يُنشئ سجل دفع فوري (تحويل قيمة الشيك للمورد)
+ *
+ * @param batch - كائن الدفعة للعمليات الذرية
+ * @param userId - معرف المستخدم
+ * @param transactionId - معرف المعاملة المرتبطة
+ * @param outgoingCheckFormData - بيانات نموذج الشيك الصادر
+ * @param formData - بيانات القيد الرئيسي
+ * @param entryType - نوع القيد (مصروف/دخل)
+ */
 async function handleOutgoingCheckBatch(
   batch: any,
   userId: string,
@@ -742,23 +757,24 @@ async function handleOutgoingCheckBatch(
   const chequesRef = collection(firestore, `users/${userId}/cheques`);
   const paymentsRef = collection(firestore, `users/${userId}/payments`);
 
+  // تحديد حالة الشيك بناءً على نوعه المحاسبي
   // Determine cheque status based on accounting type
   let chequeStatus: string;
   if (accountingType === "cashed") {
-    chequeStatus = "تم الصرف"; // Cleared immediately
+    chequeStatus = "تم الصرف"; // تم صرفه فوراً
   } else if (accountingType === "postponed") {
-    chequeStatus = "قيد الانتظار"; // Pending until cleared later
+    chequeStatus = "قيد الانتظار"; // معلق حتى تاريخ الاستحقاق
   } else {
-    chequeStatus = "تم الصرف"; // Endorsed cheque is considered cleared
+    chequeStatus = "تم الصرف"; // الشيك المظهر يُعتبر مصروفاً
   }
 
-  // Create cheque record
+  // إنشاء سجل الشيك في قاعدة البيانات
   const chequeDocRef = doc(chequesRef);
   const chequeData: Record<string, unknown> = {
     chequeNumber: outgoingCheckFormData.chequeNumber,
-    clientName: formData.associatedParty || "غير محدد", // Supplier name
+    clientName: formData.associatedParty || "غير محدد", // اسم المورد
     amount: chequeAmount,
-    type: "صادر", // Outgoing cheque
+    type: "صادر", // نوع الشيك: صادر
     chequeType: accountingType === "endorsed" ? "مظهر" : "عادي",
     status: chequeStatus,
     linkedTransactionId: transactionId,
@@ -770,7 +786,7 @@ async function handleOutgoingCheckBatch(
     accountingType: accountingType,
   };
 
-  // Add endorser info for endorsed cheques
+  // إضافة معلومات التظهير للشيكات المظهرة
   if (accountingType === "endorsed" && outgoingCheckFormData.endorsedFromName) {
     chequeData.isEndorsedCheque = true;
     chequeData.endorsedFromName = outgoingCheckFormData.endorsedFromName;
@@ -779,14 +795,16 @@ async function handleOutgoingCheckBatch(
 
   batch.set(chequeDocRef, chequeData);
 
-  // Handle payment records based on accounting type
+  // معالجة سجلات الدفع حسب نوع الشيك المحاسبي
+  // مهم: إنشاء سجل الدفع فقط للشيكات الفورية والمظهرة
+  // Important: Create payment record only for cashed and endorsed cheques
   if (accountingType === "cashed") {
-    // CASHED CHEQUE: Create a real payment record (affects cash flow and AP)
+    // شيك صرف: إنشاء سجل دفع حقيقي (يؤثر على التدفق النقدي والذمم الدائنة)
     const paymentDocRef = doc(paymentsRef);
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
-      type: "صرف", // Disbursement - we're paying the supplier
+      type: "صرف", // صرف - دفعنا للمورد
       method: "cheque",
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
@@ -794,16 +812,17 @@ async function handleOutgoingCheckBatch(
       createdAt: new Date(),
     });
   } else if (accountingType === "postponed") {
-    // POSTPONED CHEQUE: Do NOT create payment record
-    // Payment will be created later when cheque is cleared from the outgoing cheques page
-    // No action needed here
+    // شيك مؤجل: لا يتم إنشاء سجل دفع الآن
+    // سيتم إنشاء سجل الدفع لاحقاً عند تغيير حالة الشيك إلى "تم الصرف"
+    // من صفحة الشيكات الصادرة
+    // No payment record created - will be created when cheque is cleared
   } else if (accountingType === "endorsed") {
-    // ENDORSED CHEQUE: Create payment record - we're transferring value via endorsed cheque
+    // شيك مظهر: إنشاء سجل دفع - نحن ننقل قيمة الشيك الوارد للمورد
     const paymentDocRef = doc(paymentsRef);
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
-      type: "صرف", // Disbursement
+      type: "صرف", // صرف
       method: "cheque",
       linkedTransactionId: transactionId,
       date: new Date(formData.date),

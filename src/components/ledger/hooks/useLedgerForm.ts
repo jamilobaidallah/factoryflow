@@ -30,14 +30,22 @@ export interface CheckFormState {
   endorsedToName: string;
 }
 
+/**
+ * حالة نموذج الشيك الصادر
+ * Outgoing Cheque Form State
+ *
+ * يُستخدم عند إضافة شيك صادر مع قيد مصروف في دفتر الأستاذ
+ */
 export interface OutgoingCheckFormState {
   chequeNumber: string;
   chequeAmount: string;
   bankName: string;
   dueDate: string;
-  // Accounting type for outgoing cheques: cashed (immediate), postponed (post-dated), endorsed (received cheque being passed on)
+  // نوع الشيك المحاسبي: صرف (فوري) | مؤجل (لاحقاً) | مظهر (تحويل شيك وارد)
+  // Accounting type: cashed (immediate), postponed (post-dated), endorsed (passing received cheque)
   accountingType: 'cashed' | 'postponed' | 'endorsed';
-  // For endorsed outgoing cheques, the original client/source of the cheque
+  // للشيكات المظهرة: اسم الجهة التي استلمنا منها الشيك الأصلي
+  // For endorsed cheques: the original source of the cheque
   endorsedFromName: string;
 }
 
