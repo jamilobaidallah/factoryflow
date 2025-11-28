@@ -145,6 +145,30 @@ export function QuickInvoiceDialog({
       const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
       const invoiceNumber = generateInvoiceNumber();
 
+      // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
+      // Clean items from undefined values - Firestore doesn't accept undefined
+      const cleanedItems = items.map(item => {
+        const cleanItem: Record<string, any> = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+          unit: item.unit || 'piece',
+        };
+        // فقط أضف الأبعاد إذا كانت موجودة
+        // Only add dimensions if they have values
+        if (item.length !== undefined && item.length !== null) {
+          cleanItem.length = item.length;
+        }
+        if (item.width !== undefined && item.width !== null) {
+          cleanItem.width = item.width;
+        }
+        if (item.thickness !== undefined && item.thickness !== null) {
+          cleanItem.thickness = item.thickness;
+        }
+        return cleanItem;
+      });
+
       // تعيين تاريخ الاستحقاق تلقائياً (30 يوم من تاريخ الفاتورة)
       // Auto-set due date to 30 days from invoice date
       const invoiceDate = new Date(formData.invoiceDate);
@@ -157,7 +181,7 @@ export function QuickInvoiceDialog({
         clientPhone: formData.clientPhone,
         invoiceDate,
         dueDate,
-        items,
+        items: cleanedItems,
         subtotal,
         taxRate: parseFloat(formData.taxRate),
         taxAmount,
