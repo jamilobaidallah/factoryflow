@@ -45,6 +45,8 @@ describe('useLedgerForm', () => {
         chequeAmount: "",
         bankName: "",
         dueDate: getTodayDate(),
+        accountingType: "cashed",
+        endorsedToName: "",
       });
     });
 
@@ -94,6 +96,9 @@ describe('useLedgerForm', () => {
         status: "قيد الانتظار",
         chequeType: "عادي",
         chequeImage: null,
+        accountingType: "cashed",
+        endorsedToId: "",
+        endorsedToName: "",
       });
     });
 
