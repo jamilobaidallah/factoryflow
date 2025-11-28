@@ -43,6 +43,15 @@ export interface CheckFormData {
   endorsedToName?: string;
 }
 
+export interface OutgoingCheckFormData {
+  chequeNumber: string;
+  chequeAmount: string;
+  bankName: string;
+  dueDate: string;
+  accountingType?: 'cashed' | 'postponed' | 'endorsed';
+  endorsedFromName?: string;
+}
+
 export interface InventoryFormData {
   itemName: string;
   quantity: string;
@@ -74,6 +83,8 @@ export function useLedgerOperations() {
     options: {
       hasIncomingCheck?: boolean;
       checkFormData?: CheckFormData;
+      hasOutgoingCheck?: boolean;
+      outgoingCheckFormData?: OutgoingCheckFormData;
       hasInventoryUpdate?: boolean;
       inventoryFormData?: InventoryFormData;
       hasFixedAsset?: boolean;
@@ -152,6 +163,7 @@ export function useLedgerOperations() {
       // Use batch for atomic operations
       const needsBatch =
         options.hasIncomingCheck ||
+        options.hasOutgoingCheck ||
         options.hasInventoryUpdate ||
         options.hasFixedAsset ||
         options.hasInitialPayment;
@@ -201,6 +213,16 @@ export function useLedgerOperations() {
               initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
             }
             // For postponed/endorsed, initialPaid stays 0 and status stays unpaid
+          } else if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+            // When has outgoing check with AR/AP tracking (for expenses):
+            // Only count cashed or endorsed cheques as paid
+            const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
+            if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
+              const chequeAmount = parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
+              initialPaid = chequeAmount;
+              initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+            }
+            // For postponed, initialPaid stays 0 and status stays unpaid
           }
         } else if (formData.immediateSettlement) {
           initialPaid = totalAmount;
@@ -236,6 +258,18 @@ export function useLedgerOperations() {
             user.uid,
             transactionId,
             options.checkFormData,
+            formData,
+            entryType
+          );
+        }
+
+        // Handle outgoing check
+        if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+          await handleOutgoingCheckBatch(
+            batch,
+            user.uid,
+            transactionId,
+            options.outgoingCheckFormData,
             formData,
             entryType
           );
@@ -693,4 +727,108 @@ async function handleFixedAssetBatch(
     notes: `مرتبط بالمعاملة: ${formData.description}`,
     createdAt: new Date(),
   });
+}
+
+/**
+ * معالجة الشيكات الصادرة ضمن دفعة واحدة (Batch Operation)
+ *
+ * هذه الدالة تُنشئ سجل شيك صادر وسجل دفع حسب نوع الشيك:
+ * - شيك صرف (cashed): يُنشئ سجل دفع فوري
+ * - شيك مؤجل (postponed): لا يُنشئ سجل دفع - ينتظر التصريف لاحقاً
+ * - شيك مظهر (endorsed): يُنشئ سجل دفع فوري (تحويل قيمة الشيك للمورد)
+ *
+ * @param batch - كائن الدفعة للعمليات الذرية
+ * @param userId - معرف المستخدم
+ * @param transactionId - معرف المعاملة المرتبطة
+ * @param outgoingCheckFormData - بيانات نموذج الشيك الصادر
+ * @param formData - بيانات القيد الرئيسي
+ * @param entryType - نوع القيد (مصروف/دخل)
+ */
+async function handleOutgoingCheckBatch(
+  batch: any,
+  userId: string,
+  transactionId: string,
+  outgoingCheckFormData: OutgoingCheckFormData,
+  formData: LedgerFormData,
+  entryType: string
+) {
+  const accountingType = outgoingCheckFormData.accountingType || "cashed";
+  const chequeAmount = parseFloat(outgoingCheckFormData.chequeAmount);
+  const chequesRef = collection(firestore, `users/${userId}/cheques`);
+  const paymentsRef = collection(firestore, `users/${userId}/payments`);
+
+  // تحديد حالة الشيك بناءً على نوعه المحاسبي
+  // Determine cheque status based on accounting type
+  let chequeStatus: string;
+  if (accountingType === "cashed") {
+    chequeStatus = "تم الصرف"; // تم صرفه فوراً
+  } else if (accountingType === "postponed") {
+    chequeStatus = "قيد الانتظار"; // معلق حتى تاريخ الاستحقاق
+  } else {
+    chequeStatus = "تم الصرف"; // الشيك المظهر يُعتبر مصروفاً
+  }
+
+  // إنشاء سجل الشيك في قاعدة البيانات
+  const chequeDocRef = doc(chequesRef);
+  const chequeData: Record<string, unknown> = {
+    chequeNumber: outgoingCheckFormData.chequeNumber,
+    clientName: formData.associatedParty || "غير محدد", // اسم المورد
+    amount: chequeAmount,
+    type: "صادر", // نوع الشيك: صادر
+    chequeType: accountingType === "endorsed" ? "مظهر" : "عادي",
+    status: chequeStatus,
+    linkedTransactionId: transactionId,
+    issueDate: new Date(formData.date),
+    dueDate: new Date(outgoingCheckFormData.dueDate),
+    bankName: outgoingCheckFormData.bankName,
+    notes: `مرتبط بالمعاملة: ${formData.description}`,
+    createdAt: new Date(),
+    accountingType: accountingType,
+  };
+
+  // إضافة معلومات التظهير للشيكات المظهرة
+  if (accountingType === "endorsed" && outgoingCheckFormData.endorsedFromName) {
+    chequeData.isEndorsedCheque = true;
+    chequeData.endorsedFromName = outgoingCheckFormData.endorsedFromName;
+    chequeData.notes = `شيك مظهر من: ${outgoingCheckFormData.endorsedFromName} - مرتبط بالمعاملة: ${formData.description}`;
+  }
+
+  batch.set(chequeDocRef, chequeData);
+
+  // معالجة سجلات الدفع حسب نوع الشيك المحاسبي
+  // مهم: إنشاء سجل الدفع فقط للشيكات الفورية والمظهرة
+  // Important: Create payment record only for cashed and endorsed cheques
+  if (accountingType === "cashed") {
+    // شيك صرف: إنشاء سجل دفع حقيقي (يؤثر على التدفق النقدي والذمم الدائنة)
+    const paymentDocRef = doc(paymentsRef);
+    batch.set(paymentDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "صرف", // صرف - دفعنا للمورد
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `شيك صرف رقم ${outgoingCheckFormData.chequeNumber} - ${formData.description}`,
+      createdAt: new Date(),
+    });
+  } else if (accountingType === "postponed") {
+    // شيك مؤجل: لا يتم إنشاء سجل دفع الآن
+    // سيتم إنشاء سجل الدفع لاحقاً عند تغيير حالة الشيك إلى "تم الصرف"
+    // من صفحة الشيكات الصادرة
+    // No payment record created - will be created when cheque is cleared
+  } else if (accountingType === "endorsed") {
+    // شيك مظهر: إنشاء سجل دفع - نحن ننقل قيمة الشيك الوارد للمورد
+    const paymentDocRef = doc(paymentsRef);
+    batch.set(paymentDocRef, {
+      clientName: formData.associatedParty || "غير محدد",
+      amount: chequeAmount,
+      type: "صرف", // صرف
+      method: "cheque",
+      linkedTransactionId: transactionId,
+      date: new Date(formData.date),
+      notes: `شيك مظهر رقم ${outgoingCheckFormData.chequeNumber} من ${outgoingCheckFormData.endorsedFromName} - ${formData.description}`,
+      createdAt: new Date(),
+      isEndorsement: true,
+    });
+  }
 }

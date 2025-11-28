@@ -102,6 +102,8 @@ export default function LedgerPage() {
     setFormData,
     hasIncomingCheck,
     setHasIncomingCheck,
+    hasOutgoingCheck,
+    setHasOutgoingCheck,
     hasInventoryUpdate,
     setHasInventoryUpdate,
     hasFixedAsset,
@@ -112,6 +114,8 @@ export default function LedgerPage() {
     setInitialPaymentAmount,
     checkFormData,
     setCheckFormData,
+    outgoingCheckFormData,
+    setOutgoingCheckFormData,
     inventoryFormData: inventoryFormDataNew,
     setInventoryFormData: setInventoryFormDataNew,
     fixedAssetFormData,
@@ -139,6 +143,8 @@ export default function LedgerPage() {
       const success = await submitLedgerEntry(formData, editingEntry, {
         hasIncomingCheck,
         checkFormData,
+        hasOutgoingCheck,
+        outgoingCheckFormData,
         hasInventoryUpdate,
         inventoryFormData: inventoryFormDataNew,
         hasFixedAsset,
@@ -296,6 +302,7 @@ export default function LedgerPage() {
     });
     setEditingEntry(null);
     setHasIncomingCheck(false);
+    setHasOutgoingCheck(false);
     setHasInventoryUpdate(false);
     setHasFixedAsset(false);
     setHasInitialPayment(false);
@@ -307,6 +314,14 @@ export default function LedgerPage() {
       dueDate: new Date().toISOString().split("T")[0],
       accountingType: "cashed",
       endorsedToName: "",
+    });
+    setOutgoingCheckFormData({
+      chequeNumber: "",
+      chequeAmount: "",
+      bankName: "",
+      dueDate: new Date().toISOString().split("T")[0],
+      accountingType: "cashed",
+      endorsedFromName: "",
     });
     setInventoryFormDataNew({
       itemName: "",
@@ -794,6 +809,8 @@ export default function LedgerPage() {
         setFormData={setFormData}
         hasIncomingCheck={hasIncomingCheck}
         setHasIncomingCheck={setHasIncomingCheck}
+        hasOutgoingCheck={hasOutgoingCheck}
+        setHasOutgoingCheck={setHasOutgoingCheck}
         hasInventoryUpdate={hasInventoryUpdate}
         setHasInventoryUpdate={setHasInventoryUpdate}
         hasFixedAsset={hasFixedAsset}
@@ -804,6 +821,8 @@ export default function LedgerPage() {
         setInitialPaymentAmount={setInitialPaymentAmount}
         checkFormData={checkFormData}
         setCheckFormData={setCheckFormData}
+        outgoingCheckFormData={outgoingCheckFormData}
+        setOutgoingCheckFormData={setOutgoingCheckFormData}
         inventoryFormData={inventoryFormDataNew}
         setInventoryFormData={setInventoryFormDataNew}
         fixedAssetFormData={fixedAssetFormData}

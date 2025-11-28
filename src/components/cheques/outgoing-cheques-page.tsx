@@ -155,34 +155,118 @@ export default function OutgoingChequesPage() {
           updateData.chequeImageUrl = chequeImageUrl;
         }
 
-        // Check if status changed from pending to cleared/cashed
+        // التحقق من تغيير حالة الشيك - منطق محاسبي مهم
+        // Check if status changed - critical accounting logic
         const oldStatus = editingCheque.status;
         const newStatus = formData.status;
         const pendingStatuses = ["قيد الانتظار", "pending"];
         const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+        const bouncedOrRevertedStatuses = ["مرتجع", "bounced", "قيد الانتظار", "pending", "ملغي", "cancelled"];
         const wasPending = pendingStatuses.includes(oldStatus);
+        const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
+        const isNowBouncedOrReverted = bouncedOrRevertedStatuses.includes(newStatus);
 
+        // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
+        // Important: Create payment record when cheque changes from pending to cleared
         if (wasPending && isNowCleared) {
-          // Add cleared date when status changes to cleared
+          // إضافة تاريخ الصرف عند تغيير الحالة إلى تم الصرف
           updateData.clearedDate = new Date();
 
           // Create a Payment record (disbursement for outgoing cheque)
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
           const chequeAmount = parseFloat(formData.amount);
 
-          await addDoc(paymentsRef, {
+          const paymentRef = await addDoc(paymentsRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
             type: "صرف", // Disbursement - we paid the supplier
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
+            linkedChequeId: editingCheque.id,
             date: new Date(),
             notes: `صرف شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
           });
 
-          // Update AR/AP tracking if linkedTransactionId exists
+          // Store the payment ID in the cheque for later reference
+          updateData.linkedPaymentId = paymentRef.id;
+
+          // تحديث تتبع الذمم الدائنة (AP) إذا كان هناك قيد مرتبط
+          // Update Accounts Payable tracking if linked to a ledger entry
+          if (formData.linkedTransactionId) {
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              // تحديث الذمم فقط إذا كان القيد يتتبع الذمم
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = currentTotalPaid + chequeAmount;
+                const newRemainingBalance = transactionAmount - newTotalPaid;
+
+                // حساب حالة الدفع الجديدة
+                let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
+                if (newRemainingBalance <= 0) {
+                  newPaymentStatus = "paid";
+                } else if (newTotalPaid > 0) {
+                  newPaymentStatus = "partial";
+                }
+
+                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
+          }
+        } else if (wasCleared && isNowBouncedOrReverted) {
+          // مهم: حذف سجل الدفع عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
+          // Important: Delete payment record when cheque is bounced or reverted
+          // معالجة إلغاء الصرف - حذف سجل الدفع وتحديث الذمم
+          const chequeAmount = parseFloat(formData.amount);
+
+          // Delete the associated payment record
+          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const paymentQuery = query(
+            paymentsRef,
+            where("linkedChequeId", "==", editingCheque.id)
+          );
+          const paymentSnapshot = await getDocs(paymentQuery);
+
+          // If we don't find by linkedChequeId, try finding by linkedTransactionId and amount
+          if (paymentSnapshot.empty && formData.linkedTransactionId) {
+            const altPaymentQuery = query(
+              paymentsRef,
+              where("linkedTransactionId", "==", formData.linkedTransactionId.trim()),
+              where("method", "==", "cheque"),
+              where("amount", "==", chequeAmount)
+            );
+            const altPaymentSnapshot = await getDocs(altPaymentQuery);
+            for (const paymentDoc of altPaymentSnapshot.docs) {
+              await deleteDoc(doc(firestore, `users/${user.uid}/payments`, paymentDoc.id));
+            }
+          } else {
+            for (const paymentDoc of paymentSnapshot.docs) {
+              await deleteDoc(doc(firestore, `users/${user.uid}/payments`, paymentDoc.id));
+            }
+          }
+
+          // إزالة تاريخ الصرف ومرجع الدفع من الشيك
+          updateData.clearedDate = null;
+          updateData.linkedPaymentId = null;
+
+          // إرجاع تتبع الذمم الدائنة - استرداد المبلغ المدفوع
+          // Revert Accounts Payable tracking - restore the paid amount
           if (formData.linkedTransactionId) {
             const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
             const ledgerQuery = query(
@@ -198,7 +282,7 @@ export default function OutgoingChequesPage() {
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
                 const transactionAmount = ledgerData.amount || 0;
-                const newTotalPaid = currentTotalPaid + chequeAmount;
+                const newTotalPaid = Math.max(0, currentTotalPaid - chequeAmount);
                 const newRemainingBalance = transactionAmount - newTotalPaid;
 
                 let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
@@ -219,11 +303,21 @@ export default function OutgoingChequesPage() {
         }
 
         await updateDoc(chequeRef, updateData);
+
+        let toastDescription = "تم تحديث بيانات الشيك الصادر";
+        if (wasPending && isNowCleared) {
+          toastDescription = `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`;
+        } else if (wasCleared && isNowBouncedOrReverted) {
+          if (newStatus === "مرتجع" || newStatus === "bounced") {
+            toastDescription = `تم تسجيل الشيك رقم ${formData.chequeNumber} كمرتجع وإلغاء سند الصرف`;
+          } else {
+            toastDescription = `تم إرجاع الشيك رقم ${formData.chequeNumber} إلى قيد الانتظار وإلغاء سند الصرف`;
+          }
+        }
+
         toast({
           title: "تم التحديث بنجاح",
-          description: wasPending && isNowCleared
-            ? `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`
-            : "تم تحديث بيانات الشيك الصادر",
+          description: toastDescription,
         });
       } else {
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
@@ -333,6 +427,8 @@ export default function OutgoingChequesPage() {
         return "bg-green-100 text-green-700";
       case "قيد الانتظار":
         return "bg-yellow-100 text-yellow-700";
+      case "مرتجع":
+        return "bg-orange-100 text-orange-700";
       case "ملغي":
         return "bg-red-100 text-red-700";
       default:
@@ -371,8 +467,7 @@ export default function OutgoingChequesPage() {
       setLinkDialogOpen(false);
       setChequeToLink(null);
       setLinkTransactionId("");
-    } catch (error) {
-      console.error("Error linking transaction:", error);
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء ربط الشيك بالمعاملة",
@@ -386,11 +481,13 @@ export default function OutgoingChequesPage() {
   // Calculate summary statistics
   const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
   const cashedCheques = cheques.filter(c => c.status === "تم الصرف");
+  const bouncedCheques = cheques.filter(c => c.status === "مرتجع");
   const cancelledCheques = cheques.filter(c => c.status === "ملغي");
   const endorsedCheques = cheques.filter(c => c.isEndorsedCheque);
 
   const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
   const totalCashedValue = cashedCheques.reduce((sum, c) => sum + c.amount, 0);
+  const totalBouncedValue = bouncedCheques.reduce((sum, c) => sum + c.amount, 0);
   const totalEndorsedValue = endorsedCheques.reduce((sum, c) => sum + c.amount, 0);
 
   return (
@@ -407,7 +504,7 @@ export default function OutgoingChequesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">قيد الانتظار</CardTitle>
@@ -424,6 +521,15 @@ export default function OutgoingChequesPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{cashedCheques.length}</div>
             <p className="text-xs text-gray-500 mt-1">{totalCashedValue.toFixed(2)} دينار</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">مرتجع</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{bouncedCheques.length}</div>
+            <p className="text-xs text-gray-500 mt-1">{totalBouncedValue.toFixed(2)} دينار</p>
           </CardContent>
         </Card>
         <Card>
@@ -645,6 +751,7 @@ export default function OutgoingChequesPage() {
                 >
                   <option value="قيد الانتظار">قيد الانتظار</option>
                   <option value="تم الصرف">تم الصرف</option>
+                  <option value="مرتجع">مرتجع</option>
                   <option value="ملغي">ملغي</option>
                 </select>
               </div>
