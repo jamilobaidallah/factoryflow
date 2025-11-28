@@ -21,9 +21,19 @@ import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleto
 // Types and hooks
 import {
   LedgerEntry,
+  LedgerFormData,
+  CheckFormData,
+  OutgoingCheckFormData,
+  InventoryFormData,
+  FixedAssetFormData,
   initialPaymentFormData,
   initialChequeRelatedFormData,
-  initialInventoryRelatedFormData
+  initialInventoryRelatedFormData,
+  initialLedgerFormData,
+  initialCheckFormData,
+  initialOutgoingCheckFormData,
+  initialInventoryFormData,
+  initialFixedAssetFormData,
 } from "./types/ledger";
 import { useLedgerData } from "./hooks/useLedgerData";
 import { useLedgerForm } from "./hooks/useLedgerForm";
@@ -36,6 +46,9 @@ import { LedgerTable } from "./components/LedgerTable";
 import { LedgerFormDialog } from "./components/LedgerFormDialog";
 import { RelatedRecordsDialog } from "./components/RelatedRecordsDialog";
 import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
+
+// Context
+import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
 
 export default function LedgerPage() {
   const { toast } = useToast();
@@ -75,39 +88,62 @@ export default function LedgerPage() {
     amount: number;
   } | null>(null);
 
-  // Destructure form state from hook
+  // Form state using local state for context-based approach
+  const [formData, setFormData] = useState<LedgerFormData>(initialLedgerFormData);
+  const [hasIncomingCheck, setHasIncomingCheck] = useState(false);
+  const [hasOutgoingCheck, setHasOutgoingCheck] = useState(false);
+  const [hasInventoryUpdate, setHasInventoryUpdate] = useState(false);
+  const [hasFixedAsset, setHasFixedAsset] = useState(false);
+  const [hasInitialPayment, setHasInitialPayment] = useState(false);
+  const [initialPaymentAmount, setInitialPaymentAmount] = useState("");
+  const [checkFormData, setCheckFormData] = useState<CheckFormData>(initialCheckFormData);
+  const [outgoingCheckFormData, setOutgoingCheckFormData] = useState<OutgoingCheckFormData>(initialOutgoingCheckFormData);
+  const [inventoryFormDataNew, setInventoryFormDataNew] = useState<InventoryFormData>(initialInventoryFormData);
+  const [fixedAssetFormData, setFixedAssetFormData] = useState<FixedAssetFormData>(initialFixedAssetFormData);
+
+  // Related records forms (from original hook)
   const {
-    formData,
-    setFormData,
-    hasIncomingCheck,
-    setHasIncomingCheck,
-    hasOutgoingCheck,
-    setHasOutgoingCheck,
-    hasInventoryUpdate,
-    setHasInventoryUpdate,
-    hasFixedAsset,
-    setHasFixedAsset,
-    hasInitialPayment,
-    setHasInitialPayment,
-    initialPaymentAmount,
-    setInitialPaymentAmount,
-    checkFormData,
-    setCheckFormData,
-    outgoingCheckFormData,
-    setOutgoingCheckFormData,
-    inventoryFormData: inventoryFormDataNew,
-    setInventoryFormData: setInventoryFormDataNew,
-    fixedAssetFormData,
-    setFixedAssetFormData,
     paymentFormData,
     setPaymentFormData,
     chequeRelatedFormData: chequeFormData,
     setChequeRelatedFormData: setChequeFormData,
     inventoryRelatedFormData: inventoryFormData,
     setInventoryRelatedFormData: setInventoryFormData,
-    resetAllForms,
-    loadEntryForEdit,
   } = formHook;
+
+  // Reset all forms helper
+  const resetAllForms = () => {
+    setFormData(initialLedgerFormData);
+    setHasIncomingCheck(false);
+    setHasOutgoingCheck(false);
+    setHasInventoryUpdate(false);
+    setHasFixedAsset(false);
+    setHasInitialPayment(false);
+    setInitialPaymentAmount("");
+    setCheckFormData(initialCheckFormData);
+    setOutgoingCheckFormData(initialOutgoingCheckFormData);
+    setInventoryFormDataNew(initialInventoryFormData);
+    setFixedAssetFormData(initialFixedAssetFormData);
+  };
+
+  // Load entry for editing
+  const loadEntryForEdit = (entry: LedgerEntry) => {
+    setFormData({
+      description: entry.description,
+      amount: entry.amount.toString(),
+      category: entry.category,
+      subCategory: entry.subCategory,
+      date: entry.date instanceof Date
+        ? entry.date.toISOString().split("T")[0]
+        : new Date(entry.date).toISOString().split("T")[0],
+      associatedParty: entry.associatedParty || "",
+      ownerName: entry.ownerName || "",
+      reference: entry.reference || "",
+      notes: entry.notes || "",
+      trackARAP: entry.isARAPEntry || false,
+      immediateSettlement: false,
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,6 +226,41 @@ export default function LedgerPage() {
     const success = await addInventoryToEntry(selectedEntry, inventoryFormData);
     if (success) { setInventoryFormData(initialInventoryRelatedFormData); setIsRelatedDialogOpen(false); }
     setLoading(false);
+  };
+
+  // Context value for LedgerFormDialog - eliminates prop drilling
+  const ledgerFormContextValue: LedgerFormContextValue = {
+    isOpen: isDialogOpen,
+    onClose: () => setIsDialogOpen(false),
+    editingEntry,
+    onSubmit: handleSubmit,
+    loading,
+    clients,
+    partners,
+    formData,
+    setFormData,
+    hasIncomingCheck,
+    setHasIncomingCheck,
+    hasOutgoingCheck,
+    setHasOutgoingCheck,
+    hasInventoryUpdate,
+    setHasInventoryUpdate,
+    hasFixedAsset,
+    setHasFixedAsset,
+    hasInitialPayment,
+    setHasInitialPayment,
+    initialPaymentAmount,
+    setInitialPaymentAmount,
+    checkFormData,
+    setCheckFormData,
+    outgoingCheckFormData,
+    setOutgoingCheckFormData,
+    inventoryFormData: inventoryFormDataNew,
+    setInventoryFormData: setInventoryFormDataNew,
+    fixedAssetFormData,
+    setFixedAssetFormData,
+    createInvoice,
+    setCreateInvoice,
   };
 
   return (
@@ -291,39 +362,10 @@ export default function LedgerPage() {
         </CardContent>
       </Card>
 
-      <LedgerFormDialog
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        editingEntry={editingEntry}
-        onSubmit={handleSubmit}
-        loading={loading}
-        clients={clients}
-        partners={partners}
-        formData={formData}
-        setFormData={setFormData}
-        hasIncomingCheck={hasIncomingCheck}
-        setHasIncomingCheck={setHasIncomingCheck}
-        hasOutgoingCheck={hasOutgoingCheck}
-        setHasOutgoingCheck={setHasOutgoingCheck}
-        hasInventoryUpdate={hasInventoryUpdate}
-        setHasInventoryUpdate={setHasInventoryUpdate}
-        hasFixedAsset={hasFixedAsset}
-        setHasFixedAsset={setHasFixedAsset}
-        hasInitialPayment={hasInitialPayment}
-        setHasInitialPayment={setHasInitialPayment}
-        initialPaymentAmount={initialPaymentAmount}
-        setInitialPaymentAmount={setInitialPaymentAmount}
-        checkFormData={checkFormData}
-        setCheckFormData={setCheckFormData}
-        outgoingCheckFormData={outgoingCheckFormData}
-        setOutgoingCheckFormData={setOutgoingCheckFormData}
-        inventoryFormData={inventoryFormDataNew}
-        setInventoryFormData={setInventoryFormDataNew}
-        fixedAssetFormData={fixedAssetFormData}
-        setFixedAssetFormData={setFixedAssetFormData}
-        createInvoice={createInvoice}
-        setCreateInvoice={setCreateInvoice}
-      />
+      {/* LedgerFormDialog wrapped with context provider - no prop drilling! */}
+      <LedgerFormProvider value={ledgerFormContextValue}>
+        <LedgerFormDialog />
+      </LedgerFormProvider>
 
       {/* Related Records Management Dialog */}
       <RelatedRecordsDialog
