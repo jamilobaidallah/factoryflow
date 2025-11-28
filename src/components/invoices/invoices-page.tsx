@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download, Eye, Send } from "lucide-react";
+import { Plus, Edit, Trash2, Download } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -35,16 +35,36 @@ import {
   onSnapshot,
   query,
   orderBy,
-  writeBatch,
   limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+
+// وحدات القياس للمصنع
+// Unit types for manufacturing
+type InvoiceItemUnit = 'm' | 'm2' | 'piece';
 
 interface InvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
   total: number;
+  // بيانات التصنيع - Manufacturing data
+  unit?: InvoiceItemUnit;
+  length?: number;    // الطول (سم)
+  width?: number;     // العرض (سم)
+  thickness?: number; // السماكة (سم)
+}
+
+// نوع البيانات للحفظ في Firestore - Clean item type for Firestore save
+interface CleanInvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  unit: InvoiceItemUnit;
+  length?: number;
+  width?: number;
+  thickness?: number;
 }
 
 interface Invoice {
@@ -82,13 +102,12 @@ export default function InvoicesPage() {
     clientAddress: "",
     clientPhone: "",
     invoiceDate: new Date().toISOString().split("T")[0],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     taxRate: "0",
     notes: "",
   });
 
   const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, total: 0 },
+    { description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined },
   ]);
 
   useEffect(() => {
@@ -139,7 +158,7 @@ export default function InvoicesPage() {
   };
 
   const handleAddItem = () => {
-    setItems([...items, { description: "", quantity: 1, unitPrice: 0, total: 0 }]);
+    setItems([...items, { description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -148,7 +167,7 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
+  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | undefined) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
@@ -167,15 +186,44 @@ export default function InvoicesPage() {
     try {
       const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
 
+      // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
+      // Clean items from undefined values - Firestore doesn't accept undefined
+      const cleanedItems: CleanInvoiceItem[] = items.map(item => {
+        const cleanItem: CleanInvoiceItem = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+          unit: item.unit || 'piece',
+        };
+        // فقط أضف الأبعاد إذا كانت موجودة
+        // Only add dimensions if they have values
+        if (item.length !== undefined && item.length !== null) {
+          cleanItem.length = item.length;
+        }
+        if (item.width !== undefined && item.width !== null) {
+          cleanItem.width = item.width;
+        }
+        if (item.thickness !== undefined && item.thickness !== null) {
+          cleanItem.thickness = item.thickness;
+        }
+        return cleanItem;
+      });
+
+      // تعيين تاريخ الاستحقاق تلقائياً (30 يوم من تاريخ الفاتورة)
+      // Auto-set due date to 30 days from invoice date
+      const invoiceDate = new Date(formData.invoiceDate);
+      const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
       if (editingInvoice) {
         const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, editingInvoice.id);
         await updateDoc(invoiceRef, {
           clientName: formData.clientName,
           clientAddress: formData.clientAddress,
           clientPhone: formData.clientPhone,
-          invoiceDate: new Date(formData.invoiceDate),
-          dueDate: new Date(formData.dueDate),
-          items,
+          invoiceDate,
+          dueDate,
+          items: cleanedItems,
           subtotal,
           taxRate: parseFloat(formData.taxRate),
           taxAmount,
@@ -196,9 +244,9 @@ export default function InvoicesPage() {
           clientName: formData.clientName,
           clientAddress: formData.clientAddress,
           clientPhone: formData.clientPhone,
-          invoiceDate: new Date(formData.invoiceDate),
-          dueDate: new Date(formData.dueDate),
-          items,
+          invoiceDate,
+          dueDate,
+          items: cleanedItems,
           subtotal,
           taxRate: parseFloat(formData.taxRate),
           taxAmount,
@@ -236,7 +284,6 @@ export default function InvoicesPage() {
       clientAddress: invoice.clientAddress || "",
       clientPhone: invoice.clientPhone || "",
       invoiceDate: invoice.invoiceDate.toISOString().split("T")[0],
-      dueDate: invoice.dueDate.toISOString().split("T")[0],
       taxRate: invoice.taxRate.toString(),
       notes: invoice.notes || "",
     });
@@ -372,20 +419,33 @@ export default function InvoicesPage() {
           <thead>
             <tr>
               <th>الوصف</th>
+              <th>الوحدة</th>
+              <th>الأبعاد (ط×ع×س)</th>
               <th>الكمية</th>
               <th>سعر الوحدة</th>
               <th>المجموع</th>
             </tr>
           </thead>
           <tbody>
-            ${invoice.items.map(item => `
+            ${invoice.items.map(item => {
+              // تحويل الوحدة للعرض - Unit display conversion
+              const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
+              // تنسيق الأبعاد بالسنتيمتر - Format dimensions in cm
+              const dims = [
+                item.length ? `${item.length}` : '',
+                item.width ? `${item.width}` : '',
+                item.thickness ? `${item.thickness}` : ''
+              ].filter(Boolean).join(' × ') || '-';
+              return `
               <tr>
                 <td>${item.description}</td>
+                <td>${unitDisplay}</td>
+                <td>${dims !== '-' ? dims + ' سم' : dims}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unitPrice.toFixed(2)} دينار</td>
                 <td>${item.total.toFixed(2)} دينار</td>
               </tr>
-            `).join("")}
+            `;}).join("")}
           </tbody>
         </table>
 
@@ -454,11 +514,10 @@ export default function InvoicesPage() {
       clientAddress: "",
       clientPhone: "",
       invoiceDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       taxRate: "0",
       notes: "",
     });
-    setItems([{ description: "", quantity: 1, unitPrice: 0, total: 0 }]);
+    setItems([{ description: "", quantity: 1, unitPrice: 0, total: 0, unit: 'piece', length: undefined, width: undefined, thickness: undefined }]);
     setEditingInvoice(null);
   };
 
@@ -651,7 +710,7 @@ export default function InvoicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="invoiceDate">تاريخ الفاتورة</Label>
                 <Input
@@ -659,16 +718,6 @@ export default function InvoicesPage() {
                   type="date"
                   value={formData.invoiceDate}
                   onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">تاريخ الاستحقاق</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                   required
                 />
               </div>
@@ -693,58 +742,122 @@ export default function InvoicesPage() {
                 </Button>
               </div>
 
-              {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-5 space-y-1">
-                    <Label className="text-xs">الوصف</Label>
-                    <Input
-                      value={item.description}
-                      onChange={(e) => handleItemChange(index, "description", e.target.value)}
-                      placeholder="وصف المنتج أو الخدمة"
-                      required
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">الكمية</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">السعر</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={item.unitPrice}
-                      onChange={(e) =>
-                        handleItemChange(index, "unitPrice", parseFloat(e.target.value) || 0)
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">المجموع</Label>
-                    <Input value={item.total.toFixed(2)} disabled />
-                  </div>
-                  <div className="col-span-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveItem(index)}
-                      disabled={items.length === 1}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+              {/* جدول بنود الفاتورة مع أبعاد التصنيع */}
+              {/* Invoice items table with manufacturing dimensions */}
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full min-w-[850px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
+                      <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>
+                      <th className="px-2 py-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, index) => (
+                      <tr key={index} className="border-t align-middle">
+                        {/* الوصف */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            value={item.description}
+                            onChange={(e) => handleItemChange(index, "description", e.target.value)}
+                            placeholder="وصف المنتج"
+                            required
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        {/* الوحدة - Unit dropdown */}
+                        <td className="px-1 py-1.5">
+                          <select
+                            value={item.unit || 'piece'}
+                            onChange={(e) => handleItemChange(index, "unit", e.target.value as InvoiceItemUnit)}
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-1 py-1 text-sm text-center"
+                          >
+                            <option value="m">متر طولي</option>
+                            <option value="m2">متر مربع</option>
+                            <option value="piece">عدد</option>
+                          </select>
+                        </td>
+                        {/* الطول - Length (اختياري - optional) */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.length ?? ''}
+                            onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        </td>
+                        {/* العرض - Width (اختياري - optional) */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.width ?? ''}
+                            onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        </td>
+                        {/* السماكة - Thickness (اختياري - optional) */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.thickness ?? ''}
+                            onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        </td>
+                        {/* الكمية - Quantity */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)}
+                            required
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        </td>
+                        {/* السعر - Price */}
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.unitPrice}
+                            onChange={(e) => handleItemChange(index, "unitPrice", parseFloat(e.target.value) || 0)}
+                            required
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        </td>
+                        {/* المجموع - Total */}
+                        <td className="px-1 py-1.5">
+                          <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm text-center bg-gray-50 w-full" />
+                        </td>
+                        {/* حذف - Delete */}
+                        <td className="px-1 py-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(index)}
+                            disabled={items.length === 1}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg space-y-2">

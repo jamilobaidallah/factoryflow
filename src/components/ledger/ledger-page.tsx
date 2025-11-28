@@ -61,6 +61,7 @@ import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
 import { LedgerFormDialog } from "./components/LedgerFormDialog";
 import { RelatedRecordsDialog } from "./components/RelatedRecordsDialog";
+import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Interfaces and constants are now imported from utils
@@ -91,6 +92,14 @@ export default function LedgerPage() {
   // Quick payment dialog
   const [isQuickPayDialogOpen, setIsQuickPayDialogOpen] = useState(false);
   const [quickPayEntry, setQuickPayEntry] = useState<LedgerEntry | null>(null);
+
+  // جسر إنشاء الفاتورة - Invoice creation bridge
+  const [createInvoice, setCreateInvoice] = useState(false);
+  const [isQuickInvoiceDialogOpen, setIsQuickInvoiceDialogOpen] = useState(false);
+  const [pendingInvoiceData, setPendingInvoiceData] = useState<{
+    clientName: string;
+    amount: number;
+  } | null>(null);
 
   // Use custom hooks for form state and operations
   const formHook = useLedgerForm();
@@ -139,6 +148,15 @@ export default function LedgerPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // حفظ بيانات الفاتورة المعلقة قبل الإرسال
+    // Save pending invoice data before submission
+    const shouldCreateInvoice = createInvoice && formData.associatedParty && parseFloat(formData.amount) > 0;
+    const invoiceData = shouldCreateInvoice ? {
+      clientName: formData.associatedParty,
+      amount: parseFloat(formData.amount),
+    } : null;
+
     try {
       const success = await submitLedgerEntry(formData, editingEntry, {
         hasIncomingCheck,
@@ -157,6 +175,14 @@ export default function LedgerPage() {
         resetAllForms();
         setEditingEntry(null);
         setIsDialogOpen(false);
+        setCreateInvoice(false);
+
+        // فتح نافذة إنشاء الفاتورة إذا كان الخيار مفعلاً
+        // Open invoice creation dialog if option was enabled
+        if (invoiceData) {
+          setPendingInvoiceData(invoiceData);
+          setIsQuickInvoiceDialogOpen(true);
+        }
       }
     } catch (error) {
       const appError = handleError(error);
@@ -307,6 +333,7 @@ export default function LedgerPage() {
     setHasFixedAsset(false);
     setHasInitialPayment(false);
     setInitialPaymentAmount("");
+    setCreateInvoice(false); // Reset invoice creation flag
     setCheckFormData({
       chequeNumber: "",
       chequeAmount: "",
@@ -827,6 +854,8 @@ export default function LedgerPage() {
         setInventoryFormData={setInventoryFormDataNew}
         fixedAssetFormData={fixedAssetFormData}
         setFixedAssetFormData={setFixedAssetFormData}
+        createInvoice={createInvoice}
+        setCreateInvoice={setCreateInvoice}
       />
 
       {/* Related Records Management Dialog */}
@@ -858,6 +887,16 @@ export default function LedgerPage() {
           setIsQuickPayDialogOpen(false);
           setQuickPayEntry(null);
         }}
+      />
+
+      {/* نافذة إنشاء فاتورة سريعة - Quick Invoice Creation Dialog */}
+      <QuickInvoiceDialog
+        isOpen={isQuickInvoiceDialogOpen}
+        onClose={() => {
+          setIsQuickInvoiceDialogOpen(false);
+          setPendingInvoiceData(null);
+        }}
+        pendingData={pendingInvoiceData}
       />
 
       {confirmationDialog}
