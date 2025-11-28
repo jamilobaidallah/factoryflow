@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Download, Eye } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -96,6 +96,7 @@ export default function InvoicesPage() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(false);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     clientName: "",
@@ -420,7 +421,7 @@ export default function InvoicesPage() {
             <tr>
               <th>الوصف</th>
               <th>الوحدة</th>
-              <th>الأبعاد (ط×ع×س)</th>
+              <th>الأبعاد (ط×ع×س) سم</th>
               <th>الكمية</th>
               <th>سعر الوحدة</th>
               <th>المجموع</th>
@@ -430,17 +431,17 @@ export default function InvoicesPage() {
             ${invoice.items.map(item => {
               // تحويل الوحدة للعرض - Unit display conversion
               const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
-              // تنسيق الأبعاد بالسنتيمتر - Format dimensions in cm
-              const dims = [
-                item.length ? `${item.length}` : '',
-                item.width ? `${item.width}` : '',
-                item.thickness ? `${item.thickness}` : ''
-              ].filter(Boolean).join(' × ') || '-';
+              // تنسيق الأبعاد بشكل موضعي ثابت - Strict positional dimension formatting
+              // Format: Length × Width × Thickness (use dash for missing values)
+              const l = (item.length && item.length > 0) ? `${item.length}` : '-';
+              const w = (item.width && item.width > 0) ? `${item.width}` : '-';
+              const t = (item.thickness && item.thickness > 0) ? `${item.thickness}` : '-';
+              const dims = `${l} × ${w} × ${t}`;
               return `
               <tr>
                 <td>${item.description}</td>
                 <td>${unitDisplay}</td>
-                <td>${dims !== '-' ? dims + ' سم' : dims}</td>
+                <td style="font-family: monospace;">${dims}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unitPrice.toFixed(2)} دينار</td>
                 <td>${item.total.toFixed(2)} دينار</td>
@@ -506,6 +507,20 @@ export default function InvoicesPage() {
       overdue: "bg-red-100 text-red-800",
     };
     return colors[status];
+  };
+
+  // تنسيق الأبعاد بشكل موضعي ثابت - Strict positional dimension formatting
+  // Format: Length × Width × Thickness (use dash for missing values)
+  const formatDimensions = (length?: number, width?: number, thickness?: number): string => {
+    const l = (length && length > 0) ? `${length}` : '-';
+    const w = (width && width > 0) ? `${width}` : '-';
+    const t = (thickness && thickness > 0) ? `${thickness}` : '-';
+    return `${l} × ${w} × ${t}`;
+  };
+
+  const handlePreview = (invoice: Invoice) => {
+    setViewInvoice(invoice);
+    setIsPreviewOpen(true);
   };
 
   const resetForm = () => {
@@ -627,7 +642,16 @@ export default function InvoicesPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handlePreview(invoice)}
+                          title="معاينة"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleExportPDF(invoice)}
+                          title="تصدير PDF"
                         >
                           <Download className="w-4 h-4" />
                         </Button>
@@ -635,6 +659,7 @@ export default function InvoicesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(invoice)}
+                          title="تعديل"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -895,6 +920,127 @@ export default function InvoicesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Preview Modal - Read-only view */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>معاينة الفاتورة</DialogTitle>
+            <DialogDescription>
+              فاتورة رقم: {viewInvoice?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewInvoice && (
+            <div className="space-y-6">
+              {/* Client & Invoice Info */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-gray-700">معلومات العميل</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
+                    <p><span className="text-gray-500">الاسم:</span> {viewInvoice.clientName}</p>
+                    {viewInvoice.clientAddress && (
+                      <p><span className="text-gray-500">العنوان:</span> {viewInvoice.clientAddress}</p>
+                    )}
+                    {viewInvoice.clientPhone && (
+                      <p><span className="text-gray-500">الهاتف:</span> {viewInvoice.clientPhone}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-gray-700">معلومات الفاتورة</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
+                    <p><span className="text-gray-500">التاريخ:</span> {viewInvoice.invoiceDate.toLocaleDateString("ar-JO")}</p>
+                    <p><span className="text-gray-500">الاستحقاق:</span> {viewInvoice.dueDate.toLocaleDateString("ar-JO")}</p>
+                    <p>
+                      <span className="text-gray-500">الحالة:</span>{" "}
+                      <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(viewInvoice.status)}`}>
+                        {getStatusLabel(viewInvoice.status)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice Items Table */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-gray-700">بنود الفاتورة</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>الوصف</TableHead>
+                        <TableHead className="text-center">الوحدة</TableHead>
+                        <TableHead className="text-center">الأبعاد (ط×ع×س) سم</TableHead>
+                        <TableHead className="text-center">الكمية</TableHead>
+                        <TableHead className="text-center">السعر</TableHead>
+                        <TableHead className="text-center">المجموع</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {viewInvoice.items.map((item, index) => {
+                        const unitDisplay = item.unit === 'm' ? 'متر طولي' : item.unit === 'm2' ? 'متر مربع' : 'عدد';
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{item.description}</TableCell>
+                            <TableCell className="text-center">{unitDisplay}</TableCell>
+                            <TableCell className="text-center font-mono">
+                              {formatDimensions(item.length, item.width, item.thickness)}
+                            </TableCell>
+                            <TableCell className="text-center">{item.quantity}</TableCell>
+                            <TableCell className="text-center">{item.unitPrice.toFixed(2)} دينار</TableCell>
+                            <TableCell className="text-center">{item.total.toFixed(2)} دينار</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>المجموع الفرعي:</span>
+                  <span className="font-medium">{viewInvoice.subtotal.toFixed(2)} دينار</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>الضريبة ({viewInvoice.taxRate}%):</span>
+                  <span className="font-medium">{viewInvoice.taxAmount.toFixed(2)} دينار</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <span>المجموع الكلي:</span>
+                  <span className="text-primary">{viewInvoice.total.toFixed(2)} دينار</span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {viewInvoice.notes && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-gray-700">ملاحظات</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                    {viewInvoice.notes}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                  إغلاق
+                </Button>
+                <Button onClick={() => {
+                  handleExportPDF(viewInvoice);
+                  setIsPreviewOpen(false);
+                }}>
+                  <Download className="w-4 h-4 ml-2" />
+                  تصدير PDF
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
