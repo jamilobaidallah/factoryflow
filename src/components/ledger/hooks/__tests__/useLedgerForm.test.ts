@@ -438,6 +438,9 @@ describe('useLedgerForm', () => {
           dueDate: "2025-02-01",
           status: "تم الصرف",
           chequeType: "مجير",
+          accountingType: "cashed",
+          endorsedToId: "",
+          endorsedToName: "",
           chequeImage: null,
         });
       });

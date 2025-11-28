@@ -88,6 +88,12 @@ export default function ChequesPage() {
   const [chequeToEndorse, setChequeToEndorse] = useState<Cheque | null>(null);
   const [endorseToSupplier, setEndorseToSupplier] = useState("");
 
+  // Clear/Bounce cheque dialogs
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [chequeToClear, setChequeToClear] = useState<Cheque | null>(null);
+  const [bounceDialogOpen, setBounceDialogOpen] = useState(false);
+  const [chequeToBounce, setChequeToBounce] = useState<Cheque | null>(null);
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(50);
@@ -473,6 +479,149 @@ export default function ChequesPage() {
     }
   };
 
+  // Open clear cheque dialog
+  const openClearDialog = (cheque: Cheque) => {
+    setChequeToClear(cheque);
+    setClearDialogOpen(true);
+  };
+
+  // Handle clearing a pending cheque (confirm collection)
+  const handleClearCheque = async () => {
+    if (!user || !chequeToClear) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Update cheque status to 'تم الصرف' (cleared)
+      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToClear.id);
+      await updateDoc(chequeRef, {
+        status: "تم الصرف",
+        clearedDate: new Date(),
+      });
+
+      // 2. Create a Payment record
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentType = chequeToClear.type === "وارد" ? "قبض" : "صرف";
+
+      await addDoc(paymentsRef, {
+        clientName: chequeToClear.clientName,
+        amount: chequeToClear.amount,
+        type: paymentType,
+        method: "cheque",
+        linkedTransactionId: chequeToClear.linkedTransactionId || "",
+        date: new Date(),
+        notes: `تحصيل شيك مؤجل رقم ${chequeToClear.chequeNumber}`,
+        createdAt: new Date(),
+      });
+
+      // 3. Update AR/AP tracking if linkedTransactionId exists
+      if (chequeToClear.linkedTransactionId) {
+        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+        const ledgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", chequeToClear.linkedTransactionId.trim())
+        );
+        const ledgerSnapshot = await getDocs(ledgerQuery);
+
+        if (!ledgerSnapshot.empty) {
+          const ledgerDoc = ledgerSnapshot.docs[0];
+          const ledgerData = ledgerDoc.data();
+
+          if (ledgerData.isARAPEntry) {
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const transactionAmount = ledgerData.amount || 0;
+            const newTotalPaid = currentTotalPaid + chequeToClear.amount;
+            const newRemainingBalance = transactionAmount - newTotalPaid;
+
+            let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+            if (newRemainingBalance <= 0) {
+              newStatus = "paid";
+            } else if (newTotalPaid > 0) {
+              newStatus = "partial";
+            }
+
+            await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newStatus,
+            });
+          }
+        }
+      }
+
+      toast({
+        title: "تم التحصيل بنجاح",
+        description: `تم تحصيل الشيك رقم ${chequeToClear.chequeNumber} وتحديث الرصيد`,
+      });
+
+      setClearDialogOpen(false);
+      setChequeToClear(null);
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open bounce cheque dialog
+  const openBounceDialog = (cheque: Cheque) => {
+    setChequeToBounce(cheque);
+    setBounceDialogOpen(true);
+  };
+
+  // Handle bouncing a pending cheque
+  const handleBounceCheque = async () => {
+    if (!user || !chequeToBounce) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Update cheque status to 'مرفوض' (bounced)
+      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToBounce.id);
+      await updateDoc(chequeRef, {
+        status: "مرفوض",
+        bouncedDate: new Date(),
+      });
+
+      // No payment record created - client still owes the money
+      // No AR/AP update - balance remains unchanged
+
+      toast({
+        title: "تم تسجيل الشيك كمرتجع",
+        description: `تم تسجيل الشيك رقم ${chequeToBounce.chequeNumber} كمرتجع. رصيد العميل لم يتغير.`,
+      });
+
+      setBounceDialogOpen(false);
+      setChequeToBounce(null);
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check if a cheque is overdue
+  const isOverdue = (cheque: Cheque) => {
+    if (cheque.status !== "قيد الانتظار") {return false;}
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(cheque.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -528,9 +677,19 @@ export default function ChequesPage() {
               </TableHeader>
               <TableBody>
                 {cheques.map((cheque) => (
-                  <TableRow key={cheque.id}>
+                  <TableRow
+                    key={cheque.id}
+                    className={isOverdue(cheque) ? "bg-red-50" : ""}
+                  >
                     <TableCell className="font-medium">
-                      {cheque.chequeNumber}
+                      <div className="flex items-center gap-2">
+                        {cheque.chequeNumber}
+                        {isOverdue(cheque) && (
+                          <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+                            متأخر
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div>
@@ -589,7 +748,42 @@ export default function ChequesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
+                        {/* Show clear (confirm collection) button for pending cheques */}
+                        {cheque.status === "قيد الانتظار" && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => openClearDialog(cheque)}
+                            title="تأكيد التحصيل"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                          </Button>
+                        )}
+                        {/* Show bounce button for pending cheques */}
+                        {cheque.status === "قيد الانتظار" && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => openBounceDialog(cheque)}
+                            title="شيك مرتجع"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
                         {/* Show endorse button only for incoming pending cheques that are not endorsed */}
                         {cheque.type === "وارد" &&
                           cheque.status === "قيد الانتظار" &&
@@ -975,6 +1169,92 @@ export default function ChequesPage() {
               disabled={loading || !endorseToSupplier.trim()}
             >
               {loading ? "جاري التظهير..." : "تظهير الشيك"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear/Collect Cheque Dialog */}
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تأكيد تحصيل الشيك</DialogTitle>
+            <DialogDescription>
+              {chequeToClear && (
+                <div className="text-sm mt-2 space-y-1">
+                  <p><strong>رقم الشيك:</strong> {chequeToClear.chequeNumber}</p>
+                  <p><strong>العميل:</strong> {chequeToClear.clientName}</p>
+                  <p><strong>المبلغ:</strong> {chequeToClear.amount} دينار</p>
+                  <p><strong>تاريخ الاستحقاق:</strong> {new Date(chequeToClear.dueDate).toLocaleDateString("ar-EG")}</p>
+                  <p className="text-green-600 mt-2">
+                    ✓ سيتم تحديث حالة الشيك إلى &quot;تم الصرف&quot; وتسجيل دفعة وتحديث رصيد العميل
+                  </p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setClearDialogOpen(false);
+                setChequeToClear(null);
+              }}
+              disabled={loading}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleClearCheque}
+              disabled={loading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {loading ? "جاري التحصيل..." : "تأكيد التحصيل"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bounce Cheque Dialog */}
+      <Dialog open={bounceDialogOpen} onOpenChange={setBounceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تسجيل شيك مرتجع</DialogTitle>
+            <DialogDescription>
+              {chequeToBounce && (
+                <div className="text-sm mt-2 space-y-1">
+                  <p><strong>رقم الشيك:</strong> {chequeToBounce.chequeNumber}</p>
+                  <p><strong>العميل:</strong> {chequeToBounce.clientName}</p>
+                  <p><strong>المبلغ:</strong> {chequeToBounce.amount} دينار</p>
+                  <p><strong>تاريخ الاستحقاق:</strong> {new Date(chequeToBounce.dueDate).toLocaleDateString("ar-EG")}</p>
+                  <p className="text-red-600 mt-2">
+                    ⚠️ سيتم تسجيل الشيك كمرتجع. رصيد العميل لن يتغير - لا يزال مديناً بالمبلغ.
+                  </p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setBounceDialogOpen(false);
+                setChequeToBounce(null);
+              }}
+              disabled={loading}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBounceCheque}
+              disabled={loading}
+              variant="destructive"
+            >
+              {loading ? "جاري التسجيل..." : "تسجيل كمرتجع"}
             </Button>
           </DialogFooter>
         </DialogContent>

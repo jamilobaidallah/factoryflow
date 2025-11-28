@@ -57,6 +57,10 @@ export interface ChequeRelatedFormState {
   dueDate: string;
   status: string;
   chequeType: string;
+  // Accounting type: 'cashed' (immediate), 'postponed' (post-dated), 'endorsed' (to third party)
+  accountingType: 'cashed' | 'postponed' | 'endorsed';
+  endorsedToId: string;
+  endorsedToName: string;
   chequeImage: File | null;
 }
 
@@ -121,6 +125,9 @@ const initialChequeRelatedFormData: ChequeRelatedFormState = {
   dueDate: new Date().toISOString().split("T")[0],
   status: "قيد الانتظار",
   chequeType: "عادي",
+  accountingType: "cashed",
+  endorsedToId: "",
+  endorsedToName: "",
   chequeImage: null,
 };
 
