@@ -23,11 +23,12 @@ interface UseChequesOperationsReturn {
   submitCheque: (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ) => Promise<boolean>;
   deleteCheque: (chequeId: string, cheques: Cheque[]) => Promise<boolean>;
   endorseCheque: (cheque: Cheque, supplierName: string) => Promise<boolean>;
-  clearCheque: (cheque: Cheque) => Promise<boolean>;
+  clearCheque: (cheque: Cheque, paymentDate?: Date) => Promise<boolean>;
   bounceCheque: (cheque: Cheque) => Promise<boolean>;
 }
 
@@ -80,7 +81,8 @@ export function useChequesOperations(): UseChequesOperationsReturn {
   const submitCheque = async (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -122,7 +124,10 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         const isNowCleared = clearedStatuses.includes(newStatus);
 
         if (wasPending && isNowCleared) {
-          updateData.clearedDate = new Date();
+          // Use provided payment date or fall back to current date
+          const effectivePaymentDate = paymentDate || new Date();
+
+          updateData.clearedDate = effectivePaymentDate;
 
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
           const paymentType = formData.type === CHEQUE_TYPES.INCOMING ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
@@ -134,7 +139,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
             type: paymentType,
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
-            date: new Date(),
+            date: effectivePaymentDate,
             notes: `تحصيل شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
           });
@@ -369,14 +374,17 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     }
   };
 
-  const clearCheque = async (cheque: Cheque): Promise<boolean> => {
+  const clearCheque = async (cheque: Cheque, paymentDate?: Date): Promise<boolean> => {
     if (!user) return false;
 
     try {
+      // Use provided payment date or fall back to current date
+      const effectivePaymentDate = paymentDate || new Date();
+
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
         status: CHEQUE_STATUS_AR.CASHED,
-        clearedDate: new Date(),
+        clearedDate: effectivePaymentDate,
       });
 
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
@@ -388,7 +396,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         type: paymentType,
         method: "cheque",
         linkedTransactionId: cheque.linkedTransactionId || "",
-        date: new Date(),
+        date: effectivePaymentDate,
         notes: `تحصيل شيك مؤجل رقم ${cheque.chequeNumber}`,
         createdAt: new Date(),
       });

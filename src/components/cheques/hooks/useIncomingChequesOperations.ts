@@ -21,7 +21,8 @@ interface UseIncomingChequesOperationsReturn {
   submitCheque: (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ) => Promise<boolean>;
   deleteCheque: (chequeId: string) => Promise<boolean>;
   endorseCheque: (
@@ -98,7 +99,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
   const submitCheque = async (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -172,7 +174,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const isNowCleared = clearedStatuses.includes(newStatus);
 
         if (wasPending && isNowCleared) {
-          updateData.clearedDate = new Date();
+          // Use provided payment date or fall back to current date
+          const effectivePaymentDate = paymentDate || new Date();
+
+          updateData.clearedDate = effectivePaymentDate;
 
           // Create a Payment record (receipt for incoming cheque)
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
@@ -184,7 +189,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             type: PAYMENT_TYPES.RECEIPT, // Receipt - client paid us
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
-            date: new Date(),
+            date: effectivePaymentDate,
             notes: `تحصيل شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
           });
