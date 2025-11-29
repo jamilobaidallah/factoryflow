@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload, X } from "lucide-react";
 import { Invoice, InvoiceFormData, InvoiceItem, InvoiceItemUnit, InvoiceItemType } from "../types/invoices";
 
 interface InvoicesFormDialogProps {
@@ -37,6 +38,9 @@ export function InvoicesFormDialog({
   loading,
   onSubmit,
 }: InvoicesFormDialogProps) {
+  // حالة معاينة الصورة - Image preview state
+  const [showImagePreview, setShowImagePreview] = useState(false);
+
   const handleAddItem = () => {
     setItems([
       ...items,
@@ -103,6 +107,7 @@ export function InvoicesFormDialog({
   const totals = calculateTotals(items, parseFloat(formData.taxRate));
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -193,21 +198,32 @@ export function InvoicesFormDialog({
                   variant="outline"
                   size="sm"
                   onClick={() => document.getElementById('invoiceImage')?.click()}
-                  className="w-full"
+                  className="flex-1"
                 >
                   <Upload className="w-4 h-4 ml-2" />
                   {formData.invoiceImageUrl ? 'تغيير الصورة' : 'رفع صورة'}
                 </Button>
                 {formData.invoiceImageUrl && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormData({ ...formData, invoiceImageUrl: '' })}
-                    className="text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowImagePreview(true)}
+                      title="معاينة الصورة"
+                    >
+                      معاينة
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, invoiceImageUrl: '' })}
+                      className="text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
                 )}
               </div>
               {formData.invoiceImageUrl && (
@@ -410,5 +426,34 @@ export function InvoicesFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Image Preview Modal */}
+    {showImagePreview && formData.invoiceImageUrl && (
+      <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
+        <DialogContent className="max-w-3xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>معاينة صورة الفاتورة</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowImagePreview(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center items-center overflow-auto max-h-[70vh]">
+            <img
+              src={formData.invoiceImageUrl}
+              alt="صورة الفاتورة"
+              className="max-w-full max-h-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }

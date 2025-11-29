@@ -18,7 +18,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, CheckCircle, AlertTriangle, Upload, X } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
@@ -80,7 +80,12 @@ export function QuickInvoiceDialog({
     invoiceDate: new Date().toISOString().split("T")[0],
     taxRate: "0",
     notes: "",
+    manualInvoiceNumber: "",
+    invoiceImageUrl: "",
   });
+
+  // حالة معاينة الصورة - Image preview state
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   // بنود الفاتورة مع القيم الافتراضية من الدفعة
   // Invoice items with default values from payment
@@ -152,6 +157,18 @@ export function QuickInvoiceDialog({
     setItems(newItems);
   };
 
+  // Handle invoice image upload (converts to base64)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData({ ...formData, invoiceImageUrl: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !pendingData) { return; }
@@ -205,6 +222,8 @@ export function QuickInvoiceDialog({
         taxAmount,
         total,
         notes: formData.notes,
+        manualInvoiceNumber: formData.manualInvoiceNumber || undefined,
+        invoiceImageUrl: formData.invoiceImageUrl || undefined,
       });
 
       if (result.success) {
@@ -242,7 +261,10 @@ export function QuickInvoiceDialog({
       invoiceDate: new Date().toISOString().split("T")[0],
       taxRate: "0",
       notes: "",
+      manualInvoiceNumber: "",
+      invoiceImageUrl: "",
     });
+    setShowImagePreview(false);
     setItems([{
       description: "",
       quantity: 1,
@@ -266,6 +288,7 @@ export function QuickInvoiceDialog({
   if (!pendingData) { return null; }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -321,6 +344,67 @@ export function QuickInvoiceDialog({
                 value={formData.taxRate}
                 onChange={(e) => setFormData({ ...formData, taxRate: e.target.value })}
               />
+            </div>
+          </div>
+
+          {/* رقم الفاتورة اليدوي وصورة الفاتورة */}
+          {/* Manual Invoice Number and Invoice Image */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="manualInvoiceNumber">رقم الفاتورة اليدوي (ورقي)</Label>
+              <Input
+                id="manualInvoiceNumber"
+                value={formData.manualInvoiceNumber}
+                onChange={(e) => setFormData({ ...formData, manualInvoiceNumber: e.target.value })}
+                placeholder="رقم الفاتورة الورقية..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invoiceImage">صورة الفاتورة</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="invoiceImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('invoiceImage')?.click()}
+                  className="flex-1"
+                >
+                  <Upload className="w-4 h-4 ml-2" />
+                  {formData.invoiceImageUrl ? 'تغيير الصورة' : 'رفع صورة'}
+                </Button>
+                {formData.invoiceImageUrl && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowImagePreview(true)}
+                      title="معاينة الصورة"
+                    >
+                      معاينة
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, invoiceImageUrl: '' })}
+                      className="text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              {formData.invoiceImageUrl && (
+                <p className="text-xs text-green-600">تم رفع الصورة بنجاح</p>
+              )}
             </div>
           </div>
 
@@ -556,5 +640,34 @@ export function QuickInvoiceDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Image Preview Modal */}
+    {showImagePreview && formData.invoiceImageUrl && (
+      <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
+        <DialogContent className="max-w-3xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>معاينة صورة الفاتورة</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowImagePreview(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center items-center overflow-auto max-h-[70vh]">
+            <img
+              src={formData.invoiceImageUrl}
+              alt="صورة الفاتورة"
+              className="max-w-full max-h-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+  </>
   );
 }

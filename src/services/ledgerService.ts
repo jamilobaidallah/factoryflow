@@ -131,6 +131,8 @@ export interface InvoiceData {
   taxAmount: number;
   total: number;
   notes: string;
+  manualInvoiceNumber?: string; // رقم فاتورة يدوي (ورقي)
+  invoiceImageUrl?: string; // صورة الفاتورة الورقية (base64)
 }
 
 /**
@@ -929,7 +931,7 @@ export class LedgerService {
       const random = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
       const invoiceNumber = `INV-${year}-${random}`;
 
-      const docRef = await addDoc(this.invoicesRef, {
+      const invoiceDoc: Record<string, unknown> = {
         invoiceNumber,
         clientName: data.clientName,
         clientAddress: data.clientAddress,
@@ -945,7 +947,15 @@ export class LedgerService {
         notes: data.notes,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+      // Only save optional fields if they have values
+      if (data.manualInvoiceNumber) {
+        invoiceDoc.manualInvoiceNumber = data.manualInvoiceNumber;
+      }
+      if (data.invoiceImageUrl) {
+        invoiceDoc.invoiceImageUrl = data.invoiceImageUrl;
+      }
+      const docRef = await addDoc(this.invoicesRef, invoiceDoc);
 
       return { success: true, data: invoiceNumber };
     } catch (error) {
