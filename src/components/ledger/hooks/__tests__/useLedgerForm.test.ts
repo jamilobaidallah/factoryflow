@@ -92,6 +92,7 @@ describe('useLedgerForm', () => {
         chequeNumber: "",
         amount: "",
         bankName: "",
+        issueDate: getTodayDate(),
         dueDate: getTodayDate(),
         status: "قيد الانتظار",
         chequeType: "عادي",
