@@ -21,7 +21,8 @@ interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ) => Promise<boolean>;
   deleteCheque: (chequeId: string) => Promise<boolean>;
   linkTransaction: (cheque: Cheque, transactionId: string) => Promise<boolean>;
@@ -96,7 +97,8 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
   const submitCheque = async (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
-    chequeImage: File | null
+    chequeImage: File | null,
+    paymentDate?: Date
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -178,8 +180,11 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
         // Important: Create payment record when cheque changes from pending to cleared
         if (wasPending && isNowCleared) {
+          // Use provided payment date or fall back to current date
+          const effectivePaymentDate = paymentDate || new Date();
+
           // إضافة تاريخ الصرف عند تغيير الحالة إلى تم الصرف
-          updateData.clearedDate = new Date();
+          updateData.clearedDate = effectivePaymentDate;
 
           // Create a Payment record (disbursement for outgoing cheque)
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
@@ -192,7 +197,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
             linkedChequeId: editingCheque.id,
-            date: new Date(),
+            date: effectivePaymentDate,
             notes: `صرف شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
           });

@@ -32,6 +32,7 @@ import {
   ClearChequeDialog,
   BounceChequeDialog,
 } from "./components/ChequeDialogs";
+import { PaymentDateModal } from "./components/PaymentDateModal";
 
 export default function ChequesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -69,6 +70,11 @@ export default function ChequesPage() {
   const [bounceDialogOpen, setBounceDialogOpen] = useState(false);
   const [chequeToBounce, setChequeToBounce] = useState<Cheque | null>(null);
 
+  // Payment date modal state
+  const [paymentDateModalOpen, setPaymentDateModalOpen] = useState(false);
+  const [paymentDateContext, setPaymentDateContext] = useState<'submit' | 'clear'>('submit');
+  const [pendingFormData, setPendingFormData] = useState<ChequeFormData | null>(null);
+
   const resetForm = () => {
     setFormData(initialChequeFormData);
     setEditingCheque(null);
@@ -102,14 +108,36 @@ export default function ChequesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if status is changing to 'Cashed Out' from a pending status
+    const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
+    const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+    const wasPending = editingCheque ? pendingStatuses.includes(editingCheque.status) : false;
+    const isNowCleared = clearedStatuses.includes(formData.status);
+
+    if (editingCheque && wasPending && isNowCleared) {
+      // Store the form data and open payment date modal
+      setPendingFormData(formData);
+      setPaymentDateContext('submit');
+      setPaymentDateModalOpen(true);
+      return;
+    }
+
+    // Normal submission without payment date
+    await submitChequeWithDate();
+  };
+
+  const submitChequeWithDate = async (paymentDate?: Date) => {
     setLoading(true);
     if (chequeImage) setUploadingImage(true);
 
-    const success = await submitCheque(formData, editingCheque, chequeImage);
+    const dataToSubmit = pendingFormData || formData;
+    const success = await submitCheque(dataToSubmit, editingCheque, chequeImage, paymentDate);
 
     if (success) {
       resetForm();
       setIsDialogOpen(false);
+      setPendingFormData(null);
     }
     setLoading(false);
     setUploadingImage(false);
@@ -140,13 +168,41 @@ export default function ChequesPage() {
 
   const handleClear = async () => {
     if (!chequeToClear) return;
+
+    // Open payment date modal for clearing cheques
+    setPaymentDateContext('clear');
+    setPaymentDateModalOpen(true);
+    setClearDialogOpen(false);
+  };
+
+  const clearChequeWithDate = async (paymentDate?: Date) => {
+    if (!chequeToClear) return;
     setLoading(true);
-    const success = await clearCheque(chequeToClear);
+    const success = await clearCheque(chequeToClear, paymentDate);
     if (success) {
-      setClearDialogOpen(false);
       setChequeToClear(null);
     }
     setLoading(false);
+  };
+
+  const handlePaymentDateConfirm = async (paymentDate: Date) => {
+    setPaymentDateModalOpen(false);
+
+    if (paymentDateContext === 'submit') {
+      await submitChequeWithDate(paymentDate);
+    } else if (paymentDateContext === 'clear') {
+      await clearChequeWithDate(paymentDate);
+    }
+  };
+
+  const handlePaymentDateCancel = () => {
+    setPaymentDateModalOpen(false);
+    setPendingFormData(null);
+
+    // If we were in the middle of clearing, reopen the clear dialog
+    if (paymentDateContext === 'clear' && chequeToClear) {
+      setClearDialogOpen(true);
+    }
   };
 
   const handleBounce = async () => {
@@ -327,6 +383,26 @@ export default function ChequesPage() {
         cheque={chequeToBounce}
         loading={loading}
         onBounce={handleBounce}
+      />
+
+      <PaymentDateModal
+        isOpen={paymentDateModalOpen}
+        onClose={handlePaymentDateCancel}
+        onConfirm={handlePaymentDateConfirm}
+        defaultDate={
+          paymentDateContext === 'submit' && editingCheque?.dueDate
+            ? new Date(editingCheque.dueDate)
+            : paymentDateContext === 'clear' && chequeToClear?.dueDate
+            ? new Date(chequeToClear.dueDate)
+            : new Date()
+        }
+        chequeNumber={
+          paymentDateContext === 'submit' && editingCheque?.chequeNumber
+            ? editingCheque.chequeNumber
+            : paymentDateContext === 'clear' && chequeToClear?.chequeNumber
+            ? chequeToClear.chequeNumber
+            : ""
+        }
       />
 
       {confirmationDialog}

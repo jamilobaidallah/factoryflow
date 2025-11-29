@@ -17,6 +17,7 @@ import { useIncomingChequesOperations } from "./hooks/useIncomingChequesOperatio
 import { IncomingChequesTable } from "./components/IncomingChequesTable";
 import { IncomingChequesFormDialog } from "./components/IncomingChequesFormDialog";
 import { ImageViewerDialog, EndorseDialog } from "./components/IncomingChequeDialogs";
+import { PaymentDateModal } from "./components/PaymentDateModal";
 
 const initialFormData: ChequeFormData = {
   chequeNumber: "",
@@ -72,6 +73,10 @@ export default function IncomingChequesPage() {
   const [endorseToSupplier, setEndorseToSupplier] = useState("");
   const [endorseTransactionId, setEndorseTransactionId] = useState("");
 
+  // Payment date modal state
+  const [paymentDateModalOpen, setPaymentDateModalOpen] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState<ChequeFormData | null>(null);
+
   const resetForm = () => {
     setFormData(initialFormData);
     setEditingCheque(null);
@@ -105,17 +110,48 @@ export default function IncomingChequesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if status is changing to 'Cashed Out' from a pending status
+    const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
+    const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+    const wasPending = editingCheque ? pendingStatuses.includes(editingCheque.status) : false;
+    const isNowCleared = clearedStatuses.includes(formData.status);
+
+    if (editingCheque && wasPending && isNowCleared) {
+      // Store the form data and open payment date modal
+      setPendingFormData(formData);
+      setPaymentDateModalOpen(true);
+      return;
+    }
+
+    // Normal submission without payment date
+    await submitChequeWithDate();
+  };
+
+  const submitChequeWithDate = async (paymentDate?: Date) => {
     setLoading(true);
     if (chequeImage) setUploadingImage(true);
 
-    const success = await submitCheque(formData, editingCheque, chequeImage);
+    const dataToSubmit = pendingFormData || formData;
+    const success = await submitCheque(dataToSubmit, editingCheque, chequeImage, paymentDate);
 
     if (success) {
       resetForm();
       setIsDialogOpen(false);
+      setPendingFormData(null);
     }
     setLoading(false);
     setUploadingImage(false);
+  };
+
+  const handlePaymentDateConfirm = async (paymentDate: Date) => {
+    setPaymentDateModalOpen(false);
+    await submitChequeWithDate(paymentDate);
+  };
+
+  const handlePaymentDateCancel = () => {
+    setPaymentDateModalOpen(false);
+    setPendingFormData(null);
   };
 
   const handleDelete = (chequeId: string) => {
@@ -267,6 +303,14 @@ export default function IncomingChequesPage() {
         setTransactionId={setEndorseTransactionId}
         loading={loading}
         onEndorse={handleEndorse}
+      />
+
+      <PaymentDateModal
+        isOpen={paymentDateModalOpen}
+        onClose={handlePaymentDateCancel}
+        onConfirm={handlePaymentDateConfirm}
+        defaultDate={editingCheque?.dueDate ? new Date(editingCheque.dueDate) : new Date()}
+        chequeNumber={editingCheque?.chequeNumber || ""}
       />
 
       {confirmationDialog}
