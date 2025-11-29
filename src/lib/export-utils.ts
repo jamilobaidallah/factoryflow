@@ -94,8 +94,10 @@ export async function exportToExcel(
   });
 
   // Auto-fit columns
-  worksheet.columns.forEach(column => {
-    column.width = 15;
+  worksheet.columns.forEach((column: Partial<ExcelJS.Column>) => {
+    if (column) {
+      column.width = 15;
+    }
   });
 
   // Generate buffer and trigger download
