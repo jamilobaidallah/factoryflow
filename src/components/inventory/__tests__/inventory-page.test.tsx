@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import InventoryPage from '../inventory-page';
 
@@ -75,6 +75,16 @@ const mockInventoryItems = [
   },
 ];
 
+// Helper function to render and wait for async effects
+const renderInventoryPage = async () => {
+  const result = render(<InventoryPage />);
+  // Wait for async state updates to complete
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  return result;
+};
+
 describe('InventoryPage', () => {
   let unsubscribeMock: jest.Mock;
 
@@ -82,40 +92,46 @@ describe('InventoryPage', () => {
     jest.clearAllMocks();
     unsubscribeMock = jest.fn();
 
-    // Setup onSnapshot to return mock data
+    // Setup onSnapshot to return mock data synchronously
     mockOnSnapshot.mockImplementation((query, callback) => {
-      callback({
-        forEach: (fn: (doc: { id: string; data: () => typeof mockInventoryItems[0] }) => void) => {
-          mockInventoryItems.forEach((item) => {
-            fn({
-              id: item.id,
-              data: () => item,
+      // Use setTimeout to ensure this runs after component mount
+      setTimeout(() => {
+        callback({
+          forEach: (fn: (doc: { id: string; data: () => typeof mockInventoryItems[0] }) => void) => {
+            mockInventoryItems.forEach((item) => {
+              fn({
+                id: item.id,
+                data: () => item,
+              });
             });
-          });
-        },
-      });
+          },
+        });
+      }, 0);
       return unsubscribeMock;
     });
 
     mockCollection.mockReturnValue('inventory-collection');
     mockQuery.mockReturnValue('inventory-query');
     mockDoc.mockReturnValue('doc-ref');
-    mockGetCountFromServer.mockResolvedValue({ data: () => ({ count: 2 }) });
+    // Return immediately resolved promise
+    mockGetCountFromServer.mockImplementation(() =>
+      Promise.resolve({ data: () => ({ count: 2 }) })
+    );
   });
 
   describe('Rendering', () => {
-    it('renders page title', () => {
-      render(<InventoryPage />);
+    it('renders page title', async () => {
+      await renderInventoryPage();
       expect(screen.getByText('المخزون')).toBeInTheDocument();
     });
 
-    it('renders add item button', () => {
-      render(<InventoryPage />);
+    it('renders add item button', async () => {
+      await renderInventoryPage();
       expect(screen.getByRole('button', { name: /إضافة عنصر للمخزون/ })).toBeInTheDocument();
     });
 
     it('renders inventory table when there are items', async () => {
-      render(<InventoryPage />);
+      await renderInventoryPage();
       await waitFor(() => {
         expect(screen.getByRole('table')).toBeInTheDocument();
       });
@@ -124,7 +140,7 @@ describe('InventoryPage', () => {
 
   describe('Displaying Inventory', () => {
     it('displays item names', async () => {
-      render(<InventoryPage />);
+      await renderInventoryPage();
       await waitFor(() => {
         expect(screen.getByText('حديد مسلح')).toBeInTheDocument();
         expect(screen.getByText('اسمنت')).toBeInTheDocument();
@@ -133,25 +149,25 @@ describe('InventoryPage', () => {
   });
 
   describe('Stats Cards', () => {
-    it('displays total items card', () => {
-      render(<InventoryPage />);
+    it('displays total items card', async () => {
+      await renderInventoryPage();
       expect(screen.getByText('إجمالي العناصر')).toBeInTheDocument();
     });
 
-    it('displays low stock card', () => {
-      render(<InventoryPage />);
+    it('displays low stock card', async () => {
+      await renderInventoryPage();
       expect(screen.getByText('عناصر منخفضة المخزون')).toBeInTheDocument();
     });
 
-    it('displays total value card', () => {
-      render(<InventoryPage />);
+    it('displays total value card', async () => {
+      await renderInventoryPage();
       expect(screen.getByText('القيمة الإجمالية')).toBeInTheDocument();
     });
   });
 
   describe('Add Item Dialog', () => {
     it('opens dialog when add button clicked', async () => {
-      render(<InventoryPage />);
+      await renderInventoryPage();
       await userEvent.click(screen.getByRole('button', { name: /إضافة عنصر للمخزون/ }));
       await waitFor(() => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -160,13 +176,13 @@ describe('InventoryPage', () => {
   });
 
   describe('Real-time Updates', () => {
-    it('subscribes to Firestore on mount', () => {
-      render(<InventoryPage />);
+    it('subscribes to Firestore on mount', async () => {
+      await renderInventoryPage();
       expect(mockOnSnapshot).toHaveBeenCalled();
     });
 
-    it('unsubscribes from Firestore on unmount', () => {
-      const { unmount } = render(<InventoryPage />);
+    it('unsubscribes from Firestore on unmount', async () => {
+      const { unmount } = await renderInventoryPage();
       unmount();
       expect(unsubscribeMock).toHaveBeenCalled();
     });
@@ -181,7 +197,7 @@ describe('InventoryPage', () => {
         return unsubscribeMock;
       });
 
-      render(<InventoryPage />);
+      await renderInventoryPage();
       await waitFor(() => {
         expect(screen.getByText(/لا توجد عناصر في المخزون/)).toBeInTheDocument();
       });

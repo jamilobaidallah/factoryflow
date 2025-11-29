@@ -216,7 +216,12 @@ describe('LoginPage', () => {
       expect(screen.getByText('جاري التحميل...')).toBeInTheDocument();
 
       // Resolve to clean up
-      resolvePromise!({ user: { uid: '123' } });
+      await act(async () => {
+        resolvePromise!({ user: { uid: '123' } });
+        await waitFor(() => {
+          expect(mockToast).toHaveBeenCalled();
+        });
+      });
     });
 
     it('disables inputs during loading', async () => {
@@ -233,7 +238,12 @@ describe('LoginPage', () => {
       expect(screen.getByLabelText('البريد الإلكتروني')).toBeDisabled();
       expect(screen.getByLabelText('كلمة المرور')).toBeDisabled();
 
-      resolvePromise!({ user: { uid: '123' } });
+      await act(async () => {
+        resolvePromise!({ user: { uid: '123' } });
+        await waitFor(() => {
+          expect(mockToast).toHaveBeenCalled();
+        });
+      });
     });
   });
 
