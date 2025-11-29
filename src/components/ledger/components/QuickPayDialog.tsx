@@ -24,10 +24,15 @@ interface QuickPayDialogProps {
   onSuccess?: () => void;
 }
 
+function getTodayDateString(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDialogProps) {
   const { user } = useUser();
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(getTodayDateString);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +76,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         totalPaid: entry.totalPaid || 0,
         remainingBalance: entry.remainingBalance || entry.amount,
         isARAPEntry: entry.isARAPEntry || false,
+        date: new Date(paymentDate),
       });
 
       if (result.success) {
@@ -80,6 +86,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         });
 
         setAmount("");
+        setPaymentDate(getTodayDateString());
         onClose();
         onSuccess?.();
       } else {
@@ -89,8 +96,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
           variant: "destructive",
         });
       }
-    } catch (error) {
-      console.error("Error adding quick payment:", error);
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء إضافة الدفعة",
@@ -148,6 +154,16 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
                 الحد الأقصى: {entry.remainingBalance.toFixed(2)} دينار
               </p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="paymentDate">تاريخ الدفعة</Label>
+            <Input
+              id="paymentDate"
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

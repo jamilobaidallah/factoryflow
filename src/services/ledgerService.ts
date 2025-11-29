@@ -83,6 +83,7 @@ export interface QuickPaymentData {
   totalPaid: number;
   remainingBalance: number;
   isARAPEntry: boolean;
+  date?: Date;
 }
 
 export interface InvoiceData {
@@ -660,7 +661,7 @@ export class LedgerService {
         amount: data.amount,
         type: paymentType,
         linkedTransactionId: data.entryTransactionId,
-        date: new Date(),
+        date: data.date || new Date(),
         notes: `دفعة جزئية - ${data.entryDescription}`,
         category: data.entryCategory,
         subCategory: data.entrySubCategory,
@@ -676,8 +677,7 @@ export class LedgerService {
       await this.updateARAPTracking(data.entryId, newTotalPaid, newRemainingBalance, newStatus);
 
       return { success: true };
-    } catch (error) {
-      console.error("Error adding quick payment:", error);
+    } catch {
       return {
         success: false,
         error: "حدث خطأ أثناء إضافة الدفعة",
