@@ -11,7 +11,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Download, Eye, Image, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 
 // Types and hooks
@@ -36,6 +42,9 @@ export default function InvoicesPage() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Image preview state
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<InvoiceFormData>(initialFormData);
@@ -187,18 +196,19 @@ export default function InvoicesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>رقم الفاتورة</TableHead>
+                <TableHead>رقم يدوي</TableHead>
                 <TableHead>العميل</TableHead>
                 <TableHead>التاريخ</TableHead>
-                <TableHead>الاستحقاق</TableHead>
                 <TableHead>المبلغ</TableHead>
                 <TableHead>الحالة</TableHead>
+                <TableHead>صورة</TableHead>
                 <TableHead>الإجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                     لا توجد فواتير بعد. انقر على &quot;فاتورة جديدة&quot; للبدء.
                   </TableCell>
                 </TableRow>
@@ -206,14 +216,31 @@ export default function InvoicesPage() {
                 invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                    <TableCell className="text-gray-600 text-sm">
+                      {invoice.manualInvoiceNumber || "-"}
+                    </TableCell>
                     <TableCell>{invoice.clientName}</TableCell>
                     <TableCell>{invoice.invoiceDate.toLocaleDateString("ar-JO")}</TableCell>
-                    <TableCell>{invoice.dueDate.toLocaleDateString("ar-JO")}</TableCell>
                     <TableCell>{invoice.total.toFixed(2)} د.أ</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-xs ${getStatusColor(invoice.status)}`}>
                         {getStatusLabel(invoice.status)}
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      {invoice.invoiceImageUrl ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedImageUrl(invoice.invoiceImageUrl || null)}
+                          title="عرض صورة الفاتورة"
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Image className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -291,6 +318,34 @@ export default function InvoicesPage() {
         invoice={viewInvoice}
         onExportPDF={exportPDF}
       />
+
+      {/* Image Preview Modal */}
+      {selectedImageUrl && (
+        <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
+          <DialogContent className="max-w-3xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center justify-between">
+                <span>صورة الفاتورة</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedImageUrl(null)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex justify-center items-center overflow-auto max-h-[70vh]">
+              <img
+                src={selectedImageUrl}
+                alt="صورة الفاتورة"
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {confirmationDialog}
     </div>
