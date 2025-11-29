@@ -677,8 +677,7 @@ export class LedgerService {
       await this.updateARAPTracking(data.entryId, newTotalPaid, newRemainingBalance, newStatus);
 
       return { success: true };
-    } catch (error) {
-      console.error("Error adding quick payment:", error);
+    } catch {
       return {
         success: false,
         error: "حدث خطأ أثناء إضافة الدفعة",

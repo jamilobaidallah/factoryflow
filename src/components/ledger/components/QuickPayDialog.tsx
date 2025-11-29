@@ -24,11 +24,15 @@ interface QuickPayDialogProps {
   onSuccess?: () => void;
 }
 
+function getTodayDateString(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDialogProps) {
   const { user } = useUser();
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [paymentDate, setPaymentDate] = useState(getTodayDateString);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,7 +86,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         });
 
         setAmount("");
-        setPaymentDate(new Date().toISOString().split("T")[0]);
+        setPaymentDate(getTodayDateString());
         onClose();
         onSuccess?.();
       } else {
@@ -92,8 +96,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
           variant: "destructive",
         });
       }
-    } catch (error) {
-      console.error("Error adding quick payment:", error);
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء إضافة الدفعة",
