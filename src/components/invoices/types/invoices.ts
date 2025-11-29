@@ -2,12 +2,18 @@
 // Unit types for manufacturing
 export type InvoiceItemUnit = 'm' | 'm2' | 'piece';
 
+// نوع البند: مادة أو خدمة
+// Item type: material or service
+export type InvoiceItemType = 'material' | 'service';
+
 export interface InvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
   total: number;
-  // بيانات التصنيع - Manufacturing data
+  // نوع البند - Item type (material or service)
+  itemType?: InvoiceItemType;
+  // بيانات التصنيع - Manufacturing data (only for materials)
   unit?: InvoiceItemUnit;
   length?: number;    // الطول (سم)
   width?: number;     // العرض (سم)
@@ -20,6 +26,7 @@ export interface CleanInvoiceItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  itemType: InvoiceItemType;
   unit: InvoiceItemUnit;
   length?: number;
   width?: number;
@@ -29,6 +36,7 @@ export interface CleanInvoiceItem {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  manualInvoiceNumber?: string; // رقم فاتورة يدوي (ورقي)
   clientName: string;
   clientAddress?: string;
   clientPhone?: string;
@@ -41,6 +49,7 @@ export interface Invoice {
   total: number;
   status: "draft" | "sent" | "paid" | "overdue";
   notes?: string;
+  invoiceImageUrl?: string; // صورة الفاتورة الورقية
   linkedTransactionId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +62,8 @@ export interface InvoiceFormData {
   invoiceDate: string;
   taxRate: string;
   notes: string;
+  manualInvoiceNumber: string; // رقم فاتورة يدوي (ورقي)
+  invoiceImageUrl: string; // صورة الفاتورة الورقية (base64)
 }
 
 export const initialFormData: InvoiceFormData = {
@@ -62,6 +73,8 @@ export const initialFormData: InvoiceFormData = {
   invoiceDate: new Date().toISOString().split("T")[0],
   taxRate: "0",
   notes: "",
+  manualInvoiceNumber: "",
+  invoiceImageUrl: "",
 };
 
 export const initialInvoiceItem: InvoiceItem = {
@@ -69,6 +82,7 @@ export const initialInvoiceItem: InvoiceItem = {
   quantity: 1,
   unitPrice: 0,
   total: 0,
+  itemType: 'material',
   unit: 'piece',
   length: undefined,
   width: undefined,

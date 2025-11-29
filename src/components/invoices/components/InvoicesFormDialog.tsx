@@ -11,8 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Trash2 } from "lucide-react";
-import { Invoice, InvoiceFormData, InvoiceItem, InvoiceItemUnit } from "../types/invoices";
+import { Plus, Trash2, Upload } from "lucide-react";
+import { Invoice, InvoiceFormData, InvoiceItem, InvoiceItemUnit, InvoiceItemType } from "../types/invoices";
 
 interface InvoicesFormDialogProps {
   isOpen: boolean;
@@ -45,6 +45,7 @@ export function InvoicesFormDialog({
         quantity: 1,
         unitPrice: 0,
         total: 0,
+        itemType: 'material',
         unit: 'piece',
         length: undefined,
         width: undefined,
@@ -62,13 +63,19 @@ export function InvoicesFormDialog({
   const handleItemChange = (
     index: number,
     field: keyof InvoiceItem,
-    value: string | number | InvoiceItemUnit | undefined
+    value: string | number | InvoiceItemUnit | InvoiceItemType | undefined
   ) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
     if (field === "quantity" || field === "unitPrice") {
+      // Forward calculation: Total = Qty × Price
       newItems[index].total = newItems[index].quantity * newItems[index].unitPrice;
+    } else if (field === "total") {
+      // Reverse calculation: Price = Total / Qty
+      if (newItems[index].quantity > 0) {
+        newItems[index].unitPrice = newItems[index].total / newItems[index].quantity;
+      }
     }
 
     setItems(newItems);
@@ -79,6 +86,18 @@ export function InvoicesFormDialog({
     const taxAmount = (subtotal * taxRate) / 100;
     const total = subtotal + taxAmount;
     return { subtotal, taxAmount, total };
+  };
+
+  // Handle invoice image upload (converts to base64)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData({ ...formData, invoiceImageUrl: reader.result as string });
+    };
+    reader.readAsDataURL(file);
   };
 
   const totals = calculateTotals(items, parseFloat(formData.taxRate));
@@ -147,6 +166,56 @@ export function InvoicesFormDialog({
             </div>
           </div>
 
+          {/* رقم الفاتورة اليدوي وصورة الفاتورة */}
+          {/* Manual Invoice Number and Invoice Image */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="manualInvoiceNumber">رقم الفاتورة اليدوي (ورقي)</Label>
+              <Input
+                id="manualInvoiceNumber"
+                value={formData.manualInvoiceNumber}
+                onChange={(e) => setFormData({ ...formData, manualInvoiceNumber: e.target.value })}
+                placeholder="رقم الفاتورة الورقية..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invoiceImage">صورة الفاتورة</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="invoiceImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('invoiceImage')?.click()}
+                  className="w-full"
+                >
+                  <Upload className="w-4 h-4 ml-2" />
+                  {formData.invoiceImageUrl ? 'تغيير الصورة' : 'رفع صورة'}
+                </Button>
+                {formData.invoiceImageUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, invoiceImageUrl: '' })}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              {formData.invoiceImageUrl && (
+                <p className="text-xs text-green-600">تم رفع الصورة بنجاح</p>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>بنود الفاتورة</Label>
@@ -162,8 +231,9 @@ export function InvoicesFormDialog({
               <table className="w-full min-w-[850px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
+                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[180px]">الوصف</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">النوع</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">الوحدة</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
@@ -186,6 +256,17 @@ export function InvoicesFormDialog({
                           className="h-8 text-sm"
                         />
                       </td>
+                      {/* النوع - Type dropdown (Material/Service) */}
+                      <td className="px-1 py-1.5">
+                        <select
+                          value={item.itemType || 'material'}
+                          onChange={(e) => handleItemChange(index, "itemType", e.target.value as InvoiceItemType)}
+                          className="flex h-8 w-full rounded-md border border-input bg-background px-1 py-1 text-sm text-center"
+                        >
+                          <option value="material">مادة</option>
+                          <option value="service">خدمة</option>
+                        </select>
+                      </td>
                       {/* الوحدة - Unit dropdown */}
                       <td className="px-1 py-1.5">
                         <select
@@ -198,35 +279,47 @@ export function InvoicesFormDialog({
                           <option value="piece">عدد</option>
                         </select>
                       </td>
-                      {/* الطول - Length (اختياري - optional) */}
+                      {/* الطول - Length (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.length ?? ''}
-                          onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.length ?? ''}
+                            onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      {/* العرض - Width (اختياري - optional) */}
+                      {/* العرض - Width (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.width ?? ''}
-                          onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.width ?? ''}
+                            onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      {/* السماكة - Thickness (اختياري - optional) */}
+                      {/* السماكة - Thickness (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.thickness ?? ''}
-                          onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.thickness ?? ''}
+                            onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
                       {/* الكمية - Quantity */}
                       <td className="px-1 py-1.5">
@@ -250,9 +343,15 @@ export function InvoicesFormDialog({
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>
-                      {/* المجموع - Total */}
+                      {/* المجموع - Total (editable for reverse calculation) */}
                       <td className="px-1 py-1.5">
-                        <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm text-center bg-gray-50 w-full" />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={item.total}
+                          onChange={(e) => handleItemChange(index, "total", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center w-full"
+                        />
                       </td>
                       {/* حذف - Delete */}
                       <td className="px-1 py-1.5">

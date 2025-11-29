@@ -26,12 +26,14 @@ import { createLedgerService } from "@/services/ledgerService";
 
 // وحدات القياس للمصنع - Unit types for manufacturing
 type InvoiceItemUnit = 'm' | 'm2' | 'piece';
+type InvoiceItemType = 'material' | 'service';
 
 interface InvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
   total: number;
+  itemType?: InvoiceItemType;
   unit?: InvoiceItemUnit;
   length?: number;
   width?: number;
@@ -44,6 +46,7 @@ interface CleanInvoiceItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  itemType: InvoiceItemType;
   unit: InvoiceItemUnit;
   length?: number;
   width?: number;
@@ -87,6 +90,7 @@ export function QuickInvoiceDialog({
       quantity: 1,
       unitPrice: pendingData?.amount || 0,
       total: pendingData?.amount || 0,
+      itemType: 'material',
       unit: 'piece',
       length: undefined,
       width: undefined,
@@ -117,6 +121,7 @@ export function QuickInvoiceDialog({
       quantity: 1,
       unitPrice: 0,
       total: 0,
+      itemType: 'material',
       unit: 'piece',
       length: undefined,
       width: undefined,
@@ -130,12 +135,18 @@ export function QuickInvoiceDialog({
     }
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | undefined) => {
+  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number | InvoiceItemUnit | InvoiceItemType | undefined) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
     if (field === "quantity" || field === "unitPrice") {
+      // Forward calculation: Total = Qty × Price
       newItems[index].total = newItems[index].quantity * newItems[index].unitPrice;
+    } else if (field === "total") {
+      // Reverse calculation: Price = Total / Qty
+      if (newItems[index].quantity > 0) {
+        newItems[index].unitPrice = newItems[index].total / newItems[index].quantity;
+      }
     }
 
     setItems(newItems);
@@ -157,18 +168,21 @@ export function QuickInvoiceDialog({
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           total: item.total,
+          itemType: item.itemType || 'material',
           unit: item.unit || 'piece',
         };
-        // فقط أضف الأبعاد إذا كانت موجودة
-        // Only add dimensions if they have values
-        if (item.length !== undefined && item.length !== null) {
-          cleanItem.length = item.length;
-        }
-        if (item.width !== undefined && item.width !== null) {
-          cleanItem.width = item.width;
-        }
-        if (item.thickness !== undefined && item.thickness !== null) {
-          cleanItem.thickness = item.thickness;
+        // فقط أضف الأبعاد إذا كانت موجودة (للمواد فقط)
+        // Only add dimensions if they have values (materials only)
+        if (item.itemType !== 'service') {
+          if (item.length !== undefined && item.length !== null) {
+            cleanItem.length = item.length;
+          }
+          if (item.width !== undefined && item.width !== null) {
+            cleanItem.width = item.width;
+          }
+          if (item.thickness !== undefined && item.thickness !== null) {
+            cleanItem.thickness = item.thickness;
+          }
         }
         return cleanItem;
       });
@@ -234,6 +248,7 @@ export function QuickInvoiceDialog({
       quantity: 1,
       unitPrice: 0,
       total: 0,
+      itemType: 'material',
       unit: 'piece',
       length: undefined,
       width: undefined,
@@ -324,8 +339,9 @@ export function QuickInvoiceDialog({
               <table className="w-full min-w-[850px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[200px]">الوصف</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-28">الوحدة</th>
+                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[180px]">الوصف</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">النوع</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">الوحدة</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
@@ -348,6 +364,17 @@ export function QuickInvoiceDialog({
                           className="h-8 text-sm"
                         />
                       </td>
+                      {/* النوع - Type dropdown (Material/Service) */}
+                      <td className="px-1 py-1.5">
+                        <select
+                          value={item.itemType || 'material'}
+                          onChange={(e) => handleItemChange(index, "itemType", e.target.value as InvoiceItemType)}
+                          className="flex h-8 w-full rounded-md border border-input bg-background px-1 py-1 text-sm text-center"
+                        >
+                          <option value="material">مادة</option>
+                          <option value="service">خدمة</option>
+                        </select>
+                      </td>
                       {/* الوحدة - Unit dropdown */}
                       <td className="px-1 py-1.5">
                         <select
@@ -360,35 +387,47 @@ export function QuickInvoiceDialog({
                           <option value="piece">عدد</option>
                         </select>
                       </td>
-                      {/* الطول - Length (اختياري - optional) */}
+                      {/* الطول - Length (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.length ?? ''}
-                          onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.length ?? ''}
+                            onChange={(e) => handleItemChange(index, "length", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      {/* العرض - Width (اختياري - optional) */}
+                      {/* العرض - Width (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.width ?? ''}
-                          onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.width ?? ''}
+                            onChange={(e) => handleItemChange(index, "width", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      {/* السماكة - Thickness (اختياري - optional) */}
+                      {/* السماكة - Thickness (hidden for service) */}
                       <td className="px-1 py-1.5">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          value={item.thickness ?? ''}
-                          onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
-                          className="h-8 text-sm text-center w-full"
-                        />
+                        {item.itemType !== 'service' ? (
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.thickness ?? ''}
+                            onChange={(e) => handleItemChange(index, "thickness", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-8 text-sm text-center w-full"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
                       {/* الكمية - Quantity */}
                       <td className="px-1 py-1.5">
@@ -412,9 +451,15 @@ export function QuickInvoiceDialog({
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>
-                      {/* المجموع - Total */}
+                      {/* المجموع - Total (editable for reverse calculation) */}
                       <td className="px-1 py-1.5">
-                        <Input value={item.total.toFixed(2)} disabled className="h-8 text-sm text-center bg-gray-50 w-full" />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={item.total}
+                          onChange={(e) => handleItemChange(index, "total", parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm text-center w-full"
+                        />
                       </td>
                       {/* حذف - Delete */}
                       <td className="px-1 py-1.5">
@@ -453,9 +498,10 @@ export function QuickInvoiceDialog({
           </div>
 
           {/* مطابقة القيد - Ledger Reconciliation */}
+          {/* Relaxed validation: allows match if rounded values are equal */}
           {pendingData && (
             <div className={`p-3 rounded-lg border ${
-              Math.abs(totals.total - pendingData.amount) < 0.01
+              Math.round(totals.total) === Math.round(pendingData.amount)
                 ? 'bg-green-50 border-green-200'
                 : 'bg-yellow-50 border-yellow-200'
             }`}>
@@ -471,7 +517,7 @@ export function QuickInvoiceDialog({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {Math.abs(totals.total - pendingData.amount) < 0.01 ? (
+                  {Math.round(totals.total) === Math.round(pendingData.amount) ? (
                     <>
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <span className="text-green-700 font-medium text-sm">مطابق</span>

@@ -59,18 +59,21 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           total: item.total,
+          itemType: item.itemType || 'material',
           unit: item.unit || 'piece',
         };
-        // فقط أضف الأبعاد إذا كانت موجودة
-        // Only add dimensions if they have values
-        if (item.length !== undefined && item.length !== null) {
-          cleanItem.length = item.length;
-        }
-        if (item.width !== undefined && item.width !== null) {
-          cleanItem.width = item.width;
-        }
-        if (item.thickness !== undefined && item.thickness !== null) {
-          cleanItem.thickness = item.thickness;
+        // فقط أضف الأبعاد إذا كانت موجودة (للمواد فقط)
+        // Only add dimensions if they have values (materials only)
+        if (item.itemType !== 'service') {
+          if (item.length !== undefined && item.length !== null) {
+            cleanItem.length = item.length;
+          }
+          if (item.width !== undefined && item.width !== null) {
+            cleanItem.width = item.width;
+          }
+          if (item.thickness !== undefined && item.thickness !== null) {
+            cleanItem.thickness = item.thickness;
+          }
         }
         return cleanItem;
       });
@@ -82,7 +85,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
 
       if (editingInvoice) {
         const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, editingInvoice.id);
-        await updateDoc(invoiceRef, {
+        const updateData: Record<string, unknown> = {
           clientName: formData.clientName,
           clientAddress: formData.clientAddress,
           clientPhone: formData.clientPhone,
@@ -95,7 +98,15 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           total,
           notes: formData.notes,
           updatedAt: new Date(),
-        });
+        };
+        // Only save optional fields if they have values
+        if (formData.manualInvoiceNumber) {
+          updateData.manualInvoiceNumber = formData.manualInvoiceNumber;
+        }
+        if (formData.invoiceImageUrl) {
+          updateData.invoiceImageUrl = formData.invoiceImageUrl;
+        }
+        await updateDoc(invoiceRef, updateData);
 
         toast({
           title: "تم التحديث",
@@ -104,7 +115,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
       } else {
         const invoiceNumber = generateInvoiceNumber();
 
-        await addDoc(collection(firestore, `users/${user.uid}/invoices`), {
+        const newInvoice: Record<string, unknown> = {
           invoiceNumber,
           clientName: formData.clientName,
           clientAddress: formData.clientAddress,
@@ -120,7 +131,15 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           notes: formData.notes,
           createdAt: new Date(),
           updatedAt: new Date(),
-        });
+        };
+        // Only save optional fields if they have values
+        if (formData.manualInvoiceNumber) {
+          newInvoice.manualInvoiceNumber = formData.manualInvoiceNumber;
+        }
+        if (formData.invoiceImageUrl) {
+          newInvoice.invoiceImageUrl = formData.invoiceImageUrl;
+        }
+        await addDoc(collection(firestore, `users/${user.uid}/invoices`), newInvoice);
 
         toast({
           title: "تمت الإضافة",

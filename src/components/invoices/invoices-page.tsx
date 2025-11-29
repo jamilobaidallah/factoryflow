@@ -61,6 +61,8 @@ export default function InvoicesPage() {
       invoiceDate: invoice.invoiceDate.toISOString().split("T")[0],
       taxRate: invoice.taxRate.toString(),
       notes: invoice.notes || "",
+      manualInvoiceNumber: invoice.manualInvoiceNumber || "",
+      invoiceImageUrl: invoice.invoiceImageUrl || "",
     });
     setItems(invoice.items);
     setIsDialogOpen(true);
