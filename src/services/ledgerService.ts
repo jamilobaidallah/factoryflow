@@ -24,7 +24,7 @@ import {
   WriteBatch,
   CollectionReference,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import type {
   LedgerEntry,
   LedgerFormData,
@@ -45,6 +45,26 @@ import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
   `users/${userId}/${collectionName}`;
+
+/**
+ * Sanitizes a filename by replacing spaces and special characters
+ * with underscores to prevent URL encoding issues in Firebase Storage
+ */
+function sanitizeFileName(filename: string): string {
+  // Get file extension
+  const lastDot = filename.lastIndexOf('.');
+  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+  const ext = lastDot > 0 ? filename.substring(lastDot) : '';
+
+  // Replace spaces and special characters with underscores
+  const sanitized = name
+    .replace(/\s+/g, '_')           // Replace spaces with underscores
+    .replace(/[^\w\-_.]/g, '_')     // Replace other special chars with underscores
+    .replace(/_+/g, '_')            // Collapse multiple underscores
+    .replace(/^_|_$/g, '');         // Trim leading/trailing underscores
+
+  return sanitized + ext.toLowerCase();
+}
 
 // Result types for service methods
 export interface ServiceResult<T = void> {
@@ -697,12 +717,33 @@ export class LedgerService {
 
       // Upload cheque image if provided
       if (formData.chequeImage) {
-        const imageRef = ref(
-          storage,
-          `users/${this.userId}/cheques/${Date.now()}_${formData.chequeImage.name}`
-        );
-        await uploadBytes(imageRef, formData.chequeImage);
-        chequeImageUrl = await getDownloadURL(imageRef);
+        try {
+          const sanitizedName = sanitizeFileName(formData.chequeImage.name);
+          const imageRef = ref(
+            storage,
+            `users/${this.userId}/cheques/${Date.now()}_${sanitizedName}`
+          );
+          await uploadBytes(imageRef, formData.chequeImage);
+          chequeImageUrl = await getDownloadURL(imageRef);
+        } catch (uploadError) {
+          // Handle storage-specific errors
+          if (uploadError instanceof StorageError) {
+            const errorCode = uploadError.code;
+            if (errorCode === 'storage/unauthorized' || errorCode === 'storage/unauthenticated') {
+              return {
+                success: false,
+                error: "ليس لديك صلاحية لرفع الصور. يرجى التأكد من تسجيل الدخول والمحاولة مرة أخرى",
+              };
+            } else if (errorCode === 'storage/quota-exceeded') {
+              return {
+                success: false,
+                error: "تم تجاوز الحد المسموح به للتخزين",
+              };
+            }
+          }
+          // Re-throw for generic error handling
+          throw uploadError;
+        }
       }
 
       const chequeDirection = entry.type === "دخل" ? CHEQUE_TYPES.INCOMING : CHEQUE_TYPES.OUTGOING;

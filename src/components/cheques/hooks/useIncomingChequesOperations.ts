@@ -12,7 +12,7 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
@@ -30,6 +30,26 @@ interface UseIncomingChequesOperationsReturn {
     transactionId: string
   ) => Promise<boolean>;
   cancelEndorsement: (cheque: Cheque) => Promise<boolean>;
+}
+
+/**
+ * Sanitizes a filename by replacing spaces and special characters
+ * with underscores to prevent URL encoding issues in Firebase Storage
+ */
+function sanitizeFileName(filename: string): string {
+  // Get file extension
+  const lastDot = filename.lastIndexOf('.');
+  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+  const ext = lastDot > 0 ? filename.substring(lastDot) : '';
+
+  // Replace spaces and special characters with underscores
+  const sanitized = name
+    .replace(/\s+/g, '_')           // Replace spaces with underscores
+    .replace(/[^\w\-_.]/g, '_')     // Replace other special chars with underscores
+    .replace(/_+/g, '_')            // Collapse multiple underscores
+    .replace(/^_|_$/g, '');         // Trim leading/trailing underscores
+
+  return sanitized + ext.toLowerCase();
 }
 
 export function useIncomingChequesOperations(): UseIncomingChequesOperationsReturn {
@@ -85,12 +105,44 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     try {
       let chequeImageUrl: string | undefined = undefined;
       if (chequeImage) {
-        const imageRef = ref(
-          storage,
-          `users/${user.uid}/cheques/${Date.now()}_${chequeImage.name}`
-        );
-        await uploadBytes(imageRef, chequeImage);
-        chequeImageUrl = await getDownloadURL(imageRef);
+        try {
+          const sanitizedName = sanitizeFileName(chequeImage.name);
+          const imageRef = ref(
+            storage,
+            `users/${user.uid}/cheques/${Date.now()}_${sanitizedName}`
+          );
+          await uploadBytes(imageRef, chequeImage);
+          chequeImageUrl = await getDownloadURL(imageRef);
+        } catch (uploadError) {
+          // Handle storage-specific errors
+          if (uploadError instanceof StorageError) {
+            const errorCode = uploadError.code;
+            if (errorCode === 'storage/unauthorized' || errorCode === 'storage/unauthenticated') {
+              toast({
+                title: "خطأ في الصلاحيات",
+                description: "ليس لديك صلاحية لرفع الصور. يرجى التأكد من تسجيل الدخول والمحاولة مرة أخرى",
+                variant: "destructive",
+              });
+              return false;
+            } else if (errorCode === 'storage/canceled') {
+              toast({
+                title: "تم الإلغاء",
+                description: "تم إلغاء رفع الصورة",
+                variant: "destructive",
+              });
+              return false;
+            } else if (errorCode === 'storage/quota-exceeded') {
+              toast({
+                title: "خطأ في التخزين",
+                description: "تم تجاوز الحد المسموح به للتخزين",
+                variant: "destructive",
+              });
+              return false;
+            }
+          }
+          // Re-throw for generic error handling
+          throw uploadError;
+        }
       }
 
       if (editingCheque) {
@@ -174,9 +226,19 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
       return true;
     } catch (error) {
+      // Provide more specific error messages
+      let errorDescription = "حدث خطأ أثناء حفظ البيانات";
+
+      if (error instanceof StorageError) {
+        errorDescription = "حدث خطأ أثناء رفع صورة الشيك. يرجى المحاولة مرة أخرى";
+      } else if (error instanceof Error) {
+        // Log the actual error for debugging
+        console.error("Cheque save error:", error.message);
+      }
+
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء حفظ البيانات",
+        description: errorDescription,
         variant: "destructive",
       });
       return false;
