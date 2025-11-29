@@ -28,6 +28,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
   const { user } = useUser();
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +72,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         totalPaid: entry.totalPaid || 0,
         remainingBalance: entry.remainingBalance || entry.amount,
         isARAPEntry: entry.isARAPEntry || false,
+        date: new Date(paymentDate),
       });
 
       if (result.success) {
@@ -80,6 +82,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         });
 
         setAmount("");
+        setPaymentDate(new Date().toISOString().split("T")[0]);
         onClose();
         onSuccess?.();
       } else {
@@ -148,6 +151,16 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
                 الحد الأقصى: {entry.remainingBalance.toFixed(2)} دينار
               </p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="paymentDate">تاريخ الدفعة</Label>
+            <Input
+              id="paymentDate"
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
