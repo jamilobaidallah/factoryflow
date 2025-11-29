@@ -12,6 +12,7 @@ import {
   query,
   where,
   getDocs,
+  runTransaction,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
@@ -193,23 +194,107 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     }
   };
 
+  /**
+   * Delete a cheque with atomic transaction
+   * Steps:
+   * 1. Find and retrieve the cheque document
+   * 2. Find and retrieve associated payment records
+   * 3. Find and retrieve the linked ledger entry (if exists)
+   * 4. In a single transaction:
+   *    - Delete the cheque
+   *    - Delete all associated payment records
+   *    - Reverse the AR/AP balance in the ledger
+   */
   const deleteCheque = async (chequeId: string, cheques: Cheque[]): Promise<boolean> => {
     if (!user) return false;
 
     try {
       const cheque = cheques.find((c) => c.id === chequeId);
-
-      if (cheque && cheque.linkedTransactionId) {
-        await updateARAPTracking(cheque.linkedTransactionId, cheque.amount, false);
+      if (!cheque) {
+        toast({
+          title: "خطأ",
+          description: "الشيك غير موجود",
+          variant: "destructive",
+        });
+        return false;
       }
 
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
-      await deleteDoc(chequeRef);
+      // Step 1: Find all associated payment records linked to this cheque
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsQuery = query(
+        paymentsRef,
+        where("linkedTransactionId", "==", cheque.linkedTransactionId || ""),
+        where("notes", ">=", `${cheque.chequeNumber}`),
+        where("notes", "<=", `${cheque.chequeNumber}\uf8ff`)
+      );
+      const paymentsSnapshot = await getDocs(paymentsQuery);
 
+      // Filter payments that actually reference this cheque number in notes
+      const relatedPayments = paymentsSnapshot.docs.filter(doc => {
+        const data = doc.data();
+        return data.notes && data.notes.includes(cheque.chequeNumber);
+      });
+
+      // Step 2: Find the linked ledger entry (if exists)
+      let ledgerDocRef = null;
+      let ledgerData = null;
+
+      if (cheque.linkedTransactionId) {
+        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+        const ledgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", cheque.linkedTransactionId.trim())
+        );
+        const ledgerSnapshot = await getDocs(ledgerQuery);
+
+        if (!ledgerSnapshot.empty) {
+          const ledgerDoc = ledgerSnapshot.docs[0];
+          ledgerDocRef = doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id);
+          ledgerData = ledgerDoc.data();
+        }
+      }
+
+      // Step 3: Execute atomic transaction
+      await runTransaction(firestore, async (transaction) => {
+        const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+
+        // Delete the cheque
+        transaction.delete(chequeRef);
+
+        // Delete all associated payment records
+        relatedPayments.forEach((paymentDoc) => {
+          const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentDoc.id);
+          transaction.delete(paymentRef);
+        });
+
+        // Reverse AR/AP tracking in ledger entry
+        if (ledgerDocRef && ledgerData && ledgerData.isARAPEntry) {
+          const currentTotalPaid = ledgerData.totalPaid || 0;
+          const transactionAmount = ledgerData.amount || 0;
+          const newTotalPaid = Math.max(0, currentTotalPaid - cheque.amount);
+          const newRemainingBalance = transactionAmount - newTotalPaid;
+
+          let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
+          if (newRemainingBalance <= 0) {
+            newStatus = "paid";
+          } else if (newTotalPaid > 0) {
+            newStatus = "partial";
+          }
+
+          transaction.update(ledgerDocRef, {
+            totalPaid: newTotalPaid,
+            remainingBalance: newRemainingBalance,
+            paymentStatus: newStatus,
+          });
+        }
+      });
+
+      // Success toast
+      const deletedItemsCount = relatedPayments.length;
       toast({
-        title: "تم الحذف",
-        description: cheque?.linkedTransactionId
-          ? "تم حذف الشيك وتحديث الرصيد في دفتر الأستاذ"
+        title: "تم الحذف بنجاح",
+        description: cheque.linkedTransactionId
+          ? `تم حذف الشيك و ${deletedItemsCount} سند مرتبط وتحديث الرصيد في دفتر الأستاذ`
           : "تم حذف الشيك بنجاح",
       });
       return true;

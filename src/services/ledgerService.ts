@@ -1014,19 +1014,47 @@ export class LedgerService {
       } else if (options.hasInitialPayment && options.initialPaymentAmount) {
         initialPaid = parseFloat(options.initialPaymentAmount);
         initialStatus = initialPaid >= totalAmount ? "paid" : "partial";
-      } else if (options.hasIncomingCheck && options.checkFormData) {
-        const chequeAccountingType = options.checkFormData.accountingType || "cashed";
-        if (chequeAccountingType === "cashed") {
-          const chequeAmount = parseFloat(options.checkFormData.chequeAmount || "0");
-          initialPaid = chequeAmount;
-          initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+      } else if (options.hasIncomingCheck) {
+        // Handle multiple incoming cheques
+        if (options.incomingChequesList && options.incomingChequesList.length > 0) {
+          let totalCashedAmount = 0;
+          options.incomingChequesList.forEach((cheque) => {
+            const accountingType = cheque.accountingType || "cashed";
+            if (accountingType === "cashed") {
+              totalCashedAmount += parseFloat(cheque.chequeAmount || "0");
+            }
+          });
+          initialPaid = totalCashedAmount;
+          initialStatus = totalCashedAmount >= totalAmount ? "paid" : totalCashedAmount > 0 ? "partial" : "unpaid";
+        } else if (options.checkFormData) {
+          // Backwards compatibility: single cheque
+          const chequeAccountingType = options.checkFormData.accountingType || "cashed";
+          if (chequeAccountingType === "cashed") {
+            const chequeAmount = parseFloat(options.checkFormData.chequeAmount || "0");
+            initialPaid = chequeAmount;
+            initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+          }
         }
-      } else if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
-        const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
-        if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
-          const chequeAmount = parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
-          initialPaid = chequeAmount;
-          initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+      } else if (options.hasOutgoingCheck) {
+        // Handle multiple outgoing cheques
+        if (options.outgoingChequesList && options.outgoingChequesList.length > 0) {
+          let totalCashedAmount = 0;
+          options.outgoingChequesList.forEach((cheque) => {
+            const accountingType = cheque.accountingType || "cashed";
+            if (accountingType === "cashed" || accountingType === "endorsed") {
+              totalCashedAmount += parseFloat(cheque.chequeAmount || "0");
+            }
+          });
+          initialPaid = totalCashedAmount;
+          initialStatus = totalCashedAmount >= totalAmount ? "paid" : totalCashedAmount > 0 ? "partial" : "unpaid";
+        } else if (options.outgoingCheckFormData) {
+          // Backwards compatibility: single cheque
+          const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
+          if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
+            const chequeAmount = parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
+            initialPaid = chequeAmount;
+            initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
+          }
         }
       }
     } else if (formData.immediateSettlement) {
