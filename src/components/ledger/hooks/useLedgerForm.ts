@@ -76,6 +76,7 @@ export interface ChequeRelatedFormState {
   chequeNumber: string;
   amount: string;
   bankName: string;
+  issueDate: string; // تاريخ كتابة الشيك - Cheque writing/issue date
   dueDate: string;
   status: string;
   chequeType: string;
@@ -155,6 +156,7 @@ const initialChequeRelatedFormData: ChequeRelatedFormState = {
   chequeNumber: "",
   amount: "",
   bankName: "",
+  issueDate: new Date().toISOString().split("T")[0],
   dueDate: new Date().toISOString().split("T")[0],
   status: "قيد الانتظار",
   chequeType: "عادي",
@@ -186,9 +188,20 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
   const [hasInitialPayment, setHasInitialPayment] = useState(false);
   const [initialPaymentAmount, setInitialPaymentAmount] = useState("");
 
-  // Related forms for batch operations
+  // Related forms for batch operations (single cheque - backwards compatibility)
   const [checkFormData, setCheckFormData] = useState<CheckFormState>(initialCheckFormData);
   const [outgoingCheckFormData, setOutgoingCheckFormData] = useState<OutgoingCheckFormState>(initialOutgoingCheckFormData);
+
+  // Multiple cheques support
+  interface CheckFormDataItem extends CheckFormState {
+    id: string;
+  }
+  interface OutgoingCheckFormDataItem extends OutgoingCheckFormState {
+    id: string;
+  }
+  const [incomingChequesList, setIncomingChequesList] = useState<CheckFormDataItem[]>([]);
+  const [outgoingChequesList, setOutgoingChequesList] = useState<OutgoingCheckFormDataItem[]>([]);
+
   const [inventoryFormData, setInventoryFormData] = useState<InventoryFormState>(initialInventoryFormData);
   const [fixedAssetFormData, setFixedAssetFormData] = useState<FixedAssetFormState>(initialFixedAssetFormData);
 
@@ -210,6 +223,8 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
     setInitialPaymentAmount("");
     setCheckFormData(initialCheckFormData);
     setOutgoingCheckFormData(initialOutgoingCheckFormData);
+    setIncomingChequesList([]);
+    setOutgoingChequesList([]);
     setInventoryFormData(initialInventoryFormData);
     setFixedAssetFormData(initialFixedAssetFormData);
     setPaymentFormData(initialPaymentFormData);
@@ -278,11 +293,18 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
     initialPaymentAmount,
     setInitialPaymentAmount,
 
-    // Related forms
+    // Related forms (single cheque - backwards compatibility)
     checkFormData,
     setCheckFormData,
     outgoingCheckFormData,
     setOutgoingCheckFormData,
+
+    // Multiple cheques support
+    incomingChequesList,
+    setIncomingChequesList,
+    outgoingChequesList,
+    setOutgoingChequesList,
+
     inventoryFormData,
     setInventoryFormData,
     fixedAssetFormData,

@@ -175,17 +175,30 @@ export function RelatedRecordsDialog({
                       />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="chequeBankName">اسم البنك</Label>
+                    <Input
+                      id="chequeBankName"
+                      value={chequeFormData.bankName}
+                      onChange={(e) =>
+                        setChequeFormData({ ...chequeFormData, bankName: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="chequeBankName">اسم البنك</Label>
+                      <Label htmlFor="chequeIssueDate">تاريخ كتابة الشيك</Label>
                       <Input
-                        id="chequeBankName"
-                        value={chequeFormData.bankName}
+                        id="chequeIssueDate"
+                        type="date"
+                        value={chequeFormData.issueDate}
                         onChange={(e) =>
-                          setChequeFormData({ ...chequeFormData, bankName: e.target.value })
+                          setChequeFormData({ ...chequeFormData, issueDate: e.target.value })
                         }
                         required
                       />
+                      <p className="text-xs text-gray-500">تاريخ تحرير/كتابة الشيك</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="chequeDueDate">تاريخ الاستحقاق</Label>
@@ -198,6 +211,7 @@ export function RelatedRecordsDialog({
                         }
                         required
                       />
+                      <p className="text-xs text-gray-500">تاريخ صرف الشيك</p>
                     </div>
                   </div>
 

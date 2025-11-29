@@ -7,7 +7,9 @@ import { createContext, useContext, ReactNode } from "react";
 import {
   LedgerFormData,
   CheckFormData,
+  CheckFormDataItem,
   OutgoingCheckFormData,
+  OutgoingCheckFormDataItem,
   InventoryFormData,
   FixedAssetFormData,
   LedgerEntry,
@@ -56,11 +58,18 @@ export interface LedgerFormContextValue {
   initialPaymentAmount: string;
   setInitialPaymentAmount: (value: string) => void;
 
-  // Related form data
+  // Related form data (single cheque - for backwards compatibility)
   checkFormData: CheckFormData;
   setCheckFormData: (data: CheckFormData) => void;
   outgoingCheckFormData: OutgoingCheckFormData;
   setOutgoingCheckFormData: (data: OutgoingCheckFormData) => void;
+
+  // Multiple cheques support
+  incomingChequesList: CheckFormDataItem[];
+  setIncomingChequesList: (data: CheckFormDataItem[]) => void;
+  outgoingChequesList: OutgoingCheckFormDataItem[];
+  setOutgoingChequesList: (data: OutgoingCheckFormDataItem[]) => void;
+
   inventoryFormData: InventoryFormData;
   setInventoryFormData: (data: InventoryFormData) => void;
   fixedAssetFormData: FixedAssetFormData;

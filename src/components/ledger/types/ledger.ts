@@ -40,7 +40,7 @@ export interface LedgerFormData {
 }
 
 /**
- * Check Form Data (Incoming)
+ * Check Form Data (Incoming) - Single cheque
  */
 export interface CheckFormData {
   chequeNumber: string;
@@ -49,6 +49,13 @@ export interface CheckFormData {
   dueDate: string;
   accountingType?: 'cashed' | 'postponed' | 'endorsed';
   endorsedToName?: string;
+}
+
+/**
+ * Check Form Data Item (for multiple cheques support)
+ */
+export interface CheckFormDataItem extends CheckFormData {
+  id: string; // Unique identifier for each cheque in the list
 }
 
 /**
@@ -61,6 +68,13 @@ export interface OutgoingCheckFormData {
   dueDate: string;
   accountingType?: 'cashed' | 'postponed' | 'endorsed';
   endorsedFromName?: string;
+}
+
+/**
+ * Outgoing Check Form Data Item (for multiple cheques support)
+ */
+export interface OutgoingCheckFormDataItem extends OutgoingCheckFormData {
+  id: string; // Unique identifier for each cheque in the list
 }
 
 /**
@@ -102,6 +116,7 @@ export interface ChequeRelatedFormData {
   chequeNumber: string;
   amount: string;
   bankName: string;
+  issueDate: string; // تاريخ كتابة الشيك - Cheque writing/issue date
   dueDate: string;
   status: string;
   chequeType: string;
@@ -221,6 +236,7 @@ export const initialChequeRelatedFormData: ChequeRelatedFormData = {
   chequeNumber: "",
   amount: "",
   bankName: "",
+  issueDate: new Date().toISOString().split("T")[0],
   dueDate: new Date().toISOString().split("T")[0],
   status: "قيد الانتظار",
   chequeType: "عادي",

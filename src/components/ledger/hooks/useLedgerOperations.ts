@@ -34,6 +34,9 @@ export function useLedgerOperations() {
       checkFormData?: CheckFormData;
       hasOutgoingCheck?: boolean;
       outgoingCheckFormData?: OutgoingCheckFormData;
+      // Multiple cheques support
+      incomingChequesList?: CheckFormData[];
+      outgoingChequesList?: OutgoingCheckFormData[];
       hasInventoryUpdate?: boolean;
       inventoryFormData?: InventoryFormData;
       hasFixedAsset?: boolean;
@@ -83,6 +86,9 @@ export function useLedgerOperations() {
           checkFormData: options.checkFormData,
           hasOutgoingCheck: options.hasOutgoingCheck,
           outgoingCheckFormData: options.outgoingCheckFormData,
+          // Multiple cheques support
+          incomingChequesList: options.incomingChequesList,
+          outgoingChequesList: options.outgoingChequesList,
           hasInventoryUpdate: options.hasInventoryUpdate,
           inventoryFormData: options.inventoryFormData,
           hasFixedAsset: options.hasFixedAsset,

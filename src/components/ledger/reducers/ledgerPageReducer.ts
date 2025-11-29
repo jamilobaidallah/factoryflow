@@ -7,7 +7,9 @@ import {
   LedgerEntry,
   LedgerFormData,
   CheckFormData,
+  CheckFormDataItem,
   OutgoingCheckFormData,
+  OutgoingCheckFormDataItem,
   InventoryFormData,
   FixedAssetFormData,
   initialLedgerFormData,
@@ -61,6 +63,9 @@ export interface LedgerPageState {
     initialPaymentAmount: string;
     checkFormData: CheckFormData;
     outgoingCheckFormData: OutgoingCheckFormData;
+    // Multiple cheques support
+    incomingChequesList: CheckFormDataItem[];
+    outgoingChequesList: OutgoingCheckFormDataItem[];
     inventoryFormData: InventoryFormData;
     fixedAssetFormData: FixedAssetFormData;
   };
@@ -101,6 +106,8 @@ export const initialLedgerPageState: LedgerPageState = {
     initialPaymentAmount: "",
     checkFormData: initialCheckFormData,
     outgoingCheckFormData: initialOutgoingCheckFormData,
+    incomingChequesList: [],
+    outgoingChequesList: [],
     inventoryFormData: initialInventoryFormData,
     fixedAssetFormData: initialFixedAssetFormData,
   },
@@ -143,6 +150,8 @@ export type LedgerPageAction =
   | { type: "SET_INITIAL_PAYMENT_AMOUNT"; payload: string }
   | { type: "SET_CHECK_FORM_DATA"; payload: CheckFormData }
   | { type: "SET_OUTGOING_CHECK_FORM_DATA"; payload: OutgoingCheckFormData }
+  | { type: "SET_INCOMING_CHEQUES_LIST"; payload: CheckFormDataItem[] }
+  | { type: "SET_OUTGOING_CHEQUES_LIST"; payload: OutgoingCheckFormDataItem[] }
   | { type: "SET_INVENTORY_FORM_DATA"; payload: InventoryFormData }
   | { type: "SET_FIXED_ASSET_FORM_DATA"; payload: FixedAssetFormData }
 
@@ -340,6 +349,18 @@ export function ledgerPageReducer(
         form: { ...state.form, outgoingCheckFormData: action.payload },
       };
 
+    case "SET_INCOMING_CHEQUES_LIST":
+      return {
+        ...state,
+        form: { ...state.form, incomingChequesList: action.payload },
+      };
+
+    case "SET_OUTGOING_CHEQUES_LIST":
+      return {
+        ...state,
+        form: { ...state.form, outgoingChequesList: action.payload },
+      };
+
     case "SET_INVENTORY_FORM_DATA":
       return {
         ...state,
@@ -366,6 +387,8 @@ export function ledgerPageReducer(
           initialPaymentAmount: "",
           checkFormData: initialCheckFormData,
           outgoingCheckFormData: initialOutgoingCheckFormData,
+          incomingChequesList: [],
+          outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
           fixedAssetFormData: initialFixedAssetFormData,
         },
@@ -384,6 +407,8 @@ export function ledgerPageReducer(
           initialPaymentAmount: "",
           checkFormData: initialCheckFormData,
           outgoingCheckFormData: initialOutgoingCheckFormData,
+          incomingChequesList: [],
+          outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
           fixedAssetFormData: initialFixedAssetFormData,
         },
@@ -417,6 +442,8 @@ export function ledgerPageReducer(
           initialPaymentAmount: "",
           checkFormData: initialCheckFormData,
           outgoingCheckFormData: initialOutgoingCheckFormData,
+          incomingChequesList: [],
+          outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
           fixedAssetFormData: initialFixedAssetFormData,
         },

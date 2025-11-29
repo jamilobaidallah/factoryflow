@@ -444,6 +444,7 @@ describe('useLedgerForm', () => {
           chequeNumber: "CHQ-001",
           amount: "500",
           bankName: "بنك الأردن",
+          issueDate: "2025-01-15",
           dueDate: "2025-02-01",
           status: "تم الصرف",
           chequeType: "مجير",

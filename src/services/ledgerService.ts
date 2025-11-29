@@ -82,6 +82,9 @@ export interface CreateLedgerEntryOptions {
   checkFormData?: CheckFormData;
   hasOutgoingCheck?: boolean;
   outgoingCheckFormData?: OutgoingCheckFormData;
+  // Multiple cheques support
+  incomingChequesList?: CheckFormData[];
+  outgoingChequesList?: OutgoingCheckFormData[];
   hasInventoryUpdate?: boolean;
   inventoryFormData?: InventoryFormData;
   hasFixedAsset?: boolean;
@@ -369,8 +372,20 @@ export class LedgerService {
         }),
       });
 
-      // Handle incoming check
-      if (options.hasIncomingCheck && options.checkFormData) {
+      // Handle incoming cheques (multiple cheques support)
+      if (options.hasIncomingCheck && options.incomingChequesList && options.incomingChequesList.length > 0) {
+        // New: Handle multiple cheques
+        for (const chequeData of options.incomingChequesList) {
+          this.handleIncomingCheckBatch(
+            batch,
+            transactionId,
+            chequeData,
+            formData,
+            entryType
+          );
+        }
+      } else if (options.hasIncomingCheck && options.checkFormData) {
+        // Backwards compatibility: Handle single cheque
         this.handleIncomingCheckBatch(
           batch,
           transactionId,
@@ -380,8 +395,20 @@ export class LedgerService {
         );
       }
 
-      // Handle outgoing check
-      if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+      // Handle outgoing cheques (multiple cheques support)
+      if (options.hasOutgoingCheck && options.outgoingChequesList && options.outgoingChequesList.length > 0) {
+        // New: Handle multiple cheques
+        for (const chequeData of options.outgoingChequesList) {
+          this.handleOutgoingCheckBatch(
+            batch,
+            transactionId,
+            chequeData,
+            formData,
+            entryType
+          );
+        }
+      } else if (options.hasOutgoingCheck && options.outgoingCheckFormData) {
+        // Backwards compatibility: Handle single cheque
         this.handleOutgoingCheckBatch(
           batch,
           transactionId,
@@ -769,6 +796,8 @@ export class LedgerService {
       }
 
       // Create the cheque record
+      // Use the issueDate from form if provided, otherwise use current date
+      const issueDate = formData.issueDate ? new Date(formData.issueDate) : new Date();
       const chequeData: Record<string, unknown> = {
         chequeNumber: formData.chequeNumber,
         clientName: entry.associatedParty || "غير محدد",
@@ -778,7 +807,7 @@ export class LedgerService {
         status: chequeStatus,
         chequeImageUrl: chequeImageUrl,
         linkedTransactionId: entry.transactionId,
-        issueDate: new Date(),
+        issueDate: issueDate,
         dueDate: new Date(formData.dueDate),
         bankName: formData.bankName,
         notes: `مرتبط بالمعاملة: ${entry.description}`,
@@ -795,7 +824,7 @@ export class LedgerService {
 
       // Handle different accounting flows
       if (accountingType === "cashed") {
-        // Create payment record
+        // Create payment record - use issueDate for the payment date
         const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
         await addDoc(this.paymentsRef, {
           clientName: entry.associatedParty || "غير محدد",
@@ -803,7 +832,7 @@ export class LedgerService {
           type: paymentType,
           method: "cheque",
           linkedTransactionId: entry.transactionId,
-          date: new Date(),
+          date: issueDate,
           notes: `شيك صرف رقم ${formData.chequeNumber} - ${entry.description}`,
           createdAt: new Date(),
         });
@@ -820,13 +849,13 @@ export class LedgerService {
           }
         }
       } else if (accountingType === "endorsed") {
-        // Create two payment records with noCashMovement flag
+        // Create two payment records with noCashMovement flag - use issueDate
         await addDoc(this.paymentsRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,
           type: PAYMENT_TYPES.RECEIPT,
           linkedTransactionId: entry.transactionId,
-          date: new Date(),
+          date: issueDate,
           notes: `تظهير شيك رقم ${formData.chequeNumber} للجهة: ${formData.endorsedToName}`,
           createdAt: new Date(),
           isEndorsement: true,
@@ -838,7 +867,7 @@ export class LedgerService {
           amount: chequeAmount,
           type: PAYMENT_TYPES.DISBURSEMENT,
           linkedTransactionId: entry.transactionId,
-          date: new Date(),
+          date: issueDate,
           notes: `استلام شيك مظهر رقم ${formData.chequeNumber} من العميل: ${entry.associatedParty}`,
           createdAt: new Date(),
           isEndorsement: true,
