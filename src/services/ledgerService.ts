@@ -41,6 +41,7 @@ import type {
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { getCategoryType, generateTransactionId } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { calculateWeightedAverageCost, calculateLandedCostUnitPrice } from "@/lib/inventory-utils";
 
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -1301,17 +1302,35 @@ export class LedgerService {
       const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
 
       if (movementType === "دخول" && formData.amount) {
-        const purchaseUnitPrice = parseFloat(formData.amount) / quantityChange;
-        const oldValue = currentQuantity * currentUnitPrice;
-        const newValue = quantityChange * purchaseUnitPrice;
-        const weightedAvgPrice = parseFloat(((oldValue + newValue) / newQuantity).toFixed(2));
+        // Calculate total landed cost (purchase + shipping + other costs)
+        const shippingCost = inventoryFormData.shippingCost ? parseFloat(inventoryFormData.shippingCost) : 0;
+        const otherCosts = inventoryFormData.otherCosts ? parseFloat(inventoryFormData.otherCosts) : 0;
+        const purchaseAmount = parseFloat(formData.amount);
+
+        // Use utility function to calculate landed cost unit price
+        const purchaseUnitPrice = calculateLandedCostUnitPrice(
+          purchaseAmount,
+          shippingCost,
+          otherCosts,
+          quantityChange
+        );
+
+        // Use utility function to calculate weighted average cost
+        const weightedAvgPrice = calculateWeightedAverageCost(
+          currentQuantity,
+          currentUnitPrice,
+          quantityChange,
+          purchaseUnitPrice
+        );
+
+        const totalLandedCost = purchaseAmount + shippingCost + otherCosts;
 
         batch.update(itemDocRef, {
           quantity: newQuantity,
           unitPrice: weightedAvgPrice,
-          lastPurchasePrice: parseFloat(purchaseUnitPrice.toFixed(2)),
+          lastPurchasePrice: purchaseUnitPrice,
           lastPurchaseDate: new Date(),
-          lastPurchaseAmount: formData.amount,
+          lastPurchaseAmount: totalLandedCost,
         });
       } else {
         batch.update(itemDocRef, {
@@ -1347,12 +1366,19 @@ export class LedgerService {
         };
       }
 
+      // Calculate total landed cost (purchase + shipping + other costs)
       const shippingCost = inventoryFormData.shippingCost ? parseFloat(inventoryFormData.shippingCost) : 0;
       const otherCosts = inventoryFormData.otherCosts ? parseFloat(inventoryFormData.otherCosts) : 0;
       const purchaseAmount = formData.amount ? parseFloat(formData.amount) : 0;
       const totalLandedCost = purchaseAmount + shippingCost + otherCosts;
-      const calculatedUnitPrice =
-        totalLandedCost > 0 ? parseFloat((totalLandedCost / quantityChange).toFixed(2)) : 0;
+
+      // Use utility function to calculate landed cost unit price
+      const calculatedUnitPrice = calculateLandedCostUnitPrice(
+        purchaseAmount,
+        shippingCost,
+        otherCosts,
+        quantityChange
+      );
 
       const newItemRef = doc(this.inventoryRef);
       itemId = newItemRef.id;
