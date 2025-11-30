@@ -244,3 +244,81 @@ export function validatePaymentAmount(amount: number): {
 
   return { isValid: true };
 }
+
+/**
+ * Check if a payment is a multi-allocation payment
+ *
+ * @param payment - Payment object to check
+ * @returns boolean - true if payment has multi-allocation flag
+ */
+export function isMultiAllocationPayment(payment: {
+  isMultiAllocation?: boolean;
+  allocationCount?: number;
+}): boolean {
+  return payment.isMultiAllocation === true && (payment.allocationCount ?? 0) > 0;
+}
+
+/**
+ * Update a ledger entry's AR/AP fields directly by document ID
+ *
+ * @param firestore - Firestore instance
+ * @param userId - User ID
+ * @param ledgerDocId - Firestore document ID of the ledger entry
+ * @param paymentAmount - Amount to add or subtract
+ * @param operation - 'add' or 'subtract'
+ * @returns ARAPUpdateResult with success status
+ */
+export async function updateLedgerEntryById(
+  firestore: Firestore,
+  userId: string,
+  ledgerDocId: string,
+  paymentAmount: number,
+  operation: 'add' | 'subtract'
+): Promise<ARAPUpdateResult> {
+  try {
+    const { getDoc } = await import('firebase/firestore');
+    const ledgerRef = doc(firestore, `users/${userId}/ledger`, ledgerDocId);
+    const ledgerSnapshot = await getDoc(ledgerRef);
+
+    if (!ledgerSnapshot.exists()) {
+      return {
+        success: false,
+        message: `⚠ لم يتم العثور على القيد المالي`,
+      };
+    }
+
+    const ledgerData = ledgerSnapshot.data();
+    const transactionAmount = ledgerData.amount || 0;
+    const currentTotalPaid = ledgerData.totalPaid || 0;
+
+    let newTotalPaid: number;
+    if (operation === 'add') {
+      newTotalPaid = currentTotalPaid + paymentAmount;
+    } else {
+      newTotalPaid = Math.max(0, currentTotalPaid - paymentAmount);
+    }
+
+    const newRemainingBalance = transactionAmount - newTotalPaid;
+    const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+
+    await updateDoc(ledgerRef, {
+      totalPaid: newTotalPaid,
+      remainingBalance: newRemainingBalance,
+      paymentStatus: newStatus,
+    });
+
+    return {
+      success: true,
+      message: `تم تحديث: المدفوع ${newTotalPaid.toFixed(2)} - المتبقي ${newRemainingBalance.toFixed(2)}`,
+      newTotalPaid,
+      newRemainingBalance,
+      newStatus,
+    };
+  } catch (error) {
+    console.error('Error updating ledger entry by ID:', error);
+    return {
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الذمم',
+    };
+  }
+}

@@ -21,13 +21,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Download, Layers } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
+import { MultiAllocationDialog } from "./MultiAllocationDialog";
+import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
+import { isMultiAllocationPayment } from "@/lib/arap-utils";
 import {
   collection,
   addDoc,
@@ -121,6 +124,11 @@ interface Payment {
   isEndorsement?: boolean;
   noCashMovement?: boolean;
   endorsementChequeId?: string;
+  // Multi-allocation fields
+  isMultiAllocation?: boolean;
+  totalAllocated?: number;
+  allocationMethod?: 'fifo' | 'manual';
+  allocationCount?: number;
 }
 
 export default function PaymentsPage() {
@@ -129,9 +137,13 @@ export default function PaymentsPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isMultiAllocationDialogOpen, setIsMultiAllocationDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+
+  // Multi-allocation hook for delete reversal
+  const { reversePaymentAllocations } = usePaymentAllocations();
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,14 +318,35 @@ export default function PaymentsPage() {
   const handleDelete = (paymentId: string) => {
     if (!user) {return;}
 
+    const payment = payments.find((p) => p.id === paymentId);
+    const isMultiAlloc = payment && isMultiAllocationPayment(payment);
+
     confirm(
       "حذف المدفوعة",
-      "هل أنت متأكد من حذف هذه المدفوعة؟ لا يمكن التراجع عن هذا الإجراء.",
+      isMultiAlloc
+        ? `هل أنت متأكد من حذف هذه المدفوعة الموزعة على ${payment.allocationCount} معاملة؟ سيتم إلغاء جميع التخصيصات.`
+        : "هل أنت متأكد من حذف هذه المدفوعة؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
         try {
-          // First, get the payment data to access linkedTransactionId and amount
-          const payment = payments.find((p) => p.id === paymentId);
+          if (isMultiAlloc) {
+            // Use multi-allocation reversal logic
+            const success = await reversePaymentAllocations(paymentId);
+            if (success) {
+              toast({
+                title: "تم الحذف",
+                description: `تم حذف المدفوعة وإلغاء ${payment.allocationCount} تخصيص`,
+              });
+            } else {
+              toast({
+                title: "خطأ",
+                description: "حدث خطأ أثناء حذف المدفوعة",
+                variant: "destructive",
+              });
+            }
+            return;
+          }
 
+          // Original single-transaction delete logic
           if (payment && payment.linkedTransactionId) {
             // Reverse AR/AP update before deleting
             const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
@@ -407,10 +440,21 @@ export default function PaymentsPage() {
           <h1 className="text-3xl font-bold text-gray-900">المدفوعات</h1>
           <p className="text-gray-600 mt-2">تتبع عمليات القبض والصرف</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          إضافة مدفوعة
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsMultiAllocationDialogOpen(true)}
+            aria-label="إضافة دفعة متعددة"
+          >
+            <Layers className="w-4 h-4" aria-hidden="true" />
+            دفعة متعددة
+          </Button>
+          <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            إضافة مدفوعة
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -527,7 +571,13 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell>{payment.amount || 0} دينار</TableCell>
                     <TableCell>
-                      {payment.linkedTransactionId ? (
+                      {payment.isMultiAllocation ? (
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
+                            {payment.allocationCount} معاملات
+                          </span>
+                        </div>
+                      ) : payment.linkedTransactionId ? (
                         <div className="flex items-center gap-1">
                           <span className="font-mono text-xs">
                             {payment.linkedTransactionId}
@@ -761,6 +811,12 @@ export default function PaymentsPage() {
       </Dialog>
 
       {confirmationDialog}
+
+      {/* Multi-Allocation Payment Dialog */}
+      <MultiAllocationDialog
+        open={isMultiAllocationDialogOpen}
+        onOpenChange={setIsMultiAllocationDialogOpen}
+      />
     </div>
   );
 }

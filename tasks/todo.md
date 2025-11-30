@@ -1,101 +1,199 @@
-# Refactor Invoice Modal: UX Overhaul & Logic Fixes
+# Multi-Allocation Payment System
 
-## Problem Analysis
+## Problem Summary
 
-The Invoice Modal (`InvoicesFormDialog.tsx`) needs UX improvements and logic fixes:
+Currently, each payment in the app links to a **single** transaction via `linkedTransactionId`. This is impractical when a client wants to pay a lump sum covering multiple outstanding transactions. The user must manually create separate payment entries, which:
+- Is tedious
+- Makes bank reconciliation impossible (bank sees one deposit, not multiple)
 
-1. **Total field is read-only** - Users can't paste a ledger amount and have the price auto-adjust
-2. **Validation too strict** - QuickInvoiceDialog shows mismatch for decimal differences
-3. **No row type distinction** - Can't differentiate Material vs Service rows
-4. **Missing metadata fields** - No manual invoice # or invoice image upload
+## Proposed Solution
+
+Build a **multi-allocation payment system** that:
+1. Shows all unpaid/partially-paid transactions when a client is selected
+2. Allows **FIFO auto-distribution** - applies payment to oldest transactions first
+3. Allows **manual override** - user can allocate amounts to specific transactions
+4. Implements **rollback logic** - deleting a payment reverses ALL allocations
 
 ---
 
-## Files Modified
+## Architecture Changes
 
-| File | Changes |
-|------|---------|
-| `src/components/invoices/types/invoices.ts` | Added `InvoiceItemType`, `itemType`, `manualInvoiceNumber`, `invoiceImageUrl` |
-| `src/components/invoices/components/InvoicesFormDialog.tsx` | Editable Total, reverse calculation, row types, metadata fields |
-| `src/components/invoices/hooks/useInvoicesOperations.ts` | Save new fields to Firestore |
-| `src/components/invoices/invoices-page.tsx` | Load new fields when editing |
-| `src/components/ledger/components/QuickInvoiceDialog.tsx` | Same changes + relaxed validation |
+### New Data Model: `paymentAllocations` subcollection
+
+Each payment will have a subcollection `paymentAllocations` storing how the payment is distributed:
+
+```typescript
+interface PaymentAllocation {
+  id: string;
+  transactionId: string;       // Ledger transaction ID
+  allocatedAmount: number;     // How much of the payment went to this transaction
+  transactionDate: Date;       // For sorting (FIFO reference)
+  createdAt: Date;
+}
+```
+
+The main `Payment` document will also track:
+- `totalAllocated: number` - Sum of all allocations
+- `allocationMethod: 'fifo' | 'manual'` - How it was allocated
+
+---
+
+## Files to Create/Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/components/payments/types.ts` | **CREATE** | Type definitions for allocations |
+| `src/components/payments/MultiAllocationDialog.tsx` | **CREATE** | New dialog for multi-allocation payments |
+| `src/components/payments/hooks/useClientTransactions.ts` | **CREATE** | Hook to fetch client's unpaid transactions |
+| `src/components/payments/hooks/usePaymentAllocations.ts` | **CREATE** | Hook for allocation CRUD and FIFO logic |
+| `src/components/payments/payments-page.tsx` | **MODIFY** | Add button to open new dialog |
+| `src/lib/arap-utils.ts` | **MODIFY** | Add batch allocation/reversal functions |
 
 ---
 
 ## Implementation Plan
 
-### Tasks
+### Phase 1: Foundation (Types & Hooks)
 
-- [x] **Task 1: Update Types** - Add `itemType` to `InvoiceItem`, add `manualInvoiceNumber` and `invoiceImageUrl` to `Invoice` and `InvoiceFormData`
+- [x] **Task 1.1: Create types.ts**
+  - Define `PaymentAllocation` interface
+  - Define `UnpaidTransaction` interface (for listing client's debts)
+  - Define `AllocationEntry` interface (for UI state)
+  - Export all necessary types
 
-- [x] **Task 2: Editable Total with Reverse Calculation** - Make Total editable. When Total changes, back-calculate `unitPrice = total / quantity`.
+- [x] **Task 1.2: Create useClientTransactions hook**
+  - Fetch all ledger entries where `associatedParty === clientName` AND `isARAPEntry === true`
+  - Filter to only `paymentStatus !== 'paid'` (unpaid or partial)
+  - Sort by date (oldest first for FIFO)
+  - Return list with `id`, `transactionId`, `date`, `amount`, `totalPaid`, `remainingBalance`
 
-- [x] **Task 3: Row Type Dropdown (Material/Service)** - Add dropdown for each row. Hide dimension columns when type is "Service".
+- [x] **Task 1.3: Create usePaymentAllocations hook**
+  - `autoDistributeFIFO(amount, transactions)` - FIFO distribution logic
+  - `saveAllocations(paymentId, allocations)` - Save to Firestore subcollection
+  - `reverseAllocations(paymentId)` - Fetch allocations and reverse each one
 
-- [x] **Task 4: New Metadata Fields** - Add "Manual Invoice #" text input and file upload for invoice image in form header.
+### Phase 2: AR/AP Utilities
 
-- [x] **Task 5: Relax Validation in QuickInvoiceDialog** - Change validation to `Math.round(InvoiceTotal) === Math.round(LedgerAmount)` for the match indicator.
+- [x] **Task 2.1: Add batch allocation functions to arap-utils.ts**
+  - `isMultiAllocationPayment()` - Check if payment has multi-allocation
+  - `updateLedgerEntryById()` - Update ledger AR/AP by document ID
+  - Handle atomic updates (batch writes)
 
-- [x] **Task 6: Update Operations Hook** - Save new fields (`itemType`, `manualInvoiceNumber`, `invoiceImageUrl`) to Firestore.
+### Phase 3: UI Components
 
-- [x] **Task 7: Apply Same Changes to QuickInvoiceDialog** - Ensure consistency between both invoice dialogs.
+- [x] **Task 3.1: Create MultiAllocationDialog component**
+  - Client selector dropdown with autocomplete
+  - Payment amount input
+  - Payment date input
+  - "Auto-Distribute (FIFO)" button
+  - Table showing client's unpaid transactions with:
+    - Date, Description, Total Amount, Remaining Balance, **Allocation Input**
+  - Manual input fields for each transaction
+  - Running total of allocations vs payment amount
+  - Save/Cancel buttons
+  - Visual indicator when allocation sum !== payment amount
 
-- [x] **Task 8: Test & Verify** - Build passes with no TypeScript errors.
+- [x] **Task 3.2: Update payments-page.tsx**
+  - Add "دفعة متعددة" (Multi-Allocation Payment) button
+  - Import and integrate `MultiAllocationDialog`
+  - Update delete handler to use new reversal logic
+
+### Phase 4: Delete/Rollback Logic
+
+- [x] **Task 4.1: Implement rollback on payment delete**
+  - When deleting a payment, check if it has allocations using `isMultiAllocationPayment()`
+  - Fetch all allocations from subcollection
+  - Call `reversePaymentAllocations()` to restore ledger balances
+  - Delete allocations subcollection
+  - Delete payment document
+
+### Phase 5: Testing & Verification
+
+- [ ] **Task 5.1: Manual testing scenarios**
+  - Test FIFO distribution with exact payment amount
+  - Test FIFO with partial payment (covers some transactions fully, one partially)
+  - Test FIFO with overpayment
+  - Test manual allocation
+  - Test delete reversal (verify ledger balances restored)
+  - Test edge cases (no unpaid transactions, zero remaining balance)
+
+- [x] **Task 5.2: Build verification**
+  - Run `npm run build` - no TypeScript errors (PASSED)
+
+---
+
+## Key Design Decisions
+
+1. **Subcollection vs Array**: Using a subcollection for allocations allows:
+   - Easy querying of allocations per payment
+   - No document size limits
+   - Atomic deletion of payment + allocations
+
+2. **FIFO is Default**: Oldest transactions get paid first, which matches standard accounting practice
+
+3. **Manual Override**: Users can override FIFO by typing amounts directly
+
+4. **Allocations stored with payment**: Makes rollback simple - just read the allocations subcollection
+
+5. **Allocation sum validation**: Allow saving even if sum !== payment (for flexibility), but show warning
+
+---
+
+## Out of Scope
+
+- Bulk import of payments from bank statements
+- Payment method tracking (cash/cheque/transfer) - existing field covers this
+- Currency conversion
 
 ---
 
 ## Review
 
-### Changes Made
+### Files Created
 
-#### 1. Types (`types/invoices.ts`)
-- Added `InvoiceItemType = 'material' | 'service'`
-- Added `itemType` field to `InvoiceItem` and `CleanInvoiceItem`
-- Added `manualInvoiceNumber` and `invoiceImageUrl` to `Invoice` interface
-- Added `manualInvoiceNumber` and `invoiceImageUrl` to `InvoiceFormData`
-- Updated `initialFormData` and `initialInvoiceItem` with defaults
+| File | Purpose |
+|------|---------|
+| `src/components/payments/types.ts` | Type definitions for multi-allocation payments |
+| `src/components/payments/MultiAllocationDialog.tsx` | Main dialog component for creating multi-allocation payments |
+| `src/components/payments/hooks/useClientTransactions.ts` | Hook to fetch client's unpaid/partial transactions |
+| `src/components/payments/hooks/usePaymentAllocations.ts` | Hook with FIFO logic, save, and reversal functions |
 
-#### 2. Reverse Calculation (`InvoicesFormDialog.tsx`, `QuickInvoiceDialog.tsx`)
-- `handleItemChange` now handles `total` field
-- When Total is edited: `unitPrice = total / quantity`
-- Total input is now editable (removed `disabled` attribute)
+### Files Modified
 
-#### 3. Row Type Dropdown
-- Added "النوع" (Type) column to table header
-- Added dropdown with "مادة" (Material) / "خدمة" (Service) options
-- Dimensions (Length/Width/Thickness) hidden when type is "Service"
-- Shows "-" placeholder for service items
+| File | Changes |
+|------|---------|
+| `src/components/payments/payments-page.tsx` | Added "دفعة متعددة" button, multi-allocation dialog integration, updated delete handler for rollback |
+| `src/lib/arap-utils.ts` | Added `isMultiAllocationPayment()` and `updateLedgerEntryById()` helper functions |
 
-#### 4. Metadata Fields (`InvoicesFormDialog.tsx`)
-- Added "رقم الفاتورة اليدوي" (Manual Invoice #) text input
-- Added "صورة الفاتورة" (Invoice Image) file upload button
-- Image stored as base64 string
-- Upload button shows "تغيير الصورة" when image exists
-- Delete button to remove uploaded image
+### How It Works
 
-#### 5. Relaxed Validation (`QuickInvoiceDialog.tsx`)
-- Changed from: `Math.abs(totals.total - pendingData.amount) < 0.01`
-- Changed to: `Math.round(totals.total) === Math.round(pendingData.amount)`
-- Allows saving when rounded values match
+1. **Creating a Multi-Allocation Payment**:
+   - User clicks "دفعة متعددة" button
+   - Selects a client from autocomplete dropdown
+   - System fetches all unpaid/partial AR/AP transactions for that client
+   - User enters payment amount
+   - User clicks "توزيع تلقائي (FIFO)" to auto-distribute, OR manually enters amounts per transaction
+   - System saves payment + allocations subcollection + updates each ledger entry
 
-#### 6. Operations Hook (`useInvoicesOperations.ts`)
-- `cleanedItems` now includes `itemType`
-- Dimensions only saved for materials (`itemType !== 'service'`)
-- `updateDoc` and `addDoc` now save `manualInvoiceNumber` and `invoiceImageUrl` if provided
+2. **FIFO Distribution**:
+   - Transactions sorted by date (oldest first)
+   - Payment amount applied to oldest transaction until fully paid
+   - Remaining amount flows to next transaction
+   - Continues until payment exhausted or all debts covered
 
-#### 7. Edit Page (`invoices-page.tsx`)
-- `handleEdit` now loads `manualInvoiceNumber` and `invoiceImageUrl` from invoice
+3. **Rollback on Delete**:
+   - When deleting a multi-allocation payment
+   - System fetches all allocations from subcollection
+   - Reverses each ledger entry's `totalPaid`, `remainingBalance`, `paymentStatus`
+   - Deletes allocations and payment document
 
----
+### UI Features
 
-### Code Quality
-
-- **Simple Changes**: Each modification is minimal and focused
-- **No Breaking Changes**: All existing functionality preserved
-- **No Infinite Loops**: Reverse calculation only triggers on direct `total` field edit
-- **Consistent UX**: Both `InvoicesFormDialog` and `QuickInvoiceDialog` have identical behavior
-- **Clean Data**: Optional fields only saved to Firestore when they have values
+- Client autocomplete dropdown
+- Summary cards showing: Total Outstanding, Payment Amount, Difference
+- Transaction table with editable allocation inputs
+- Visual indicator for balanced/unbalanced allocations
+- Purple badge in payments table showing "X معاملات" for multi-allocation payments
 
 ### Build Status
 
@@ -104,4 +202,4 @@ Compiled successfully
 Linting and checking validity of types passed
 ```
 
-All 8 tasks completed successfully.
+All code tasks completed. Ready for Vercel preview testing.
