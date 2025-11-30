@@ -55,9 +55,9 @@ export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableP
             <TableCell>
               {new Date(asset.purchaseDate).toLocaleDateString("ar-EG")}
             </TableCell>
-            <TableCell>{asset.purchaseCost.toFixed(2)} د</TableCell>
-            <TableCell>{asset.accumulatedDepreciation.toFixed(2)} د</TableCell>
-            <TableCell>{asset.bookValue.toFixed(2)} د</TableCell>
+            <TableCell>{(asset.purchaseCost ?? 0).toFixed(2)} د</TableCell>
+            <TableCell>{(asset.accumulatedDepreciation ?? 0).toFixed(2)} د</TableCell>
+            <TableCell>{(asset.bookValue ?? 0).toFixed(2)} د</TableCell>
             <TableCell>
               <span
                 className={`px-2 py-1 rounded-full text-xs ${
