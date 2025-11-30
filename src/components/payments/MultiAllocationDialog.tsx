@@ -46,19 +46,40 @@ interface PartyWithDebt {
   totalOutstanding: number;
 }
 
+/**
+ * Pre-filled cheque data for cashing workflow
+ */
+interface ChequeData {
+  chequeId: string;
+  chequeNumber: string;
+  clientName: string;
+  amount: number;
+  dueDate: Date;
+  chequeType: "incoming" | "outgoing";
+}
+
 interface MultiAllocationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** Pre-filled data when cashing a cheque */
+  chequeData?: ChequeData;
+  /** Callback with payment ID when cheque cashing succeeds */
+  onChequeSuccess?: (paymentId: string) => void;
 }
 
 export function MultiAllocationDialog({
   open,
   onOpenChange,
   onSuccess,
+  chequeData,
+  onChequeSuccess,
 }: MultiAllocationDialogProps) {
   const { user } = useUser();
   const { toast } = useToast();
+
+  // Determine if this is a cheque cashing flow
+  const isChequeCashing = !!chequeData;
 
   // Form state
   const [formData, setFormData] = useState(initialMultiAllocationFormData);
@@ -85,6 +106,23 @@ export function MultiAllocationDialog({
     loading: allocationLoading,
     error: allocationError,
   } = usePaymentAllocations();
+
+  // Initialize form with cheque data when in cheque cashing mode
+  useEffect(() => {
+    if (chequeData && open) {
+      setFormData({
+        clientName: chequeData.clientName,
+        amount: chequeData.amount.toString(),
+        date: chequeData.dueDate.toISOString().split("T")[0],
+        notes: `تحصيل شيك رقم ${chequeData.chequeNumber}`,
+        type: chequeData.chequeType === "incoming" ? "قبض" : "صرف",
+        allocations: [],
+        allocationMethod: "fifo",
+      });
+      // Hide the dropdown since client is pre-selected
+      setShowClientDropdown(false);
+    }
+  }, [chequeData, open]);
 
   // Fetch parties that have outstanding AR/AP debt from ledger
   useEffect(() => {
@@ -264,6 +302,8 @@ export function MultiAllocationDialog({
         date: new Date(formData.date),
         notes: formData.notes,
         type: formData.type,
+        // Pass cheque ID if this is a cheque cashing flow
+        linkedChequeId: chequeData?.chequeId,
       },
       allocations,
       formData.allocationMethod
@@ -272,13 +312,22 @@ export function MultiAllocationDialog({
     setSaving(false);
 
     if (paymentId) {
-      toast({
-        title: "تمت الإضافة بنجاح",
-        description: `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
-      });
+      if (isChequeCashing) {
+        // Cheque cashing flow - call the cheque success callback
+        toast({
+          title: "تم تحصيل الشيك بنجاح",
+          description: `تم توزيع مبلغ الشيك على ${activeAllocations.length} معاملة`,
+        });
+        onChequeSuccess?.(paymentId);
+      } else {
+        toast({
+          title: "تمت الإضافة بنجاح",
+          description: `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
+        });
+        onSuccess?.();
+      }
       resetForm();
       onOpenChange(false);
-      onSuccess?.();
     } else if (allocationError) {
       toast({
         title: "خطأ",
@@ -292,9 +341,13 @@ export function MultiAllocationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>إضافة دفعة متعددة</DialogTitle>
+          <DialogTitle>
+            {isChequeCashing ? `تحصيل شيك رقم ${chequeData?.chequeNumber}` : "إضافة دفعة متعددة"}
+          </DialogTitle>
           <DialogDescription>
-            توزيع دفعة واحدة على عدة معاملات مستحقة
+            {isChequeCashing
+              ? "توزيع مبلغ الشيك على المعاملات المستحقة للعميل"
+              : "توزيع دفعة واحدة على عدة معاملات مستحقة"}
           </DialogDescription>
         </DialogHeader>
 
@@ -308,15 +361,19 @@ export function MultiAllocationDialog({
                 id="clientName"
                 value={formData.clientName}
                 onChange={(e) => {
-                  setFormData((prev) => ({ ...prev, clientName: e.target.value }));
-                  setShowClientDropdown(true);
+                  if (!isChequeCashing) {
+                    setFormData((prev) => ({ ...prev, clientName: e.target.value }));
+                    setShowClientDropdown(true);
+                  }
                 }}
-                onFocus={() => setShowClientDropdown(true)}
+                onFocus={() => !isChequeCashing && setShowClientDropdown(true)}
                 placeholder={partiesLoading ? "جاري التحميل..." : "اختر أو ابحث..."}
                 autoComplete="off"
-                disabled={partiesLoading}
+                disabled={partiesLoading || isChequeCashing}
+                readOnly={isChequeCashing}
+                className={isChequeCashing ? "bg-gray-100 cursor-not-allowed" : ""}
               />
-              {showClientDropdown && !partiesLoading && (
+              {showClientDropdown && !partiesLoading && !isChequeCashing && (
                 <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                   {filteredParties.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-gray-500 text-center">
@@ -345,17 +402,25 @@ export function MultiAllocationDialog({
 
             {/* Payment Amount */}
             <div className="space-y-2">
-              <Label htmlFor="amount">مبلغ الدفعة (دينار)</Label>
+              <Label htmlFor="amount">
+                مبلغ الدفعة (دينار)
+                {isChequeCashing && <span className="text-xs text-gray-500 mr-2">(مبلغ الشيك)</span>}
+              </Label>
               <Input
                 id="amount"
                 type="number"
                 step="0.01"
                 min="0"
                 value={formData.amount}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, amount: e.target.value }))
-                }
+                onChange={(e) => {
+                  if (!isChequeCashing) {
+                    setFormData((prev) => ({ ...prev, amount: e.target.value }));
+                  }
+                }}
                 placeholder="0.00"
+                disabled={isChequeCashing}
+                readOnly={isChequeCashing}
+                className={isChequeCashing ? "bg-gray-100 cursor-not-allowed font-bold" : ""}
               />
             </div>
 

@@ -13,11 +13,14 @@ import {
   where,
   getDocs,
   runTransaction,
+  getDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { usePaymentAllocations } from "@/components/payments/hooks/usePaymentAllocations";
+import { isMultiAllocationPayment } from "@/lib/arap-utils";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -35,6 +38,7 @@ interface UseChequesOperationsReturn {
 export function useChequesOperations(): UseChequesOperationsReturn {
   const { user } = useUser();
   const { toast } = useToast();
+  const { reversePaymentAllocations } = usePaymentAllocations();
 
   const updateARAPTracking = async (
     linkedTransactionId: string,
@@ -120,8 +124,45 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         const newStatus = formData.status;
         const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
         const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+        const revertedStatuses = [CHEQUE_STATUS_AR.PENDING, "pending", CHEQUE_STATUS_AR.BOUNCED, "bounced", CHEQUE_STATUS_AR.CANCELLED, "cancelled", CHEQUE_STATUS_AR.RETURNED, "returned"];
         const wasPending = pendingStatuses.includes(oldStatus);
+        const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
+        const isNowReverted = revertedStatuses.includes(newStatus);
+
+        // Handle status REVERSION: Cashed → Pending/Bounced/Cancelled
+        if (wasCleared && isNowReverted && editingCheque.linkedPaymentId) {
+          // Check if the linked payment is a multi-allocation payment
+          const paymentRef = doc(firestore, `users/${user.uid}/payments`, editingCheque.linkedPaymentId);
+          const paymentSnap = await getDoc(paymentRef);
+
+          if (paymentSnap.exists()) {
+            const paymentData = paymentSnap.data();
+
+            if (isMultiAllocationPayment(paymentData)) {
+              // Reverse the multi-allocation payment
+              const success = await reversePaymentAllocations(editingCheque.linkedPaymentId);
+              if (!success) {
+                toast({
+                  title: "خطأ",
+                  description: "حدث خطأ أثناء إلغاء تخصيصات الدفعة",
+                  variant: "destructive",
+                });
+                return false;
+              }
+            } else {
+              // Simple payment - delete it and reverse AR/AP
+              await deleteDoc(paymentRef);
+              if (editingCheque.linkedTransactionId) {
+                await updateARAPTracking(editingCheque.linkedTransactionId, editingCheque.amount, false);
+              }
+            }
+          }
+
+          // Clear the payment link and cleared date
+          updateData.linkedPaymentId = null;
+          updateData.clearedDate = null;
+        }
 
         if (wasPending && isNowCleared) {
           // Use provided payment date or fall back to current date
@@ -150,11 +191,18 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         }
 
         await updateDoc(chequeRef, updateData);
+
+        // Determine toast message based on status change
+        let toastDescription = "تم تحديث بيانات الشيك";
+        if (wasPending && isNowCleared) {
+          toastDescription = `تم تحصيل الشيك رقم ${formData.chequeNumber} وإنشاء سند قبض/صرف`;
+        } else if (wasCleared && isNowReverted) {
+          toastDescription = `تم إلغاء تحصيل الشيك رقم ${formData.chequeNumber} وإرجاع الذمم`;
+        }
+
         toast({
           title: "تم التحديث بنجاح",
-          description: wasPending && isNowCleared
-            ? `تم تحصيل الشيك رقم ${formData.chequeNumber} وإنشاء سند قبض/صرف`
-            : "تم تحديث بيانات الشيك",
+          description: toastDescription,
         });
       } else {
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
@@ -203,12 +251,9 @@ export function useChequesOperations(): UseChequesOperationsReturn {
    * Delete a cheque with atomic transaction
    * Steps:
    * 1. Find and retrieve the cheque document
-   * 2. Find and retrieve associated payment records
-   * 3. Find and retrieve the linked ledger entry (if exists)
-   * 4. In a single transaction:
-   *    - Delete the cheque
-   *    - Delete all associated payment records
-   *    - Reverse the AR/AP balance in the ledger
+   * 2. Check if it has a linked multi-allocation payment
+   * 3. If multi-allocation, use reversePaymentAllocations
+   * 4. Otherwise, use existing logic for single-transaction payments
    */
   const deleteCheque = async (chequeId: string, cheques: Cheque[]): Promise<boolean> => {
     if (!user) return false;
@@ -224,6 +269,42 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         return false;
       }
 
+      // Check if this cheque has a linked multi-allocation payment
+      if (cheque.linkedPaymentId) {
+        const paymentRef = doc(firestore, `users/${user.uid}/payments`, cheque.linkedPaymentId);
+        const paymentSnap = await getDoc(paymentRef);
+
+        if (paymentSnap.exists()) {
+          const paymentData = paymentSnap.data();
+
+          // Check if it's a multi-allocation payment
+          if (isMultiAllocationPayment(paymentData)) {
+            // Use the multi-allocation reversal logic
+            const success = await reversePaymentAllocations(cheque.linkedPaymentId);
+
+            if (success) {
+              // Delete the cheque document
+              const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+              await deleteDoc(chequeRef);
+
+              toast({
+                title: "تم الحذف بنجاح",
+                description: `تم حذف الشيك وإلغاء ${paymentData.allocationCount || 0} تخصيص مرتبط`,
+              });
+              return true;
+            } else {
+              toast({
+                title: "خطأ",
+                description: "حدث خطأ أثناء إلغاء تخصيصات الدفعة",
+                variant: "destructive",
+              });
+              return false;
+            }
+          }
+        }
+      }
+
+      // Fallback: Use existing logic for cheques without multi-allocation payments
       // Step 1: Find all associated payment records linked to this cheque
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const paymentsQuery = query(
@@ -425,15 +506,50 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     if (!user) return false;
 
     try {
+      const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+      const wasCleared = clearedStatuses.includes(cheque.status);
+
+      // If the cheque was previously cashed, reverse the payment
+      if (wasCleared && cheque.linkedPaymentId) {
+        const paymentRef = doc(firestore, `users/${user.uid}/payments`, cheque.linkedPaymentId);
+        const paymentSnap = await getDoc(paymentRef);
+
+        if (paymentSnap.exists()) {
+          const paymentData = paymentSnap.data();
+
+          if (isMultiAllocationPayment(paymentData)) {
+            // Reverse the multi-allocation payment
+            const success = await reversePaymentAllocations(cheque.linkedPaymentId);
+            if (!success) {
+              toast({
+                title: "خطأ",
+                description: "حدث خطأ أثناء إلغاء تخصيصات الدفعة",
+                variant: "destructive",
+              });
+              return false;
+            }
+          } else {
+            // Simple payment - delete it and reverse AR/AP
+            await deleteDoc(paymentRef);
+            if (cheque.linkedTransactionId) {
+              await updateARAPTracking(cheque.linkedTransactionId, cheque.amount, false);
+            }
+          }
+        }
+      }
+
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
         status: CHEQUE_STATUS_AR.BOUNCED,
         bouncedDate: new Date(),
+        ...(wasCleared && cheque.linkedPaymentId ? { linkedPaymentId: null, clearedDate: null } : {}),
       });
 
       toast({
         title: "تم تسجيل الشيك كمرتجع",
-        description: `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع. رصيد العميل لم يتغير.`,
+        description: wasCleared && cheque.linkedPaymentId
+          ? `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع وإرجاع الذمم`
+          : `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع. رصيد العميل لم يتغير.`,
       });
       return true;
     } catch (error) {
