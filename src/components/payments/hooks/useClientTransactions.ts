@@ -11,7 +11,6 @@ import {
   query,
   where,
   getDocs,
-  orderBy,
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
@@ -50,13 +49,12 @@ export function useClientTransactions(clientName: string): UseClientTransactions
       const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
 
       // Query for AR/AP entries belonging to this client
-      // We need to filter for unpaid/partial status in JavaScript since Firestore
-      // doesn't support OR queries on different fields easily
+      // Note: We don't use orderBy here to avoid needing a composite index
+      // Sorting is done in JavaScript after fetching
       const q = query(
         ledgerRef,
         where('associatedParty', '==', clientName),
-        where('isARAPEntry', '==', true),
-        orderBy('date', 'asc') // Oldest first for FIFO
+        where('isARAPEntry', '==', true)
       );
 
       const snapshot = await getDocs(q);
@@ -93,7 +91,7 @@ export function useClientTransactions(clientName: string): UseClientTransactions
         });
       });
 
-      // Sort by date (oldest first) - already ordered by Firestore, but ensure consistency
+      // Sort by date (oldest first) for FIFO distribution
       unpaidTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       setTransactions(unpaidTransactions);
