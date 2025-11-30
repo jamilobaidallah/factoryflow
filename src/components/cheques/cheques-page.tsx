@@ -91,6 +91,7 @@ export default function ChequesPage() {
     amount: number;
     dueDate: Date;
     chequeType: "incoming" | "outgoing";
+    paymentDate?: Date;
   } | null>(null);
 
   const resetForm = () => {
@@ -134,17 +135,10 @@ export default function ChequesPage() {
     const isNowCleared = clearedStatuses.includes(formData.status);
 
     if (editingCheque && wasPending && isNowCleared) {
-      // Intercept: Open MultiAllocationDialog instead of auto-saving payment
+      // Step 1: Store form data and open PaymentDateModal first
       setPendingFormData(formData);
-      setChequeToCash({
-        chequeId: editingCheque.id,
-        chequeNumber: formData.chequeNumber,
-        clientName: formData.clientName,
-        amount: parseFloat(formData.amount),
-        dueDate: new Date(formData.dueDate),
-        chequeType: formData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
-      });
-      setMultiAllocationDialogOpen(true);
+      setPaymentDateContext('submit');
+      setPaymentDateModalOpen(true);
       setIsDialogOpen(false); // Close the cheque edit dialog
       return;
     }
@@ -195,18 +189,11 @@ export default function ChequesPage() {
   const handleClear = async () => {
     if (!chequeToClear) return;
 
-    // Open MultiAllocationDialog for clearing cheques
-    setChequeToCash({
-      chequeId: chequeToClear.id,
-      chequeNumber: chequeToClear.chequeNumber,
-      clientName: chequeToClear.clientName,
-      amount: chequeToClear.amount,
-      dueDate: chequeToClear.dueDate instanceof Date ? chequeToClear.dueDate : new Date(chequeToClear.dueDate),
-      chequeType: chequeToClear.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
-    });
-    setMultiAllocationDialogOpen(true);
+    // Step 1: Open PaymentDateModal first to select the date
+    setPaymentDateContext('clear');
+    setPaymentDateModalOpen(true);
     setClearDialogOpen(false);
-    setChequeToClear(null);
+    // Note: chequeToClear is kept for use in handlePaymentDateConfirm
   };
 
   const clearChequeWithDate = async (paymentDate?: Date) => {
@@ -222,10 +209,31 @@ export default function ChequesPage() {
   const handlePaymentDateConfirm = async (paymentDate: Date) => {
     setPaymentDateModalOpen(false);
 
-    if (paymentDateContext === 'submit') {
-      await submitChequeWithDate(paymentDate);
-    } else if (paymentDateContext === 'clear') {
-      await clearChequeWithDate(paymentDate);
+    if (paymentDateContext === 'submit' && pendingFormData && editingCheque) {
+      // Step 2: Open MultiAllocationDialog with the selected payment date (from edit form)
+      setChequeToCash({
+        chequeId: editingCheque.id,
+        chequeNumber: pendingFormData.chequeNumber,
+        clientName: pendingFormData.clientName,
+        amount: parseFloat(pendingFormData.amount),
+        dueDate: new Date(pendingFormData.dueDate),
+        chequeType: pendingFormData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+        paymentDate: paymentDate, // Pass the selected date to MultiAllocationDialog
+      });
+      setMultiAllocationDialogOpen(true);
+    } else if (paymentDateContext === 'clear' && chequeToClear) {
+      // Step 2: Open MultiAllocationDialog with the selected payment date (from "Mark as Cleared")
+      setChequeToCash({
+        chequeId: chequeToClear.id,
+        chequeNumber: chequeToClear.chequeNumber,
+        clientName: chequeToClear.clientName,
+        amount: chequeToClear.amount,
+        dueDate: chequeToClear.dueDate instanceof Date ? chequeToClear.dueDate : new Date(chequeToClear.dueDate),
+        chequeType: chequeToClear.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+        paymentDate: paymentDate, // Pass the selected date to MultiAllocationDialog
+      });
+      setChequeToClear(null); // Clear now since we've captured the data
+      setMultiAllocationDialogOpen(true);
     }
   };
 
