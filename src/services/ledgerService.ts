@@ -1438,28 +1438,38 @@ export class LedgerService {
   ): void {
     const assetDocRef = doc(this.fixedAssetsRef);
 
-    const purchaseAmount = parseFloat(formData.amount);
+    const purchaseCost = parseFloat(formData.amount);
     const usefulLifeYears = parseFloat(fixedAssetFormData.usefulLifeYears);
+    const usefulLifeMonths = usefulLifeYears * 12;
     const salvageValue = fixedAssetFormData.salvageValue
       ? parseFloat(fixedAssetFormData.salvageValue)
       : 0;
 
-    const depreciableAmount = purchaseAmount - salvageValue;
-    const annualDepreciation =
+    const depreciableAmount = purchaseCost - salvageValue;
+    const monthlyDepreciation =
       fixedAssetFormData.depreciationMethod === "declining"
-        ? purchaseAmount * 0.2
-        : depreciableAmount / usefulLifeYears;
+        ? (purchaseCost * 0.2) / 12
+        : depreciableAmount / usefulLifeMonths;
+    const bookValue = purchaseCost;
+
+    // Generate asset number in format FA-YYYY-XXXX
+    const now = new Date();
+    const year = now.getFullYear();
+    const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const assetNumber = `FA-${year}-${random}`;
 
     batch.set(assetDocRef, {
+      assetNumber: assetNumber,
       assetName: fixedAssetFormData.assetName,
-      purchaseAmount: purchaseAmount,
+      category: "أخرى", // Default category for ledger-created assets
       purchaseDate: new Date(formData.date),
-      usefulLifeYears: usefulLifeYears,
+      purchaseCost: purchaseCost,
       salvageValue: salvageValue,
+      usefulLifeMonths: usefulLifeMonths,
+      monthlyDepreciation: monthlyDepreciation,
       depreciationMethod: fixedAssetFormData.depreciationMethod,
-      annualDepreciation: annualDepreciation,
       accumulatedDepreciation: 0,
-      bookValue: purchaseAmount,
+      bookValue: bookValue,
       linkedTransactionId: transactionId,
       status: "active",
       notes: `مرتبط بالمعاملة: ${formData.description}`,
