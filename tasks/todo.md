@@ -1,3 +1,151 @@
+# Pagination Logic Bug Fix
+
+## Problem Summary
+
+The pagination UI shows correctly (e.g., "50 of 60", page numbers 1 and 2), but clicking page numbers or Next/Previous buttons does NOT update the table data. The same first page of data is always displayed.
+
+**Affected pages:**
+- Payments page (`src/components/payments/payments-page.tsx`)
+- Ledger page (`src/components/ledger/ledger-page.tsx`)
+- Likely other pages with similar pagination pattern
+
+## Root Cause Analysis
+
+### Payments Page (Line 181)
+```typescript
+const q = query(paymentsRef, orderBy("date", "desc"), limit(pageSize));
+```
+- The `currentPage` state is in the dependency array but **never used in the query**
+- Query always fetches the first `pageSize` (50) records regardless of current page
+
+### Ledger Page - `useLedgerData` hook (Line 42-52)
+```typescript
+const unsubscribe = service.subscribeLedgerEntries(
+    pageSize,
+    (entriesData, lastVisible) => { ... }
+);
+```
+- Same issue: `currentPage` is passed but `subscribeLedgerEntries` doesn't use it
+- The service method (`ledgerService.ts:199-225`) only uses `limit(pageSize)`
+
+## Solution
+
+Implement **cursor-based pagination** using Firestore's `startAfter()`. This is the recommended approach for Firestore.
+
+**Key Changes:**
+1. Track page cursors (first/last document of each page)
+2. Use `startAfter(cursor)` to fetch subsequent pages
+3. Store cursors in a map keyed by page number for backward navigation
+
+---
+
+## Implementation Plan
+
+### Phase 1: Create Reusable Pagination Hook
+
+- [x] **Task 1.1: Create `usePaginatedQuery` hook**
+  - SKIPPED: Implemented cursor tracking directly in each component/hook for simplicity
+  - Avoids over-engineering for the current use case
+
+### Phase 2: Fix Payments Page
+
+- [x] **Task 2.1: Update payments-page.tsx to use cursor-based pagination**
+  - Added `startAfter`, `DocumentSnapshot`, `QueryConstraint` imports
+  - Added `pageCursors` state using `useState<Map<number, DocumentSnapshot>>`
+  - Modified useEffect to build query with `startAfter(cursor)` for pages > 1
+  - Store last document of each page as cursor for next page
+
+### Phase 3: Fix Ledger Page
+
+- [x] **Task 3.1: Update `useLedgerData` hook**
+  - Added `pageCursorsRef` using `useRef<Map<number, DocumentSnapshot>>`
+  - Pass cursor to `subscribeLedgerEntries` when `currentPage > 1`
+  - Store last document of each page for navigation
+
+- [x] **Task 3.2: Update `ledgerService.subscribeLedgerEntries`**
+  - Added `startAfter` and `QueryConstraint` imports
+  - Accept optional `startAfterDoc?: DocumentSnapshot | null` parameter
+  - Build query dynamically with `startAfter(startAfterDoc)` when cursor provided
+
+### Phase 4: Testing & Build Verification
+
+- [ ] **Task 4.1: Test pagination on payments page**
+  - Click page 2 → verify different data loads
+  - Click Previous → verify page 1 data returns
+  - Verify "X of Y" count remains accurate
+
+- [ ] **Task 4.2: Test pagination on ledger page**
+  - Same tests as payments page
+
+- [x] **Task 4.3: Run build**
+  - `npm run build` - PASSED (no TypeScript errors)
+
+---
+
+## Technical Details
+
+### Cursor Storage Strategy
+```typescript
+// Store the last document of each page
+const [pageCursors, setPageCursors] = useState<Map<number, DocumentSnapshot>>(new Map());
+
+// When fetching page N, use cursor from page N-1
+const startAfterDoc = pageCursors.get(currentPage - 1) || null;
+```
+
+### Query with Cursor
+```typescript
+// Page 1: No cursor needed
+query(collectionRef, orderBy("date", "desc"), limit(pageSize))
+
+// Page 2+: Use cursor from previous page
+query(collectionRef, orderBy("date", "desc"), startAfter(cursor), limit(pageSize))
+```
+
+---
+
+## Files to Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/components/payments/payments-page.tsx` | MODIFY | Add cursor-based pagination |
+| `src/components/ledger/hooks/useLedgerData.ts` | MODIFY | Add cursor tracking and pass to service |
+| `src/services/ledgerService.ts` | MODIFY | Accept startAfter cursor parameter |
+
+---
+
+## Notes
+
+- RTL (Right-to-Left) considerations: The "Previous" (السابق) and "Next" (التالي) buttons have inverted arrow icons for Arabic UI, but the logic should remain the same.
+- The current UI shows arrows in opposite directions (ChevronRight for Previous, ChevronLeft for Next) which matches RTL expectations.
+
+---
+
+## Review
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/payments/payments-page.tsx` | Added cursor-based pagination with `startAfter()`, `pageCursors` state for tracking document cursors |
+| `src/components/ledger/hooks/useLedgerData.ts` | Added `pageCursorsRef` for cursor tracking, pass cursor to service |
+| `src/services/ledgerService.ts` | Updated `subscribeLedgerEntries` to accept optional `startAfterDoc` parameter |
+
+### How It Works
+
+1. **Page 1 Load**: Query without cursor, store last document as cursor for page 1
+2. **Page 2+ Load**: Use cursor from previous page with `startAfter()`, store last document as cursor for current page
+3. **Back Navigation**: Cursors are stored in a Map keyed by page number, allowing backward navigation
+
+### Build Status
+
+```
+✓ Compiled successfully
+Linting and checking validity of types passed
+```
+
+---
+
 # Multi-Allocation Payment System
 
 ## Problem Summary

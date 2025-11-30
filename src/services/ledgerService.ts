@@ -17,12 +17,14 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   writeBatch,
   onSnapshot,
   DocumentSnapshot,
   Unsubscribe,
   WriteBatch,
   CollectionReference,
+  QueryConstraint,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import type {
@@ -194,14 +196,26 @@ export class LedgerService {
   // ============================================
 
   /**
-   * Subscribe to ledger entries with real-time updates
+   * Subscribe to ledger entries with real-time updates and cursor-based pagination
    */
   subscribeLedgerEntries(
     pageSize: number,
     onData: (entries: LedgerEntry[], lastDoc: DocumentSnapshot | null) => void,
-    onError?: (error: Error) => void
+    onError?: (error: Error) => void,
+    startAfterDoc?: DocumentSnapshot | null
   ): Unsubscribe {
-    const q = query(this.ledgerRef, orderBy("date", "desc"), limit(pageSize));
+    // Build query constraints
+    const queryConstraints: QueryConstraint[] = [
+      orderBy("date", "desc"),
+      limit(pageSize)
+    ];
+
+    // Add cursor if provided (for pages > 1)
+    if (startAfterDoc) {
+      queryConstraints.push(startAfter(startAfterDoc));
+    }
+
+    const q = query(this.ledgerRef, ...queryConstraints);
 
     return onSnapshot(
       q,

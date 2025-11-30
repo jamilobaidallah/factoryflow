@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser } from "@/firebase/provider";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { createLedgerService } from "@/services/ledgerService";
@@ -10,7 +10,7 @@ interface UseLedgerDataOptions {
 }
 
 /**
- * Custom hook to fetch and manage ledger data with pagination
+ * Custom hook to fetch and manage ledger data with cursor-based pagination
  * Uses LedgerService for all Firestore operations
  */
 export function useLedgerData(options: UseLedgerDataOptions = {}) {
@@ -22,6 +22,8 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     const [totalCount, setTotalCount] = useState(0);
     const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
     const [loading, setLoading] = useState(true);
+    // Store page cursors for cursor-based pagination (using ref to avoid re-renders)
+    const pageCursorsRef = useRef<Map<number, DocumentSnapshot>>(new Map());
 
     // Load total count of entries
     useEffect(() => {
@@ -33,23 +35,35 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         });
     }, [user]);
 
-    // Load ledger entries with pagination
+    // Load ledger entries with cursor-based pagination
     useEffect(() => {
         if (!user) { return; }
 
         const service = createLedgerService(user.uid);
+
+        // Get cursor for current page (from previous page)
+        const startAfterDoc = currentPage > 1
+            ? pageCursorsRef.current.get(currentPage - 1) || null
+            : null;
 
         const unsubscribe = service.subscribeLedgerEntries(
             pageSize,
             (entriesData, lastVisible) => {
                 setEntries(entriesData);
                 setLastDoc(lastVisible);
+
+                // Store cursor for this page (to enable navigating to next page)
+                if (lastVisible) {
+                    pageCursorsRef.current.set(currentPage, lastVisible);
+                }
+
                 setLoading(false);
             },
             (error) => {
                 console.error("Error fetching ledger entries:", error);
                 setLoading(false);
-            }
+            },
+            startAfterDoc
         );
 
         return () => unsubscribe();

@@ -43,7 +43,10 @@ import {
   where,
   getDocs,
   limit,
+  startAfter,
   getCountFromServer,
+  DocumentSnapshot,
+  QueryConstraint,
 } from "firebase/firestore";
 import {
   Pagination,
@@ -151,6 +154,8 @@ export default function PaymentsPage() {
   const [pageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
   const totalPages = Math.ceil(totalCount / pageSize);
+  // Store the last document of each page for cursor-based pagination
+  const [pageCursors, setPageCursors] = useState<Map<number, DocumentSnapshot>>(new Map());
 
   const [formData, setFormData] = useState({
     clientName: "",
@@ -173,27 +178,55 @@ export default function PaymentsPage() {
     });
   }, [user]);
 
-  // Fetch payments with pagination
+  // Fetch payments with cursor-based pagination
   useEffect(() => {
     if (!user) {return;}
 
     const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-    const q = query(paymentsRef, orderBy("date", "desc"), limit(pageSize));
+
+    // Build query constraints
+    const queryConstraints: QueryConstraint[] = [
+      orderBy("date", "desc"),
+      limit(pageSize)
+    ];
+
+    // For pages > 1, use the cursor from the previous page
+    if (currentPage > 1) {
+      const cursor = pageCursors.get(currentPage - 1);
+      if (cursor) {
+        queryConstraints.push(startAfter(cursor));
+      }
+    }
+
+    const q = query(paymentsRef, ...queryConstraints);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const paymentsData: Payment[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
         paymentsData.push({
-          id: doc.id,
+          id: docSnap.id,
           ...convertFirestoreDates(data),
         } as Payment);
       });
+
+      // Store the last document as cursor for the next page
+      if (snapshot.docs.length > 0) {
+        const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        setPageCursors(prev => {
+          const newMap = new Map(prev);
+          newMap.set(currentPage, lastDoc);
+          return newMap;
+        });
+      }
+
       setPayments(paymentsData);
       setDataLoading(false);
     });
 
     return () => unsubscribe();
+    // Note: pageCursors intentionally excluded to avoid infinite loops - we only read from it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, pageSize, currentPage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
