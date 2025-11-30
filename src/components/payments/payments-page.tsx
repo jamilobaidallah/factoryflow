@@ -211,7 +211,7 @@ export default function PaymentsPage() {
       });
 
       // Store the last document as cursor for the next page
-      if (snapshot.docs.length > 0) {
+      if (snapshot.docs && snapshot.docs.length > 0) {
         const lastDoc = snapshot.docs[snapshot.docs.length - 1];
         setPageCursors(prev => {
           const newMap = new Map(prev);
