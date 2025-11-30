@@ -35,15 +35,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Zap, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useClientTransactions } from "./hooks/useClientTransactions";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
 import { AllocationEntry, initialMultiAllocationFormData } from "./types";
 
-interface Client {
-  id: string;
+interface PartyWithDebt {
   name: string;
+  totalOutstanding: number;
 }
 
 interface MultiAllocationDialogProps {
@@ -65,9 +65,10 @@ export function MultiAllocationDialog({
   const [allocations, setAllocations] = useState<AllocationEntry[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Clients list for autocomplete
-  const [clients, setClients] = useState<Client[]>([]);
+  // Parties with outstanding debt (fetched from ledger)
+  const [partiesWithDebt, setPartiesWithDebt] = useState<PartyWithDebt[]>([]);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [partiesLoading, setPartiesLoading] = useState(true);
 
   // Fetch client's unpaid transactions
   const {
@@ -85,22 +86,48 @@ export function MultiAllocationDialog({
     error: allocationError,
   } = usePaymentAllocations();
 
-  // Fetch clients list for autocomplete
+  // Fetch parties that have outstanding AR/AP debt from ledger
   useEffect(() => {
     if (!user) return;
 
-    const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-    const q = query(clientsRef, orderBy("name", "asc"), limit(500));
+    setPartiesLoading(true);
+    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    // Query for AR/AP entries that are not fully paid
+    const q = query(
+      ledgerRef,
+      where("isARAPEntry", "==", true)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const clientsData: Client[] = [];
+      // Group by associatedParty and sum outstanding amounts
+      const partyMap = new Map<string, number>();
+
       snapshot.forEach((doc) => {
-        clientsData.push({
-          id: doc.id,
-          name: doc.data().name,
-        });
+        const data = doc.data();
+        const partyName = data.associatedParty;
+        const paymentStatus = data.paymentStatus || "unpaid";
+
+        // Skip if no party name or fully paid
+        if (!partyName || paymentStatus === "paid") return;
+
+        const amount = data.amount || 0;
+        const totalPaid = data.totalPaid || 0;
+        const remaining = data.remainingBalance ?? (amount - totalPaid);
+
+        // Only include if there's outstanding balance
+        if (remaining > 0) {
+          const current = partyMap.get(partyName) || 0;
+          partyMap.set(partyName, current + remaining);
+        }
       });
-      setClients(clientsData);
+
+      // Convert to array and sort by name
+      const parties: PartyWithDebt[] = Array.from(partyMap.entries())
+        .map(([name, totalOutstanding]) => ({ name, totalOutstanding }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+
+      setPartiesWithDebt(parties);
+      setPartiesLoading(false);
     });
 
     return () => unsubscribe();
@@ -124,13 +151,13 @@ export function MultiAllocationDialog({
     }
   }, [transactions]);
 
-  // Filter clients for dropdown
-  const filteredClients = useMemo(() => {
-    if (!formData.clientName) return clients;
-    return clients.filter((c) =>
-      c.name.toLowerCase().includes(formData.clientName.toLowerCase())
+  // Filter parties for dropdown
+  const filteredParties = useMemo(() => {
+    if (!formData.clientName) return partiesWithDebt;
+    return partiesWithDebt.filter((p) =>
+      p.name.toLowerCase().includes(formData.clientName.toLowerCase())
     );
-  }, [clients, formData.clientName]);
+  }, [partiesWithDebt, formData.clientName]);
 
   // Calculate totals
   const paymentAmount = parseFloat(formData.amount) || 0;
@@ -276,7 +303,7 @@ export function MultiAllocationDialog({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Client Selector */}
             <div className="space-y-2 relative">
-              <Label htmlFor="clientName">اسم العميل</Label>
+              <Label htmlFor="clientName">الطرف المعني (من الدفتر)</Label>
               <Input
                 id="clientName"
                 value={formData.clientName}
@@ -285,21 +312,33 @@ export function MultiAllocationDialog({
                   setShowClientDropdown(true);
                 }}
                 onFocus={() => setShowClientDropdown(true)}
-                placeholder="ابحث عن عميل..."
+                placeholder={partiesLoading ? "جاري التحميل..." : "اختر أو ابحث..."}
                 autoComplete="off"
+                disabled={partiesLoading}
               />
-              {showClientDropdown && filteredClients.length > 0 && (
+              {showClientDropdown && !partiesLoading && (
                 <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                  {filteredClients.slice(0, 10).map((client) => (
-                    <button
-                      key={client.id}
-                      type="button"
-                      className="w-full px-3 py-2 text-right hover:bg-gray-100 text-sm"
-                      onClick={() => handleClientSelect(client.name)}
-                    >
-                      {client.name}
-                    </button>
-                  ))}
+                  {filteredParties.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                      {partiesWithDebt.length === 0
+                        ? "لا توجد ذمم مستحقة في الدفتر"
+                        : "لا توجد نتائج"}
+                    </div>
+                  ) : (
+                    filteredParties.slice(0, 15).map((party) => (
+                      <button
+                        key={party.name}
+                        type="button"
+                        className="w-full px-3 py-2 text-right hover:bg-gray-100 text-sm flex justify-between items-center"
+                        onClick={() => handleClientSelect(party.name)}
+                      >
+                        <span>{party.name}</span>
+                        <span className="text-xs text-orange-600 font-medium">
+                          {party.totalOutstanding.toFixed(0)} دينار
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
             </div>
