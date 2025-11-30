@@ -129,6 +129,7 @@ interface Payment {
   totalAllocated?: number;
   allocationMethod?: 'fifo' | 'manual';
   allocationCount?: number;
+  allocationTransactionIds?: string[]; // Array of transaction IDs
 }
 
 export default function PaymentsPage() {
@@ -571,12 +572,21 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell>{payment.amount || 0} دينار</TableCell>
                     <TableCell>
-                      {payment.isMultiAllocation ? (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
-                            {payment.allocationCount} معاملات
-                          </span>
+                      {payment.isMultiAllocation && payment.allocationTransactionIds?.length ? (
+                        <div className="flex flex-col gap-1">
+                          {payment.allocationTransactionIds.map((txnId, idx) => (
+                            <div key={idx} className="flex items-center gap-1">
+                              <span className="font-mono text-xs text-purple-700">
+                                {txnId}
+                              </span>
+                              <CopyButton text={txnId} size="sm" />
+                            </div>
+                          ))}
                         </div>
+                      ) : payment.isMultiAllocation ? (
+                        <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
+                          {payment.allocationCount} معاملات
+                        </span>
                       ) : payment.linkedTransactionId ? (
                         <div className="flex items-center gap-1">
                           <span className="font-mono text-xs">

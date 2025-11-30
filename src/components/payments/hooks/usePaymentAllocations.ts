@@ -146,6 +146,11 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         0
       );
 
+      // Extract transaction IDs for display in the payments table
+      const allocationTransactionIds = activeAllocations.map(
+        (a) => a.transactionId
+      );
+
       // Create the payment document
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const paymentDocRef = doc(paymentsRef);
@@ -162,6 +167,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         totalAllocated,
         allocationMethod,
         allocationCount: activeAllocations.length,
+        allocationTransactionIds, // Array of transaction IDs for display
         // Keep linkedTransactionId empty for multi-allocation payments
         linkedTransactionId: '',
       });
