@@ -3,10 +3,12 @@
  * Uses LedgerFormContext to eliminate prop drilling
  */
 
+import { useState, useMemo, useEffect } from "react";
 import { CATEGORIES } from "../utils/ledger-constants";
 import { getCategoryType } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
 import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
+import { useAllClients } from "@/hooks/useAllClients";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +20,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
 
 export function LedgerFormDialog() {
   const {
@@ -58,6 +60,35 @@ export function LedgerFormDialog() {
     createInvoice,
     setCreateInvoice,
   } = useLedgerFormContext();
+
+  // Get all clients from ledger and partners for dropdown
+  const { clients: allClients, loading: clientsLoading } = useAllClients();
+
+  // Associated party dropdown state
+  const [showPartyDropdown, setShowPartyDropdown] = useState(false);
+
+  // Filter clients based on search input
+  const filteredClients = useMemo(() => {
+    if (!formData.associatedParty?.trim()) {
+      return allClients;
+    }
+    const searchTerm = formData.associatedParty.toLowerCase();
+    return allClients.filter((client) =>
+      client.name.toLowerCase().includes(searchTerm)
+    );
+  }, [allClients, formData.associatedParty]);
+
+  const handlePartySelect = (partyName: string) => {
+    setFormData({ ...formData, associatedParty: partyName });
+    setShowPartyDropdown(false);
+  };
+
+  // Close dropdown when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowPartyDropdown(false);
+    }
+  }, [isOpen]);
 
   // Helper functions for multiple cheques management
   const addIncomingCheque = () => {
@@ -182,22 +213,75 @@ export function LedgerFormDialog() {
             </div>
 
             {/* Associated Party */}
-            <div className="space-y-2">
-              <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد)</Label>
-              <Input
-                id="associatedParty"
-                list="clients-list"
-                value={formData.associatedParty}
-                onChange={(e) =>
-                  setFormData({ ...formData, associatedParty: e.target.value })
-                }
-                placeholder="اختر من القائمة أو اكتب اسم جديد"
-              />
-              <datalist id="clients-list">
-                {clients.map((client) => (
-                  <option key={client.id} value={client.name} />
-                ))}
-              </datalist>
+            <div className="space-y-2 relative">
+              <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
+              <div className="relative">
+                <Input
+                  id="associatedParty"
+                  value={formData.associatedParty}
+                  onChange={(e) => {
+                    setFormData({ ...formData, associatedParty: e.target.value });
+                    setShowPartyDropdown(true);
+                  }}
+                  onFocus={() => setShowPartyDropdown(true)}
+                  placeholder={clientsLoading ? "جاري التحميل..." : "اختر أو ابحث... (اتركه فارغاً للمصاريف اليومية)"}
+                  autoComplete="off"
+                />
+                <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              {showPartyDropdown && !clientsLoading && (
+                <div className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {/* Option to clear/leave empty */}
+                  {formData.associatedParty && (
+                    <button
+                      type="button"
+                      onClick={() => handlePartySelect("")}
+                      className="w-full px-3 py-2 text-right text-sm border-b hover:bg-gray-100 text-gray-500"
+                    >
+                      × مسح الاختيار (بدون طرف معني)
+                    </button>
+                  )}
+                  {filteredClients.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                      {allClients.length === 0 ? "لا يوجد عملاء مسجلين في الدفتر" : "لا توجد نتائج"}
+                    </div>
+                  ) : (
+                    filteredClients.map((client) => (
+                      <button
+                        key={client.name}
+                        type="button"
+                        onClick={() => handlePartySelect(client.name)}
+                        className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 flex items-center justify-between"
+                      >
+                        <span>{client.name}</span>
+                        <div className="flex items-center gap-1">
+                          {client.hasOutstandingDebt && (
+                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                              ذمم: {client.totalOutstanding?.toFixed(2)}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : 'متعدد'}
+                          </span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                  {/* Option to add new party manually */}
+                  {formData.associatedParty?.trim() && !allClients.some(c => c.name === formData.associatedParty?.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPartyDropdown(false)}
+                      className="w-full px-3 py-2 text-right text-sm border-t hover:bg-blue-50 text-blue-600"
+                    >
+                      + استخدام &quot;{formData.associatedParty}&quot; كاسم جديد
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-gray-500">
+                اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني
+              </p>
             </div>
 
             {/* Owner dropdown for capital transactions */}

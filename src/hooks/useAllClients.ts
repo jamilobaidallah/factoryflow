@@ -10,11 +10,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, query, getDocs, where, limit, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, where } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 
-type ClientSource = 'ledger' | 'partner' | 'client' | 'multiple';
+type ClientSource = 'ledger' | 'partner' | 'both';
 
 interface ClientInfo {
   name: string;
@@ -60,7 +60,7 @@ export function useAllClients(): UseAllClientsResult {
       // Helper to merge sources
       const mergeSource = (existing: ClientSource, newSource: ClientSource): ClientSource => {
         if (existing === newSource) return existing;
-        return 'multiple';
+        return 'both';
       };
 
       ledgerSnapshot.forEach((doc) => {
@@ -108,31 +108,6 @@ export function useAllClients(): UseAllClientsResult {
             clientMap.set(trimmedName, {
               name: trimmedName,
               source: 'partner',
-              hasOutstandingDebt: false,
-              totalOutstanding: 0,
-            });
-          }
-        }
-      });
-
-      // 3. Fetch from clients collection
-      const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-      const clientsQuery = query(clientsRef, orderBy('name'), limit(500));
-      const clientsSnapshot = await getDocs(clientsQuery);
-
-      clientsSnapshot.forEach((doc) => {
-        const data = doc.data();
-        const clientName = data.name;
-        if (clientName && typeof clientName === 'string' && clientName.trim()) {
-          const trimmedName = clientName.trim();
-          const existing = clientMap.get(trimmedName);
-
-          if (existing) {
-            existing.source = mergeSource(existing.source, 'client');
-          } else {
-            clientMap.set(trimmedName, {
-              name: trimmedName,
-              source: 'client',
               hasOutstandingDebt: false,
               totalOutstanding: 0,
             });

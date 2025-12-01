@@ -18,7 +18,7 @@ import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface ClientInfo {
   name: string;
-  source: 'ledger' | 'partner' | 'client' | 'multiple';
+  source: 'ledger' | 'partner' | 'both';
   hasOutstandingDebt?: boolean;
   totalOutstanding?: number;
 }
@@ -150,7 +150,7 @@ export function IncomingChequesFormDialog({
                               </span>
                             )}
                             <span className="text-xs text-gray-400">
-                              {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
+                              {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : 'متعدد'}
                             </span>
                           </div>
                         </button>
