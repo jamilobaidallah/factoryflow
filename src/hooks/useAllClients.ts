@@ -4,18 +4,21 @@
  * Fetches all unique client names from:
  * 1. Ledger entries (associatedParty field) - AR/AP tracking
  * 2. Partners collection
+ * 3. Clients collection
  *
  * Returns a deduplicated, sorted list for use in client dropdown components.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, query, getDocs, where } from 'firebase/firestore';
+import { collection, query, getDocs, where, limit, orderBy } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 
+type ClientSource = 'ledger' | 'partner' | 'client' | 'multiple';
+
 interface ClientInfo {
   name: string;
-  source: 'ledger' | 'partner' | 'both';
+  source: ClientSource;
   hasOutstandingDebt?: boolean;
   totalOutstanding?: number;
 }
@@ -54,6 +57,12 @@ export function useAllClients(): UseAllClientsResult {
       );
       const ledgerSnapshot = await getDocs(ledgerQuery);
 
+      // Helper to merge sources
+      const mergeSource = (existing: ClientSource, newSource: ClientSource): ClientSource => {
+        if (existing === newSource) return existing;
+        return 'multiple';
+      };
+
       ledgerSnapshot.forEach((doc) => {
         const data = doc.data();
         const partyName = data.associatedParty;
@@ -70,9 +79,7 @@ export function useAllClients(): UseAllClientsResult {
               existing.hasOutstandingDebt = true;
               existing.totalOutstanding = (existing.totalOutstanding || 0) + remainingBalance;
             }
-            if (existing.source === 'partner') {
-              existing.source = 'both';
-            }
+            existing.source = mergeSource(existing.source, 'ledger');
           } else {
             clientMap.set(trimmedName, {
               name: trimmedName,
@@ -96,13 +103,36 @@ export function useAllClients(): UseAllClientsResult {
           const existing = clientMap.get(trimmedName);
 
           if (existing) {
-            if (existing.source === 'ledger') {
-              existing.source = 'both';
-            }
+            existing.source = mergeSource(existing.source, 'partner');
           } else {
             clientMap.set(trimmedName, {
               name: trimmedName,
               source: 'partner',
+              hasOutstandingDebt: false,
+              totalOutstanding: 0,
+            });
+          }
+        }
+      });
+
+      // 3. Fetch from clients collection
+      const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+      const clientsQuery = query(clientsRef, orderBy('name'), limit(500));
+      const clientsSnapshot = await getDocs(clientsQuery);
+
+      clientsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        const clientName = data.name;
+        if (clientName && typeof clientName === 'string' && clientName.trim()) {
+          const trimmedName = clientName.trim();
+          const existing = clientMap.get(trimmedName);
+
+          if (existing) {
+            existing.source = mergeSource(existing.source, 'client');
+          } else {
+            clientMap.set(trimmedName, {
+              name: trimmedName,
+              source: 'client',
               hasOutstandingDebt: false,
               totalOutstanding: 0,
             });
