@@ -106,7 +106,19 @@ export function IncomingChequesTable({
               {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
             </TableCell>
             <TableCell className="font-mono text-xs">
-              {cheque.linkedTransactionId || "-"}
+              <div className="space-y-1">
+                {cheque.linkedTransactionId && (
+                  <div title="رقم المعاملة المرتبطة">
+                    {cheque.linkedTransactionId}
+                  </div>
+                )}
+                {cheque.linkedPaymentId && (
+                  <div className="text-green-600" title="رقم الدفعة">
+                    دفعة: {cheque.linkedPaymentId.slice(-8)}
+                  </div>
+                )}
+                {!cheque.linkedTransactionId && !cheque.linkedPaymentId && "-"}
+              </div>
             </TableCell>
             <TableCell>
               {cheque.chequeImageUrl ? (

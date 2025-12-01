@@ -18,7 +18,7 @@ import { OutgoingChequesFormDialog } from "./components/OutgoingChequesFormDialo
 import { ImageViewerDialog, LinkTransactionDialog } from "./components/OutgoingChequeDialogs";
 import { PaymentDateModal } from "./components/PaymentDateModal";
 import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, collection, getDocs, getDoc, writeBatch } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -101,15 +101,121 @@ export default function OutgoingChequesPage() {
     setIsDialogOpen(true);
   };
 
+  // Function to reverse a payment when cheque status changes back to pending
+  const reversePayment = async (cheque: Cheque): Promise<boolean> => {
+    if (!user || !cheque.linkedPaymentId) return false;
+
+    try {
+      const batch = writeBatch(firestore);
+
+      // 1. Get the payment and its allocations
+      const paymentRef = doc(firestore, `users/${user.uid}/payments`, cheque.linkedPaymentId);
+      const paymentDoc = await getDoc(paymentRef);
+
+      if (!paymentDoc.exists()) {
+        console.warn("Payment not found:", cheque.linkedPaymentId);
+        // Payment doesn't exist, just clear the link
+        return true;
+      }
+
+      // 2. Get all allocations for this payment
+      const allocationsRef = collection(firestore, `users/${user.uid}/payments/${cheque.linkedPaymentId}/allocations`);
+      const allocationsSnapshot = await getDocs(allocationsRef);
+
+      // 3. Reverse each allocation - restore the ledger entry's remaining balance
+      for (const allocationDoc of allocationsSnapshot.docs) {
+        const allocation = allocationDoc.data();
+        const ledgerDocId = allocation.ledgerDocId;
+        const allocatedAmount = allocation.allocatedAmount || 0;
+
+        if (ledgerDocId) {
+          const ledgerRef = doc(firestore, `users/${user.uid}/ledger`, ledgerDocId);
+          const ledgerDoc = await getDoc(ledgerRef);
+
+          if (ledgerDoc.exists()) {
+            const ledgerData = ledgerDoc.data();
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const currentRemainingBalance = ledgerData.remainingBalance || 0;
+            const originalAmount = ledgerData.amount || 0;
+
+            // Restore the remaining balance
+            const newTotalPaid = Math.max(0, currentTotalPaid - allocatedAmount);
+            const newRemainingBalance = currentRemainingBalance + allocatedAmount;
+
+            // Determine new payment status
+            let newPaymentStatus: 'unpaid' | 'partial' | 'paid' = 'unpaid';
+            if (newTotalPaid >= originalAmount) {
+              newPaymentStatus = 'paid';
+            } else if (newTotalPaid > 0) {
+              newPaymentStatus = 'partial';
+            }
+
+            batch.update(ledgerRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newPaymentStatus,
+            });
+          }
+        }
+
+        // Delete the allocation
+        batch.delete(allocationDoc.ref);
+      }
+
+      // 4. Delete the payment document
+      batch.delete(paymentRef);
+
+      // 5. Update the cheque to clear linkedPaymentId and clearedDate
+      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+      batch.update(chequeRef, {
+        linkedPaymentId: null,
+        clearedDate: null,
+      });
+
+      await batch.commit();
+      return true;
+    } catch (error) {
+      console.error("Error reversing payment:", error);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Check if status is changing to 'Cashed Out' from a pending status
     const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
-    const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+    const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed", "تم الصرف", "محصل"];
+    const wasCleared = editingCheque ? clearedStatuses.includes(editingCheque.status) : false;
     const wasPending = editingCheque ? pendingStatuses.includes(editingCheque.status) : false;
     const isNowCleared = clearedStatuses.includes(formData.status);
+    const isNowPending = pendingStatuses.includes(formData.status);
 
+    // CASE 1: Reversal - Status changing from cashed back to pending
+    if (editingCheque && wasCleared && isNowPending && editingCheque.linkedPaymentId) {
+      setLoading(true);
+      const success = await reversePayment(editingCheque);
+
+      if (success) {
+        toast({
+          title: "تم إلغاء الصرف",
+          description: `تم إلغاء صرف الشيك رقم ${editingCheque.chequeNumber} واسترداد المبالغ للمعاملات المستحقة`,
+        });
+
+        // Continue with normal submission to update the status
+        await submitChequeWithDate();
+      } else {
+        toast({
+          title: "خطأ",
+          description: "حدث خطأ أثناء إلغاء الصرف",
+          variant: "destructive",
+        });
+        setLoading(false);
+      }
+      return;
+    }
+
+    // CASE 2: Cashing - Status changing from pending to cashed
     if (editingCheque && wasPending && isNowCleared) {
       // Go directly to MultiAllocationDialog (date picker is inside)
       setPendingFormData(formData);

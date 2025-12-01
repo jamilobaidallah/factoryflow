@@ -168,13 +168,21 @@ export function OutgoingChequesTable({
                       {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {cheque.linkedTransactionId ? (
-                        <span className="px-2 py-1 bg-green-50 text-green-700 rounded border border-green-200">
-                          {cheque.linkedTransactionId}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      <div className="space-y-1">
+                        {cheque.linkedTransactionId && (
+                          <div className="px-2 py-1 bg-green-50 text-green-700 rounded border border-green-200" title="رقم المعاملة المرتبطة">
+                            {cheque.linkedTransactionId}
+                          </div>
+                        )}
+                        {cheque.linkedPaymentId && (
+                          <div className="text-blue-600" title="رقم الدفعة">
+                            دفعة: {cheque.linkedPaymentId.slice(-8)}
+                          </div>
+                        )}
+                        {!cheque.linkedTransactionId && !cheque.linkedPaymentId && (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {cheque.chequeImageUrl ? (
