@@ -11,11 +11,13 @@ import {
   query,
   where,
   getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { safeAdd, safeSubtract } from "@/lib/currency";
 
 interface UseIncomingChequesOperationsReturn {
   submitCheque: (
@@ -96,6 +98,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     }
   };
 
+  /**
+   * Submit incoming cheque with atomic batch operation
+   * Ensures cheque + payment + ARAP update succeed or fail together
+   */
   const submitCheque = async (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
@@ -105,6 +111,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     if (!user) return false;
 
     try {
+      // Upload image first (external storage - before batch)
       let chequeImageUrl: string | undefined = undefined;
       if (chequeImage) {
         try {
@@ -174,19 +181,20 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const isNowCleared = clearedStatuses.includes(newStatus);
 
         if (wasPending && isNowCleared) {
-          // Use provided payment date or fall back to current date
+          // Status change requires atomic batch
+          const batch = writeBatch(firestore);
           const effectivePaymentDate = paymentDate || new Date();
-
           updateData.clearedDate = effectivePaymentDate;
 
-          // Create a Payment record (receipt for incoming cheque)
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
           const chequeAmount = parseFloat(formData.amount);
 
-          await addDoc(paymentsRef, {
+          // Add payment to batch
+          const paymentDocRef = doc(paymentsRef);
+          batch.set(paymentDocRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
-            type: PAYMENT_TYPES.RECEIPT, // Receipt - client paid us
+            type: PAYMENT_TYPES.RECEIPT,
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
             date: effectivePaymentDate,
@@ -194,13 +202,46 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             createdAt: new Date(),
           });
 
-          // Update AR/AP tracking if linkedTransactionId exists
+          // Update cheque in batch
+          batch.update(chequeRef, updateData);
+
+          // Inline ARAP update in batch (if linked)
           if (formData.linkedTransactionId) {
-            await updateARAPTracking(formData.linkedTransactionId, chequeAmount);
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
+                const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
+                const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+                batch.update(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
           }
+
+          // Commit atomically
+          await batch.commit();
+        } else {
+          // Simple update - no status change
+          await updateDoc(chequeRef, updateData);
         }
 
-        await updateDoc(chequeRef, updateData);
         toast({
           title: "تم التحديث بنجاح",
           description: wasPending && isNowCleared
@@ -208,12 +249,13 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             : "تم تحديث بيانات الشيك الوارد",
         });
       } else {
+        // Creating new cheque - simple add (no ARAP update needed for new incoming cheques)
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
-          type: CHEQUE_TYPES.INCOMING, // Always incoming
+          type: CHEQUE_TYPES.INCOMING,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),
@@ -271,6 +313,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     }
   };
 
+  /**
+   * Endorse incoming cheque with atomic batch operation
+   * Ensures all 5 operations (incoming update, outgoing create, link update, 2 payments) succeed or fail together
+   */
   const endorseCheque = async (
     cheque: Cheque,
     supplierName: string,
@@ -286,19 +332,28 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     }
 
     try {
-      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      // Use atomic batch for all operations
+      const batch = writeBatch(firestore);
+      const now = new Date();
 
-      // 1. Update incoming cheque status and type
+      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const incomingChequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
-      await updateDoc(incomingChequeRef, {
+
+      // Pre-generate outgoing cheque document ref (for linking)
+      const outgoingChequeRef = doc(chequesRef);
+
+      // 1. Update incoming cheque status, type, and outgoing reference
+      batch.update(incomingChequeRef, {
         chequeType: "مجير",
         status: CHEQUE_STATUS_AR.ENDORSED,
         endorsedTo: supplierName,
-        endorsedDate: new Date(),
+        endorsedDate: now,
+        endorsedToOutgoingId: outgoingChequeRef.id,
       });
 
       // 2. Create outgoing cheque entry
-      const outgoingChequeDoc = await addDoc(chequesRef, {
+      batch.set(outgoingChequeRef, {
         chequeNumber: cheque.chequeNumber,
         clientName: supplierName,
         amount: cheque.amount,
@@ -310,44 +365,43 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         dueDate: cheque.dueDate,
         bankName: cheque.bankName,
         notes: `شيك مظهر من العميل: ${cheque.clientName}`,
-        createdAt: new Date(),
+        createdAt: now,
         endorsedFromId: cheque.id,
         isEndorsedCheque: true,
       });
 
-      // 3. Update incoming cheque with outgoing reference
-      await updateDoc(incomingChequeRef, {
-        endorsedToOutgoingId: outgoingChequeDoc.id,
-      });
-
-      // 4. Create payment record for original client (decrease receivable)
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      await addDoc(paymentsRef, {
+      // 3. Create payment record for original client (decrease receivable)
+      const receiptDocRef = doc(paymentsRef);
+      batch.set(receiptDocRef, {
         clientName: cheque.clientName,
         amount: cheque.amount,
         type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: cheque.linkedTransactionId || "",
-        date: new Date(),
+        date: now,
         notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
-        createdAt: new Date(),
+        createdAt: now,
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
       });
 
-      // 5. Create payment record for supplier (decrease payable)
-      await addDoc(paymentsRef, {
+      // 4. Create payment record for supplier (decrease payable)
+      const disbursementDocRef = doc(paymentsRef);
+      batch.set(disbursementDocRef, {
         clientName: supplierName,
         amount: cheque.amount,
         type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: transactionId.trim() || cheque.linkedTransactionId || "",
-        date: new Date(),
+        date: now,
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
-        createdAt: new Date(),
+        createdAt: now,
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
       });
+
+      // Commit atomically - all 4 operations succeed or all fail
+      await batch.commit();
 
       toast({
         title: "تم التظهير بنجاح",
@@ -365,10 +419,23 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     }
   };
 
+  /**
+   * Cancel endorsement with atomic batch operation
+   * Ensures outgoing cheque deletion + incoming revert + payments deletion succeed or fail together
+   */
   const cancelEndorsement = async (cheque: Cheque): Promise<boolean> => {
     if (!user) return false;
 
     try {
+      // Query payment records first (before batch)
+      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsSnapshot = await getDocs(
+        query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
+      );
+
+      // Use atomic batch for all operations
+      const batch = writeBatch(firestore);
+
       // 1. Delete the outgoing cheque entry if it exists
       if (cheque.endorsedToOutgoingId) {
         const outgoingChequeRef = doc(
@@ -376,12 +443,12 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           `users/${user.uid}/cheques`,
           cheque.endorsedToOutgoingId
         );
-        await deleteDoc(outgoingChequeRef);
+        batch.delete(outgoingChequeRef);
       }
 
       // 2. Revert incoming cheque to pending status
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
-      await updateDoc(chequeRef, {
+      batch.update(chequeRef, {
         chequeType: "عادي",
         status: CHEQUE_STATUS_AR.PENDING,
         endorsedTo: null,
@@ -390,15 +457,12 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       });
 
       // 3. Delete endorsement payment records
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const paymentsSnapshot = await getDocs(
-        query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
-      );
+      paymentsSnapshot.docs.forEach((paymentDoc) => {
+        batch.delete(paymentDoc.ref);
+      });
 
-      const deletePromises = paymentsSnapshot.docs.map((doc) =>
-        deleteDoc(doc.ref)
-      );
-      await Promise.all(deletePromises);
+      // Commit atomically - all operations succeed or all fail
+      await batch.commit();
 
       toast({
         title: "تم إلغاء التظهير",

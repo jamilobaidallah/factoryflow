@@ -663,6 +663,7 @@ export class LedgerService {
 
   /**
    * Add a payment to an existing ledger entry
+   * Uses atomic batch operation to ensure payment + ARAP update succeed or fail together
    */
   async addPaymentToEntry(
     entry: LedgerEntry,
@@ -683,7 +684,12 @@ export class LedgerService {
 
       const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 
-      await addDoc(this.paymentsRef, {
+      // Use atomic batch for payment + ARAP update
+      const batch = writeBatch(firestore);
+
+      // Add payment document
+      const paymentDocRef = doc(this.paymentsRef);
+      batch.set(paymentDocRef, {
         clientName: entry.associatedParty || "غير محدد",
         amount: paymentAmount,
         type: paymentType,
@@ -693,15 +699,23 @@ export class LedgerService {
         createdAt: new Date(),
       });
 
-      // Update ledger entry AR/AP tracking if enabled
+      // Update ledger entry AR/AP tracking if enabled (in same batch)
       if (entry.isARAPEntry) {
         const newTotalPaid = safeAdd(entry.totalPaid || 0, paymentAmount);
         const newRemainingBalance = safeSubtract(entry.amount, newTotalPaid);
         const newStatus: "paid" | "unpaid" | "partial" =
           newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
 
-        await this.updateARAPTracking(entry.id, newTotalPaid, newRemainingBalance, newStatus);
+        const entryRef = this.getLedgerDocRef(entry.id);
+        batch.update(entryRef, {
+          totalPaid: newTotalPaid,
+          remainingBalance: newRemainingBalance,
+          paymentStatus: newStatus,
+        });
       }
+
+      // Commit atomically - both succeed or both fail
+      await batch.commit();
 
       return { success: true };
     } catch (error) {
@@ -715,6 +729,7 @@ export class LedgerService {
 
   /**
    * Add a quick payment (from QuickPayDialog)
+   * Uses atomic batch operation to ensure payment + ARAP update succeed or fail together
    */
   async addQuickPayment(data: QuickPaymentData): Promise<ServiceResult> {
     try {
@@ -728,8 +743,12 @@ export class LedgerService {
 
       const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 
+      // Use atomic batch for payment + ARAP update
+      const batch = writeBatch(firestore);
+
       // Add payment record
-      await addDoc(this.paymentsRef, {
+      const paymentDocRef = doc(this.paymentsRef);
+      batch.set(paymentDocRef, {
         clientName: data.associatedParty || "غير محدد",
         amount: data.amount,
         type: paymentType,
@@ -741,13 +760,21 @@ export class LedgerService {
         createdAt: new Date(),
       });
 
-      // Update ledger entry AR/AP tracking
+      // Update ledger entry AR/AP tracking (in same batch)
       const newTotalPaid = safeAdd(data.totalPaid, data.amount);
       const newRemainingBalance = safeSubtract(data.entryAmount, newTotalPaid);
       const newStatus: "paid" | "unpaid" | "partial" =
         newRemainingBalance === 0 ? "paid" : newRemainingBalance < data.entryAmount ? "partial" : "unpaid";
 
-      await this.updateARAPTracking(data.entryId, newTotalPaid, newRemainingBalance, newStatus);
+      const entryRef = this.getLedgerDocRef(data.entryId);
+      batch.update(entryRef, {
+        totalPaid: newTotalPaid,
+        remainingBalance: newRemainingBalance,
+        paymentStatus: newStatus,
+      });
+
+      // Commit atomically - both succeed or both fail
+      await batch.commit();
 
       return { success: true };
     } catch {
@@ -760,6 +787,7 @@ export class LedgerService {
 
   /**
    * Add a cheque to an existing ledger entry
+   * Uses atomic batch operation to ensure cheque + payments + ARAP update succeed or fail together
    */
   async addChequeToEntry(
     entry: LedgerEntry,
@@ -768,7 +796,7 @@ export class LedgerService {
     try {
       let chequeImageUrl = "";
 
-      // Upload cheque image if provided
+      // Upload cheque image if provided (external storage - before batch)
       if (formData.chequeImage) {
         try {
           const sanitizedName = sanitizeFileName(formData.chequeImage.name);
@@ -821,6 +849,9 @@ export class LedgerService {
         };
       }
 
+      // Use atomic batch for all Firestore operations
+      const batch = writeBatch(firestore);
+
       // Create the cheque record
       // Use the issueDate from form if provided, otherwise use current date
       const issueDate = formData.issueDate ? new Date(formData.issueDate) : new Date();
@@ -846,13 +877,15 @@ export class LedgerService {
         chequeData.endorsedDate = new Date();
       }
 
-      await addDoc(this.chequesRef, chequeData);
+      const chequeDocRef = doc(this.chequesRef);
+      batch.set(chequeDocRef, chequeData);
 
       // Handle different accounting flows
       if (accountingType === "cashed") {
         // Create payment record - use issueDate for the payment date
         const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
-        await addDoc(this.paymentsRef, {
+        const paymentDocRef = doc(this.paymentsRef);
+        batch.set(paymentDocRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,
           type: paymentType,
@@ -863,7 +896,7 @@ export class LedgerService {
           createdAt: new Date(),
         });
 
-        // Update AR/AP tracking
+        // Update AR/AP tracking (in same batch)
         if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
           if (chequeAmount <= entry.remainingBalance) {
             const newTotalPaid = safeAdd(entry.totalPaid || 0, chequeAmount);
@@ -871,12 +904,18 @@ export class LedgerService {
             const newStatus: "paid" | "unpaid" | "partial" =
               newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
 
-            await this.updateARAPTracking(entry.id, newTotalPaid, newRemainingBalance, newStatus);
+            const entryRef = this.getLedgerDocRef(entry.id);
+            batch.update(entryRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newStatus,
+            });
           }
         }
       } else if (accountingType === "endorsed") {
         // Create two payment records with noCashMovement flag - use issueDate
-        await addDoc(this.paymentsRef, {
+        const receiptDocRef = doc(this.paymentsRef);
+        batch.set(receiptDocRef, {
           clientName: entry.associatedParty || "غير محدد",
           amount: chequeAmount,
           type: PAYMENT_TYPES.RECEIPT,
@@ -888,7 +927,8 @@ export class LedgerService {
           noCashMovement: true,
         });
 
-        await addDoc(this.paymentsRef, {
+        const disbursementDocRef = doc(this.paymentsRef);
+        batch.set(disbursementDocRef, {
           clientName: formData.endorsedToName,
           amount: chequeAmount,
           type: PAYMENT_TYPES.DISBURSEMENT,
@@ -900,7 +940,10 @@ export class LedgerService {
           noCashMovement: true,
         });
       }
-      // For postponed, no payment record is created
+      // For postponed, no payment record is created - just the cheque
+
+      // Commit atomically - all operations succeed or all fail
+      await batch.commit();
 
       return { success: true };
     } catch (error) {

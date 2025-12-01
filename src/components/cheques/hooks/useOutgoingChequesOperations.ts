@@ -11,11 +11,13 @@ import {
   query,
   where,
   getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -94,6 +96,10 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
     }
   };
 
+  /**
+   * Submit outgoing cheque with atomic batch operation
+   * Ensures cheque + payment + ARAP update succeed or fail together
+   */
   const submitCheque = async (
     formData: ChequeFormData,
     editingCheque: Cheque | null,
@@ -103,7 +109,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
     if (!user) return false;
 
     try {
-      // Upload image if provided
+      // Upload image first (external storage - before batch)
       let chequeImageUrl: string | undefined = undefined;
       if (chequeImage) {
         try {
@@ -180,20 +186,26 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
         // Important: Create payment record when cheque changes from pending to cleared
         if (wasPending && isNowCleared) {
-          // Use provided payment date or fall back to current date
+          // Use atomic batch for status change operations
+          const batch = writeBatch(firestore);
           const effectivePaymentDate = paymentDate || new Date();
 
           // إضافة تاريخ الصرف عند تغيير الحالة إلى تم الصرف
           updateData.clearedDate = effectivePaymentDate;
 
-          // Create a Payment record (disbursement for outgoing cheque)
+          // Pre-generate payment document ref
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const paymentDocRef = doc(paymentsRef);
           const chequeAmount = parseFloat(formData.amount);
 
-          const paymentRef = await addDoc(paymentsRef, {
+          // Store the payment ID in the cheque for later reference
+          updateData.linkedPaymentId = paymentDocRef.id;
+
+          // Add payment to batch
+          batch.set(paymentDocRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
-            type: PAYMENT_TYPES.DISBURSEMENT, // Disbursement - we paid the supplier
+            type: PAYMENT_TYPES.DISBURSEMENT,
             method: "cheque",
             linkedTransactionId: formData.linkedTransactionId || "",
             linkedChequeId: editingCheque.id,
@@ -202,28 +214,61 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             createdAt: new Date(),
           });
 
-          // Store the payment ID in the cheque for later reference
-          updateData.linkedPaymentId = paymentRef.id;
+          // Update cheque in batch
+          batch.update(chequeRef, updateData);
 
-          // تحديث تتبع الذمم الدائنة (AP) إذا كان هناك قيد مرتبط
-          // Update Accounts Payable tracking if linked to a ledger entry
+          // Inline ARAP update in batch (if linked)
           if (formData.linkedTransactionId) {
-            await updateARAPTracking(formData.linkedTransactionId, chequeAmount, true);
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
+                const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
+                const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+                batch.update(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
           }
+
+          // Commit atomically
+          await batch.commit();
+
+          toast({
+            title: "تم التحديث بنجاح",
+            description: `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`,
+          });
         } else if (wasCleared && isNowBouncedOrReverted) {
           // مهم: حذف سجل الدفع عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
           // Important: Delete payment record when cheque is bounced or reverted
           const chequeAmount = parseFloat(formData.amount);
 
-          // Delete the associated payment record
+          // Query payments before batch
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          let paymentsToDelete: { id: string }[] = [];
+
           const paymentQuery = query(
             paymentsRef,
             where("linkedChequeId", "==", editingCheque.id)
           );
           const paymentSnapshot = await getDocs(paymentQuery);
 
-          // If we don't find by linkedChequeId, try finding by linkedTransactionId and amount
           if (paymentSnapshot.empty && formData.linkedTransactionId) {
             const altPaymentQuery = query(
               paymentsRef,
@@ -232,50 +277,86 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
               where("amount", "==", chequeAmount)
             );
             const altPaymentSnapshot = await getDocs(altPaymentQuery);
-            for (const paymentDoc of altPaymentSnapshot.docs) {
-              await deleteDoc(doc(firestore, `users/${user.uid}/payments`, paymentDoc.id));
-            }
+            paymentsToDelete = altPaymentSnapshot.docs.map(d => ({ id: d.id }));
           } else {
-            for (const paymentDoc of paymentSnapshot.docs) {
-              await deleteDoc(doc(firestore, `users/${user.uid}/payments`, paymentDoc.id));
-            }
+            paymentsToDelete = paymentSnapshot.docs.map(d => ({ id: d.id }));
           }
 
           // إزالة تاريخ الصرف ومرجع الدفع من الشيك
           updateData.clearedDate = null;
           updateData.linkedPaymentId = null;
 
-          // إرجاع تتبع الذمم الدائنة - استرداد المبلغ المدفوع
-          // Revert Accounts Payable tracking - restore the paid amount
+          // Use atomic batch for reversal operations
+          const batch = writeBatch(firestore);
+
+          // Delete payments in batch
+          paymentsToDelete.forEach(payment => {
+            batch.delete(doc(firestore, `users/${user.uid}/payments`, payment.id));
+          });
+
+          // Update cheque in batch
+          batch.update(chequeRef, updateData);
+
+          // Inline ARAP reversal in batch (if linked)
           if (formData.linkedTransactionId) {
-            await updateARAPTracking(formData.linkedTransactionId, chequeAmount, false);
+            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", formData.linkedTransactionId.trim())
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const transactionAmount = ledgerData.amount || 0;
+                const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, chequeAmount));
+                const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
+                const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+                batch.update(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
           }
-        }
 
-        await updateDoc(chequeRef, updateData);
+          // Commit atomically
+          await batch.commit();
 
-        let toastDescription = "تم تحديث بيانات الشيك الصادر";
-        if (wasPending && isNowCleared) {
-          toastDescription = `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`;
-        } else if (wasCleared && isNowBouncedOrReverted) {
+          let toastDescription: string;
           if (newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced") {
             toastDescription = `تم تسجيل الشيك رقم ${formData.chequeNumber} كمرتجع وإلغاء سند الصرف`;
           } else {
             toastDescription = `تم إرجاع الشيك رقم ${formData.chequeNumber} إلى قيد الانتظار وإلغاء سند الصرف`;
           }
-        }
 
-        toast({
-          title: "تم التحديث بنجاح",
-          description: toastDescription,
-        });
+          toast({
+            title: "تم التحديث بنجاح",
+            description: toastDescription,
+          });
+        } else {
+          // Simple update - no status change affecting payments
+          await updateDoc(chequeRef, updateData);
+          toast({
+            title: "تم التحديث بنجاح",
+            description: "تم تحديث بيانات الشيك الصادر",
+          });
+        }
       } else {
+        // Creating new cheque - simple add
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
-          type: CHEQUE_TYPES.OUTGOING, // Always outgoing
+          type: CHEQUE_TYPES.OUTGOING,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),
