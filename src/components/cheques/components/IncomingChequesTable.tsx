@@ -9,8 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Edit, Trash2, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import { Edit, Trash2, Image as ImageIcon, RefreshCw, X, Copy } from "lucide-react";
 import { Cheque } from "../types/cheques";
+import { useToast } from "@/hooks/use-toast";
 
 interface IncomingChequesTableProps {
   cheques: Cheque[];
@@ -29,6 +30,24 @@ export function IncomingChequesTable({
   onCancelEndorsement,
   onViewImage,
 }: IncomingChequesTableProps) {
+  const { toast } = useToast();
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "تم النسخ",
+        description: "تم نسخ رقم المعاملة",
+      });
+    } catch {
+      toast({
+        title: "خطأ",
+        description: "فشل في النسخ",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "تم الصرف":
@@ -108,16 +127,38 @@ export function IncomingChequesTable({
             <TableCell className="font-mono text-xs">
               <div className="space-y-1">
                 {cheque.linkedTransactionId && (
-                  <div title="رقم المعاملة المرتبطة">
-                    {cheque.linkedTransactionId}
+                  <div className="flex items-center gap-1" title="رقم المعاملة المرتبطة">
+                    <span>{cheque.linkedTransactionId}</span>
+                    <button
+                      onClick={() => copyToClipboard(cheque.linkedTransactionId)}
+                      className="p-0.5 hover:bg-gray-100 rounded"
+                      title="نسخ"
+                    >
+                      <Copy className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                    </button>
                   </div>
                 )}
-                {cheque.linkedPaymentId && (
-                  <div className="text-green-600" title="رقم الدفعة">
-                    دفعة: {cheque.linkedPaymentId.slice(-8)}
+                {cheque.paidTransactionIds && cheque.paidTransactionIds.length > 0 && (
+                  <div className="space-y-0.5">
+                    {cheque.paidTransactionIds.map((txnId, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded border border-green-200 text-xs"
+                        title="معاملة مدفوعة"
+                      >
+                        <span className="flex-1">{txnId}</span>
+                        <button
+                          onClick={() => copyToClipboard(txnId)}
+                          className="p-0.5 hover:bg-green-100 rounded"
+                          title="نسخ"
+                        >
+                          <Copy className="w-3 h-3 text-green-500 hover:text-green-700" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {!cheque.linkedTransactionId && !cheque.linkedPaymentId && "-"}
+                {!cheque.linkedTransactionId && (!cheque.paidTransactionIds || cheque.paidTransactionIds.length === 0) && "-"}
               </div>
             </TableCell>
             <TableCell>

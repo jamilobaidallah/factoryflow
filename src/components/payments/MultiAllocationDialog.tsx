@@ -65,8 +65,8 @@ interface MultiAllocationDialogProps {
   onSuccess?: () => void;
   /** Pre-filled data when cashing a cheque */
   chequeData?: ChequeData;
-  /** Callback when cheque cashing succeeds, returns paymentId */
-  onChequeSuccess?: (paymentId: string) => void;
+  /** Callback when cheque cashing succeeds, returns paymentId and transaction IDs that were paid */
+  onChequeSuccess?: (paymentId: string, paidTransactionIds: string[]) => void;
 }
 
 export function MultiAllocationDialog({
@@ -322,7 +322,9 @@ export function MultiAllocationDialog({
 
       // Call appropriate success callback
       if (isChequeCashing && onChequeSuccess) {
-        onChequeSuccess(paymentId);
+        // Extract the transaction IDs that were paid
+        const paidTransactionIds = activeAllocations.map((a) => a.transactionId);
+        onChequeSuccess(paymentId, paidTransactionIds);
       } else {
         onSuccess?.();
       }
