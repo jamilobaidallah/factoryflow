@@ -60,21 +60,35 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
       const mergeSource = (existing: ClientSource, newSource: ClientSource): ClientSource => {
         if (existing === newSource) return existing;
         if (existing === 'multiple' || newSource === 'multiple') return 'multiple';
-        // If combining different sources, use 'both' for ledger+partner, 'multiple' if client involved
         if ((existing === 'client' || newSource === 'client') && existing !== newSource) {
           return 'multiple';
         }
         return 'both';
       };
 
-      // 1. Fetch from ledger (associatedParty with AR/AP entries)
+      // Build queries
       const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
       const ledgerQuery = query(
         ledgerRef,
-        where('isARAPEntry', '==', true)
+        where('isARAPEntry', '==', true),
+        limit(2000) // Safety limit for scalability
       );
-      const ledgerSnapshot = await getDocs(ledgerQuery);
 
+      const partnersRef = collection(firestore, `users/${user.uid}/partners`);
+      const partnersQuery = query(partnersRef, limit(500));
+
+      // Build optional clients query
+      const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+      const clientsQuery = query(clientsRef, orderBy('name'), limit(500));
+
+      // Execute all queries in parallel for better performance
+      const [ledgerSnapshot, partnersSnapshot, clientsSnapshot] = await Promise.all([
+        getDocs(ledgerQuery),
+        getDocs(partnersQuery),
+        includeClientsCollection ? getDocs(clientsQuery) : Promise.resolve(null),
+      ]);
+
+      // 1. Process ledger entries
       ledgerSnapshot.forEach((doc) => {
         const data = doc.data();
         const partyName = data.associatedParty;
@@ -83,11 +97,8 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
           const existing = clientMap.get(trimmedName);
           const remainingBalance = data.remainingBalance || 0;
           const paymentStatus = data.paymentStatus || 'unpaid';
-          const entryType = data.type; // 'دخل' or 'مصروف'
+          const entryType = data.type;
 
-          // Calculate balance: positive = they owe us (receivable), negative = we owe them (payable)
-          // For income entries (دخل): remaining balance is what client owes us (positive)
-          // For expense entries (مصروف): remaining balance is what we owe supplier (negative)
           let balanceContribution = 0;
           if (paymentStatus !== 'paid' && remainingBalance > 0) {
             balanceContribution = entryType === 'مصروف' ? -remainingBalance : remainingBalance;
@@ -108,10 +119,7 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
         }
       });
 
-      // 2. Fetch from partners collection
-      const partnersRef = collection(firestore, `users/${user.uid}/partners`);
-      const partnersSnapshot = await getDocs(partnersRef);
-
+      // 2. Process partners
       partnersSnapshot.forEach((doc) => {
         const data = doc.data();
         const partnerName = data.name;
@@ -132,12 +140,8 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
         }
       });
 
-      // 3. Optionally fetch from clients collection
-      if (includeClientsCollection) {
-        const clientsRef = collection(firestore, `users/${user.uid}/clients`);
-        const clientsQuery = query(clientsRef, orderBy('name'), limit(500));
-        const clientsSnapshot = await getDocs(clientsQuery);
-
+      // 3. Process clients (if fetched)
+      if (clientsSnapshot) {
         clientsSnapshot.forEach((doc) => {
           const data = doc.data();
           const clientName = data.name;
