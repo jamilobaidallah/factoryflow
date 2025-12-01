@@ -23,6 +23,7 @@ import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 import { Cheque, ChequeFormData, initialChequeFormData } from "./types/cheques";
 import { useChequesData } from "./hooks/useChequesData";
 import { useChequesOperations } from "./hooks/useChequesOperations";
+import { useAllClients } from "@/hooks/useAllClients";
 
 // Components
 import { ChequesFormDialog } from "./components/ChequesFormDialog";
@@ -32,7 +33,6 @@ import {
   ClearChequeDialog,
   BounceChequeDialog,
 } from "./components/ChequeDialogs";
-import { PaymentDateModal } from "./components/PaymentDateModal";
 import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
 import { doc, updateDoc } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
@@ -54,6 +54,7 @@ export default function ChequesPage() {
     currentPage,
   });
   const { submitCheque, deleteCheque, endorseCheque, clearCheque, bounceCheque } = useChequesOperations();
+  const { clients, loading: clientsLoading } = useAllClients();
 
   // UI state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -77,9 +78,7 @@ export default function ChequesPage() {
   const [bounceDialogOpen, setBounceDialogOpen] = useState(false);
   const [chequeToBounce, setChequeToBounce] = useState<Cheque | null>(null);
 
-  // Payment date modal state
-  const [paymentDateModalOpen, setPaymentDateModalOpen] = useState(false);
-  const [paymentDateContext, setPaymentDateContext] = useState<'submit' | 'clear'>('submit');
+  // Pending form data for cheque cashing flow
   const [pendingFormData, setPendingFormData] = useState<ChequeFormData | null>(null);
 
   // Multi-allocation dialog state for cheque cashing
@@ -91,7 +90,6 @@ export default function ChequesPage() {
     amount: number;
     dueDate: Date;
     chequeType: "incoming" | "outgoing";
-    paymentDate?: Date;
   } | null>(null);
 
   const resetForm = () => {
@@ -135,11 +133,18 @@ export default function ChequesPage() {
     const isNowCleared = clearedStatuses.includes(formData.status);
 
     if (editingCheque && wasPending && isNowCleared) {
-      // Step 1: Store form data and open PaymentDateModal first
+      // Go directly to MultiAllocationDialog (date picker is inside)
       setPendingFormData(formData);
-      setPaymentDateContext('submit');
-      setPaymentDateModalOpen(true);
+      setChequeToCash({
+        chequeId: editingCheque.id,
+        chequeNumber: formData.chequeNumber,
+        clientName: formData.clientName,
+        amount: parseFloat(formData.amount),
+        dueDate: new Date(formData.dueDate),
+        chequeType: formData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+      });
       setIsDialogOpen(false); // Close the cheque edit dialog
+      setMultiAllocationDialogOpen(true);
       return;
     }
 
@@ -189,62 +194,18 @@ export default function ChequesPage() {
   const handleClear = async () => {
     if (!chequeToClear) return;
 
-    // Step 1: Open PaymentDateModal first to select the date
-    setPaymentDateContext('clear');
-    setPaymentDateModalOpen(true);
+    // Go directly to MultiAllocationDialog (date picker is inside)
+    setChequeToCash({
+      chequeId: chequeToClear.id,
+      chequeNumber: chequeToClear.chequeNumber,
+      clientName: chequeToClear.clientName,
+      amount: chequeToClear.amount,
+      dueDate: chequeToClear.dueDate instanceof Date ? chequeToClear.dueDate : new Date(chequeToClear.dueDate),
+      chequeType: chequeToClear.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+    });
     setClearDialogOpen(false);
-    // Note: chequeToClear is kept for use in handlePaymentDateConfirm
-  };
-
-  const clearChequeWithDate = async (paymentDate?: Date) => {
-    if (!chequeToClear) return;
-    setLoading(true);
-    const success = await clearCheque(chequeToClear, paymentDate);
-    if (success) {
-      setChequeToClear(null);
-    }
-    setLoading(false);
-  };
-
-  const handlePaymentDateConfirm = async (paymentDate: Date) => {
-    setPaymentDateModalOpen(false);
-
-    if (paymentDateContext === 'submit' && pendingFormData && editingCheque) {
-      // Step 2: Open MultiAllocationDialog with the selected payment date (from edit form)
-      setChequeToCash({
-        chequeId: editingCheque.id,
-        chequeNumber: pendingFormData.chequeNumber,
-        clientName: pendingFormData.clientName,
-        amount: parseFloat(pendingFormData.amount),
-        dueDate: new Date(pendingFormData.dueDate),
-        chequeType: pendingFormData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
-        paymentDate: paymentDate, // Pass the selected date to MultiAllocationDialog
-      });
-      setMultiAllocationDialogOpen(true);
-    } else if (paymentDateContext === 'clear' && chequeToClear) {
-      // Step 2: Open MultiAllocationDialog with the selected payment date (from "Mark as Cleared")
-      setChequeToCash({
-        chequeId: chequeToClear.id,
-        chequeNumber: chequeToClear.chequeNumber,
-        clientName: chequeToClear.clientName,
-        amount: chequeToClear.amount,
-        dueDate: chequeToClear.dueDate instanceof Date ? chequeToClear.dueDate : new Date(chequeToClear.dueDate),
-        chequeType: chequeToClear.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
-        paymentDate: paymentDate, // Pass the selected date to MultiAllocationDialog
-      });
-      setChequeToClear(null); // Clear now since we've captured the data
-      setMultiAllocationDialogOpen(true);
-    }
-  };
-
-  const handlePaymentDateCancel = () => {
-    setPaymentDateModalOpen(false);
-    setPendingFormData(null);
-
-    // If we were in the middle of clearing, reopen the clear dialog
-    if (paymentDateContext === 'clear' && chequeToClear) {
-      setClearDialogOpen(true);
-    }
+    setChequeToClear(null);
+    setMultiAllocationDialogOpen(true);
   };
 
   const handleBounce = async () => {
@@ -420,6 +381,8 @@ export default function ChequesPage() {
         loading={loading}
         uploadingImage={uploadingImage}
         onSubmit={handleSubmit}
+        clients={clients}
+        clientsLoading={clientsLoading}
       />
 
       <ImageViewerDialog
@@ -458,26 +421,6 @@ export default function ChequesPage() {
         cheque={chequeToBounce}
         loading={loading}
         onBounce={handleBounce}
-      />
-
-      <PaymentDateModal
-        isOpen={paymentDateModalOpen}
-        onClose={handlePaymentDateCancel}
-        onConfirm={handlePaymentDateConfirm}
-        defaultDate={
-          paymentDateContext === 'submit' && editingCheque?.dueDate
-            ? new Date(editingCheque.dueDate)
-            : paymentDateContext === 'clear' && chequeToClear?.dueDate
-            ? new Date(chequeToClear.dueDate)
-            : new Date()
-        }
-        chequeNumber={
-          paymentDateContext === 'submit' && editingCheque?.chequeNumber
-            ? editingCheque.chequeNumber
-            : paymentDateContext === 'clear' && chequeToClear?.chequeNumber
-            ? chequeToClear.chequeNumber
-            : ""
-        }
       />
 
       {confirmationDialog}

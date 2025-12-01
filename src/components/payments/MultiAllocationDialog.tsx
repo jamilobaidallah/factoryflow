@@ -56,8 +56,6 @@ interface ChequeData {
   amount: number;
   dueDate: Date;
   chequeType: "incoming" | "outgoing";
-  /** Payment date selected from the date modal */
-  paymentDate?: Date;
 }
 
 interface MultiAllocationDialogProps {
@@ -112,8 +110,8 @@ export function MultiAllocationDialog({
   // Initialize form with cheque data when in cheque cashing mode
   useEffect(() => {
     if (chequeData && open) {
-      // Use the payment date from the date modal if provided, otherwise use dueDate
-      const effectiveDate = chequeData.paymentDate || chequeData.dueDate;
+      // Default to today's date for cashing (user can change it in the dialog)
+      const effectiveDate = new Date();
       setFormData({
         clientName: chequeData.clientName,
         amount: chequeData.amount.toString(),
@@ -430,7 +428,10 @@ export function MultiAllocationDialog({
 
             {/* Payment Date */}
             <div className="space-y-2">
-              <Label htmlFor="date">التاريخ</Label>
+              <Label htmlFor="date">
+                {isChequeCashing ? "تاريخ التحصيل" : "التاريخ"}
+                {isChequeCashing && <span className="text-xs text-gray-500 mr-2">(تاريخ صرف الشيك)</span>}
+              </Label>
               <Input
                 id="date"
                 type="date"
