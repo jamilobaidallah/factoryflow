@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
+import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
 
 // Helper function to generate unique asset number
 const generateAssetNumber = (): string => {
@@ -61,10 +62,10 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
     if (!user) return false;
 
     try {
-      const purchaseCost = parseFloat(formData.purchaseCost);
-      const salvageValue = parseFloat(formData.salvageValue);
-      const usefulLifeYears = parseFloat(formData.usefulLifeYears);
-      const usefulLifeMonths = usefulLifeYears * 12;
+      const purchaseCost = parseAmount(formData.purchaseCost);
+      const salvageValue = parseAmount(formData.salvageValue);
+      const usefulLifeYears = parseAmount(formData.usefulLifeYears);
+      const usefulLifeMonths = safeMultiply(usefulLifeYears, 12);
 
       // Validation
       if (purchaseCost <= salvageValue) {
@@ -77,7 +78,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       }
 
       // Calculate monthly depreciation (Straight-Line Method)
-      const monthlyDepreciation = (purchaseCost - salvageValue) / usefulLifeMonths;
+      const monthlyDepreciation = safeDivide(safeSubtract(purchaseCost, salvageValue), usefulLifeMonths);
       const bookValue = purchaseCost; // Initial book value
 
       const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
@@ -203,17 +204,19 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       // Process each asset
       for (const asset of activeAssets) {
         // Check if asset is fully depreciated
-        if (asset.accumulatedDepreciation >= (asset.purchaseCost - asset.salvageValue)) {
+        const depreciableTotal = safeSubtract(asset.purchaseCost, asset.salvageValue);
+        if (asset.accumulatedDepreciation >= depreciableTotal) {
           continue; // Skip fully depreciated assets
         }
 
+        const remainingDepreciable = safeSubtract(depreciableTotal, asset.accumulatedDepreciation);
         const depreciationAmount = Math.min(
           asset.monthlyDepreciation,
-          (asset.purchaseCost - asset.salvageValue) - asset.accumulatedDepreciation
+          remainingDepreciable
         );
 
-        const newAccumulatedDepreciation = asset.accumulatedDepreciation + depreciationAmount;
-        const newBookValue = asset.purchaseCost - newAccumulatedDepreciation;
+        const newAccumulatedDepreciation = safeAdd(asset.accumulatedDepreciation, depreciationAmount);
+        const newBookValue = safeSubtract(asset.purchaseCost, newAccumulatedDepreciation);
 
         // Create depreciation record
         const recordsRef = collection(firestore, `users/${user.uid}/depreciation_records`);
@@ -242,7 +245,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           lastDepreciationDate: new Date(),
         });
 
-        totalDepreciation += depreciationAmount;
+        totalDepreciation = safeAdd(totalDepreciation, depreciationAmount);
       }
 
       // Create ledger entry for total depreciation
@@ -278,7 +281,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
 
       toast({
         title: "تم تسجيل الاستهلاك بنجاح",
-        description: `إجمالي الاستهلاك: ${totalDepreciation.toFixed(2)} دينار`,
+        description: `إجمالي الاستهلاك: ${roundCurrency(totalDepreciation).toFixed(2)} دينار`,
       });
       return true;
     } catch (error) {

@@ -44,6 +44,15 @@ import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { getCategoryType, generateTransactionId } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { calculateWeightedAverageCost, calculateLandedCostUnitPrice } from "@/lib/inventory-utils";
+import {
+  parseAmount,
+  safeAdd,
+  safeSubtract,
+  safeMultiply,
+  safeDivide,
+  sumAmounts,
+  roundCurrency
+} from "@/lib/currency";
 
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -318,7 +327,7 @@ export class LedgerService {
         transactionId,
         description: formData.description,
         type: entryType,
-        amount: parseFloat(formData.amount),
+        amount: parseAmount(formData.amount),
         category: formData.category,
         subCategory: formData.subCategory,
         associatedParty: formData.associatedParty,
@@ -349,7 +358,7 @@ export class LedgerService {
     try {
       const entryType = getCategoryType(formData.category, formData.subCategory);
       const transactionId = generateTransactionId();
-      const totalAmount = parseFloat(formData.amount);
+      const totalAmount = parseAmount(formData.amount);
 
       // Validations
       const validationError = this.validateCreateOptions(formData, options, totalAmount);
@@ -384,7 +393,7 @@ export class LedgerService {
         ...(formData.trackARAP && {
           isARAPEntry: true,
           totalPaid: initialPaid,
-          remainingBalance: totalAmount - initialPaid,
+          remainingBalance: safeSubtract(totalAmount, initialPaid),
           paymentStatus: initialStatus,
         }),
       });
@@ -439,7 +448,7 @@ export class LedgerService {
       if (formData.immediateSettlement) {
         const cashAmount =
           options.hasIncomingCheck && options.checkFormData
-            ? totalAmount - parseFloat(options.checkFormData.chequeAmount)
+            ? safeSubtract(totalAmount, parseAmount(options.checkFormData.chequeAmount))
             : totalAmount;
         this.handleImmediateSettlementBatch(batch, transactionId, formData, entryType, cashAmount);
       }
@@ -660,14 +669,14 @@ export class LedgerService {
     formData: PaymentFormData
   ): Promise<ServiceResult> {
     try {
-      const paymentAmount = parseFloat(formData.amount);
+      const paymentAmount = parseAmount(formData.amount);
 
       // Validate payment amount
       if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
         if (paymentAmount > entry.remainingBalance) {
           return {
             success: false,
-            error: `المبلغ المتبقي هو ${entry.remainingBalance.toFixed(2)} دينار فقط`,
+            error: `المبلغ المتبقي هو ${roundCurrency(entry.remainingBalance).toFixed(2)} دينار فقط`,
           };
         }
       }
@@ -686,8 +695,8 @@ export class LedgerService {
 
       // Update ledger entry AR/AP tracking if enabled
       if (entry.isARAPEntry) {
-        const newTotalPaid = (entry.totalPaid || 0) + paymentAmount;
-        const newRemainingBalance = entry.amount - newTotalPaid;
+        const newTotalPaid = safeAdd(entry.totalPaid || 0, paymentAmount);
+        const newRemainingBalance = safeSubtract(entry.amount, newTotalPaid);
         const newStatus: "paid" | "unpaid" | "partial" =
           newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
 
@@ -713,7 +722,7 @@ export class LedgerService {
       if (data.isARAPEntry && data.amount > data.remainingBalance) {
         return {
           success: false,
-          error: `المبلغ المتبقي هو ${data.remainingBalance.toFixed(2)} دينار فقط`,
+          error: `المبلغ المتبقي هو ${roundCurrency(data.remainingBalance).toFixed(2)} دينار فقط`,
         };
       }
 
@@ -733,8 +742,8 @@ export class LedgerService {
       });
 
       // Update ledger entry AR/AP tracking
-      const newTotalPaid = data.totalPaid + data.amount;
-      const newRemainingBalance = data.entryAmount - newTotalPaid;
+      const newTotalPaid = safeAdd(data.totalPaid, data.amount);
+      const newRemainingBalance = safeSubtract(data.entryAmount, newTotalPaid);
       const newStatus: "paid" | "unpaid" | "partial" =
         newRemainingBalance === 0 ? "paid" : newRemainingBalance < data.entryAmount ? "partial" : "unpaid";
 
@@ -791,7 +800,7 @@ export class LedgerService {
       }
 
       const chequeDirection = entry.type === "دخل" ? CHEQUE_TYPES.INCOMING : CHEQUE_TYPES.OUTGOING;
-      const chequeAmount = parseFloat(formData.amount);
+      const chequeAmount = parseAmount(formData.amount);
       const accountingType = formData.accountingType || "cashed";
 
       // Determine the correct status based on accounting type
@@ -857,8 +866,8 @@ export class LedgerService {
         // Update AR/AP tracking
         if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
           if (chequeAmount <= entry.remainingBalance) {
-            const newTotalPaid = (entry.totalPaid || 0) + chequeAmount;
-            const newRemainingBalance = entry.amount - newTotalPaid;
+            const newTotalPaid = safeAdd(entry.totalPaid || 0, chequeAmount);
+            const newRemainingBalance = safeSubtract(entry.amount, newTotalPaid);
             const newStatus: "paid" | "unpaid" | "partial" =
               newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
 
@@ -916,11 +925,11 @@ export class LedgerService {
         itemId: "",
         itemName: formData.itemName,
         type: movementType,
-        quantity: parseFloat(formData.quantity),
+        quantity: parseAmount(formData.quantity),
         unit: formData.unit,
-        thickness: formData.thickness ? parseFloat(formData.thickness) : null,
-        width: formData.width ? parseFloat(formData.width) : null,
-        length: formData.length ? parseFloat(formData.length) : null,
+        thickness: formData.thickness ? parseAmount(formData.thickness) : null,
+        width: formData.width ? parseAmount(formData.width) : null,
+        length: formData.length ? parseAmount(formData.length) : null,
         linkedTransactionId: entry.transactionId,
         notes: formData.notes || `مرتبط بالمعاملة: ${entry.description}`,
         createdAt: new Date(),
@@ -1300,7 +1309,7 @@ export class LedgerService {
     inventoryFormData: InventoryFormData
   ): Promise<ServiceResult> {
     const movementType = entryType === "مصروف" ? "دخول" : "خروج";
-    const quantityChange = parseFloat(inventoryFormData.quantity);
+    const quantityChange = parseAmount(inventoryFormData.quantity);
 
     const itemQuery = query(this.inventoryRef, where("itemName", "==", inventoryFormData.itemName));
     const itemSnapshot = await getDocs(itemQuery);
@@ -1314,7 +1323,7 @@ export class LedgerService {
       const currentQuantity = existingItemData.quantity || 0;
       const currentUnitPrice = existingItemData.unitPrice || 0;
       const newQuantity =
-        movementType === "دخول" ? currentQuantity + quantityChange : currentQuantity - quantityChange;
+        movementType === "دخول" ? safeAdd(currentQuantity, quantityChange) : safeSubtract(currentQuantity, quantityChange);
 
       if (newQuantity < 0) {
         return {
@@ -1327,9 +1336,9 @@ export class LedgerService {
 
       if (movementType === "دخول" && formData.amount) {
         // Calculate total landed cost (purchase + shipping + other costs)
-        const shippingCost = inventoryFormData.shippingCost ? parseFloat(inventoryFormData.shippingCost) : 0;
-        const otherCosts = inventoryFormData.otherCosts ? parseFloat(inventoryFormData.otherCosts) : 0;
-        const purchaseAmount = parseFloat(formData.amount);
+        const shippingCost = inventoryFormData.shippingCost ? parseAmount(inventoryFormData.shippingCost) : 0;
+        const otherCosts = inventoryFormData.otherCosts ? parseAmount(inventoryFormData.otherCosts) : 0;
+        const purchaseAmount = parseAmount(formData.amount);
 
         // Use utility function to calculate landed cost unit price
         const purchaseUnitPrice = calculateLandedCostUnitPrice(
@@ -1347,7 +1356,7 @@ export class LedgerService {
           purchaseUnitPrice
         );
 
-        const totalLandedCost = purchaseAmount + shippingCost + otherCosts;
+        const totalLandedCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
 
         batch.update(itemDocRef, {
           quantity: newQuantity,
@@ -1365,7 +1374,7 @@ export class LedgerService {
       // Auto-record COGS when selling
       if (entryType === "إيراد" && movementType === "خروج") {
         const unitCost = existingItemData.unitPrice || 0;
-        const cogsAmount = quantityChange * unitCost;
+        const cogsAmount = safeMultiply(quantityChange, unitCost);
 
         const cogsDocRef = doc(this.ledgerRef);
         batch.set(cogsDocRef, {
@@ -1378,7 +1387,7 @@ export class LedgerService {
           date: new Date(formData.date),
           linkedTransactionId: transactionId,
           autoGenerated: true,
-          notes: `حساب تلقائي: ${quantityChange} × ${unitCost.toFixed(2)} = ${cogsAmount.toFixed(2)} دينار`,
+          notes: `حساب تلقائي: ${quantityChange} × ${roundCurrency(unitCost).toFixed(2)} = ${roundCurrency(cogsAmount).toFixed(2)} دينار`,
           createdAt: new Date(),
         });
       }
@@ -1391,10 +1400,10 @@ export class LedgerService {
       }
 
       // Calculate total landed cost (purchase + shipping + other costs)
-      const shippingCost = inventoryFormData.shippingCost ? parseFloat(inventoryFormData.shippingCost) : 0;
-      const otherCosts = inventoryFormData.otherCosts ? parseFloat(inventoryFormData.otherCosts) : 0;
-      const purchaseAmount = formData.amount ? parseFloat(formData.amount) : 0;
-      const totalLandedCost = purchaseAmount + shippingCost + otherCosts;
+      const shippingCost = inventoryFormData.shippingCost ? parseAmount(inventoryFormData.shippingCost) : 0;
+      const otherCosts = inventoryFormData.otherCosts ? parseAmount(inventoryFormData.otherCosts) : 0;
+      const purchaseAmount = formData.amount ? parseAmount(formData.amount) : 0;
+      const totalLandedCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
 
       // Use utility function to calculate landed cost unit price
       const calculatedUnitPrice = calculateLandedCostUnitPrice(
@@ -1412,9 +1421,9 @@ export class LedgerService {
         quantity: quantityChange,
         unit: inventoryFormData.unit,
         unitPrice: calculatedUnitPrice,
-        thickness: inventoryFormData.thickness ? parseFloat(inventoryFormData.thickness) : null,
-        width: inventoryFormData.width ? parseFloat(inventoryFormData.width) : null,
-        length: inventoryFormData.length ? parseFloat(inventoryFormData.length) : null,
+        thickness: inventoryFormData.thickness ? parseAmount(inventoryFormData.thickness) : null,
+        width: inventoryFormData.width ? parseAmount(inventoryFormData.width) : null,
+        length: inventoryFormData.length ? parseAmount(inventoryFormData.length) : null,
         minStock: 0,
         location: "",
         notes: `تم الإنشاء تلقائياً من المعاملة: ${formData.description}`,
@@ -1433,9 +1442,9 @@ export class LedgerService {
       type: movementType,
       quantity: quantityChange,
       unit: inventoryFormData.unit,
-      thickness: inventoryFormData.thickness ? parseFloat(inventoryFormData.thickness) : null,
-      width: inventoryFormData.width ? parseFloat(inventoryFormData.width) : null,
-      length: inventoryFormData.length ? parseFloat(inventoryFormData.length) : null,
+      thickness: inventoryFormData.thickness ? parseAmount(inventoryFormData.thickness) : null,
+      width: inventoryFormData.width ? parseAmount(inventoryFormData.width) : null,
+      length: inventoryFormData.length ? parseAmount(inventoryFormData.length) : null,
       linkedTransactionId: transactionId,
       notes: `مرتبط بالمعاملة: ${formData.description}`,
       createdAt: new Date(),
@@ -1452,18 +1461,18 @@ export class LedgerService {
   ): void {
     const assetDocRef = doc(this.fixedAssetsRef);
 
-    const purchaseCost = parseFloat(formData.amount);
-    const usefulLifeYears = parseFloat(fixedAssetFormData.usefulLifeYears);
-    const usefulLifeMonths = usefulLifeYears * 12;
+    const purchaseCost = parseAmount(formData.amount);
+    const usefulLifeYears = parseAmount(fixedAssetFormData.usefulLifeYears);
+    const usefulLifeMonths = safeMultiply(usefulLifeYears, 12);
     const salvageValue = fixedAssetFormData.salvageValue
-      ? parseFloat(fixedAssetFormData.salvageValue)
+      ? parseAmount(fixedAssetFormData.salvageValue)
       : 0;
 
-    const depreciableAmount = purchaseCost - salvageValue;
+    const depreciableAmount = safeSubtract(purchaseCost, salvageValue);
     const monthlyDepreciation =
       fixedAssetFormData.depreciationMethod === "declining"
-        ? (purchaseCost * 0.2) / 12
-        : depreciableAmount / usefulLifeMonths;
+        ? safeDivide(safeMultiply(purchaseCost, 0.2), 12)
+        : safeDivide(depreciableAmount, usefulLifeMonths);
     const bookValue = purchaseCost;
 
     // Generate asset number in format FA-YYYY-XXXX

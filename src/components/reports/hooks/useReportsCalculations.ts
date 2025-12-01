@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import { safeAdd, safeSubtract, safeDivide, safeMultiply, sumAmounts } from "@/lib/currency";
 
 interface LedgerEntry {
   id: string;
@@ -126,14 +127,14 @@ export function useReportsCalculations({
       // Exclude owner equity transactions (رأس المال) from P&L
       if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
         if (entry.type === "دخل") {
-          ownerInvestments += entry.amount;
+          ownerInvestments = safeAdd(ownerInvestments, entry.amount);
         } else if (entry.type === "مصروف") {
-          ownerWithdrawals += entry.amount;
+          ownerWithdrawals = safeAdd(ownerWithdrawals, entry.amount);
         }
       }
     });
 
-    const netOwnerEquity = ownerInvestments - ownerWithdrawals;
+    const netOwnerEquity = safeSubtract(ownerInvestments, ownerWithdrawals);
 
     return {
       ownerInvestments,
@@ -156,18 +157,18 @@ export function useReportsCalculations({
       }
 
       if (entry.type === "دخل") {
-        totalRevenue += entry.amount;
+        totalRevenue = safeAdd(totalRevenue, entry.amount);
         revenueByCategory[entry.category] =
-          (revenueByCategory[entry.category] || 0) + entry.amount;
+          safeAdd(revenueByCategory[entry.category] || 0, entry.amount);
       } else if (entry.type === "مصروف") {
-        totalExpenses += entry.amount;
+        totalExpenses = safeAdd(totalExpenses, entry.amount);
         expensesByCategory[entry.category] =
-          (expensesByCategory[entry.category] || 0) + entry.amount;
+          safeAdd(expensesByCategory[entry.category] || 0, entry.amount);
       }
     });
 
-    const netProfit = totalRevenue - totalExpenses;
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const netProfit = safeSubtract(totalRevenue, totalExpenses);
+    const profitMargin = totalRevenue > 0 ? safeMultiply(safeDivide(netProfit, totalRevenue), 100) : 0;
 
     return {
       totalRevenue,
@@ -194,13 +195,13 @@ export function useReportsCalculations({
       }
 
       if (payment.type === "قبض") {
-        cashIn += payment.amount;
+        cashIn = safeAdd(cashIn, payment.amount);
       } else if (payment.type === "صرف") {
-        cashOut += payment.amount;
+        cashOut = safeAdd(cashOut, payment.amount);
       }
     });
 
-    const netCashFlow = cashIn - cashOut;
+    const netCashFlow = safeSubtract(cashIn, cashOut);
 
     return { cashIn, cashOut, netCashFlow };
   }, [payments]);
@@ -216,10 +217,10 @@ export function useReportsCalculations({
       if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
         if (entry.type === "دخل") {
           receivables.push(entry);
-          totalReceivables += entry.remainingBalance || 0;
+          totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
         } else if (entry.type === "مصروف") {
           payables.push(entry);
-          totalPayables += entry.remainingBalance || 0;
+          totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
         }
       }
     });
@@ -252,8 +253,8 @@ export function useReportsCalculations({
     let lowStockItems = 0;
 
     const valuedInventory = inventory.map((item) => {
-      const value = item.quantity * item.unitPrice;
-      totalValue += value;
+      const value = safeMultiply(item.quantity, item.unitPrice);
+      totalValue = safeAdd(totalValue, value);
       if (item.quantity < 10) { lowStockItems++; } // Arbitrary low stock threshold
       return { ...item, totalValue: value };
     });
@@ -268,15 +269,15 @@ export function useReportsCalculations({
 
     ledgerEntries.forEach((entry) => {
       if (entry.category === "إيرادات المبيعات") {
-        totalSales += entry.amount;
+        totalSales = safeAdd(totalSales, entry.amount);
       }
       if (entry.category === "تكلفة البضاعة المباعة (COGS)") {
-        totalCOGS += entry.amount;
+        totalCOGS = safeAdd(totalCOGS, entry.amount);
       }
     });
 
-    const grossProfit = totalSales - totalCOGS;
-    const grossMargin = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+    const grossProfit = safeSubtract(totalSales, totalCOGS);
+    const grossMargin = totalSales > 0 ? safeMultiply(safeDivide(grossProfit, totalSales), 100) : 0;
 
     return { totalSales, totalCOGS, grossProfit, grossMargin };
   }, [ledgerEntries]);
@@ -291,16 +292,16 @@ export function useReportsCalculations({
     const activeAssets = fixedAssets.filter((asset) => asset.status === "active");
 
     activeAssets.forEach((asset) => {
-      totalCost += asset.purchaseCost;
-      totalAccumulatedDepreciation += asset.accumulatedDepreciation;
-      totalBookValue += asset.bookValue;
-      monthlyDepreciation += asset.monthlyDepreciation;
+      totalCost = safeAdd(totalCost, asset.purchaseCost);
+      totalAccumulatedDepreciation = safeAdd(totalAccumulatedDepreciation, asset.accumulatedDepreciation);
+      totalBookValue = safeAdd(totalBookValue, asset.bookValue);
+      monthlyDepreciation = safeAdd(monthlyDepreciation, asset.monthlyDepreciation);
     });
 
     const assetsByCategory: { [key: string]: number } = {};
     activeAssets.forEach((asset) => {
       assetsByCategory[asset.category] =
-        (assetsByCategory[asset.category] || 0) + asset.bookValue;
+        safeAdd(assetsByCategory[asset.category] || 0, asset.bookValue);
     });
 
     return {

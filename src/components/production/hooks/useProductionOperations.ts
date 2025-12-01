@@ -16,6 +16,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { ProductionOrder, ProductionFormData, InventoryItem } from "../types/production";
 import { generateOrderNumber } from "../utils/production-helpers";
+import { parseAmount, safeMultiply, safeAdd, safeSubtract, safeDivide, roundCurrency } from "@/lib/currency";
 
 interface UseProductionOperationsReturn {
   submitOrder: (
@@ -54,8 +55,8 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         return false;
       }
 
-      const inputQty = parseFloat(formData.inputQuantity);
-      const outputQty = parseFloat(formData.outputQuantity);
+      const inputQty = parseAmount(formData.inputQuantity);
+      const outputQty = parseAmount(formData.outputQuantity);
 
       // Validate input quantity (skip for edit mode if already validated)
       if (!isEditMode && inputQty > selectedItem.quantity) {
@@ -128,9 +129,9 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           ));
 
           const newInputUnitCost = newInputSnapshot.empty ? 0 : (newInputSnapshot.docs[0].data().unitPrice || 0);
-          const totalMaterialCost = inputQty * newInputUnitCost;
-          const totalCost = totalMaterialCost + (formData.productionExpenses ? parseFloat(formData.productionExpenses) : 0);
-          const calculatedUnitCost = totalCost / outputQty;
+          const totalMaterialCost = safeMultiply(inputQty, newInputUnitCost);
+          const totalCost = safeAdd(totalMaterialCost, formData.productionExpenses ? parseAmount(formData.productionExpenses) : 0);
+          const calculatedUnitCost = safeDivide(totalCost, outputQty);
 
           if (!newInputSnapshot.empty) {
             const currentQty = newInputSnapshot.docs[0].data().quantity || 0;
@@ -173,10 +174,10 @@ export function useProductionOperations(): UseProductionOperationsReturn {
               unitPrice: calculatedUnitCost,
               minStock: 0,
               location: "",
-              thickness: formData.outputThickness ? parseFloat(formData.outputThickness) : null,
-              width: formData.outputWidth ? parseFloat(formData.outputWidth) : null,
-              length: formData.outputLength ? parseFloat(formData.outputLength) : null,
-              notes: `تم التحديث من تعديل أمر الإنتاج - تكلفة الوحدة: ${calculatedUnitCost.toFixed(2)} دينار`,
+              thickness: formData.outputThickness ? parseAmount(formData.outputThickness) : null,
+              width: formData.outputWidth ? parseAmount(formData.outputWidth) : null,
+              length: formData.outputLength ? parseAmount(formData.outputLength) : null,
+              notes: `تم التحديث من تعديل أمر الإنتاج - تكلفة الوحدة: ${roundCurrency(calculatedUnitCost).toFixed(2)} دينار`,
               createdAt: new Date(),
             });
           }
@@ -240,11 +241,11 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           inputLength: selectedItem.length || null,
           outputItemName: formData.outputItemName,
           outputQuantity: outputQty,
-          outputThickness: formData.outputThickness ? parseFloat(formData.outputThickness) : null,
-          outputWidth: formData.outputWidth ? parseFloat(formData.outputWidth) : null,
-          outputLength: formData.outputLength ? parseFloat(formData.outputLength) : null,
+          outputThickness: formData.outputThickness ? parseAmount(formData.outputThickness) : null,
+          outputWidth: formData.outputWidth ? parseAmount(formData.outputWidth) : null,
+          outputLength: formData.outputLength ? parseAmount(formData.outputLength) : null,
           unit: selectedItem.unit,
-          productionExpenses: formData.productionExpenses ? parseFloat(formData.productionExpenses) : 0,
+          productionExpenses: formData.productionExpenses ? parseAmount(formData.productionExpenses) : 0,
           notes: formData.notes,
         });
 
@@ -270,11 +271,11 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           inputLength: selectedItem.length || null,
           outputItemName: formData.outputItemName,
           outputQuantity: outputQty,
-          outputThickness: formData.outputThickness ? parseFloat(formData.outputThickness) : null,
-          outputWidth: formData.outputWidth ? parseFloat(formData.outputWidth) : null,
-          outputLength: formData.outputLength ? parseFloat(formData.outputLength) : null,
+          outputThickness: formData.outputThickness ? parseAmount(formData.outputThickness) : null,
+          outputWidth: formData.outputWidth ? parseAmount(formData.outputWidth) : null,
+          outputLength: formData.outputLength ? parseAmount(formData.outputLength) : null,
           unit: selectedItem.unit,
-          productionExpenses: formData.productionExpenses ? parseFloat(formData.productionExpenses) : 0,
+          productionExpenses: formData.productionExpenses ? parseAmount(formData.productionExpenses) : 0,
           status: "قيد التنفيذ",
           notes: formData.notes,
           createdAt: new Date(),
@@ -319,9 +320,9 @@ export function useProductionOperations(): UseProductionOperationsReturn {
       ));
 
       const inputUnitCost = inputItemSnapshot.empty ? 0 : (inputItemSnapshot.docs[0].data().unitPrice || 0);
-      const totalMaterialCost = order.inputQuantity * inputUnitCost;
-      const totalCost = totalMaterialCost + order.productionExpenses;
-      const calculatedUnitCost = totalCost / order.outputQuantity;
+      const totalMaterialCost = safeMultiply(order.inputQuantity, inputUnitCost);
+      const totalCost = safeAdd(totalMaterialCost, order.productionExpenses);
+      const calculatedUnitCost = safeDivide(totalCost, order.outputQuantity);
 
       if (!inputItemSnapshot.empty) {
         const currentQty = inputItemSnapshot.docs[0].data().quantity || 0;
@@ -357,7 +358,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           thickness: order.outputThickness || null,
           width: order.outputWidth || null,
           length: order.outputLength || null,
-          notes: `تم الإنشاء من أمر الإنتاج ${order.orderNumber} - تكلفة الوحدة: ${calculatedUnitCost.toFixed(2)} دينار`,
+          notes: `تم الإنشاء من أمر الإنتاج ${order.orderNumber} - تكلفة الوحدة: ${roundCurrency(calculatedUnitCost).toFixed(2)} دينار`,
           createdAt: new Date(),
         });
       }

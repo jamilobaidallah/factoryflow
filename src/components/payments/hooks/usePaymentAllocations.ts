@@ -23,6 +23,7 @@ import {
   FIFODistributionResult,
 } from '../types';
 import { calculatePaymentStatus } from '@/lib/arap-utils';
+import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
 
 interface UsePaymentAllocationsResult {
   loading: boolean;
@@ -84,7 +85,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
       // Calculate how much to allocate to this transaction
       const allocationAmount = Math.min(remainingPayment, txn.remainingBalance);
-      remainingPayment -= allocationAmount;
+      remainingPayment = safeSubtract(remainingPayment, allocationAmount);
 
       allocations.push({
         transactionId: txn.transactionId,
@@ -97,12 +98,12 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       });
     }
 
-    const totalAllocated = allocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
+    const totalAllocated = sumAmounts(allocations.map(a => a.allocatedAmount));
 
     return {
       allocations,
       totalAllocated,
-      remainingPayment: Math.max(0, remainingPayment),
+      remainingPayment: zeroFloor(remainingPayment),
     };
   };
 
@@ -141,10 +142,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     }
 
     try {
-      const totalAllocated = activeAllocations.reduce(
-        (sum, a) => sum + a.allocatedAmount,
-        0
-      );
+      const totalAllocated = sumAmounts(activeAllocations.map(a => a.allocatedAmount));
 
       // Extract transaction IDs for display in the payments table
       const allocationTransactionIds = activeAllocations.map(
@@ -213,8 +211,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           // Update ledger entry with new payment totals
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
-          const newTotalPaid = currentTotalPaid + allocation.allocatedAmount;
-          const newRemainingBalance = transactionAmount - newTotalPaid;
+          const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
+          const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
           const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
           transaction.update(ledgerRef, {
@@ -288,8 +286,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         for (const { ref: ledgerRef, data: ledgerData, allocatedAmount } of ledgerUpdates) {
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
-          const newTotalPaid = Math.max(0, currentTotalPaid - allocatedAmount);
-          const newRemainingBalance = transactionAmount - newTotalPaid;
+          const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, allocatedAmount));
+          const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
           const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
           transaction.update(ledgerRef, {

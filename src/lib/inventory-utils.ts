@@ -1,3 +1,4 @@
+import { safeAdd, safeMultiply, safeDivide, sumAmounts } from "./currency";
 
 /**
  * Calculates the new weighted average unit price after a purchase.
@@ -13,16 +14,15 @@ export function calculateWeightedAverageCost(
         return 0;
     }
 
-    const oldValue = currentQuantity * currentUnitPrice;
-    const newValue = purchaseQuantity * purchaseUnitPrice;
-    const totalQuantity = currentQuantity + purchaseQuantity;
+    const oldValue = safeMultiply(currentQuantity, currentUnitPrice);
+    const newValue = safeMultiply(purchaseQuantity, purchaseUnitPrice);
+    const totalQuantity = safeAdd(currentQuantity, purchaseQuantity);
 
     if (totalQuantity === 0) {
         return 0;
     }
 
-    const weightedAvg = (oldValue + newValue) / totalQuantity;
-    return parseFloat(weightedAvg.toFixed(2));
+    return safeDivide(safeAdd(oldValue, newValue), totalQuantity);
 }
 
 /**
@@ -33,8 +33,7 @@ export function calculateCOGS(
     quantitySold: number,
     unitCost: number
 ): number {
-    const cogs = quantitySold * unitCost;
-    return parseFloat(cogs.toFixed(2));
+    return safeMultiply(quantitySold, unitCost);
 }
 
 /**
@@ -50,9 +49,8 @@ export function calculateLandedCostUnitPrice(
         return 0;
     }
 
-    const totalCost = purchaseAmount + shippingCost + otherCosts;
-    const unitPrice = totalCost / quantity;
-    return parseFloat(unitPrice.toFixed(2));
+    const totalCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
+    return safeDivide(totalCost, quantity);
 }
 
 /**
@@ -68,7 +66,6 @@ export function calculateProductionUnitCost(
         return 0;
     }
 
-    const totalCost = materialCost + productionExpenses;
-    const unitCost = totalCost / outputQuantity;
-    return parseFloat(unitCost.toFixed(2));
+    const totalCost = safeAdd(materialCost, productionExpenses);
+    return safeDivide(totalCost, outputQuantity);
 }

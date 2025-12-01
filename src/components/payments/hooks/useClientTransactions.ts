@@ -15,6 +15,7 @@ import {
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { UnpaidTransaction } from '../types';
+import { safeSubtract, sumAmounts } from '@/lib/currency';
 
 interface UseClientTransactionsResult {
   transactions: UnpaidTransaction[];
@@ -71,7 +72,7 @@ export function useClientTransactions(clientName: string): UseClientTransactions
 
         const amount = data.amount || 0;
         const totalPaid = data.totalPaid || 0;
-        const remainingBalance = data.remainingBalance ?? (amount - totalPaid);
+        const remainingBalance = data.remainingBalance ?? safeSubtract(amount, totalPaid);
 
         // Skip if remaining balance is 0 or negative
         if (remainingBalance <= 0) {
@@ -109,10 +110,7 @@ export function useClientTransactions(clientName: string): UseClientTransactions
   }, [fetchTransactions]);
 
   // Calculate total outstanding balance
-  const totalOutstanding = transactions.reduce(
-    (sum, t) => sum + t.remainingBalance,
-    0
-  );
+  const totalOutstanding = sumAmounts(transactions.map(t => t.remainingBalance));
 
   return {
     transactions,

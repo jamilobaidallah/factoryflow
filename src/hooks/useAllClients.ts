@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { collection, query, getDocs, where, orderBy, limit } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { safeAdd } from '@/lib/currency';
 
 type ClientSource = 'ledger' | 'partner' | 'client' | 'both' | 'multiple';
 
@@ -105,7 +106,7 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
           }
 
           if (existing) {
-            existing.balance = (existing.balance || 0) + balanceContribution;
+            existing.balance = safeAdd(existing.balance || 0, balanceContribution);
             existing.hasBalance = existing.balance !== 0;
             existing.source = mergeSource(existing.source, 'ledger');
           } else {

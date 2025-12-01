@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Invoice, InvoiceFormData, InvoiceItem, CleanInvoiceItem } from "../types/invoices";
+import { sumAmounts, safeMultiply, safeDivide, safeAdd, parseAmount } from "@/lib/currency";
 
 interface UseInvoicesOperationsReturn {
   submitInvoice: (
@@ -35,9 +36,9 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
   };
 
   const calculateTotals = (itemsList: InvoiceItem[], taxRate: number) => {
-    const subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
-    const taxAmount = (subtotal * taxRate) / 100;
-    const total = subtotal + taxAmount;
+    const subtotal = sumAmounts(itemsList.map(item => item.total));
+    const taxAmount = safeDivide(safeMultiply(subtotal, taxRate), 100);
+    const total = safeAdd(subtotal, taxAmount);
     return { subtotal, taxAmount, total };
   };
 
@@ -49,7 +50,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     if (!user) return false;
 
     try {
-      const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
+      const { subtotal, taxAmount, total } = calculateTotals(items, parseAmount(formData.taxRate));
 
       // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
       // Clean items from undefined values - Firestore doesn't accept undefined
@@ -93,7 +94,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           dueDate,
           items: cleanedItems,
           subtotal,
-          taxRate: parseFloat(formData.taxRate),
+          taxRate: parseAmount(formData.taxRate),
           taxAmount,
           total,
           notes: formData.notes,
@@ -124,7 +125,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           dueDate,
           items: cleanedItems,
           subtotal,
-          taxRate: parseFloat(formData.taxRate),
+          taxRate: parseAmount(formData.taxRate),
           taxAmount,
           total,
           status: "draft",
