@@ -18,9 +18,9 @@ import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 interface ClientInfo {
   name: string;
-  source: 'ledger' | 'partner' | 'both';
-  hasOutstandingDebt?: boolean;
-  totalOutstanding?: number;
+  source: 'ledger' | 'partner' | 'client' | 'both' | 'multiple';
+  balance?: number;
+  hasBalance?: boolean;
 }
 
 interface OutgoingChequesFormDialogProps {
@@ -144,13 +144,18 @@ export function OutgoingChequesFormDialog({
                         >
                           <span>{client.name}</span>
                           <div className="flex items-center gap-1">
-                            {client.hasOutstandingDebt && (
-                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
-                                ذمم: {client.totalOutstanding?.toFixed(2)}
+                            {client.hasBalance && client.balance !== 0 && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                client.balance && client.balance > 0
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-green-100 text-green-700'
+                              }`}>
+                                {client.balance && client.balance > 0 ? 'له: ' : 'عليه: '}
+                                {Math.abs(client.balance || 0).toFixed(2)}
                               </span>
                             )}
                             <span className="text-xs text-gray-400">
-                              {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : 'متعدد'}
+                              {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
                             </span>
                           </div>
                         </button>

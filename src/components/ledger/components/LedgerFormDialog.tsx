@@ -61,8 +61,8 @@ export function LedgerFormDialog() {
     setCreateInvoice,
   } = useLedgerFormContext();
 
-  // Get all clients from ledger and partners for dropdown
-  const { clients: allClients, loading: clientsLoading } = useAllClients();
+  // Get all clients from ledger, partners, AND clients collection for dropdown
+  const { clients: allClients, loading: clientsLoading } = useAllClients({ includeClientsCollection: true });
 
   // Associated party dropdown state
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
@@ -255,13 +255,18 @@ export function LedgerFormDialog() {
                       >
                         <span>{client.name}</span>
                         <div className="flex items-center gap-1">
-                          {client.hasOutstandingDebt && (
-                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
-                              ذمم: {client.totalOutstanding?.toFixed(2)}
+                          {client.hasBalance && client.balance !== 0 && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              client.balance && client.balance > 0
+                                ? 'bg-red-100 text-red-700' // They owe us (receivable)
+                                : 'bg-green-100 text-green-700' // We owe them (payable)
+                            }`}>
+                              {client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
+                              {Math.abs(client.balance || 0).toFixed(2)}
                             </span>
                           )}
                           <span className="text-xs text-gray-400">
-                            {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : 'متعدد'}
+                            {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
                           </span>
                         </div>
                       </button>
