@@ -19,6 +19,12 @@ import {
   ARAPUpdateResult,
   PAYMENT_STATUSES
 } from './definitions';
+import {
+  safeSubtract,
+  safeAdd,
+  zeroFloor,
+  roundCurrency
+} from './currency';
 
 /**
  * Calculate the payment status based on total paid and transaction amount
@@ -31,7 +37,7 @@ export function calculatePaymentStatus(
   totalPaid: number,
   transactionAmount: number
 ): PaymentStatus {
-  const remaining = transactionAmount - totalPaid;
+  const remaining = safeSubtract(transactionAmount, totalPaid);
 
   if (remaining <= 0) {
     return PAYMENT_STATUSES.PAID;
@@ -89,8 +95,8 @@ export async function updateARAPOnPaymentAdd(
     // Calculate new values
     const currentTotalPaid = ledgerData.totalPaid || 0;
     const transactionAmount = ledgerData.amount || 0;
-    const newTotalPaid = currentTotalPaid + paymentAmount;
-    const newRemainingBalance = transactionAmount - newTotalPaid;
+    const newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
+    const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
     const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
     // Update the ledger entry
@@ -102,7 +108,7 @@ export async function updateARAPOnPaymentAdd(
 
     return {
       success: true,
-      message: `تم تحديث: المدفوع ${newTotalPaid.toFixed(2)} - المتبقي ${newRemainingBalance.toFixed(2)}`,
+      message: `تم تحديث: المدفوع ${roundCurrency(newTotalPaid).toFixed(2)} - المتبقي ${roundCurrency(newRemainingBalance).toFixed(2)}`,
       newTotalPaid,
       newRemainingBalance,
       newStatus,
@@ -164,8 +170,8 @@ export async function reverseARAPOnPaymentDelete(
     // Calculate new values (subtract the payment)
     const currentTotalPaid = ledgerData.totalPaid || 0;
     const transactionAmount = ledgerData.amount || 0;
-    const newTotalPaid = Math.max(0, currentTotalPaid - paymentAmount);
-    const newRemainingBalance = transactionAmount - newTotalPaid;
+    const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
+    const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
     const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
     // Update the ledger entry
@@ -215,7 +221,7 @@ export function isValidTransactionId(transactionId: string): boolean {
  * @returns Formatted string
  */
 export function formatCurrency(amount: number, currency: string = 'دينار'): string {
-  return `${amount.toFixed(2)} ${currency}`;
+  return `${roundCurrency(amount).toFixed(2)} ${currency}`;
 }
 
 /**
@@ -293,12 +299,12 @@ export async function updateLedgerEntryById(
 
     let newTotalPaid: number;
     if (operation === 'add') {
-      newTotalPaid = currentTotalPaid + paymentAmount;
+      newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
     } else {
-      newTotalPaid = Math.max(0, currentTotalPaid - paymentAmount);
+      newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
     }
 
-    const newRemainingBalance = transactionAmount - newTotalPaid;
+    const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
     const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
     await updateDoc(ledgerRef, {
@@ -309,7 +315,7 @@ export async function updateLedgerEntryById(
 
     return {
       success: true,
-      message: `تم تحديث: المدفوع ${newTotalPaid.toFixed(2)} - المتبقي ${newRemainingBalance.toFixed(2)}`,
+      message: `تم تحديث: المدفوع ${roundCurrency(newTotalPaid).toFixed(2)} - المتبقي ${roundCurrency(newRemainingBalance).toFixed(2)}`,
       newTotalPaid,
       newRemainingBalance,
       newStatus,

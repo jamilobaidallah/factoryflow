@@ -21,6 +21,7 @@ import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { calculatePaymentStatus } from "@/lib/arap-utils";
+import { parseAmount, safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -63,9 +64,9 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         const currentTotalPaid = ledgerData.totalPaid || 0;
         const transactionAmount = ledgerData.amount || 0;
         const newTotalPaid = isAddition
-          ? currentTotalPaid + amount
-          : Math.max(0, currentTotalPaid - amount);
-        const newRemainingBalance = transactionAmount - newTotalPaid;
+          ? safeAdd(currentTotalPaid, amount)
+          : zeroFloor(safeSubtract(currentTotalPaid, amount));
+        const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
 
         let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
         if (newRemainingBalance <= 0) {
@@ -107,7 +108,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           type: formData.type,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
@@ -136,7 +137,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
 
           const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
           const paymentType = formData.type === CHEQUE_TYPES.INCOMING ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
-          const chequeAmount = parseFloat(formData.amount);
+          const chequeAmount = parseAmount(formData.amount);
 
           await addDoc(paymentsRef, {
             clientName: formData.clientName,
@@ -163,7 +164,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         });
       } else {
         const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-        const chequeAmount = parseFloat(formData.amount);
+        const chequeAmount = parseAmount(formData.amount);
 
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
@@ -281,8 +282,8 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         if (ledgerDocRef && ledgerData && ledgerData.isARAPEntry) {
           const currentTotalPaid = ledgerData.totalPaid || 0;
           const transactionAmount = ledgerData.amount || 0;
-          const newTotalPaid = Math.max(0, currentTotalPaid - cheque.amount);
-          const newRemainingBalance = transactionAmount - newTotalPaid;
+          const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, cheque.amount));
+          const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
 
           let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
           if (newRemainingBalance <= 0) {
@@ -493,8 +494,8 @@ export function useChequesOperations(): UseChequesOperationsReturn {
             const allocatedAmount = allocation.allocatedAmount || 0;
 
             // Subtract the allocated amount (reverse the payment)
-            const newTotalPaid = Math.max(0, currentTotalPaid - allocatedAmount);
-            const newRemainingBalance = transactionAmount - newTotalPaid;
+            const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, allocatedAmount));
+            const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
             const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
             batch.update(ledgerRef, {

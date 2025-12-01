@@ -10,7 +10,8 @@
       "Bash(git merge:*)",
       "Bash(git branch:*)",
       "Bash(npm install:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(firebase --version:*)"
     ],
     "deny": [],
     "ask": []
