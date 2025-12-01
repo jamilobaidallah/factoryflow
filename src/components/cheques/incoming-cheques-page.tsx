@@ -12,12 +12,18 @@ import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 import { Cheque, ChequeFormData } from "./types/cheques";
 import { useIncomingChequesData } from "./hooks/useIncomingChequesData";
 import { useIncomingChequesOperations } from "./hooks/useIncomingChequesOperations";
+import { useAllClients } from "@/hooks/useAllClients";
 
 // Components
 import { IncomingChequesTable } from "./components/IncomingChequesTable";
 import { IncomingChequesFormDialog } from "./components/IncomingChequesFormDialog";
 import { ImageViewerDialog, EndorseDialog } from "./components/IncomingChequeDialogs";
 import { PaymentDateModal } from "./components/PaymentDateModal";
+import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
+import { doc, updateDoc } from "firebase/firestore";
+import { firestore } from "@/firebase/config";
+import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
 
 const initialFormData: ChequeFormData = {
   chequeNumber: "",
@@ -34,6 +40,8 @@ const initialFormData: ChequeFormData = {
 
 export default function IncomingChequesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
+  const { user } = useUser();
+  const { toast } = useToast();
 
   // Data and operations hooks
   const {
@@ -53,6 +61,8 @@ export default function IncomingChequesPage() {
     endorseCheque,
     cancelEndorsement,
   } = useIncomingChequesOperations();
+
+  const { clients, loading: clientsLoading } = useAllClients();
 
   // UI state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -76,6 +86,17 @@ export default function IncomingChequesPage() {
   // Payment date modal state
   const [paymentDateModalOpen, setPaymentDateModalOpen] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<ChequeFormData | null>(null);
+
+  // Multi-allocation dialog state for cheque cashing
+  const [multiAllocationDialogOpen, setMultiAllocationDialogOpen] = useState(false);
+  const [chequeToCash, setChequeToCash] = useState<{
+    chequeId: string;
+    chequeNumber: string;
+    clientName: string;
+    amount: number;
+    dueDate: Date;
+    chequeType: "incoming" | "outgoing";
+  } | null>(null);
 
   const resetForm = () => {
     setFormData(initialFormData);
@@ -118,9 +139,18 @@ export default function IncomingChequesPage() {
     const isNowCleared = clearedStatuses.includes(formData.status);
 
     if (editingCheque && wasPending && isNowCleared) {
-      // Store the form data and open payment date modal
+      // Go directly to MultiAllocationDialog (date picker is inside)
       setPendingFormData(formData);
-      setPaymentDateModalOpen(true);
+      setChequeToCash({
+        chequeId: editingCheque.id,
+        chequeNumber: formData.chequeNumber,
+        clientName: formData.clientName,
+        amount: parseFloat(formData.amount),
+        dueDate: new Date(formData.dueDate),
+        chequeType: "incoming",
+      });
+      setIsDialogOpen(false); // Close the cheque edit dialog
+      setMultiAllocationDialogOpen(true);
       return;
     }
 
@@ -152,6 +182,38 @@ export default function IncomingChequesPage() {
   const handlePaymentDateCancel = () => {
     setPaymentDateModalOpen(false);
     setPendingFormData(null);
+  };
+
+  // Handler for successful cheque cashing via MultiAllocationDialog
+  const handleChequeCashingSuccess = async (paymentId: string) => {
+    if (!user || !chequeToCash) return;
+
+    try {
+      // Update the cheque status to 'Cashed' and link the payment
+      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToCash.chequeId);
+      await updateDoc(chequeRef, {
+        status: CHEQUE_STATUS_AR.CASHED,
+        clearedDate: new Date(),
+        linkedPaymentId: paymentId,
+      });
+
+      toast({
+        title: "تم تحصيل الشيك",
+        description: `تم تحصيل الشيك رقم ${chequeToCash.chequeNumber} وتوزيع المبلغ على المعاملات المستحقة`,
+      });
+
+      // Reset state - onSnapshot will auto-refresh the list
+      setChequeToCash(null);
+      setPendingFormData(null);
+      resetForm();
+    } catch (error) {
+      console.error("Error updating cheque status:", error);
+      toast({
+        title: "خطأ",
+        description: "تم حفظ الدفعة لكن حدث خطأ في تحديث حالة الشيك",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = (chequeId: string) => {
@@ -285,6 +347,8 @@ export default function IncomingChequesPage() {
         loading={loading}
         uploadingImage={uploadingImage}
         onSubmit={handleSubmit}
+        clients={clients}
+        clientsLoading={clientsLoading}
       />
 
       <ImageViewerDialog
@@ -314,6 +378,20 @@ export default function IncomingChequesPage() {
       />
 
       {confirmationDialog}
+
+      {/* Multi-Allocation Dialog for Cheque Cashing */}
+      <MultiAllocationDialog
+        open={multiAllocationDialogOpen}
+        onOpenChange={(open) => {
+          setMultiAllocationDialogOpen(open);
+          if (!open) {
+            setChequeToCash(null);
+            setPendingFormData(null);
+          }
+        }}
+        chequeData={chequeToCash || undefined}
+        onChequeSuccess={handleChequeCashingSuccess}
+      />
     </div>
   );
 }
