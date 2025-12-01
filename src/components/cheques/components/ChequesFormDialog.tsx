@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +76,14 @@ export function ChequesFormDialog({
     setFormData({ ...formData, clientName });
     setShowClientDropdown(false);
   };
+
+  // Close dropdown when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowClientDropdown(false);
+    }
+  }, [isOpen]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
@@ -121,7 +129,7 @@ export function ChequesFormDialog({
                   <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 </div>
                 {showClientDropdown && !clientsLoading && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {filteredClients.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500 text-center">
                         {clients.length === 0 ? "لا يوجد عملاء" : "لا توجد نتائج"}
