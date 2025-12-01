@@ -23,7 +23,6 @@ export interface Cheque {
   clientPhone?: string;
   // Multi-allocation payment link (for cashed cheques)
   linkedPaymentId?: string;
-  paidTransactionIds?: string[]; // Transaction IDs (TXN-...) that were paid when cashing
   clearedDate?: Date;
   bouncedDate?: Date;
 }
