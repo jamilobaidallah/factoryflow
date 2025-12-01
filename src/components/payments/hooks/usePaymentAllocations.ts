@@ -38,6 +38,8 @@ interface UsePaymentAllocationsResult {
       date: Date;
       notes: string;
       type: string;
+      /** Optional: Link to cheque when cashing a cheque */
+      linkedChequeId?: string;
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
@@ -117,6 +119,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       date: Date;
       notes: string;
       type: string;
+      /** Optional: Link to cheque when cashing a cheque */
+      linkedChequeId?: string;
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
@@ -170,6 +174,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         allocationTransactionIds, // Array of transaction IDs for display
         // Keep linkedTransactionId empty for multi-allocation payments
         linkedTransactionId: '',
+        // Link to cheque if this payment is from cashing a cheque
+        ...(paymentData.linkedChequeId && { linkedChequeId: paymentData.linkedChequeId }),
       });
 
       // Create allocation documents in subcollection

@@ -46,19 +46,41 @@ interface PartyWithDebt {
   totalOutstanding: number;
 }
 
+/**
+ * Data passed when cashing a cheque
+ * Client name and amount are pre-filled and locked
+ */
+interface ChequeData {
+  chequeId: string;
+  chequeNumber: string;
+  clientName: string;
+  amount: number;
+  dueDate: Date;
+  chequeType: "incoming" | "outgoing";
+}
+
 interface MultiAllocationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** Pre-filled data when cashing a cheque */
+  chequeData?: ChequeData;
+  /** Callback when cheque cashing succeeds, returns paymentId */
+  onChequeSuccess?: (paymentId: string) => void;
 }
 
 export function MultiAllocationDialog({
   open,
   onOpenChange,
   onSuccess,
+  chequeData,
+  onChequeSuccess,
 }: MultiAllocationDialogProps) {
   const { user } = useUser();
   const { toast } = useToast();
+
+  // Determine if we're in cheque cashing mode
+  const isChequeCashing = !!chequeData;
 
   // Form state
   const [formData, setFormData] = useState(initialMultiAllocationFormData);
@@ -69,6 +91,21 @@ export function MultiAllocationDialog({
   const [partiesWithDebt, setPartiesWithDebt] = useState<PartyWithDebt[]>([]);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [partiesLoading, setPartiesLoading] = useState(true);
+
+  // Initialize form with cheque data when in cheque cashing mode
+  useEffect(() => {
+    if (chequeData && open) {
+      setFormData({
+        clientName: chequeData.clientName,
+        amount: chequeData.amount.toString(),
+        date: new Date().toISOString().split("T")[0], // Today's date for cashing
+        notes: `تحصيل شيك رقم ${chequeData.chequeNumber}`,
+        type: chequeData.chequeType === "incoming" ? "قبض" : "صرف",
+        allocations: [],
+        allocationMethod: "fifo",
+      });
+    }
+  }, [chequeData, open]);
 
   // Fetch client's unpaid transactions
   const {
@@ -264,6 +301,8 @@ export function MultiAllocationDialog({
         date: new Date(formData.date),
         notes: formData.notes,
         type: formData.type,
+        // Link to cheque if this payment is from cashing a cheque
+        linkedChequeId: chequeData?.chequeId,
       },
       allocations,
       formData.allocationMethod
@@ -273,12 +312,20 @@ export function MultiAllocationDialog({
 
     if (paymentId) {
       toast({
-        title: "تمت الإضافة بنجاح",
-        description: `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
+        title: isChequeCashing ? "تم تحصيل الشيك" : "تمت الإضافة بنجاح",
+        description: isChequeCashing
+          ? `تم تحصيل الشيك رقم ${chequeData?.chequeNumber} وتوزيع المبلغ على ${activeAllocations.length} معاملة`
+          : `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
       });
       resetForm();
       onOpenChange(false);
-      onSuccess?.();
+
+      // Call appropriate success callback
+      if (isChequeCashing && onChequeSuccess) {
+        onChequeSuccess(paymentId);
+      } else {
+        onSuccess?.();
+      }
     } else if (allocationError) {
       toast({
         title: "خطأ",
@@ -292,9 +339,15 @@ export function MultiAllocationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>إضافة دفعة متعددة</DialogTitle>
+          <DialogTitle>
+            {isChequeCashing
+              ? `تحصيل الشيك رقم ${chequeData?.chequeNumber}`
+              : "إضافة دفعة متعددة"}
+          </DialogTitle>
           <DialogDescription>
-            توزيع دفعة واحدة على عدة معاملات مستحقة
+            {isChequeCashing
+              ? `توزيع مبلغ الشيك (${chequeData?.amount.toFixed(2)} دينار) على المعاملات المستحقة للعميل ${chequeData?.clientName}`
+              : "توزيع دفعة واحدة على عدة معاملات مستحقة"}
           </DialogDescription>
         </DialogHeader>
 
@@ -308,15 +361,19 @@ export function MultiAllocationDialog({
                 id="clientName"
                 value={formData.clientName}
                 onChange={(e) => {
-                  setFormData((prev) => ({ ...prev, clientName: e.target.value }));
-                  setShowClientDropdown(true);
+                  if (!isChequeCashing) {
+                    setFormData((prev) => ({ ...prev, clientName: e.target.value }));
+                    setShowClientDropdown(true);
+                  }
                 }}
-                onFocus={() => setShowClientDropdown(true)}
+                onFocus={() => !isChequeCashing && setShowClientDropdown(true)}
                 placeholder={partiesLoading ? "جاري التحميل..." : "اختر أو ابحث..."}
                 autoComplete="off"
-                disabled={partiesLoading}
+                disabled={partiesLoading || isChequeCashing}
+                readOnly={isChequeCashing}
+                className={isChequeCashing ? "bg-gray-100 cursor-not-allowed" : ""}
               />
-              {showClientDropdown && !partiesLoading && (
+              {showClientDropdown && !partiesLoading && !isChequeCashing && (
                 <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                   {filteredParties.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-gray-500 text-center">
@@ -352,16 +409,23 @@ export function MultiAllocationDialog({
                 step="0.01"
                 min="0"
                 value={formData.amount}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, amount: e.target.value }))
-                }
+                onChange={(e) => {
+                  if (!isChequeCashing) {
+                    setFormData((prev) => ({ ...prev, amount: e.target.value }));
+                  }
+                }}
                 placeholder="0.00"
+                disabled={isChequeCashing}
+                readOnly={isChequeCashing}
+                className={isChequeCashing ? "bg-gray-100 cursor-not-allowed font-bold" : ""}
               />
             </div>
 
             {/* Payment Date */}
             <div className="space-y-2">
-              <Label htmlFor="date">التاريخ</Label>
+              <Label htmlFor="date">
+                {isChequeCashing ? "تاريخ التحصيل" : "التاريخ"}
+              </Label>
               <Input
                 id="date"
                 type="date"

@@ -12,12 +12,15 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   runTransaction,
+  writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { calculatePaymentStatus } from "@/lib/arap-utils";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -30,6 +33,8 @@ interface UseChequesOperationsReturn {
   endorseCheque: (cheque: Cheque, supplierName: string) => Promise<boolean>;
   clearCheque: (cheque: Cheque, paymentDate?: Date) => Promise<boolean>;
   bounceCheque: (cheque: Cheque) => Promise<boolean>;
+  /** Reverse multi-allocation payment when cheque cashing is undone */
+  reverseChequeCashing: (cheque: Cheque) => Promise<boolean>;
 }
 
 export function useChequesOperations(): UseChequesOperationsReturn {
@@ -447,5 +452,94 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     }
   };
 
-  return { submitCheque, deleteCheque, endorseCheque, clearCheque, bounceCheque };
+  /**
+   * Reverse a cheque cashing operation by undoing the multi-allocation payment
+   * This is called when a cheque's status changes from "cashed" back to another status
+   */
+  const reverseChequeCashing = async (cheque: Cheque): Promise<boolean> => {
+    if (!user) return false;
+
+    // Check if cheque has a linked payment from multi-allocation
+    if (!cheque.linkedPaymentId) {
+      // No multi-allocation payment to reverse
+      return true;
+    }
+
+    try {
+      const paymentId = cheque.linkedPaymentId;
+      const batch = writeBatch(firestore);
+
+      // Step 1: Fetch all allocations for this payment
+      const allocationsRef = collection(
+        firestore,
+        `users/${user.uid}/payments/${paymentId}/allocations`
+      );
+      const allocationsSnapshot = await getDocs(allocationsRef);
+
+      // Step 2: Reverse each allocation on the ledger
+      for (const allocationDoc of allocationsSnapshot.docs) {
+        const allocation = allocationDoc.data();
+        const ledgerDocId = allocation.ledgerDocId;
+
+        if (ledgerDocId) {
+          // Get current ledger entry state
+          const ledgerRef = doc(firestore, `users/${user.uid}/ledger`, ledgerDocId);
+          const ledgerSnapshot = await getDoc(ledgerRef);
+
+          if (ledgerSnapshot.exists()) {
+            const ledgerData = ledgerSnapshot.data();
+            const transactionAmount = ledgerData.amount || 0;
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const allocatedAmount = allocation.allocatedAmount || 0;
+
+            // Subtract the allocated amount (reverse the payment)
+            const newTotalPaid = Math.max(0, currentTotalPaid - allocatedAmount);
+            const newRemainingBalance = transactionAmount - newTotalPaid;
+            const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+
+            batch.update(ledgerRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newStatus,
+            });
+          }
+        }
+
+        // Delete the allocation document
+        batch.delete(allocationDoc.ref);
+      }
+
+      // Step 3: Delete the payment document
+      const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentId);
+      batch.delete(paymentRef);
+
+      // Step 4: Update the cheque to clear linked payment data
+      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+      batch.update(chequeRef, {
+        linkedPaymentId: null,
+        clearedDate: null,
+        status: CHEQUE_STATUS_AR.PENDING,
+      });
+
+      // Commit all changes atomically
+      await batch.commit();
+
+      toast({
+        title: "تم إلغاء التحصيل",
+        description: `تم إلغاء تحصيل الشيك رقم ${cheque.chequeNumber} وعكس جميع التوزيعات`,
+      });
+
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  return { submitCheque, deleteCheque, endorseCheque, clearCheque, bounceCheque, reverseChequeCashing };
 }

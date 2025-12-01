@@ -21,6 +21,10 @@ export interface Cheque {
   notes: string;
   createdAt: Date;
   clientPhone?: string;
+  // Multi-allocation payment link (for cashed cheques)
+  linkedPaymentId?: string;
+  clearedDate?: Date;
+  bouncedDate?: Date;
 }
 
 export interface ChequeFormData {
