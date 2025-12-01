@@ -165,10 +165,11 @@ export default function OutgoingChequesPage() {
       // 4. Delete the payment document
       batch.delete(paymentRef);
 
-      // 5. Update the cheque to clear linkedPaymentId and clearedDate
+      // 5. Update the cheque to clear linkedPaymentId, paidTransactionIds, and clearedDate
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
       batch.update(chequeRef, {
         linkedPaymentId: null,
+        paidTransactionIds: null,
         clearedDate: null,
       });
 
@@ -263,16 +264,17 @@ export default function OutgoingChequesPage() {
   };
 
   // Handler for successful cheque cashing via MultiAllocationDialog
-  const handleChequeCashingSuccess = async (paymentId: string) => {
+  const handleChequeCashingSuccess = async (paymentId: string, paidTransactionIds: string[]) => {
     if (!user || !chequeToCash) return;
 
     try {
-      // Update the cheque status to 'Cashed' and link the payment
+      // Update the cheque status to 'Cashed' and link the payment + transaction IDs
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToCash.chequeId);
       await updateDoc(chequeRef, {
         status: CHEQUE_STATUS_AR.CASHED,
         clearedDate: new Date(),
         linkedPaymentId: paymentId,
+        paidTransactionIds: paidTransactionIds, // Store the transaction IDs that were paid
       });
 
       toast({

@@ -174,12 +174,20 @@ export function OutgoingChequesTable({
                             {cheque.linkedTransactionId}
                           </div>
                         )}
-                        {cheque.linkedPaymentId && (
-                          <div className="text-blue-600" title="رقم الدفعة">
-                            دفعة: {cheque.linkedPaymentId.slice(-8)}
+                        {cheque.paidTransactionIds && cheque.paidTransactionIds.length > 0 && (
+                          <div className="space-y-0.5">
+                            {cheque.paidTransactionIds.map((txnId, idx) => (
+                              <div
+                                key={idx}
+                                className="px-2 py-0.5 bg-green-50 text-green-700 rounded border border-green-200 text-xs"
+                                title="معاملة مدفوعة"
+                              >
+                                {txnId}
+                              </div>
+                            ))}
                           </div>
                         )}
-                        {!cheque.linkedTransactionId && !cheque.linkedPaymentId && (
+                        {!cheque.linkedTransactionId && (!cheque.paidTransactionIds || cheque.paidTransactionIds.length === 0) && (
                           <span className="text-gray-400">-</span>
                         )}
                       </div>
