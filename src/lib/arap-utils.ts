@@ -13,7 +13,8 @@ import {
   doc,
   Firestore,
   runTransaction,
-  getDoc
+  DocumentReference,
+  Transaction
 } from 'firebase/firestore';
 import {
   PaymentStatus,
@@ -27,12 +28,21 @@ import {
   roundCurrency
 } from './currency';
 
+// ============================================================================
+// Error Constants
+// ============================================================================
+
+const ERRORS = {
+  LEDGER_NOT_FOUND: 'LEDGER_NOT_FOUND',
+  ARAP_NOT_ENABLED: 'ARAP_NOT_ENABLED',
+} as const;
+
+// ============================================================================
+// Pure Functions (easily testable, no side effects)
+// ============================================================================
+
 /**
  * Calculate the payment status based on total paid and transaction amount
- *
- * @param totalPaid - The total amount paid so far
- * @param transactionAmount - The total amount of the transaction
- * @returns PaymentStatus - 'paid', 'unpaid', or 'partial'
  */
 export function calculatePaymentStatus(
   totalPaid: number,
@@ -40,244 +50,21 @@ export function calculatePaymentStatus(
 ): PaymentStatus {
   const remaining = safeSubtract(transactionAmount, totalPaid);
 
-  if (remaining <= 0) {
-    return PAYMENT_STATUSES.PAID;
-  } else if (totalPaid > 0) {
-    return PAYMENT_STATUSES.PARTIAL;
-  }
+  if (remaining <= 0) return PAYMENT_STATUSES.PAID;
+  if (totalPaid > 0) return PAYMENT_STATUSES.PARTIAL;
   return PAYMENT_STATUSES.UNPAID;
 }
 
 /**
- * Update AR/AP tracking when a payment is added
- *
- * @param firestore - Firestore instance
- * @param userId - User ID
- * @param transactionId - Transaction ID to update (trimmed)
- * @param paymentAmount - Amount being paid
- * @returns ARAPUpdateResult with success status and details
- */
-export async function updateARAPOnPaymentAdd(
-  firestore: Firestore,
-  userId: string,
-  transactionId: string,
-  paymentAmount: number
-): Promise<ARAPUpdateResult> {
-  try {
-    // Trim the transaction ID to handle whitespace
-    const trimmedTransactionId = transactionId.trim();
-
-    // Step 1: Query to find the ledger document ID
-    const ledgerCollectionRef = collection(firestore, `users/${userId}/ledger`);
-    const ledgerQuery = query(
-      ledgerCollectionRef,
-      where("transactionId", "==", trimmedTransactionId)
-    );
-    const querySnapshot = await getDocs(ledgerQuery);
-
-    if (querySnapshot.empty) {
-      return {
-        success: false,
-        message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}`,
-      };
-    }
-
-    const ledgerDocId = querySnapshot.docs[0].id;
-    const ledgerDocRef = doc(firestore, `users/${userId}/ledger`, ledgerDocId);
-
-    // Step 2: Use transaction for atomic read-modify-write
-    // This prevents race conditions - if another payment modifies totalPaid
-    // between our read and write, Firestore will retry the transaction
-    const result = await runTransaction(firestore, async (transaction) => {
-      const ledgerSnapshot = await transaction.get(ledgerDocRef);
-
-      if (!ledgerSnapshot.exists()) {
-        throw new Error("LEDGER_NOT_FOUND");
-      }
-
-      const ledgerData = ledgerSnapshot.data();
-
-      // Check if AR/AP tracking is enabled
-      if (!ledgerData.isARAPEntry) {
-        throw new Error("ARAP_NOT_ENABLED");
-      }
-
-      // Calculate new values using FRESH data from transaction
-      const currentTotalPaid = ledgerData.totalPaid || 0;
-      const transactionAmount = ledgerData.amount || 0;
-      const newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
-      const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-      const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
-
-      // Update the ledger entry atomically
-      transaction.update(ledgerDocRef, {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      });
-
-      return {
-        success: true as const,
-        message: `تم تحديث: المدفوع ${roundCurrency(newTotalPaid).toFixed(2)} - المتبقي ${roundCurrency(newRemainingBalance).toFixed(2)}`,
-        newTotalPaid,
-        newRemainingBalance,
-        newStatus,
-      };
-    });
-
-    return result;
-  } catch (error) {
-    console.error("Error updating AR/AP on payment add:", error);
-
-    // Handle specific error cases
-    if (error instanceof Error) {
-      if (error.message === "LEDGER_NOT_FOUND") {
-        return {
-          success: false,
-          message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}`,
-        };
-      }
-      if (error.message === "ARAP_NOT_ENABLED") {
-        return {
-          success: false,
-          message: "⚠ الحركة المالية لا تتبع نظام الذمم. فعّل 'تتبع الذمم' في دفتر الأستاذ",
-        };
-      }
-    }
-
-    return {
-      success: false,
-      message: "حدث خطأ أثناء تحديث الذمم",
-    };
-  }
-}
-
-/**
- * Reverse AR/AP tracking when a payment is deleted
- *
- * @param firestore - Firestore instance
- * @param userId - User ID
- * @param transactionId - Transaction ID to update (trimmed)
- * @param paymentAmount - Amount to subtract
- * @returns ARAPUpdateResult with success status and details
- */
-export async function reverseARAPOnPaymentDelete(
-  firestore: Firestore,
-  userId: string,
-  transactionId: string,
-  paymentAmount: number
-): Promise<ARAPUpdateResult> {
-  try {
-    // Trim the transaction ID
-    const trimmedTransactionId = transactionId.trim();
-
-    // Step 1: Query to find the ledger document ID
-    const ledgerCollectionRef = collection(firestore, `users/${userId}/ledger`);
-    const ledgerQuery = query(
-      ledgerCollectionRef,
-      where("transactionId", "==", trimmedTransactionId)
-    );
-    const querySnapshot = await getDocs(ledgerQuery);
-
-    if (querySnapshot.empty) {
-      return {
-        success: false,
-        message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}`,
-      };
-    }
-
-    const ledgerDocId = querySnapshot.docs[0].id;
-    const ledgerDocRef = doc(firestore, `users/${userId}/ledger`, ledgerDocId);
-
-    // Step 2: Use transaction for atomic read-modify-write
-    // This prevents race conditions - if another payment modifies totalPaid
-    // between our read and write, Firestore will retry the transaction
-    const result = await runTransaction(firestore, async (transaction) => {
-      const ledgerSnapshot = await transaction.get(ledgerDocRef);
-
-      if (!ledgerSnapshot.exists()) {
-        throw new Error("LEDGER_NOT_FOUND");
-      }
-
-      const ledgerData = ledgerSnapshot.data();
-
-      // Check if AR/AP tracking is enabled
-      if (!ledgerData.isARAPEntry) {
-        throw new Error("ARAP_NOT_ENABLED");
-      }
-
-      // Calculate new values using FRESH data from transaction (subtract the payment)
-      const currentTotalPaid = ledgerData.totalPaid || 0;
-      const transactionAmount = ledgerData.amount || 0;
-      const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
-      const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-      const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
-
-      // Update the ledger entry atomically
-      transaction.update(ledgerDocRef, {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      });
-
-      return {
-        success: true as const,
-        message: "تم حذف المدفوعة وتحديث الرصيد في دفتر الأستاذ",
-        newTotalPaid,
-        newRemainingBalance,
-        newStatus,
-      };
-    });
-
-    return result;
-  } catch (error) {
-    console.error("Error reversing AR/AP on payment delete:", error);
-
-    // Handle specific error cases
-    if (error instanceof Error) {
-      if (error.message === "LEDGER_NOT_FOUND") {
-        return {
-          success: false,
-          message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}`,
-        };
-      }
-      if (error.message === "ARAP_NOT_ENABLED") {
-        return {
-          success: false,
-          message: "⚠ الحركة المالية لا تتبع نظام الذمم",
-        };
-      }
-    }
-
-    return {
-      success: false,
-      message: "حدث خطأ أثناء تحديث الذمم",
-    };
-  }
-}
-
-/**
- * Validate transaction ID format
- *
- * @param transactionId - Transaction ID to validate
- * @returns boolean - true if valid format
+ * Validate transaction ID format (TXN-XXXXXXXX-XXXXXX-XXX)
  */
 export function isValidTransactionId(transactionId: string): boolean {
-  if (!transactionId || transactionId.trim().length === 0) {
-    return false;
-  }
-
-  // Transaction IDs should follow pattern: TXN-XXXXXXXX-XXXXXX-XXX
-  const pattern = /^TXN-\d{8}-\d{6}-\d{3}$/;
-  return pattern.test(transactionId.trim());
+  if (!transactionId || transactionId.trim().length === 0) return false;
+  return /^TXN-\d{8}-\d{6}-\d{3}$/.test(transactionId.trim());
 }
 
 /**
  * Format currency amount for display
- *
- * @param amount - Amount to format
- * @param currency - Currency symbol (default: 'دينار')
- * @returns Formatted string
  */
 export function formatCurrency(amount: number, currency: string = 'دينار'): string {
   return `${roundCurrency(amount).toFixed(2)} ${currency}`;
@@ -285,36 +72,19 @@ export function formatCurrency(amount: number, currency: string = 'دينار'):
 
 /**
  * Validate payment amount
- *
- * @param amount - Amount to validate
- * @returns Object with isValid and error message
  */
-export function validatePaymentAmount(amount: number): {
-  isValid: boolean;
-  error?: string;
-} {
+export function validatePaymentAmount(amount: number): { isValid: boolean; error?: string } {
   if (isNaN(amount) || amount <= 0) {
-    return {
-      isValid: false,
-      error: "المبلغ يجب أن يكون أكبر من صفر",
-    };
+    return { isValid: false, error: "المبلغ يجب أن يكون أكبر من صفر" };
   }
-
   if (amount > 999999999) {
-    return {
-      isValid: false,
-      error: "المبلغ كبير جداً",
-    };
+    return { isValid: false, error: "المبلغ كبير جداً" };
   }
-
   return { isValid: true };
 }
 
 /**
  * Check if a payment is a multi-allocation payment
- *
- * @param payment - Payment object to check
- * @returns boolean - true if payment has multi-allocation flag
  */
 export function isMultiAllocationPayment(payment: {
   isMultiAllocation?: boolean;
@@ -323,15 +93,201 @@ export function isMultiAllocationPayment(payment: {
   return payment.isMultiAllocation === true && (payment.allocationCount ?? 0) > 0;
 }
 
+// ============================================================================
+// Internal Helpers (DRY - shared logic)
+// ============================================================================
+
+interface LedgerData {
+  isARAPEntry?: boolean;
+  totalPaid?: number;
+  amount?: number;
+}
+
+/**
+ * Calculate new ARAP values after a payment change
+ */
+function calculateNewARAPValues(
+  ledgerData: LedgerData,
+  paymentAmount: number,
+  operation: 'add' | 'subtract'
+): { newTotalPaid: number; newRemainingBalance: number; newStatus: PaymentStatus } {
+  const currentTotalPaid = ledgerData.totalPaid || 0;
+  const transactionAmount = ledgerData.amount || 0;
+
+  const newTotalPaid = operation === 'add'
+    ? safeAdd(currentTotalPaid, paymentAmount)
+    : zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
+
+  const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
+  const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+
+  return { newTotalPaid, newRemainingBalance, newStatus };
+}
+
+/**
+ * Execute atomic ARAP update within a Firestore transaction
+ */
+async function executeARAPTransaction(
+  transaction: Transaction,
+  ledgerDocRef: DocumentReference,
+  paymentAmount: number,
+  operation: 'add' | 'subtract',
+  successMessage: string
+): Promise<ARAPUpdateResult> {
+  const ledgerSnapshot = await transaction.get(ledgerDocRef);
+
+  if (!ledgerSnapshot.exists()) {
+    throw new Error(ERRORS.LEDGER_NOT_FOUND);
+  }
+
+  const ledgerData = ledgerSnapshot.data() as LedgerData;
+
+  if (!ledgerData.isARAPEntry) {
+    throw new Error(ERRORS.ARAP_NOT_ENABLED);
+  }
+
+  const { newTotalPaid, newRemainingBalance, newStatus } = calculateNewARAPValues(
+    ledgerData,
+    paymentAmount,
+    operation
+  );
+
+  transaction.update(ledgerDocRef, {
+    totalPaid: newTotalPaid,
+    remainingBalance: newRemainingBalance,
+    paymentStatus: newStatus,
+  });
+
+  return {
+    success: true,
+    message: successMessage,
+    newTotalPaid,
+    newRemainingBalance,
+    newStatus,
+  };
+}
+
+/**
+ * Find ledger document by transaction ID
+ */
+async function findLedgerDocByTransactionId(
+  firestore: Firestore,
+  userId: string,
+  transactionId: string
+): Promise<{ found: true; docId: string } | { found: false }> {
+  const ledgerRef = collection(firestore, `users/${userId}/ledger`);
+  const ledgerQuery = query(ledgerRef, where("transactionId", "==", transactionId.trim()));
+  const snapshot = await getDocs(ledgerQuery);
+
+  if (snapshot.empty) return { found: false };
+  return { found: true, docId: snapshot.docs[0].id };
+}
+
+/**
+ * Handle ARAP operation errors and return user-friendly messages
+ */
+function handleARAPError(
+  error: unknown,
+  context: { transactionId?: string; operation: string }
+): ARAPUpdateResult {
+  console.error(`Error ${context.operation}:`, error);
+
+  if (error instanceof Error) {
+    if (error.message === ERRORS.LEDGER_NOT_FOUND) {
+      return {
+        success: false,
+        message: context.transactionId
+          ? `⚠ لم يتم العثور على حركة مالية برقم: ${context.transactionId}`
+          : `⚠ لم يتم العثور على القيد المالي`,
+      };
+    }
+    if (error.message === ERRORS.ARAP_NOT_ENABLED) {
+      return {
+        success: false,
+        message: "⚠ الحركة المالية لا تتبع نظام الذمم",
+      };
+    }
+  }
+
+  return { success: false, message: "حدث خطأ أثناء تحديث الذمم" };
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Update AR/AP tracking when a payment is added
+ * Uses Firestore transaction to prevent race conditions
+ */
+export async function updateARAPOnPaymentAdd(
+  firestore: Firestore,
+  userId: string,
+  transactionId: string,
+  paymentAmount: number
+): Promise<ARAPUpdateResult> {
+  try {
+    const lookup = await findLedgerDocByTransactionId(firestore, userId, transactionId);
+
+    if (!lookup.found) {
+      return { success: false, message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}` };
+    }
+
+    const ledgerDocRef = doc(firestore, `users/${userId}/ledger`, lookup.docId);
+
+    return await runTransaction(firestore, (transaction) =>
+      executeARAPTransaction(
+        transaction,
+        ledgerDocRef,
+        paymentAmount,
+        'add',
+        `تم تحديث الذمم بنجاح`
+      ).then(result => ({
+        ...result,
+        message: `تم تحديث: المدفوع ${roundCurrency(result.newTotalPaid!).toFixed(2)} - المتبقي ${roundCurrency(result.newRemainingBalance!).toFixed(2)}`,
+      }))
+    );
+  } catch (error) {
+    return handleARAPError(error, { transactionId, operation: 'updating AR/AP on payment add' });
+  }
+}
+
+/**
+ * Reverse AR/AP tracking when a payment is deleted
+ * Uses Firestore transaction to prevent race conditions
+ */
+export async function reverseARAPOnPaymentDelete(
+  firestore: Firestore,
+  userId: string,
+  transactionId: string,
+  paymentAmount: number
+): Promise<ARAPUpdateResult> {
+  try {
+    const lookup = await findLedgerDocByTransactionId(firestore, userId, transactionId);
+
+    if (!lookup.found) {
+      return { success: false, message: `⚠ لم يتم العثور على حركة مالية برقم: ${transactionId}` };
+    }
+
+    const ledgerDocRef = doc(firestore, `users/${userId}/ledger`, lookup.docId);
+
+    return await runTransaction(firestore, (transaction) =>
+      executeARAPTransaction(
+        transaction,
+        ledgerDocRef,
+        paymentAmount,
+        'subtract',
+        "تم حذف المدفوعة وتحديث الرصيد في دفتر الأستاذ"
+      )
+    );
+  } catch (error) {
+    return handleARAPError(error, { transactionId, operation: 'reversing AR/AP on payment delete' });
+  }
+}
+
 /**
  * Update a ledger entry's AR/AP fields directly by document ID
- *
- * @param firestore - Firestore instance
- * @param userId - User ID
- * @param ledgerDocId - Firestore document ID of the ledger entry
- * @param paymentAmount - Amount to add or subtract
- * @param operation - 'add' or 'subtract'
- * @returns ARAPUpdateResult with success status
+ * Uses Firestore transaction to prevent race conditions
  */
 export async function updateLedgerEntryById(
   firestore: Firestore,
@@ -343,61 +299,19 @@ export async function updateLedgerEntryById(
   try {
     const ledgerDocRef = doc(firestore, `users/${userId}/ledger`, ledgerDocId);
 
-    // Use transaction for atomic read-modify-write
-    // This prevents race conditions - if another payment modifies totalPaid
-    // between our read and write, Firestore will retry the transaction
-    const result = await runTransaction(firestore, async (transaction) => {
-      const ledgerSnapshot = await transaction.get(ledgerDocRef);
-
-      if (!ledgerSnapshot.exists()) {
-        throw new Error("LEDGER_NOT_FOUND");
-      }
-
-      const ledgerData = ledgerSnapshot.data();
-      const transactionAmount = ledgerData.amount || 0;
-      const currentTotalPaid = ledgerData.totalPaid || 0;
-
-      let newTotalPaid: number;
-      if (operation === 'add') {
-        newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
-      } else {
-        newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
-      }
-
-      const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-      const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
-
-      // Update atomically
-      transaction.update(ledgerDocRef, {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      });
-
-      return {
-        success: true as const,
-        message: `تم تحديث: المدفوع ${roundCurrency(newTotalPaid).toFixed(2)} - المتبقي ${roundCurrency(newRemainingBalance).toFixed(2)}`,
-        newTotalPaid,
-        newRemainingBalance,
-        newStatus,
-      };
-    });
-
-    return result;
+    return await runTransaction(firestore, (transaction) =>
+      executeARAPTransaction(
+        transaction,
+        ledgerDocRef,
+        paymentAmount,
+        operation,
+        `تم تحديث الذمم بنجاح`
+      ).then(result => ({
+        ...result,
+        message: `تم تحديث: المدفوع ${roundCurrency(result.newTotalPaid!).toFixed(2)} - المتبقي ${roundCurrency(result.newRemainingBalance!).toFixed(2)}`,
+      }))
+    );
   } catch (error) {
-    console.error('Error updating ledger entry by ID:', error);
-
-    // Handle specific error cases
-    if (error instanceof Error && error.message === "LEDGER_NOT_FOUND") {
-      return {
-        success: false,
-        message: `⚠ لم يتم العثور على القيد المالي`,
-      };
-    }
-
-    return {
-      success: false,
-      message: 'حدث خطأ أثناء تحديث الذمم',
-    };
+    return handleARAPError(error, { operation: 'updating ledger entry by ID' });
   }
 }
