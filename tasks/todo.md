@@ -178,14 +178,14 @@ Rather than rebuilding from scratch, we'll **layer double-entry on top** of the 
 
 ### Phase 5: Trial Balance Enhancement
 
-- [ ] **Task 5.1: Update Trial Balance calculation** (Future enhancement)
-  - Use journal entries instead of approximation
-  - Sum debits and credits by account
-  - Show difference if unbalanced
+- [x] **Task 5.1: Update Trial Balance calculation**
+  - Created useTrialBalance hook to fetch from journalService
+  - Updated TrialBalanceTab to display journal-based balances
+  - Shows debits and credits by account with account codes
 
-- [ ] **Task 5.2: Add self-balancing verification** (Future enhancement)
+- [x] **Task 5.2: Add self-balancing verification**
   - Display warning if Debits ≠ Credits
-  - Show which accounts may have issues
+  - Shows balanced/unbalanced status with icons
 
 ### Phase 6: Testing & Verification
 
@@ -193,7 +193,7 @@ Rather than rebuilding from scratch, we'll **layer double-entry on top** of the 
   - All files compile without errors
 
 - [x] **Task 6.2: Run full test suite**
-  - All 986 existing tests pass
+  - All 1040 tests pass (986 original + 54 new accounting tests)
   - No regressions introduced
 
 - [x] **Task 6.3: Run production build**
@@ -218,7 +218,10 @@ Rather than rebuilding from scratch, we'll **layer double-entry on top** of the 
 | `src/lib/account-mapping.ts` | Category → Account mapping |
 | `src/services/journalService.ts` | Journal entry CRUD operations |
 | `src/components/reports/hooks/useBalanceSheet.ts` | Balance sheet calculations |
+| `src/components/reports/hooks/useTrialBalance.ts` | Trial balance calculations |
 | `src/components/reports/tabs/BalanceSheetTab.tsx` | Balance sheet UI |
+| `src/types/__tests__/accounting.test.ts` | Accounting types tests |
+| `src/services/__tests__/journalService.test.ts` | Journal service tests |
 
 ## Files to Modify
 
