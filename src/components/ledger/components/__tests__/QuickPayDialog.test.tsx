@@ -17,18 +17,17 @@ jest.mock('@/firebase/config', () => ({
 const mockBatchSet = jest.fn();
 const mockBatchUpdate = jest.fn();
 const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
-const mockWriteBatch = jest.fn(() => ({
-  set: mockBatchSet,
-  update: mockBatchUpdate,
-  commit: mockBatchCommit,
-}));
 
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(() => ({ path: 'mock-collection' })),
   addDoc: jest.fn(),
   doc: jest.fn(() => ({ path: 'mock-doc', id: 'mock-doc-id' })),
   updateDoc: jest.fn(),
-  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
+  writeBatch: jest.fn(() => ({
+    set: mockBatchSet,
+    update: mockBatchUpdate,
+    commit: mockBatchCommit,
+  })),
 }));
 
 // Mock hooks
@@ -80,7 +79,6 @@ describe('QuickPayDialog', () => {
     mockBatchSet.mockClear();
     mockBatchUpdate.mockClear();
     mockBatchCommit.mockClear().mockResolvedValue(undefined);
-    mockWriteBatch.mockClear();
   });
 
   describe('Dialog Display', () => {
