@@ -53,6 +53,7 @@ import {
   sumAmounts,
   roundCurrency
 } from "@/lib/currency";
+import { createJournalEntryForLedger, createJournalEntryForCOGS } from "@/services/journalService";
 
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -87,6 +88,12 @@ export interface ServiceResult<T = void> {
 
 export interface DeleteResult extends ServiceResult {
   deletedRelatedCount?: number;
+}
+
+export interface InventoryUpdateResult extends ServiceResult {
+  cogsCreated?: boolean;
+  cogsAmount?: number;
+  cogsDescription?: string;
 }
 
 export interface CreateLedgerEntryOptions {
@@ -322,21 +329,37 @@ export class LedgerService {
     try {
       const entryType = getCategoryType(formData.category, formData.subCategory);
       const transactionId = generateTransactionId();
+      const amount = parseAmount(formData.amount);
+      const entryDate = new Date(formData.date);
 
       const docRef = await addDoc(this.ledgerRef, {
         transactionId,
         description: formData.description,
         type: entryType,
-        amount: parseAmount(formData.amount),
+        amount,
         category: formData.category,
         subCategory: formData.subCategory,
         associatedParty: formData.associatedParty,
         ownerName: formData.ownerName || "",
-        date: new Date(formData.date),
+        date: entryDate,
         reference: formData.reference,
         notes: formData.notes,
         createdAt: new Date(),
       });
+
+      // Create corresponding journal entry (async, non-blocking)
+      createJournalEntryForLedger(
+        this.userId,
+        transactionId,
+        formData.description,
+        amount,
+        entryType,
+        formData.category,
+        formData.subCategory,
+        entryDate,
+        false, // isARAPEntry
+        false  // immediateSettlement
+      ).catch(err => console.error("Failed to create journal entry:", err));
 
       return { success: true, data: docRef.id };
     } catch (error) {
@@ -465,8 +488,9 @@ export class LedgerService {
       }
 
       // Handle inventory update
+      let inventoryResult: InventoryUpdateResult | null = null;
       if (options.hasInventoryUpdate && options.inventoryFormData) {
-        const inventoryResult = await this.handleInventoryUpdateBatch(
+        inventoryResult = await this.handleInventoryUpdateBatch(
           batch,
           transactionId,
           formData,
@@ -484,6 +508,32 @@ export class LedgerService {
       }
 
       await batch.commit();
+
+      // Create corresponding journal entry (async, non-blocking)
+      createJournalEntryForLedger(
+        this.userId,
+        transactionId,
+        formData.description,
+        totalAmount,
+        entryType,
+        formData.category,
+        formData.subCategory,
+        new Date(formData.date),
+        formData.trackARAP,
+        formData.immediateSettlement
+      ).catch(err => console.error("Failed to create journal entry:", err));
+
+      // Create COGS journal entry if inventory was sold (DR COGS, CR Inventory)
+      if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsAmount > 0 && inventoryResult.cogsDescription) {
+        createJournalEntryForCOGS(
+          this.userId,
+          inventoryResult.cogsDescription,
+          inventoryResult.cogsAmount,
+          new Date(formData.date),
+          transactionId
+        ).catch(err => console.error("Failed to create COGS journal entry:", err));
+      }
+
       return { success: true, data: ledgerDocRef.id };
     } catch (error) {
       console.error("Error creating ledger entry with related records:", error);
@@ -1350,8 +1400,11 @@ export class LedgerService {
     formData: LedgerFormData,
     entryType: string,
     inventoryFormData: InventoryFormData
-  ): Promise<ServiceResult> {
+  ): Promise<InventoryUpdateResult> {
     const movementType = entryType === "مصروف" ? "دخول" : "خروج";
+    let cogsCreated = false;
+    let cogsAmount = 0;
+    let cogsDescription = "";
     const quantityChange = parseAmount(inventoryFormData.quantity);
 
     const itemQuery = query(this.inventoryRef, where("itemName", "==", inventoryFormData.itemName));
@@ -1417,12 +1470,14 @@ export class LedgerService {
       // Auto-record COGS when selling
       if (entryType === "إيراد" && movementType === "خروج") {
         const unitCost = existingItemData.unitPrice || 0;
-        const cogsAmount = safeMultiply(quantityChange, unitCost);
+        cogsAmount = safeMultiply(quantityChange, unitCost);
+        cogsDescription = `تكلفة البضاعة المباعة - ${inventoryFormData.itemName}`;
+        cogsCreated = true;
 
         const cogsDocRef = doc(this.ledgerRef);
         batch.set(cogsDocRef, {
           transactionId: `COGS-${transactionId}`,
-          description: `تكلفة البضاعة المباعة - ${inventoryFormData.itemName}`,
+          description: cogsDescription,
           type: "مصروف",
           amount: cogsAmount,
           category: "تكلفة البضاعة المباعة (COGS)",
@@ -1493,7 +1548,12 @@ export class LedgerService {
       createdAt: new Date(),
     });
 
-    return { success: true };
+    return {
+      success: true,
+      cogsCreated,
+      cogsAmount,
+      cogsDescription,
+    };
   }
 
   private handleFixedAssetBatch(

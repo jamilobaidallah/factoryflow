@@ -24,6 +24,7 @@ import {
 } from '../types';
 import { calculatePaymentStatus } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
+import { createJournalEntryForPayment } from '@/services/journalService';
 
 interface UsePaymentAllocationsResult {
   loading: boolean;
@@ -222,6 +223,18 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           });
         }
       });
+
+      // Create journal entry for the payment (async, non-blocking)
+      const paymentDescription = `دفعة ${paymentData.type === 'قبض' ? 'واردة من' : 'صادرة إلى'} ${paymentData.clientName}`;
+      createJournalEntryForPayment(
+        user.uid,
+        paymentDocRef.id,
+        paymentDescription,
+        totalAllocated,
+        paymentData.type as 'قبض' | 'صرف',
+        paymentData.date,
+        allocationTransactionIds[0] // Link to first transaction
+      ).catch(err => console.error("Failed to create journal entry for payment:", err));
 
       setLoading(false);
       return paymentDocRef.id;

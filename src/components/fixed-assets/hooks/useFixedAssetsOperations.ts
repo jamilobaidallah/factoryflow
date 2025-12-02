@@ -17,6 +17,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
 import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
+import { createJournalEntryForDepreciation } from "@/services/journalService";
 
 // Helper function to generate unique asset number
 const generateAssetNumber = (): string => {
@@ -278,6 +279,17 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       });
 
       await batch.commit();
+
+      // Create journal entry for depreciation (DR Depreciation Expense, CR Accumulated Depreciation)
+      if (totalDepreciation > 0) {
+        createJournalEntryForDepreciation(
+          user.uid,
+          `استهلاك أصول ثابتة - ${periodLabel}`,
+          totalDepreciation,
+          new Date(),
+          transactionId
+        ).catch(err => console.error("Failed to create depreciation journal entry:", err));
+      }
 
       toast({
         title: "تم تسجيل الاستهلاك بنجاح",

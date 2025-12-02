@@ -32,6 +32,7 @@ import { InventoryTab } from "./tabs/InventoryTab";
 import { SalesAndCOGSTab } from "./tabs/SalesAndCOGSTab";
 import { FixedAssetsTab } from "./tabs/FixedAssetsTab";
 import { TrialBalanceTab } from "./tabs/TrialBalanceTab";
+import { BalanceSheetTab } from "./tabs/BalanceSheetTab";
 import { useReportsCalculations } from "./hooks/useReportsCalculations";
 import { useReportsData } from "./hooks/useReportsData";
 
@@ -248,8 +249,9 @@ export default function ReportsPage() {
 
       {/* Reports Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-7 w-full">
+        <TabsList className="grid grid-cols-8 w-full">
           <TabsTrigger value="income-statement">قائمة الدخل</TabsTrigger>
+          <TabsTrigger value="balance-sheet">الميزانية</TabsTrigger>
           <TabsTrigger value="cash-flow">التدفقات النقدية</TabsTrigger>
           <TabsTrigger value="arap-aging">أعمار الذمم</TabsTrigger>
           <TabsTrigger value="inventory">تقييم المخزون</TabsTrigger>
@@ -280,6 +282,11 @@ export default function ReportsPage() {
             onExportPDFArabic={exportIncomeStatementHTML}
             onExportPDFEnglish={exportIncomeStatementPDF}
           />
+        </TabsContent>
+
+        {/* Balance Sheet Report */}
+        <TabsContent value="balance-sheet">
+          <BalanceSheetTab />
         </TabsContent>
 
         {/* Cash Flow Report */}
