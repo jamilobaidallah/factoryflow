@@ -30,9 +30,11 @@ const mockTransaction = {
 };
 
 // Mock runTransaction to execute the callback with our mock transaction
-const mockRunTransaction = jest.fn(async (firestore, callback) => {
-  return callback(mockTransaction);
-});
+const mockRunTransaction = jest.fn(
+  async (_firestore: unknown, callback: (transaction: typeof mockTransaction) => Promise<unknown>) => {
+    return callback(mockTransaction);
+  }
+);
 
 // Mock Firebase Firestore
 jest.mock('firebase/firestore', () => ({
@@ -41,7 +43,8 @@ jest.mock('firebase/firestore', () => ({
   where: jest.fn(),
   getDocs: jest.fn(),
   doc: jest.fn(),
-  runTransaction: (...args: unknown[]) => mockRunTransaction(...args),
+  runTransaction: (firestore: unknown, callback: (transaction: unknown) => Promise<unknown>) =>
+    mockRunTransaction(firestore, callback),
 }));
 
 const mockCollection = collection as jest.Mock;
