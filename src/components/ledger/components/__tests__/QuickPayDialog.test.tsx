@@ -13,11 +13,22 @@ jest.mock('@/firebase/config', () => ({
   firestore: {},
 }));
 
+// Create mock batch object
+const mockBatchSet = jest.fn();
+const mockBatchUpdate = jest.fn();
+const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
+const mockWriteBatch = jest.fn(() => ({
+  set: mockBatchSet,
+  update: mockBatchUpdate,
+  commit: mockBatchCommit,
+}));
+
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(() => ({ path: 'mock-collection' })),
   addDoc: jest.fn(),
-  doc: jest.fn(() => ({ path: 'mock-doc' })),
+  doc: jest.fn(() => ({ path: 'mock-doc', id: 'mock-doc-id' })),
   updateDoc: jest.fn(),
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
 }));
 
 // Mock hooks
@@ -65,6 +76,11 @@ describe('QuickPayDialog', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset batch mocks
+    mockBatchSet.mockClear();
+    mockBatchUpdate.mockClear();
+    mockBatchCommit.mockClear().mockResolvedValue(undefined);
+    mockWriteBatch.mockClear();
   });
 
   describe('Dialog Display', () => {
@@ -302,8 +318,6 @@ describe('QuickPayDialog', () => {
     });
 
     it('should not submit when entry is null', async () => {
-      const { addDoc } = require('firebase/firestore');
-
       render(
         <QuickPayDialog
           isOpen={true}
@@ -317,22 +331,16 @@ describe('QuickPayDialog', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(addDoc).not.toHaveBeenCalled();
+        expect(mockBatchCommit).not.toHaveBeenCalled();
       });
     });
   });
 
   describe('Form Submission', () => {
     it('should submit payment successfully', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
       mockToast.mockClear();
       mockOnClose.mockClear();
       mockOnSuccess.mockClear();
-
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
 
       render(
         <QuickPayDialog
@@ -362,12 +370,6 @@ describe('QuickPayDialog', () => {
     });
 
     it('should create payment record with correct data for income entry', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
-
       render(
         <QuickPayDialog
           isOpen={true}
@@ -384,7 +386,7 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(addDoc).toHaveBeenCalledWith(
+        expect(mockBatchSet).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             clientName: 'عميل أ',
@@ -399,12 +401,6 @@ describe('QuickPayDialog', () => {
     });
 
     it('should create payment record with "صرف" type for expense entry', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
-
       const expenseEntry = {
         ...mockEntry,
         type: 'مصروف' as const,
@@ -426,7 +422,7 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(addDoc).toHaveBeenCalledWith(
+        expect(mockBatchSet).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             type: 'صرف',
@@ -436,12 +432,6 @@ describe('QuickPayDialog', () => {
     });
 
     it('should update ledger entry with new payment status (partial)', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
-
       render(
         <QuickPayDialog
           isOpen={true}
@@ -458,7 +448,7 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(updateDoc).toHaveBeenCalledWith(
+        expect(mockBatchUpdate).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             totalPaid: 500,
@@ -470,12 +460,6 @@ describe('QuickPayDialog', () => {
     });
 
     it('should update ledger entry with "paid" status when fully paid', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
-
       render(
         <QuickPayDialog
           isOpen={true}
@@ -492,7 +476,7 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(updateDoc).toHaveBeenCalledWith(
+        expect(mockBatchUpdate).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             totalPaid: 1000,
@@ -504,8 +488,8 @@ describe('QuickPayDialog', () => {
     });
 
     it('should handle Firebase errors gracefully', async () => {
-      const { addDoc } = require('firebase/firestore');
-      addDoc.mockRejectedValue(new Error('Firebase error'));
+      // Make batch commit fail
+      mockBatchCommit.mockRejectedValueOnce(new Error('Firebase error'));
 
       render(
         <QuickPayDialog
@@ -535,12 +519,7 @@ describe('QuickPayDialog', () => {
     });
 
     it('should clear amount field after successful submission', async () => {
-      const { addDoc, updateDoc } = require('firebase/firestore');
-      addDoc.mockClear();
-      updateDoc.mockClear();
       mockOnSuccess.mockClear();
-      addDoc.mockResolvedValue({ id: 'payment-123' });
-      updateDoc.mockResolvedValue({});
 
       render(
         <QuickPayDialog
@@ -565,14 +544,12 @@ describe('QuickPayDialog', () => {
     });
 
     it('should show loading state during submission', async () => {
-      const { addDoc } = require('firebase/firestore');
-
-      // Create a promise that we can control
-      let resolveAddDoc: any;
-      const addDocPromise = new Promise((resolve) => {
-        resolveAddDoc = resolve;
+      // Create a promise that we can control for batch commit
+      let resolveCommit: () => void;
+      const commitPromise = new Promise<void>((resolve) => {
+        resolveCommit = resolve;
       });
-      addDoc.mockReturnValue(addDocPromise);
+      mockBatchCommit.mockReturnValueOnce(commitPromise);
 
       render(
         <QuickPayDialog
@@ -596,7 +573,7 @@ describe('QuickPayDialog', () => {
       });
 
       // Resolve the promise
-      resolveAddDoc({ id: 'payment-123' });
+      resolveCommit!();
     });
   });
 
