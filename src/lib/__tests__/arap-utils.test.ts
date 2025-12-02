@@ -17,9 +17,22 @@ import {
   query,
   where,
   getDocs,
-  updateDoc,
   doc,
+  runTransaction,
 } from 'firebase/firestore';
+
+// Mock transaction object
+const mockTransactionGet = jest.fn();
+const mockTransactionUpdate = jest.fn();
+const mockTransaction = {
+  get: mockTransactionGet,
+  update: mockTransactionUpdate,
+};
+
+// Mock runTransaction to execute the callback with our mock transaction
+const mockRunTransaction = jest.fn(async (firestore, callback) => {
+  return callback(mockTransaction);
+});
 
 // Mock Firebase Firestore
 jest.mock('firebase/firestore', () => ({
@@ -27,15 +40,14 @@ jest.mock('firebase/firestore', () => ({
   query: jest.fn(),
   where: jest.fn(),
   getDocs: jest.fn(),
-  updateDoc: jest.fn(),
   doc: jest.fn(),
+  runTransaction: (...args: unknown[]) => mockRunTransaction(...args),
 }));
 
 const mockCollection = collection as jest.Mock;
 const mockQuery = query as jest.Mock;
 const mockWhere = where as jest.Mock;
 const mockGetDocs = getDocs as jest.Mock;
-const mockUpdateDoc = updateDoc as jest.Mock;
 const mockDoc = doc as jest.Mock;
 
 // Mock Firestore instance
@@ -44,6 +56,13 @@ const mockFirestore = {} as Firestore;
 describe('AR/AP Utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTransactionGet.mockReset();
+    mockTransactionUpdate.mockReset();
+    mockRunTransaction.mockReset();
+    // Restore default runTransaction behavior
+    mockRunTransaction.mockImplementation(async (firestore, callback) => {
+      return callback(mockTransaction);
+    });
   });
 
   describe('calculatePaymentStatus', () => {
@@ -268,9 +287,10 @@ describe('AR/AP Utilities', () => {
   describe('updateARAPOnPaymentAdd', () => {
     const mockLedgerDocId = 'ledger-doc-123';
     const mockUserId = 'user-123';
-    const mockTransactionId = 'TXN-20251122-123456-789';
+    const mockTransactionIdValue = 'TXN-20251122-123456-789';
 
-    const createMockSnapshot = (data: Record<string, unknown> | null) => {
+    // Creates mock query snapshot (for getDocs - finding the document ID)
+    const createMockQuerySnapshot = (data: Record<string, unknown> | null) => {
       if (data === null) {
         return { empty: true, docs: [] };
       }
@@ -285,6 +305,20 @@ describe('AR/AP Utilities', () => {
       };
     };
 
+    // Creates mock transaction document snapshot (for transaction.get())
+    const createMockTransactionSnapshot = (data: Record<string, unknown> | null) => {
+      if (data === null) {
+        return {
+          exists: () => false,
+          data: () => null,
+        };
+      }
+      return {
+        exists: () => true,
+        data: () => data,
+      };
+    };
+
     it('should successfully update AR/AP when payment is added', async () => {
       const ledgerData = {
         isARAPEntry: true,
@@ -292,14 +326,17 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      // Mock the query to find document ID
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+
+      // Mock the transaction read
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -307,7 +344,7 @@ describe('AR/AP Utilities', () => {
       expect(result.newTotalPaid).toBe(700);
       expect(result.newRemainingBalance).toBe(300);
       expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
-      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockTransactionUpdate).toHaveBeenCalled();
     });
 
     it('should return paid status when payment completes the balance', async () => {
@@ -317,14 +354,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -341,14 +378,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         500
       );
 
@@ -359,7 +396,7 @@ describe('AR/AP Utilities', () => {
     });
 
     it('should fail when ledger entry is not found', async () => {
-      mockGetDocs.mockResolvedValue(createMockSnapshot(null));
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(null));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
@@ -370,7 +407,7 @@ describe('AR/AP Utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('لم يتم العثور على حركة مالية');
-      expect(mockUpdateDoc).not.toHaveBeenCalled();
+      expect(mockTransactionUpdate).not.toHaveBeenCalled();
     });
 
     it('should fail when AR/AP tracking is not enabled', async () => {
@@ -380,18 +417,20 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
+      mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('لا تتبع نظام الذمم');
-      expect(mockUpdateDoc).not.toHaveBeenCalled();
+      expect(mockTransactionUpdate).not.toHaveBeenCalled();
     });
 
     it('should handle Firestore error gracefully', async () => {
@@ -400,7 +439,7 @@ describe('AR/AP Utilities', () => {
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -415,9 +454,9 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
@@ -441,14 +480,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         100
       );
 
@@ -464,14 +503,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         300
       );
 
@@ -485,14 +524,14 @@ describe('AR/AP Utilities', () => {
         totalPaid: 0,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await updateARAPOnPaymentAdd(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         100
       );
 
@@ -506,9 +545,10 @@ describe('AR/AP Utilities', () => {
   describe('reverseARAPOnPaymentDelete', () => {
     const mockLedgerDocId = 'ledger-doc-456';
     const mockUserId = 'user-456';
-    const mockTransactionId = 'TXN-20251122-654321-123';
+    const mockTransactionIdValue = 'TXN-20251122-654321-123';
 
-    const createMockSnapshot = (data: Record<string, unknown> | null) => {
+    // Creates mock query snapshot (for getDocs - finding the document ID)
+    const createMockQuerySnapshot = (data: Record<string, unknown> | null) => {
       if (data === null) {
         return { empty: true, docs: [] };
       }
@@ -523,6 +563,20 @@ describe('AR/AP Utilities', () => {
       };
     };
 
+    // Creates mock transaction document snapshot (for transaction.get())
+    const createMockTransactionSnapshot = (data: Record<string, unknown> | null) => {
+      if (data === null) {
+        return {
+          exists: () => false,
+          data: () => null,
+        };
+      }
+      return {
+        exists: () => true,
+        data: () => data,
+      };
+    };
+
     it('should successfully reverse payment and update balance', async () => {
       const ledgerData = {
         isARAPEntry: true,
@@ -530,14 +584,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -545,7 +599,7 @@ describe('AR/AP Utilities', () => {
       expect(result.newTotalPaid).toBe(500);
       expect(result.newRemainingBalance).toBe(500);
       expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
-      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockTransactionUpdate).toHaveBeenCalled();
     });
 
     it('should change status to unpaid when all payments reversed', async () => {
@@ -555,14 +609,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -579,14 +633,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         500
       );
 
@@ -597,7 +651,7 @@ describe('AR/AP Utilities', () => {
     });
 
     it('should fail when ledger entry is not found', async () => {
-      mockGetDocs.mockResolvedValue(createMockSnapshot(null));
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(null));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
@@ -608,7 +662,7 @@ describe('AR/AP Utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('لم يتم العثور على حركة مالية');
-      expect(mockUpdateDoc).not.toHaveBeenCalled();
+      expect(mockTransactionUpdate).not.toHaveBeenCalled();
     });
 
     it('should fail when AR/AP tracking is not enabled', async () => {
@@ -618,18 +672,20 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
+      mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('لا تتبع نظام الذمم');
-      expect(mockUpdateDoc).not.toHaveBeenCalled();
+      expect(mockTransactionUpdate).not.toHaveBeenCalled();
     });
 
     it('should handle Firestore error gracefully', async () => {
@@ -638,7 +694,7 @@ describe('AR/AP Utilities', () => {
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -653,9 +709,9 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
@@ -679,14 +735,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         300
       );
 
@@ -702,14 +758,14 @@ describe('AR/AP Utilities', () => {
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -723,14 +779,14 @@ describe('AR/AP Utilities', () => {
         totalPaid: 500,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      mockTransactionGet.mockResolvedValue(createMockTransactionSnapshot(ledgerData));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
@@ -739,21 +795,22 @@ describe('AR/AP Utilities', () => {
       expect(result.newRemainingBalance).toBe(-300);
     });
 
-    it('should handle updateDoc failure', async () => {
+    it('should handle transaction failure', async () => {
       const ledgerData = {
         isARAPEntry: true,
         totalPaid: 500,
         amount: 1000,
       };
 
-      mockGetDocs.mockResolvedValue(createMockSnapshot(ledgerData));
-      mockUpdateDoc.mockRejectedValue(new Error('Update failed'));
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
       mockDoc.mockReturnValue('mock-doc-ref');
+      // Make the transaction fail
+      mockRunTransaction.mockRejectedValue(new Error('Transaction failed'));
 
       const result = await reverseARAPOnPaymentDelete(
         mockFirestore,
         mockUserId,
-        mockTransactionId,
+        mockTransactionIdValue,
         200
       );
 
