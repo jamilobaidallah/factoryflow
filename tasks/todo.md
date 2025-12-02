@@ -255,7 +255,31 @@ All **10 non-atomic methods** across **4 files** have been converted to use Fire
 ### Verification
 
 - **TypeScript Build**: ✅ Passed (no type errors)
+- **Unit Tests**: ✅ All 986 tests pass (updated QuickPayDialog.test.tsx to mock writeBatch)
 - **Backwards Compatible**: ✅ No API changes, same function signatures
 - **Database Compatible**: ✅ No schema changes required
+
+### Test Updates
+
+Updated `src/components/ledger/components/__tests__/QuickPayDialog.test.tsx` to properly mock the `writeBatch` pattern:
+
+```typescript
+// Create mock batch object
+const mockBatchSet = jest.fn();
+const mockBatchUpdate = jest.fn();
+const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
+const mockWriteBatch = jest.fn(() => ({
+  set: mockBatchSet,
+  update: mockBatchUpdate,
+  commit: mockBatchCommit,
+}));
+
+jest.mock('firebase/firestore', () => ({
+  // ... other mocks
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
+}));
+```
+
+Tests now check `mockBatchSet` and `mockBatchUpdate` instead of `addDoc` and `updateDoc` to verify the atomic batch operations.
 
 ---
