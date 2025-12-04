@@ -58,8 +58,7 @@ import {
 } from "@/components/ui/pagination";
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { assertNonNegative } from "@/lib/validation";
-import { isDataIntegrityError } from "@/lib/errors";
+import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
 import { CopyButton } from "@/components/ui/copy-button";
 
 // Categories with subcategories (matching ledger categories)

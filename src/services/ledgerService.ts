@@ -53,8 +53,7 @@ import {
   sumAmounts,
   roundCurrency
 } from "@/lib/currency";
-import { assertNonNegative } from "@/lib/validation";
-import { isDataIntegrityError } from "@/lib/errors";
+import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
 import { createJournalEntryForLedger, createJournalEntryForCOGS } from "@/services/journalService";
 
 // Collection path helpers

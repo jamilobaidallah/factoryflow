@@ -26,8 +26,7 @@ import {
   safeAdd,
   roundCurrency
 } from './currency';
-import { assertNonNegative } from './validation';
-import { isDataIntegrityError } from './errors';
+import { assertNonNegative, isDataIntegrityError } from './errors';
 
 // ============================================================================
 // Error Constants

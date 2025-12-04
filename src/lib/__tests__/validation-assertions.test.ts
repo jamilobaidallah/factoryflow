@@ -8,8 +8,7 @@ jest.mock('@/firebase/config', () => ({
   storage: {},
 }));
 
-import { assertNonNegative } from '../validation';
-import { DataIntegrityError } from '../errors';
+import { assertNonNegative, DataIntegrityError } from '../errors';
 
 describe('assertNonNegative', () => {
   const defaultContext = {

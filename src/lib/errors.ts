@@ -57,3 +57,56 @@ export class DataIntegrityError extends Error {
 export function isDataIntegrityError(error: unknown): error is DataIntegrityError {
   return error instanceof DataIntegrityError;
 }
+
+// ======================
+// Data Integrity Assertions
+// ======================
+
+export interface AssertNonNegativeContext {
+  operation: string;
+  entityId?: string;
+  entityType?: string;
+}
+
+/**
+ * Assert that a value is non-negative, throw DataIntegrityError if not.
+ *
+ * Use this instead of Math.max(0, value) to catch bugs rather than hide them.
+ * Negative values in quantities, balances, or payments indicate data corruption
+ * that should be surfaced and fixed, not silently clamped.
+ *
+ * @param value - The value to check
+ * @param context - Context for error reporting
+ * @returns The original value if non-negative
+ * @throws DataIntegrityError if value is negative
+ *
+ * @example
+ * // Instead of: Math.max(0, revertedQuantity)
+ * // Use:
+ * const safeQuantity = assertNonNegative(revertedQuantity, {
+ *   operation: 'revertInventory',
+ *   entityId: itemId,
+ *   entityType: 'inventory'
+ * });
+ */
+export function assertNonNegative(
+  value: number,
+  context: AssertNonNegativeContext
+): number {
+  if (value < 0) {
+    const entityInfo = context.entityId
+      ? ` for ${context.entityType || 'entity'} ${context.entityId}`
+      : '';
+    throw new DataIntegrityError(
+      `Data integrity violation: ${context.operation} resulted in negative value (${value})${entityInfo}`,
+      {
+        operation: context.operation,
+        expectedValue: 0,
+        actualValue: value,
+        entityId: context.entityId,
+        entityType: context.entityType,
+      }
+    );
+  }
+  return value;
+}

@@ -18,8 +18,7 @@ import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { safeAdd, safeSubtract } from "@/lib/currency";
-import { assertNonNegative } from "@/lib/validation";
-import { isDataIntegrityError } from "@/lib/errors";
+import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
