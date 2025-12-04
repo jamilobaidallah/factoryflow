@@ -97,6 +97,8 @@ export interface InventoryUpdateResult extends ServiceResult {
   cogsCreated?: boolean;
   cogsAmount?: number;
   cogsDescription?: string;
+  // For rollback if batch commit fails
+  inventoryChange?: { itemId: string; quantityDelta: number };
 }
 
 export interface CreateLedgerEntryOptions {
@@ -510,7 +512,17 @@ export class LedgerService {
         this.handleFixedAssetBatch(batch, transactionId, formData, options.fixedAssetFormData);
       }
 
-      await batch.commit();
+      // Commit batch - if this fails, rollback inventory changes
+      try {
+        await batch.commit();
+      } catch (batchError) {
+        // Batch failed after inventory was already updated - attempt rollback
+        if (inventoryResult?.inventoryChange) {
+          console.error("Batch commit failed, attempting inventory rollback:", batchError);
+          await this.rollbackInventoryChanges([inventoryResult.inventoryChange]);
+        }
+        throw batchError; // Re-throw to be caught by outer catch
+      }
 
       // Create corresponding journal entry (async, non-blocking)
       createJournalEntryForLedger(
@@ -618,8 +630,12 @@ export class LedgerService {
   /**
    * Delete a ledger entry and all related records
    * Uses runTransaction for inventory reversions to prevent race conditions
+   * Includes rollback mechanism if batch commit fails after inventory changes
    */
   async deleteLedgerEntry(entry: LedgerEntry): Promise<DeleteResult> {
+    // Track inventory changes for potential rollback
+    const inventoryChanges: Array<{ itemId: string; quantityDelta: number }> = [];
+
     try {
       const batch = writeBatch(firestore);
       let deletedRelatedCount = 0;
@@ -651,52 +667,59 @@ export class LedgerService {
       });
 
       // 4. Revert inventory quantities and delete related movements
-      // Use runTransaction for each inventory update to prevent race conditions
       const movementsQuery = query(
         this.inventoryMovementsRef,
         where("linkedTransactionId", "==", entry.transactionId)
       );
       const movementsSnapshot = await getDocs(movementsQuery);
 
-      for (const movementDoc of movementsSnapshot.docs) {
-        const movement = movementDoc.data() as InventoryMovementData;
-        const itemId = movement.itemId;
-        const quantity = movement.quantity || 0;
-        const movementType = movement.type;
-
-        if (itemId) {
+      // Prepare inventory reversion tasks for parallel execution
+      const inventoryReversionTasks = movementsSnapshot.docs
+        .filter((movementDoc) => {
+          const movement = movementDoc.data() as InventoryMovementData;
+          return movement.itemId; // Only process movements with itemId
+        })
+        .map(async (movementDoc) => {
+          const movement = movementDoc.data() as InventoryMovementData;
+          const itemId = movement.itemId;
+          const quantity = movement.quantity || 0;
+          const movementType = movement.type;
           const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
 
           // Use transaction for isolated read-modify-write on inventory
-          // This prevents race conditions when multiple deletes happen concurrently
           await runTransaction(firestore, async (transaction) => {
-            // READ inside transaction - guaranteed fresh
             const itemDoc = await transaction.get(itemDocRef);
 
             if (itemDoc.exists()) {
               const currentQuantity = (itemDoc.data() as InventoryItemData).quantity || 0;
 
-              const revertedQuantity =
-                movementType === "دخول"
-                  ? currentQuantity - quantity
-                  : currentQuantity + quantity;
+              // Calculate the delta (how much we're changing)
+              const quantityDelta = movementType === "دخول" ? -quantity : quantity;
+              const revertedQuantity = currentQuantity + quantityDelta;
 
-              // Fail fast on negative inventory - this indicates data corruption
+              // Fail fast on negative inventory
               const validatedQuantity = assertNonNegative(revertedQuantity, {
                 operation: 'revertInventoryOnDelete',
                 entityId: itemId,
                 entityType: 'inventory'
               });
 
-              // WRITE inside transaction - isolated from concurrent updates
               transaction.update(itemDocRef, { quantity: validatedQuantity });
+
+              // Track for potential rollback (store the delta we applied)
+              inventoryChanges.push({ itemId, quantityDelta });
             }
           });
-        }
+        });
 
+      // Execute all inventory reversions in parallel for better performance
+      await Promise.all(inventoryReversionTasks);
+
+      // Add movement deletions to batch
+      movementsSnapshot.forEach((movementDoc) => {
         batch.delete(movementDoc.ref);
         deletedRelatedCount++;
-      }
+      });
 
       // 5. Delete auto-generated COGS entries
       const cogsQuery = query(
@@ -709,7 +732,15 @@ export class LedgerService {
         deletedRelatedCount++;
       });
 
-      await batch.commit();
+      // Commit batch - if this fails, we need to rollback inventory changes
+      try {
+        await batch.commit();
+      } catch (batchError) {
+        // Batch failed after inventory was already updated - attempt rollback
+        console.error("Batch commit failed, attempting inventory rollback:", batchError);
+        await this.rollbackInventoryChanges(inventoryChanges);
+        throw batchError; // Re-throw to be caught by outer catch
+      }
 
       return {
         success: true,
@@ -730,6 +761,37 @@ export class LedgerService {
         error: "حدث خطأ أثناء حذف الحركة المالية",
       };
     }
+  }
+
+  /**
+   * Rollback inventory changes if batch commit fails
+   * Best-effort: logs errors but doesn't throw
+   */
+  private async rollbackInventoryChanges(
+    changes: Array<{ itemId: string; quantityDelta: number }>
+  ): Promise<void> {
+    const rollbackTasks = changes.map(async ({ itemId, quantityDelta }) => {
+      try {
+        const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
+
+        await runTransaction(firestore, async (transaction) => {
+          const itemDoc = await transaction.get(itemDocRef);
+          if (itemDoc.exists()) {
+            const currentQuantity = (itemDoc.data() as InventoryItemData).quantity || 0;
+            // Reverse the delta to rollback
+            const rolledBackQuantity = Math.max(0, currentQuantity - quantityDelta);
+            transaction.update(itemDocRef, { quantity: rolledBackQuantity });
+          }
+        });
+
+        console.log(`Rolled back inventory for item ${itemId}`);
+      } catch (rollbackError) {
+        // Log but don't throw - best effort rollback
+        console.error(`Failed to rollback inventory for item ${itemId}:`, rollbackError);
+      }
+    });
+
+    await Promise.all(rollbackTasks);
   }
 
   // ============================================
@@ -1430,6 +1492,7 @@ export class LedgerService {
     let cogsCreated = false;
     let cogsAmount = 0;
     let cogsDescription = "";
+    let inventoryChange: { itemId: string; quantityDelta: number } | undefined;
     const quantityChange = parseAmount(inventoryFormData.quantity);
 
     // First, find if item exists (query is safe - just finding the document ID)
@@ -1503,9 +1566,15 @@ export class LedgerService {
             });
           }
 
-          // Return data needed for COGS calculation (read inside transaction = fresh)
-          return { currentUnitPrice };
+          // Calculate delta for potential rollback
+          const quantityDelta = movementType === "دخول" ? quantityChange : -quantityChange;
+
+          // Return data needed for COGS calculation and rollback
+          return { currentUnitPrice, quantityDelta };
         });
+
+        // Store inventory change for potential rollback
+        inventoryChange = { itemId, quantityDelta: transactionResult.quantityDelta };
 
         // Auto-record COGS when selling (uses unit price from transaction)
         if (entryType === "إيراد" && movementType === "خروج") {
@@ -1612,6 +1681,7 @@ export class LedgerService {
       cogsCreated,
       cogsAmount,
       cogsDescription,
+      inventoryChange, // For rollback if batch fails
     };
   }
 
