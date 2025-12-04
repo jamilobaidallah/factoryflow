@@ -1,11 +1,8 @@
 /**
  * Journal Service Layer
  *
- * Centralizes all Firestore operations for double-entry bookkeeping:
- * - Chart of Accounts management
- * - Journal entry creation and validation
- * - Account balance calculations
- * - Trial balance and Balance Sheet generation
+ * Firestore operations for double-entry bookkeeping.
+ * Pure calculation logic is in @/lib/journal-utils.ts for testability.
  */
 
 import { firestore } from '@/firebase/config';
@@ -14,29 +11,22 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   getDocs,
   getDoc,
   query,
   where,
   orderBy,
-  runTransaction,
   writeBatch,
   Timestamp,
-  DocumentReference,
 } from 'firebase/firestore';
 import {
   Account,
-  AccountDocument,
   JournalEntry,
   JournalEntryDocument,
   JournalLine,
-  JournalEntryStatus,
   AccountBalance,
   TrialBalanceSummary,
   BalanceSheet,
-  BalanceSheetSection,
-  AccountType,
   ACCOUNT_CODES,
   validateJournalEntry,
   calculateAccountBalance,
@@ -49,10 +39,19 @@ import {
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
   getAccountNameAr,
-  AccountMapping,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
+import {
+  createJournalLines,
+  getAccountTypeFromCode,
+  generateJournalEntryNumber,
+  validateUserId,
+  validateAmount,
+  validateDate,
+  validateDescription,
+  ValidationError,
+} from '@/lib/journal-utils';
 
 // ============================================================================
 // Collection Paths
@@ -71,70 +70,15 @@ export interface ServiceResult<T = void> {
   error?: string;
 }
 
-// ============================================================================
-// Journal Entry Number Generation
-// ============================================================================
-
-/**
- * Generate unique journal entry number
- * Format: JE-YYYYMMDD-HHMMSS-XXX
- */
-function generateJournalEntryNumber(): string {
-  const now = new Date();
-  const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-  const timePart = now.toTimeString().slice(0, 8).replace(/:/g, '');
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return `JE-${datePart}-${timePart}-${random}`;
-}
+// Re-export ValidationError for consumers
+export { ValidationError } from '@/lib/journal-utils';
 
 // ============================================================================
-// Helper Functions (DRY)
+// Internal Helpers
 // ============================================================================
-
-/**
- * Create standard debit/credit journal lines from an account mapping
- * Eliminates duplication across createJournalEntryFor* functions
- */
-function createJournalLines(
-  mapping: AccountMapping,
-  amount: number,
-  description: string
-): JournalLine[] {
-  return [
-    {
-      accountCode: mapping.debitAccount,
-      accountName: mapping.debitAccount,
-      accountNameAr: mapping.debitAccountNameAr,
-      debit: roundCurrency(amount),
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: mapping.creditAccount,
-      accountName: mapping.creditAccount,
-      accountNameAr: mapping.creditAccountNameAr,
-      debit: 0,
-      credit: roundCurrency(amount),
-      description,
-    },
-  ];
-}
-
-/**
- * Determine account type from account code using standard ranges
- */
-function getAccountTypeFromCode(accountCode: string): AccountType {
-  const codeNum = parseInt(accountCode);
-  if (codeNum >= 1000 && codeNum < 2000) return 'asset';
-  if (codeNum >= 2000 && codeNum < 3000) return 'liability';
-  if (codeNum >= 3000 && codeNum < 4000) return 'equity';
-  if (codeNum >= 4000 && codeNum < 5000) return 'revenue';
-  return 'expense';
-}
 
 /**
  * Delete journal entries by a specific field query
- * Eliminates duplication between deleteByTransaction and deleteByPayment
  */
 async function deleteJournalEntriesByField(
   userId: string,
@@ -172,8 +116,10 @@ async function deleteJournalEntriesByField(
 
 /**
  * Check if user has Chart of Accounts initialized
+ * @throws {ValidationError} if userId is invalid
  */
 export async function hasChartOfAccounts(userId: string): Promise<boolean> {
+  validateUserId(userId);
   const accountsRef = collection(firestore, getAccountsPath(userId));
   const snapshot = await getDocs(query(accountsRef));
   return !snapshot.empty;
@@ -182,11 +128,14 @@ export async function hasChartOfAccounts(userId: string): Promise<boolean> {
 /**
  * Seed default Chart of Accounts for a user
  * Only runs if accounts collection is empty
+ * @throws {ValidationError} if userId is invalid
  */
 export async function seedChartOfAccounts(
   userId: string
 ): Promise<ServiceResult<number>> {
   try {
+    validateUserId(userId);
+
     // Check if already seeded
     const exists = await hasChartOfAccounts(userId);
     if (exists) {
@@ -227,9 +176,11 @@ export async function seedChartOfAccounts(
 
 /**
  * Get all accounts for a user
+ * @throws {ValidationError} if userId is invalid
  */
 export async function getAccounts(userId: string): Promise<ServiceResult<Account[]>> {
   try {
+    validateUserId(userId);
     const accountsRef = collection(firestore, getAccountsPath(userId));
     const q = query(accountsRef, orderBy('code'));
     const snapshot = await getDocs(q);
@@ -291,8 +242,8 @@ export async function getAccountByCode(
 /**
  * Create a journal entry with validation
  *
- * Validates that debits = credits before saving.
- * Uses Firestore transaction for atomicity.
+ * Validates inputs and that debits = credits before saving.
+ * @throws {ValidationError} if inputs are invalid
  */
 export async function createJournalEntry(
   userId: string,
@@ -304,6 +255,15 @@ export async function createJournalEntry(
   linkedDocumentType?: JournalEntryDocument['linkedDocumentType']
 ): Promise<ServiceResult<JournalEntry>> {
   try {
+    // Validate inputs
+    validateUserId(userId);
+    validateDescription(description);
+    validateDate(date);
+
+    if (!lines || lines.length === 0) {
+      return { success: false, error: 'Journal entry must have at least one line' };
+    }
+
     // Validate debits = credits
     const validation = validateJournalEntry(lines);
     if (!validation.isValid) {
@@ -364,6 +324,7 @@ export async function createJournalEntry(
 /**
  * Create journal entry for a ledger entry (income/expense)
  * Auto-determines debit/credit accounts based on category and type.
+ * @throws {ValidationError} if amount is invalid
  */
 export async function createJournalEntryForLedger(
   userId: string,
@@ -377,6 +338,7 @@ export async function createJournalEntryForLedger(
   isARAPEntry?: boolean,
   immediateSettlement?: boolean
 ): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
   const mapping = getAccountMappingForLedgerEntry(
     type, category, subCategory, isARAPEntry, immediateSettlement
   );
@@ -387,6 +349,7 @@ export async function createJournalEntryForLedger(
 /**
  * Create journal entry for a payment
  * Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
+ * @throws {ValidationError} if amount is invalid
  */
 export async function createJournalEntryForPayment(
   userId: string,
@@ -397,6 +360,7 @@ export async function createJournalEntryForPayment(
   date: Date,
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
   const mapping = getAccountMappingForPayment(paymentType);
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, paymentId, 'payment');
@@ -405,6 +369,7 @@ export async function createJournalEntryForPayment(
 /**
  * Create journal entry for COGS (inventory exit)
  * DR COGS, CR Inventory
+ * @throws {ValidationError} if amount is invalid
  */
 export async function createJournalEntryForCOGS(
   userId: string,
@@ -413,6 +378,7 @@ export async function createJournalEntryForCOGS(
   date: Date,
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
   const mapping = getAccountMappingForCOGS();
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'inventory');
@@ -421,6 +387,7 @@ export async function createJournalEntryForCOGS(
 /**
  * Create journal entry for depreciation
  * DR Depreciation Expense, CR Accumulated Depreciation
+ * @throws {ValidationError} if amount is invalid
  */
 export async function createJournalEntryForDepreciation(
   userId: string,
@@ -429,6 +396,7 @@ export async function createJournalEntryForDepreciation(
   date: Date,
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
   const mapping = getAccountMappingForDepreciation();
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'depreciation');
