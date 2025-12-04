@@ -147,8 +147,8 @@ export function parseAmount(value: string | number): number {
  * currencyEquals(0.1 + 0.2, 0.3) // Returns true
  * currencyEquals(100.004, 100.005) // Returns true (both round to 100.00/100.01)
  */
-export function currencyEquals(a: number, b: number): number {
-  return roundCurrency(a) === roundCurrency(b) ? 1 : 0;
+export function currencyEquals(a: number, b: number): boolean {
+  return roundCurrency(a) === roundCurrency(b);
 }
 
 /**
