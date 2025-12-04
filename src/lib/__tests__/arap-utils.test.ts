@@ -2,6 +2,12 @@
  * Unit Tests for AR/AP Utilities
  */
 
+// Mock Firebase to avoid fetch issues in test environment
+jest.mock('@/firebase/config', () => ({
+  firestore: {},
+  storage: {},
+}));
+
 import {
   calculatePaymentStatus,
   isValidTransactionId,
@@ -629,7 +635,9 @@ describe('AR/AP Utilities', () => {
       expect(result.newStatus).toBe(PAYMENT_STATUSES.UNPAID);
     });
 
-    it('should not allow totalPaid to go below 0', async () => {
+    it('should fail with data integrity error when totalPaid would go below 0', async () => {
+      // Changed behavior: We no longer silently clamp to 0.
+      // Negative values indicate data corruption (e.g., double-reversal) and should fail.
       const ledgerData = {
         isARAPEntry: true,
         totalPaid: 100,
@@ -644,13 +652,11 @@ describe('AR/AP Utilities', () => {
         mockFirestore,
         mockUserId,
         mockTransactionIdValue,
-        500
+        500 // Would result in 100 - 500 = -400
       );
 
-      expect(result.success).toBe(true);
-      expect(result.newTotalPaid).toBe(0);
-      expect(result.newRemainingBalance).toBe(1000);
-      expect(result.newStatus).toBe(PAYMENT_STATUSES.UNPAID);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('سلامة البيانات');
     });
 
     it('should fail when ledger entry is not found', async () => {
@@ -755,10 +761,13 @@ describe('AR/AP Utilities', () => {
       expect(result.newStatus).toBe(PAYMENT_STATUSES.PARTIAL);
     });
 
-    it('should handle missing totalPaid field (defaults to 0)', async () => {
+    it('should fail with data integrity error when missing totalPaid and reversal would go negative', async () => {
+      // Changed behavior: When totalPaid is missing (defaults to 0),
+      // reversing any payment would result in negative value, which now fails.
       const ledgerData = {
         isARAPEntry: true,
         amount: 1000,
+        // totalPaid is missing, defaults to 0
       };
 
       mockGetDocs.mockResolvedValue(createMockQuerySnapshot(ledgerData));
@@ -769,11 +778,11 @@ describe('AR/AP Utilities', () => {
         mockFirestore,
         mockUserId,
         mockTransactionIdValue,
-        200
+        200 // Would result in 0 - 200 = -200
       );
 
-      expect(result.success).toBe(true);
-      expect(result.newTotalPaid).toBe(0);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('سلامة البيانات');
     });
 
     it('should handle missing amount field (defaults to 0)', async () => {

@@ -17,7 +17,9 @@ import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
-import { safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
+import { safeAdd, safeSubtract } from "@/lib/currency";
+import { assertNonNegative } from "@/lib/validation";
+import { isDataIntegrityError } from "@/lib/errors";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -75,9 +77,16 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
       if (ledgerData.isARAPEntry) {
         const currentTotalPaid = ledgerData.totalPaid || 0;
         const transactionAmount = ledgerData.amount || 0;
-        const newTotalPaid = isAddition
+        const rawNewTotalPaid = isAddition
           ? currentTotalPaid + amount
-          : Math.max(0, currentTotalPaid - amount);
+          : currentTotalPaid - amount;
+
+        // Fail fast on negative totalPaid - this indicates data corruption
+        const newTotalPaid = assertNonNegative(rawNewTotalPaid, {
+          operation: 'updateARAPTracking',
+          entityId: ledgerDoc.id,
+          entityType: 'ledger'
+        });
         const newRemainingBalance = transactionAmount - newTotalPaid;
 
         let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
@@ -313,7 +322,13 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
                 const transactionAmount = ledgerData.amount || 0;
-                const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, chequeAmount));
+
+                // Fail fast on negative totalPaid - this indicates data corruption
+                const newTotalPaid = assertNonNegative(safeSubtract(currentTotalPaid, chequeAmount), {
+                  operation: 'reverseChequePayment',
+                  entityId: ledgerDoc.id,
+                  entityType: 'ledger'
+                });
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
                 const newPaymentStatus: "paid" | "unpaid" | "partial" =
                   newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
@@ -375,9 +390,14 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
       return true;
     } catch (error) {
       // Provide more specific error messages
+      let errorTitle = "خطأ";
       let errorDescription = "حدث خطأ أثناء حفظ البيانات";
 
-      if (error instanceof StorageError) {
+      if (isDataIntegrityError(error)) {
+        errorTitle = "خطأ في سلامة البيانات";
+        errorDescription = "المبلغ المدفوع سيصبح سالباً. قد يكون هناك تكرار في العملية.";
+        console.error("Data integrity error:", error);
+      } else if (error instanceof StorageError) {
         errorDescription = "حدث خطأ أثناء رفع صورة الشيك. يرجى المحاولة مرة أخرى";
       } else if (error instanceof Error) {
         // Log the actual error for debugging
@@ -385,7 +405,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
       }
 
       toast({
-        title: "خطأ",
+        title: errorTitle,
         description: errorDescription,
         variant: "destructive",
       });

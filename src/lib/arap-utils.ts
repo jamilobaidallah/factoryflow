@@ -24,9 +24,10 @@ import {
 import {
   safeSubtract,
   safeAdd,
-  zeroFloor,
   roundCurrency
 } from './currency';
+import { assertNonNegative } from './validation';
+import { isDataIntegrityError } from './errors';
 
 // ============================================================================
 // Error Constants
@@ -114,9 +115,15 @@ function calculateNewARAPValues(
   const currentTotalPaid = ledgerData.totalPaid || 0;
   const transactionAmount = ledgerData.amount || 0;
 
-  const newTotalPaid = operation === 'add'
+  const rawNewTotalPaid = operation === 'add'
     ? safeAdd(currentTotalPaid, paymentAmount)
-    : zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
+    : safeSubtract(currentTotalPaid, paymentAmount);
+
+  // Fail fast on negative totalPaid - this indicates data corruption (e.g., double-reversal)
+  const newTotalPaid = assertNonNegative(rawNewTotalPaid, {
+    operation: 'calculateARAPPayment',
+    entityType: 'payment'
+  });
 
   const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
   const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
@@ -191,6 +198,14 @@ function handleARAPError(
   context: { transactionId?: string; operation: string }
 ): ARAPUpdateResult {
   console.error(`Error ${context.operation}:`, error);
+
+  // Handle data integrity errors (negative values)
+  if (isDataIntegrityError(error)) {
+    return {
+      success: false,
+      message: "⚠ خطأ في سلامة البيانات: المبلغ المدفوع سيصبح سالباً. قد يكون هناك تكرار في العملية.",
+    };
+  }
 
   if (error instanceof Error) {
     if (error.message === ERRORS.LEDGER_NOT_FOUND) {

@@ -53,6 +53,8 @@ import {
   sumAmounts,
   roundCurrency
 } from "@/lib/currency";
+import { assertNonNegative } from "@/lib/validation";
+import { isDataIntegrityError } from "@/lib/errors";
 import { createJournalEntryForLedger, createJournalEntryForCOGS } from "@/services/journalService";
 
 // Collection path helpers
@@ -672,8 +674,15 @@ export class LedgerService {
                 ? currentQuantity - quantity
                 : currentQuantity + quantity;
 
+            // Fail fast on negative inventory - this indicates data corruption
+            const validatedQuantity = assertNonNegative(revertedQuantity, {
+              operation: 'revertInventoryOnDelete',
+              entityId: itemId,
+              entityType: 'inventory'
+            });
+
             const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
-            batch.update(itemDocRef, { quantity: Math.max(0, revertedQuantity) });
+            batch.update(itemDocRef, { quantity: validatedQuantity });
           }
         }
 
@@ -700,6 +709,14 @@ export class LedgerService {
       };
     } catch (error) {
       console.error("Error deleting ledger entry:", error);
+
+      if (isDataIntegrityError(error)) {
+        return {
+          success: false,
+          error: "خطأ في سلامة البيانات: الكمية ستصبح سالبة. قد يكون هناك تكرار في الحذف أو خطأ في البيانات.",
+        };
+      }
+
       return {
         success: false,
         error: "حدث خطأ أثناء حذف الحركة المالية",

@@ -58,6 +58,8 @@ import {
 } from "@/components/ui/pagination";
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { assertNonNegative } from "@/lib/validation";
+import { isDataIntegrityError } from "@/lib/errors";
 import { CopyButton } from "@/components/ui/copy-button";
 
 // Categories with subcategories (matching ledger categories)
@@ -397,7 +399,13 @@ export default function PaymentsPage() {
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
                 const transactionAmount = ledgerData.amount || 0;
-                const newTotalPaid = Math.max(0, currentTotalPaid - payment.amount);
+
+                // Fail fast on negative totalPaid - this indicates data corruption
+                const newTotalPaid = assertNonNegative(currentTotalPaid - payment.amount, {
+                  operation: 'reversePaymentDelete',
+                  entityId: ledgerDoc.id,
+                  entityType: 'ledger'
+                });
                 const newRemainingBalance = transactionAmount - newTotalPaid;
 
                 let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
@@ -428,12 +436,20 @@ export default function PaymentsPage() {
               : "تم حذف المدفوعة بنجاح",
           });
         } catch (error) {
-          const appError = handleError(error);
-          toast({
-            title: getErrorTitle(appError),
-            description: appError.message,
-            variant: "destructive",
-          });
+          if (isDataIntegrityError(error)) {
+            toast({
+              title: "خطأ في سلامة البيانات",
+              description: "المبلغ المدفوع سيصبح سالباً. قد يكون هناك تكرار في عملية الحذف.",
+              variant: "destructive",
+            });
+          } else {
+            const appError = handleError(error);
+            toast({
+              title: getErrorTitle(appError),
+              description: appError.message,
+              variant: "destructive",
+            });
+          }
         }
       },
       "destructive"

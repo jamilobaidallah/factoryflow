@@ -22,6 +22,8 @@ import { doc, updateDoc, deleteDoc, collection, getDocs, getDoc, writeBatch } fr
 import { firestore } from "@/firebase/config";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { assertNonNegative } from "@/lib/validation";
+import { isDataIntegrityError } from "@/lib/errors";
 
 export default function OutgoingChequesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -138,8 +140,12 @@ export default function OutgoingChequesPage() {
             const currentRemainingBalance = ledgerData.remainingBalance || 0;
             const originalAmount = ledgerData.amount || 0;
 
-            // Restore the remaining balance
-            const newTotalPaid = Math.max(0, currentTotalPaid - allocatedAmount);
+            // Restore the remaining balance - fail fast on negative values
+            const newTotalPaid = assertNonNegative(currentTotalPaid - allocatedAmount, {
+              operation: 'reverseChequePayment',
+              entityId: ledgerDocId,
+              entityType: 'ledger'
+            });
             const newRemainingBalance = currentRemainingBalance + allocatedAmount;
 
             // Determine new payment status
@@ -177,6 +183,15 @@ export default function OutgoingChequesPage() {
       return true;
     } catch (error) {
       console.error("Error reversing payment:", error);
+
+      if (isDataIntegrityError(error)) {
+        toast({
+          title: "خطأ في سلامة البيانات",
+          description: "المبلغ المدفوع سيصبح سالباً. قد يكون هناك تكرار في عملية الإلغاء.",
+          variant: "destructive",
+        });
+      }
+
       return false;
     }
   };

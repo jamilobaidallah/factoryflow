@@ -1,211 +1,161 @@
-# Implement Double-Entry Bookkeeping System
+# Fix Silent Data Corruption - Negative Value Clamps
 
 ## Problem Summary
 
-The current system uses **single-entry bookkeeping** with category-based tracking. This creates several critical gaps:
+**Severity: HIGH** - Silent data corruption
 
-| Issue | Impact |
-|-------|--------|
-| No Chart of Accounts | Cannot properly classify accounts by type |
-| No debit/credit enforcement | No self-balancing mechanism |
-| COGS doesn't reduce inventory | Asset values incorrect |
-| No automatic contra-entries | Manual work, error-prone |
-| No Balance Sheet | Cannot show financial position |
+Multiple locations in the codebase silently clamp negative values to zero using `Math.max(0, ...)`. This hides data integrity violations rather than exposing them as bugs.
 
-## Current State Analysis
+### The Issue
 
-**What exists:**
-- Category-based ledger entries (income/expense)
-- AR/AP tracking with payment allocations
-- Inventory with weighted average costing
-- Fixed assets with depreciation
-- Reports: Income Statement, Trial Balance (approximate), Cash Flow
+```typescript
+// Example: If revertedQuantity is -5, this silently becomes 0
+batch.update(itemDocRef, { quantity: Math.max(0, revertedQuantity) });
+```
 
-**What's missing:**
-- Formal Chart of Accounts with account codes
-- Account types (Asset, Liability, Equity, Revenue, Expense)
-- Journal entries with debit/credit pairs
-- Automatic contra-entries
-- Balance Sheet report
-- Self-balancing verification (Debits = Credits)
+**Why this is dangerous:**
+- Negative inventory = **BUG** (over-sold, double-deletion, data corruption)
+- Negative totalPaid = **BUG** (payment double-reversed, data mismatch)
+- Silent clamps **hide** these bugs instead of catching them
 
 ---
 
-## Design Approach
+## Affected Locations
 
-### Principle: Minimal Disruption
+| File | Line | Context | Silent Clamp |
+|------|------|---------|--------------|
+| `ledgerService.ts` | 676 | Inventory reversal on delete | `Math.max(0, revertedQuantity)` |
+| `arap-utils.ts` | 119 | ARAP payment subtraction | `zeroFloor(...)` |
+| `outgoing-cheques-page.tsx` | 142 | Cheque allocation reversal | `Math.max(0, currentTotalPaid - allocatedAmount)` |
+| `incoming-cheques-page.tsx` | 170 | Cheque allocation reversal | `Math.max(0, currentTotalPaid - allocatedAmount)` |
+| `useOutgoingChequesOperations.ts` | 80 | ARAP update on cheque | `Math.max(0, currentTotalPaid - amount)` |
+| `payments-page.tsx` | 400 | Payment deletion reversal | `Math.max(0, currentTotalPaid - payment.amount)` |
+| `currency.ts` | 180-183 | `zeroFloor()` utility | Returns 0 for negatives (by design - used by others) |
 
-Rather than rebuilding from scratch, we'll **layer double-entry on top** of the existing system:
+---
 
-1. **Add** Chart of Accounts alongside existing categories
-2. **Add** Journal Entry layer that creates paired entries
-3. **Extend** existing ledger entries with account references
-4. **Keep** existing UI flows working (backward compatible)
+## Solution Design
 
-### Account Type Rules
+### Principle: Fail Fast, Fix Root Cause
 
-| Account Type | Normal Balance | Debit Increases | Credit Increases |
-|--------------|----------------|-----------------|------------------|
-| Asset | Debit | Yes | No |
-| Liability | Credit | No | Yes |
-| Equity | Credit | No | Yes |
-| Revenue | Credit | No | Yes |
-| Expense | Debit | Yes | No |
+Instead of silently clamping, we will:
+1. **Detect** when a value would go negative
+2. **Log** a detailed error for debugging
+3. **Throw** or return failure to surface the issue
+4. **Keep** `zeroFloor()` for cases where clamping IS correct (display, UI rounding)
 
-### Standard Chart of Accounts (Arabic)
+### New Error Type
 
+Create a `DataIntegrityError` for these violations:
+
+```typescript
+export class DataIntegrityError extends Error {
+  constructor(
+    message: string,
+    public readonly context: {
+      operation: string;
+      expectedValue: number;
+      actualValue: number;
+      entityId?: string;
+    }
+  ) {
+    super(message);
+    this.name = 'DataIntegrityError';
+  }
+}
 ```
-1000-1999: Assets (أصول)
-  1000 - Cash (النقدية)
-  1100 - Bank (البنك)
-  1200 - Accounts Receivable (ذمم مدينة)
-  1300 - Inventory (المخزون)
-  1400 - Prepaid Expenses (مصاريف مدفوعة مقدماً)
-  1500 - Fixed Assets (الأصول الثابتة)
-  1510 - Accumulated Depreciation (مجمع الإهلاك) [contra-asset]
 
-2000-2999: Liabilities (التزامات)
-  2000 - Accounts Payable (ذمم دائنة)
-  2100 - Accrued Expenses (مصاريف مستحقة)
-  2200 - Notes Payable (أوراق دفع)
+### New Validation Function
 
-3000-3999: Equity (حقوق الملكية)
-  3000 - Owner's Capital (رأس المال)
-  3100 - Owner's Drawings (سحوبات المالك)
-  3200 - Retained Earnings (الأرباح المحتجزة)
-
-4000-4999: Revenue (الإيرادات)
-  4000 - Sales Revenue (إيرادات المبيعات)
-  4100 - Service Revenue (إيرادات الخدمات)
-  4200 - Other Income (إيرادات أخرى)
-
-5000-5999: Expenses (المصروفات)
-  5000 - Cost of Goods Sold (تكلفة البضاعة المباعة)
-  5100 - Salaries Expense (مصاريف الرواتب)
-  5200 - Rent Expense (مصاريف الإيجار)
-  5300 - Utilities Expense (مصاريف المرافق)
-  5400 - Depreciation Expense (مصاريف الإهلاك)
-  5500 - Other Expenses (مصاريف أخرى)
+```typescript
+/**
+ * Assert value is non-negative, throw DataIntegrityError if not.
+ * Use this instead of Math.max(0, value) to catch bugs.
+ */
+export function assertNonNegative(
+  value: number,
+  context: { operation: string; entityId?: string }
+): number {
+  if (value < 0) {
+    throw new DataIntegrityError(
+      `Data integrity violation: ${context.operation} resulted in negative value (${value})`,
+      { operation: context.operation, expectedValue: 0, actualValue: value, entityId: context.entityId }
+    );
+  }
+  return value;
+}
 ```
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Data Model & Types
+### Phase 1: Create Error Infrastructure
 
-- [x] **Task 1.1: Create Account types**
-  - File: `src/types/accounting.ts` (new file)
-  - Define: `AccountType`, `Account`, `JournalEntry`, `JournalLine`
-  - Include account codes, types, normal balances
+- [x] **Task 1.1: Create DataIntegrityError class**
+  - File: `src/lib/errors.ts` (new file)
+  - Define DataIntegrityError with context object
+  - Export alongside any existing error types
 
-- [x] **Task 1.2: Create default Chart of Accounts**
-  - File: `src/lib/chart-of-accounts.ts` (new file)
-  - Default accounts matching Arabic categories
-  - Mapping from existing categories to accounts
+- [x] **Task 1.2: Create assertNonNegative utility**
+  - File: `src/lib/validation.ts` (added to existing file)
+  - Assert function that throws DataIntegrityError
+  - Keep separate from currency.ts (different responsibility)
 
-- [x] **Task 1.3: Add category-to-account mapping**
-  - File: `src/lib/account-mapping.ts` (new file)
-  - Maps existing categories to new account codes
-  - Enables backward compatibility
+### Phase 2: Fix Silent Clamps
 
-### Phase 2: Database & Service Layer
+- [x] **Task 2.1: Fix ledgerService.ts inventory reversal**
+  - Line 676: Replace `Math.max(0, revertedQuantity)` with `assertNonNegative()`
+  - Wrap in try/catch to return meaningful error to caller
+  - Batch should fail if data integrity violated
 
-- [x] **Task 2.1: Create accounts Firestore collection**
-  - Collection: `users/{userId}/accounts`
-  - Fields: code, name, nameAr, type, normalBalance, isActive, parentCode
-  - Included in journalService.ts
+- [x] **Task 2.2: Fix arap-utils.ts payment subtraction**
+  - Line 119: Replace `zeroFloor()` with `assertNonNegative()`
+  - Transaction will fail atomically if violated
+  - Error propagates to calling code
 
-- [x] **Task 2.2: Create journal_entries collection**
-  - Collection: `users/{userId}/journal_entries`
-  - Fields: entryNumber, date, description, lines[], isPosted, linkedTransactionId
-  - Each line: accountCode, debit, credit, description
+- [x] **Task 2.3: Fix outgoing-cheques-page.tsx**
+  - Line 142: Replace `Math.max(0, ...)` with `assertNonNegative()`
+  - Catch error and show toast with meaningful message
+  - Log full error for debugging
 
-- [x] **Task 2.3: Create journalService.ts**
-  - File: `src/services/journalService.ts` (new file)
-  - createJournalEntry() - validates debits = credits
-  - reverseJournalEntry() - creates reversing entry
-  - getAccountBalance() - sum of debits - credits
-  - getTrialBalance() - all account balances
-  - getBalanceSheet() - Assets = Liabilities + Equity
+- [x] **Task 2.4: Fix incoming-cheques-page.tsx**
+  - Line 170: Same fix as outgoing-cheques-page.tsx
 
-- [x] **Task 2.4: Seed default Chart of Accounts**
-  - On first use, create default accounts for user
-  - Check if accounts collection empty, then seed
+- [x] **Task 2.5: Fix useOutgoingChequesOperations.ts**
+  - Line 80: Replace `Math.max(0, ...)` with `assertNonNegative()`
+  - Also fixed second occurrence at line 325
+  - Return failure status if integrity violated
 
-### Phase 3: Integration with Existing Flows
+- [x] **Task 2.6: Fix payments-page.tsx**
+  - Line 400: Replace `Math.max(0, ...)` with `assertNonNegative()`
+  - Show error toast, prevent partial state updates
 
-- [x] **Task 3.1: Auto-create journal entries for payments**
-  - When payment created:
-    - Receipt (قبض): DR Cash, CR Accounts Receivable
-    - Disbursement (صرف): DR Accounts Payable, CR Cash
-  - Modified `usePaymentAllocations.ts`
+### Phase 3: Testing
 
-- [x] **Task 3.2: Auto-create journal entries for ledger entries**
-  - Income entry: DR Accounts Receivable, CR Revenue
-  - Expense entry: DR Expense, CR Accounts Payable
-  - Modified `ledgerService.ts` createSimpleLedgerEntry() and createLedgerEntryWithRelated()
+- [x] **Task 3.1: Add unit tests for DataIntegrityError**
+  - Test error creation with context
+  - Test error message formatting
 
-- [x] **Task 3.3: Link COGS to inventory reduction**
-  - When inventory exits for sale:
-    - DR Cost of Goods Sold
-    - CR Inventory
-  - Modified handleInventoryUpdateBatch() to return COGS data
-  - Journal entry created after batch commit
+- [x] **Task 3.2: Add unit tests for assertNonNegative**
+  - Test positive values pass through
+  - Test zero passes through
+  - Test negative values throw DataIntegrityError
 
-- [x] **Task 3.4: Auto-create depreciation journal entries**
-  - When depreciation recorded:
-    - DR Depreciation Expense
-    - CR Accumulated Depreciation
-  - Modified `useFixedAssetsOperations.ts` runDepreciation()
+- [x] **Task 3.3: Run full test suite**
+  - Ensure no regressions
+  - All existing tests pass
 
-### Phase 4: Balance Sheet Report
+### Phase 4: Verification
 
-- [x] **Task 4.1: Create useBalanceSheet hook**
-  - File: `src/components/reports/hooks/useBalanceSheet.ts`
-  - Calculate account balances by type
-  - Assets = Liabilities + Equity verification
+- [x] **Task 4.1: TypeScript compilation**
+  - `npx tsc --noEmit` passes
 
-- [x] **Task 4.2: Create BalanceSheetTab component**
-  - File: `src/components/reports/tabs/BalanceSheetTab.tsx`
-  - Display: Assets, Liabilities, Equity sections
-  - Show verification (balanced or not)
-  - Net Income calculated from Revenue - Expenses
+- [x] **Task 4.2: Run production build**
+  - `npm run build` succeeds
 
-- [x] **Task 4.3: Add Balance Sheet to reports page**
-  - Added new tab to reports-page.tsx
-  - Shows "الميزانية" tab with full balance sheet
-
-### Phase 5: Trial Balance Enhancement
-
-- [x] **Task 5.1: Update Trial Balance calculation**
-  - Created useTrialBalance hook to fetch from journalService
-  - Updated TrialBalanceTab to display journal-based balances
-  - Shows debits and credits by account with account codes
-
-- [x] **Task 5.2: Add self-balancing verification**
-  - Display warning if Debits ≠ Credits
-  - Shows balanced/unbalanced status with icons
-
-### Phase 6: Testing & Verification
-
-- [x] **Task 6.1: TypeScript compilation**
-  - All files compile without errors
-
-- [x] **Task 6.2: Run full test suite**
-  - All 1040 tests pass (986 original + 54 new accounting tests)
-  - No regressions introduced
-
-- [x] **Task 6.3: Run production build**
-  - Build completes successfully
-  - No blocking errors
-
-### Phase 7: Migration (Optional - Future)
-
-- [ ] **Task 7.1: Migration script for existing data**
-  - Generate journal entries from existing ledger entries
-  - Calculate opening balances
-  - One-time migration utility
+- [x] **Task 4.3: Run linting**
+  - `npm run lint` passes (only pre-existing warnings)
 
 ---
 
@@ -213,25 +163,21 @@ Rather than rebuilding from scratch, we'll **layer double-entry on top** of the 
 
 | File | Purpose |
 |------|---------|
-| `src/types/accounting.ts` | Account, JournalEntry, JournalLine types |
-| `src/lib/chart-of-accounts.ts` | Default CoA with Arabic names |
-| `src/lib/account-mapping.ts` | Category → Account mapping |
-| `src/services/journalService.ts` | Journal entry CRUD operations |
-| `src/components/reports/hooks/useBalanceSheet.ts` | Balance sheet calculations |
-| `src/components/reports/hooks/useTrialBalance.ts` | Trial balance calculations |
-| `src/components/reports/tabs/BalanceSheetTab.tsx` | Balance sheet UI |
-| `src/types/__tests__/accounting.test.ts` | Accounting types tests |
-| `src/services/__tests__/journalService.test.ts` | Journal service tests |
+| `src/lib/errors.ts` | DataIntegrityError class |
+| `src/lib/validation.ts` | assertNonNegative utility |
+| `src/lib/__tests__/errors.test.ts` | Error class tests |
+| `src/lib/__tests__/validation.test.ts` | Validation utility tests |
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/services/ledgerService.ts` | Add journal entry creation on ledger save |
-| `src/components/payments/hooks/usePaymentAllocations.ts` | Add journal entry for payments |
-| `src/lib/constants.ts` | Add account-related constants |
-| `src/components/reports/reports-page.tsx` | Add Balance Sheet tab |
-| `src/components/reports/tabs/TrialBalanceTab.tsx` | Use journal entries for accuracy |
+| File | Change |
+|------|--------|
+| `src/services/ledgerService.ts` | Replace silent clamp with assertion |
+| `src/lib/arap-utils.ts` | Replace zeroFloor with assertion |
+| `src/components/cheques/outgoing-cheques-page.tsx` | Replace silent clamp with assertion |
+| `src/components/cheques/incoming-cheques-page.tsx` | Replace silent clamp with assertion |
+| `src/components/cheques/hooks/useOutgoingChequesOperations.ts` | Replace silent clamp with assertion |
+| `src/components/payments/payments-page.tsx` | Replace silent clamp with assertion |
 
 ---
 
@@ -239,41 +185,44 @@ Rather than rebuilding from scratch, we'll **layer double-entry on top** of the 
 
 | Risk | Mitigation |
 |------|------------|
-| Breaking existing functionality | Layer on top, don't replace. All existing flows continue working |
-| Data migration complexity | Phase 7 is optional. New entries get journal entries automatically |
-| Performance with dual writes | Journal entries are lightweight. Firestore handles scale |
-| User confusion | UI changes minimal. Reports improve transparently |
+| Surfacing hidden bugs | Good! That's the point. Fix root causes |
+| Breaking user operations | Errors show helpful message, operation fails safely |
+| Production errors | Better to fail fast than corrupt data silently |
 
 ---
 
-## Success Criteria
+## Review Section
 
-1. Every financial transaction creates balanced journal entries (Debits = Credits)
-2. Balance Sheet report shows accurate Assets, Liabilities, Equity
-3. Trial Balance calculated from journal entries, not approximations
-4. COGS entries automatically reduce inventory asset
-5. All existing tests pass + new accounting tests
-6. Existing UI flows unchanged (backward compatible)
+### Changes Made
+
+**New Files Created:**
+- `src/lib/errors.ts` - DataIntegrityError class with context object and type guard
+- `src/lib/__tests__/errors.test.ts` - 9 tests for DataIntegrityError
+- `src/lib/__tests__/validation-assertions.test.ts` - 12 tests for assertNonNegative
+
+**Files Modified:**
+- `src/lib/validation.ts` - Added assertNonNegative function
+- `src/services/ledgerService.ts` - Replaced silent clamp with assertion (inventory reversal)
+- `src/lib/arap-utils.ts` - Replaced zeroFloor with assertion (payment calculation)
+- `src/components/cheques/outgoing-cheques-page.tsx` - Replaced silent clamp with assertion
+- `src/components/cheques/incoming-cheques-page.tsx` - Replaced silent clamp with assertion
+- `src/components/cheques/hooks/useOutgoingChequesOperations.ts` - Replaced 2 silent clamps with assertions
+- `src/components/payments/payments-page.tsx` - Replaced silent clamp with assertion
+- `src/lib/__tests__/arap-utils.test.ts` - Updated 2 tests to expect new behavior
+
+### Tests Added
+- **21 new tests** for DataIntegrityError and assertNonNegative
+- Updated 2 existing tests in arap-utils.test.ts to reflect new "fail fast" behavior
+
+### Verification Results
+- **TypeScript**: Compiles without errors
+- **Tests**: 1110 tests pass (0 failures)
+- **Build**: Production build succeeds
+- **Lint**: Only pre-existing warnings, no new issues
+
+### Behavioral Change
+Operations that would result in negative inventory or payment values now **fail with an error** instead of silently clamping to zero. This surfaces data integrity bugs rather than hiding them.
 
 ---
 
-## Verification Checkpoints
-
-After each phase, verify:
-- [ ] TypeScript builds without errors (`npm run build`)
-- [ ] All tests pass (`npm test`)
-- [ ] No console errors in browser
-- [ ] Existing functionality still works
-
----
-
-## Notes
-
-- Journal entries use atomic Firestore transactions (like existing ARAP)
-- Account codes follow standard accounting conventions
-- Arabic names provided for all accounts
-- System remains functional even if journal entries disabled
-
----
-
-**STOP: Awaiting plan approval before proceeding with implementation.**
+**Implementation complete. Ready for PR review.**
