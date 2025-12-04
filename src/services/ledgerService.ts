@@ -12,6 +12,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   getCountFromServer,
   query,
   where,
@@ -19,6 +20,7 @@ import {
   limit,
   startAfter,
   writeBatch,
+  runTransaction,
   onSnapshot,
   DocumentSnapshot,
   Unsubscribe,
@@ -615,6 +617,7 @@ export class LedgerService {
 
   /**
    * Delete a ledger entry and all related records
+   * Uses runTransaction for inventory reversions to prevent race conditions
    */
   async deleteLedgerEntry(entry: LedgerEntry): Promise<DeleteResult> {
     try {
@@ -648,6 +651,7 @@ export class LedgerService {
       });
 
       // 4. Revert inventory quantities and delete related movements
+      // Use runTransaction for each inventory update to prevent race conditions
       const movementsQuery = query(
         this.inventoryMovementsRef,
         where("linkedTransactionId", "==", entry.transactionId)
@@ -661,28 +665,33 @@ export class LedgerService {
         const movementType = movement.type;
 
         if (itemId) {
-          const itemQuery = query(this.inventoryRef, where("__name__", "==", itemId));
-          const itemSnapshot = await getDocs(itemQuery);
+          const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
 
-          if (!itemSnapshot.empty) {
-            const itemDoc = itemSnapshot.docs[0];
-            const currentQuantity = (itemDoc.data() as InventoryItemData).quantity || 0;
+          // Use transaction for isolated read-modify-write on inventory
+          // This prevents race conditions when multiple deletes happen concurrently
+          await runTransaction(firestore, async (transaction) => {
+            // READ inside transaction - guaranteed fresh
+            const itemDoc = await transaction.get(itemDocRef);
 
-            const revertedQuantity =
-              movementType === "دخول"
-                ? currentQuantity - quantity
-                : currentQuantity + quantity;
+            if (itemDoc.exists()) {
+              const currentQuantity = (itemDoc.data() as InventoryItemData).quantity || 0;
 
-            // Fail fast on negative inventory - this indicates data corruption
-            const validatedQuantity = assertNonNegative(revertedQuantity, {
-              operation: 'revertInventoryOnDelete',
-              entityId: itemId,
-              entityType: 'inventory'
-            });
+              const revertedQuantity =
+                movementType === "دخول"
+                  ? currentQuantity - quantity
+                  : currentQuantity + quantity;
 
-            const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
-            batch.update(itemDocRef, { quantity: validatedQuantity });
-          }
+              // Fail fast on negative inventory - this indicates data corruption
+              const validatedQuantity = assertNonNegative(revertedQuantity, {
+                operation: 'revertInventoryOnDelete',
+                entityId: itemId,
+                entityType: 'inventory'
+              });
+
+              // WRITE inside transaction - isolated from concurrent updates
+              transaction.update(itemDocRef, { quantity: validatedQuantity });
+            }
+          });
         }
 
         batch.delete(movementDoc.ref);
@@ -1423,89 +1432,123 @@ export class LedgerService {
     let cogsDescription = "";
     const quantityChange = parseAmount(inventoryFormData.quantity);
 
+    // First, find if item exists (query is safe - just finding the document ID)
     const itemQuery = query(this.inventoryRef, where("itemName", "==", inventoryFormData.itemName));
     const itemSnapshot = await getDocs(itemQuery);
 
     let itemId = "";
 
     if (!itemSnapshot.empty) {
+      // Item exists - use runTransaction for isolated read-modify-write
+      // This prevents race conditions when multiple users update the same inventory item
       const existingItem = itemSnapshot.docs[0];
       itemId = existingItem.id;
-      const existingItemData = existingItem.data() as InventoryItemData;
-      const currentQuantity = existingItemData.quantity || 0;
-      const currentUnitPrice = existingItemData.unitPrice || 0;
-      const newQuantity =
-        movementType === "دخول" ? safeAdd(currentQuantity, quantityChange) : safeSubtract(currentQuantity, quantityChange);
-
-      if (newQuantity < 0) {
-        return {
-          success: false,
-          error: `الكمية المتوفرة في المخزون (${currentQuantity}) غير كافية لإجراء عملية خروج بكمية ${quantityChange}`,
-        };
-      }
-
       const itemDocRef = doc(firestore, getUserCollectionPath(this.userId, "inventory"), itemId);
 
-      if (movementType === "دخول" && formData.amount) {
-        // Calculate total landed cost (purchase + shipping + other costs)
-        const shippingCost = inventoryFormData.shippingCost ? parseAmount(inventoryFormData.shippingCost) : 0;
-        const otherCosts = inventoryFormData.otherCosts ? parseAmount(inventoryFormData.otherCosts) : 0;
-        const purchaseAmount = parseAmount(formData.amount);
+      try {
+        // Transaction ensures: if quantity changes between read and write, it retries automatically
+        const transactionResult = await runTransaction(firestore, async (transaction) => {
+          // READ inside transaction - guaranteed to be fresh and isolated
+          const itemDoc = await transaction.get(itemDocRef);
+          if (!itemDoc.exists()) {
+            throw new Error("ITEM_NOT_FOUND");
+          }
 
-        // Use utility function to calculate landed cost unit price
-        const purchaseUnitPrice = calculateLandedCostUnitPrice(
-          purchaseAmount,
-          shippingCost,
-          otherCosts,
-          quantityChange
-        );
+          const existingItemData = itemDoc.data() as InventoryItemData;
+          const currentQuantity = existingItemData.quantity || 0;
+          const currentUnitPrice = existingItemData.unitPrice || 0;
 
-        // Use utility function to calculate weighted average cost
-        const weightedAvgPrice = calculateWeightedAverageCost(
-          currentQuantity,
-          currentUnitPrice,
-          quantityChange,
-          purchaseUnitPrice
-        );
+          const newQuantity =
+            movementType === "دخول" ? safeAdd(currentQuantity, quantityChange) : safeSubtract(currentQuantity, quantityChange);
 
-        const totalLandedCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
+          if (newQuantity < 0) {
+            throw new Error(`INSUFFICIENT_QUANTITY:${currentQuantity}`);
+          }
 
-        batch.update(itemDocRef, {
-          quantity: newQuantity,
-          unitPrice: weightedAvgPrice,
-          lastPurchasePrice: purchaseUnitPrice,
-          lastPurchaseDate: new Date(),
-          lastPurchaseAmount: totalLandedCost,
+          // WRITE inside transaction - isolated from concurrent updates
+          if (movementType === "دخول" && formData.amount) {
+            // Calculate total landed cost (purchase + shipping + other costs)
+            const shippingCost = inventoryFormData.shippingCost ? parseAmount(inventoryFormData.shippingCost) : 0;
+            const otherCosts = inventoryFormData.otherCosts ? parseAmount(inventoryFormData.otherCosts) : 0;
+            const purchaseAmount = parseAmount(formData.amount);
+
+            // Use utility function to calculate landed cost unit price
+            const purchaseUnitPrice = calculateLandedCostUnitPrice(
+              purchaseAmount,
+              shippingCost,
+              otherCosts,
+              quantityChange
+            );
+
+            // Use utility function to calculate weighted average cost
+            const weightedAvgPrice = calculateWeightedAverageCost(
+              currentQuantity,
+              currentUnitPrice,
+              quantityChange,
+              purchaseUnitPrice
+            );
+
+            const totalLandedCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
+
+            transaction.update(itemDocRef, {
+              quantity: newQuantity,
+              unitPrice: weightedAvgPrice,
+              lastPurchasePrice: purchaseUnitPrice,
+              lastPurchaseDate: new Date(),
+              lastPurchaseAmount: totalLandedCost,
+            });
+          } else {
+            transaction.update(itemDocRef, {
+              quantity: newQuantity,
+            });
+          }
+
+          // Return data needed for COGS calculation (read inside transaction = fresh)
+          return { currentUnitPrice };
         });
-      } else {
-        batch.update(itemDocRef, {
-          quantity: newQuantity,
-        });
-      }
 
-      // Auto-record COGS when selling
-      if (entryType === "إيراد" && movementType === "خروج") {
-        const unitCost = existingItemData.unitPrice || 0;
-        cogsAmount = safeMultiply(quantityChange, unitCost);
-        cogsDescription = `تكلفة البضاعة المباعة - ${inventoryFormData.itemName}`;
-        cogsCreated = true;
+        // Auto-record COGS when selling (uses unit price from transaction)
+        if (entryType === "إيراد" && movementType === "خروج") {
+          const unitCost = transactionResult.currentUnitPrice;
+          cogsAmount = safeMultiply(quantityChange, unitCost);
+          cogsDescription = `تكلفة البضاعة المباعة - ${inventoryFormData.itemName}`;
+          cogsCreated = true;
 
-        const cogsDocRef = doc(this.ledgerRef);
-        batch.set(cogsDocRef, {
-          transactionId: `COGS-${transactionId}`,
-          description: cogsDescription,
-          type: "مصروف",
-          amount: cogsAmount,
-          category: "تكلفة البضاعة المباعة (COGS)",
-          subCategory: "مبيعات",
-          date: new Date(formData.date),
-          linkedTransactionId: transactionId,
-          autoGenerated: true,
-          notes: `حساب تلقائي: ${quantityChange} × ${roundCurrency(unitCost).toFixed(2)} = ${roundCurrency(cogsAmount).toFixed(2)} دينار`,
-          createdAt: new Date(),
-        });
+          const cogsDocRef = doc(this.ledgerRef);
+          batch.set(cogsDocRef, {
+            transactionId: `COGS-${transactionId}`,
+            description: cogsDescription,
+            type: "مصروف",
+            amount: cogsAmount,
+            category: "تكلفة البضاعة المباعة (COGS)",
+            subCategory: "مبيعات",
+            date: new Date(formData.date),
+            linkedTransactionId: transactionId,
+            autoGenerated: true,
+            notes: `حساب تلقائي: ${quantityChange} × ${roundCurrency(unitCost).toFixed(2)} = ${roundCurrency(cogsAmount).toFixed(2)} دينار`,
+            createdAt: new Date(),
+          });
+        }
+      } catch (error) {
+        // Handle transaction errors with user-friendly messages
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage === "ITEM_NOT_FOUND") {
+          return {
+            success: false,
+            error: `الصنف "${inventoryFormData.itemName}" لم يعد موجوداً في المخزون`,
+          };
+        }
+        if (errorMessage.startsWith("INSUFFICIENT_QUANTITY:")) {
+          const currentQty = errorMessage.split(":")[1];
+          return {
+            success: false,
+            error: `الكمية المتوفرة في المخزون (${currentQty}) غير كافية لإجراء عملية خروج بكمية ${quantityChange}`,
+          };
+        }
+        throw error; // Re-throw unexpected errors
       }
     } else {
+      // Item doesn't exist - no race condition for creation (write-only)
       if (movementType === "خروج") {
         return {
           success: false,
@@ -1548,7 +1591,7 @@ export class LedgerService {
       });
     }
 
-    // Add movement record
+    // Add movement record (write-only, safe to use batch)
     const movementDocRef = doc(this.inventoryMovementsRef);
     batch.set(movementDocRef, {
       itemId: itemId,

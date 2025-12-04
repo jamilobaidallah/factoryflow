@@ -1,193 +1,110 @@
-# Fix Silent Data Corruption - Negative Value Clamps
+# Fix: WriteBatch vs runTransaction Misuse
 
-## Problem Summary
+## Issue Summary
+**Severity**: HIGH
+**Location**: `src/services/ledgerService.ts`
 
-**Severity: HIGH** - Silent data corruption
+### The Problem
+`WriteBatch` provides **atomicity** (all-or-nothing) but **NOT isolation**.
 
-Multiple locations in the codebase silently clamp negative values to zero using `Math.max(0, ...)`. This hides data integrity violations rather than exposing them as bugs.
+In `handleInventoryUpdateBatch` and `deleteLedgerEntry`, we:
+1. READ data outside the batch (`getDocs`)
+2. Calculate new values using that data
+3. WRITE inside batch (`batch.update`)
 
-### The Issue
+**Race Condition**: The read data can become stale between the read and batch commit. If two users update the same inventory item simultaneously, one update will be lost.
 
+### Affected Code
+
+**1. `handleInventoryUpdateBatch` (lines 1413-1573)**
 ```typescript
-// Example: If revertedQuantity is -5, this silently becomes 0
-batch.update(itemDocRef, { quantity: Math.max(0, revertedQuantity) });
+// Line 1427: READ outside batch - can be stale!
+const itemSnapshot = await getDocs(itemQuery);
+const currentQuantity = existingItemData.quantity || 0;
+
+// Line 1473-1484: WRITE with potentially stale data!
+batch.update(itemDocRef, { quantity: newQuantity });
 ```
 
-**Why this is dangerous:**
-- Negative inventory = **BUG** (over-sold, double-deletion, data corruption)
-- Negative totalPaid = **BUG** (payment double-reversed, data mismatch)
-- Silent clamps **hide** these bugs instead of catching them
-
----
-
-## Affected Locations
-
-| File | Line | Context | Silent Clamp |
-|------|------|---------|--------------|
-| `ledgerService.ts` | 676 | Inventory reversal on delete | `Math.max(0, revertedQuantity)` |
-| `arap-utils.ts` | 119 | ARAP payment subtraction | `zeroFloor(...)` |
-| `outgoing-cheques-page.tsx` | 142 | Cheque allocation reversal | `Math.max(0, currentTotalPaid - allocatedAmount)` |
-| `incoming-cheques-page.tsx` | 170 | Cheque allocation reversal | `Math.max(0, currentTotalPaid - allocatedAmount)` |
-| `useOutgoingChequesOperations.ts` | 80 | ARAP update on cheque | `Math.max(0, currentTotalPaid - amount)` |
-| `payments-page.tsx` | 400 | Payment deletion reversal | `Math.max(0, currentTotalPaid - payment.amount)` |
-| `currency.ts` | 180-183 | `zeroFloor()` utility | Returns 0 for negatives (by design - used by others) |
-
----
-
-## Solution Design
-
-### Principle: Fail Fast, Fix Root Cause
-
-Instead of silently clamping, we will:
-1. **Detect** when a value would go negative
-2. **Log** a detailed error for debugging
-3. **Throw** or return failure to surface the issue
-4. **Keep** `zeroFloor()` for cases where clamping IS correct (display, UI rounding)
-
-### New Error Type
-
-Create a `DataIntegrityError` for these violations:
-
+**2. `deleteLedgerEntry` (lines 619-724)**
 ```typescript
-export class DataIntegrityError extends Error {
-  constructor(
-    message: string,
-    public readonly context: {
-      operation: string;
-      expectedValue: number;
-      actualValue: number;
-      entityId?: string;
-    }
-  ) {
-    super(message);
-    this.name = 'DataIntegrityError';
-  }
-}
-```
+// Lines 664-665: READ outside batch
+const itemQuery = query(this.inventoryRef, where("__name__", "==", itemId));
+const itemSnapshot = await getDocs(itemQuery);
+const currentQuantity = itemDoc.data().quantity || 0;
 
-### New Validation Function
-
-```typescript
-/**
- * Assert value is non-negative, throw DataIntegrityError if not.
- * Use this instead of Math.max(0, value) to catch bugs.
- */
-export function assertNonNegative(
-  value: number,
-  context: { operation: string; entityId?: string }
-): number {
-  if (value < 0) {
-    throw new DataIntegrityError(
-      `Data integrity violation: ${context.operation} resulted in negative value (${value})`,
-      { operation: context.operation, expectedValue: 0, actualValue: value, entityId: context.entityId }
-    );
-  }
-  return value;
-}
+// Lines 683-684: WRITE with potentially stale data
+batch.update(itemDocRef, { quantity: validatedQuantity });
 ```
 
 ---
 
-## Implementation Plan
+## Solution
+Replace `writeBatch` with `runTransaction` for read-modify-write operations on inventory.
 
-### Phase 1: Create Error Infrastructure
-
-- [x] **Task 1.1: Create DataIntegrityError class**
-  - File: `src/lib/errors.ts` (new file)
-  - Define DataIntegrityError with context object
-  - Export alongside any existing error types
-
-- [x] **Task 1.2: Create assertNonNegative utility**
-  - File: `src/lib/validation.ts` (added to existing file)
-  - Assert function that throws DataIntegrityError
-  - Keep separate from currency.ts (different responsibility)
-
-### Phase 2: Fix Silent Clamps
-
-- [x] **Task 2.1: Fix ledgerService.ts inventory reversal**
-  - Line 676: Replace `Math.max(0, revertedQuantity)` with `assertNonNegative()`
-  - Wrap in try/catch to return meaningful error to caller
-  - Batch should fail if data integrity violated
-
-- [x] **Task 2.2: Fix arap-utils.ts payment subtraction**
-  - Line 119: Replace `zeroFloor()` with `assertNonNegative()`
-  - Transaction will fail atomically if violated
-  - Error propagates to calling code
-
-- [x] **Task 2.3: Fix outgoing-cheques-page.tsx**
-  - Line 142: Replace `Math.max(0, ...)` with `assertNonNegative()`
-  - Catch error and show toast with meaningful message
-  - Log full error for debugging
-
-- [x] **Task 2.4: Fix incoming-cheques-page.tsx**
-  - Line 170: Same fix as outgoing-cheques-page.tsx
-
-- [x] **Task 2.5: Fix useOutgoingChequesOperations.ts**
-  - Line 80: Replace `Math.max(0, ...)` with `assertNonNegative()`
-  - Also fixed second occurrence at line 325
-  - Return failure status if integrity violated
-
-- [x] **Task 2.6: Fix payments-page.tsx**
-  - Line 400: Replace `Math.max(0, ...)` with `assertNonNegative()`
-  - Show error toast, prevent partial state updates
-
-### Phase 3: Testing
-
-- [x] **Task 3.1: Add unit tests for DataIntegrityError**
-  - Test error creation with context
-  - Test error message formatting
-
-- [x] **Task 3.2: Add unit tests for assertNonNegative**
-  - Test positive values pass through
-  - Test zero passes through
-  - Test negative values throw DataIntegrityError
-
-- [x] **Task 3.3: Run full test suite**
-  - Ensure no regressions
-  - All existing tests pass
-
-### Phase 4: Verification
-
-- [x] **Task 4.1: TypeScript compilation**
-  - `npx tsc --noEmit` passes
-
-- [x] **Task 4.2: Run production build**
-  - `npm run build` succeeds
-
-- [x] **Task 4.3: Run linting**
-  - `npm run lint` passes (only pre-existing warnings)
+`runTransaction` provides:
+- **Isolation**: Reads are consistent - if data changes, transaction retries
+- **Automatic retry**: Retries on conflicts (up to 5 times by default)
+- **Atomicity**: All operations succeed or fail together
 
 ---
 
-## Files to Create
+## Todo List
 
-| File | Purpose |
-|------|---------|
-| `src/lib/errors.ts` | DataIntegrityError class |
-| `src/lib/validation.ts` | assertNonNegative utility |
-| `src/lib/__tests__/errors.test.ts` | Error class tests |
-| `src/lib/__tests__/validation.test.ts` | Validation utility tests |
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/services/ledgerService.ts` | Replace silent clamp with assertion |
-| `src/lib/arap-utils.ts` | Replace zeroFloor with assertion |
-| `src/components/cheques/outgoing-cheques-page.tsx` | Replace silent clamp with assertion |
-| `src/components/cheques/incoming-cheques-page.tsx` | Replace silent clamp with assertion |
-| `src/components/cheques/hooks/useOutgoingChequesOperations.ts` | Replace silent clamp with assertion |
-| `src/components/payments/payments-page.tsx` | Replace silent clamp with assertion |
+- [x] **1. Add `runTransaction` import** from firebase/firestore
+- [x] **2. Refactor `handleInventoryUpdateBatch`**
+  - Convert from batch helper to transaction-based approach
+  - Read inventory inside transaction
+  - Perform all inventory calculations inside transaction
+  - Return data needed for remaining batch operations (COGS, movement records)
+- [x] **3. Refactor `deleteLedgerEntry` inventory reversion**
+  - Move inventory read-modify-write into transaction
+  - Keep non-inventory batch operations as-is (they're write-only)
+- [x] **4. Update `createLedgerEntryWithRelated`**
+  - No changes needed - already calls refactored `handleInventoryUpdateBatch`
+- [x] **5. Verify no regressions**
+  - TypeScript compiles ✓
+  - Tests pass (1110/1110) ✓
+  - Build succeeds ✓
 
 ---
 
-## Risk Assessment
+## Implementation Strategy
 
-| Risk | Mitigation |
-|------|------------|
-| Surfacing hidden bugs | Good! That's the point. Fix root causes |
-| Breaking user operations | Errors show helpful message, operation fails safely |
-| Production errors | Better to fail fast than corrupt data silently |
+### Current (BROKEN):
+```typescript
+// READ - can be stale by commit time!
+const itemSnapshot = await getDocs(itemQuery);
+const currentQuantity = existingItemData.quantity || 0;
+
+// ... later ...
+batch.update(itemDocRef, { quantity: newQuantity }); // Using STALE data!
+```
+
+### After (CORRECT):
+```typescript
+await runTransaction(firestore, async (transaction) => {
+  // READ inside transaction - guaranteed fresh
+  const itemDoc = await transaction.get(itemDocRef);
+  const currentQuantity = itemDoc.data()?.quantity || 0;
+
+  // Calculate new value
+  const newQuantity = currentQuantity + quantityChange;
+
+  // WRITE inside same transaction - isolated
+  transaction.update(itemDocRef, { quantity: newQuantity });
+});
+```
+
+### Key Design Decisions
+
+1. **Separate transaction for inventory, batch for the rest**
+   - Inventory operations need isolation (runTransaction)
+   - Other operations (cheques, payments) are write-only and can use batch
+
+2. **Transaction scope**: Only inventory item and movement
+   - Ledger entry creation stays in batch (no read-modify-write)
+   - COGS record stays in batch (write-only)
 
 ---
 
@@ -195,34 +112,59 @@ export function assertNonNegative(
 
 ### Changes Made
 
-**New Files Created:**
-- `src/lib/errors.ts` - DataIntegrityError class with context object and type guard
-- `src/lib/__tests__/errors.test.ts` - 9 tests for DataIntegrityError
-- `src/lib/__tests__/validation-assertions.test.ts` - 12 tests for assertNonNegative
+**File Modified:** `src/services/ledgerService.ts`
 
-**Files Modified:**
-- `src/lib/validation.ts` - Added assertNonNegative function
-- `src/services/ledgerService.ts` - Replaced silent clamp with assertion (inventory reversal)
-- `src/lib/arap-utils.ts` - Replaced zeroFloor with assertion (payment calculation)
-- `src/components/cheques/outgoing-cheques-page.tsx` - Replaced silent clamp with assertion
-- `src/components/cheques/incoming-cheques-page.tsx` - Replaced silent clamp with assertion
-- `src/components/cheques/hooks/useOutgoingChequesOperations.ts` - Replaced 2 silent clamps with assertions
-- `src/components/payments/payments-page.tsx` - Replaced silent clamp with assertion
-- `src/lib/__tests__/arap-utils.test.ts` - Updated 2 tests to expect new behavior
+**1. Added imports:**
+- `runTransaction` from firebase/firestore
+- `getDoc` from firebase/firestore
 
-### Tests Added
-- **21 new tests** for DataIntegrityError and assertNonNegative
-- Updated 2 existing tests in arap-utils.test.ts to reflect new "fail fast" behavior
+**2. Refactored `handleInventoryUpdateBatch` (lines 1415-1609):**
+- Wrapped inventory read-modify-write in `runTransaction`
+- Reads quantity inside transaction (guaranteed fresh)
+- Calculates weighted average cost inside transaction
+- Updates inventory inside transaction (isolated from concurrent updates)
+- Returns `currentUnitPrice` for COGS calculation
+- Added proper error handling with user-friendly messages
+
+**3. Refactored `deleteLedgerEntry` (lines 618-733):**
+- Wrapped inventory reversion in `runTransaction` for each movement
+- Reads current quantity inside transaction
+- Calculates reverted quantity inside transaction
+- Uses `assertNonNegative` for data integrity validation
+- Updates inside transaction (isolated from concurrent deletes)
+
+### What This Fixes
+
+**Before (Race Condition):**
+```
+User A reads quantity=10
+User B reads quantity=10
+User A writes quantity=15 (added 5)
+User B writes quantity=17 (added 7)
+Result: quantity=17 (User A's update LOST!)
+```
+
+**After (Transaction Isolation):**
+```
+User A reads quantity=10 inside transaction
+User B reads quantity=10 inside transaction
+User A writes quantity=15
+User B's transaction detects conflict, RETRIES
+User B re-reads quantity=15, writes quantity=22
+Result: quantity=22 (Both updates preserved!)
+```
 
 ### Verification Results
-- **TypeScript**: Compiles without errors
-- **Tests**: 1110 tests pass (0 failures)
-- **Build**: Production build succeeds
-- **Lint**: Only pre-existing warnings, no new issues
 
-### Behavioral Change
-Operations that would result in negative inventory or payment values now **fail with an error** instead of silently clamping to zero. This surfaces data integrity bugs rather than hiding them.
+| Check | Result |
+|-------|--------|
+| TypeScript | Compiles without errors |
+| Tests | 1110/1110 passed |
+| Build | Production build succeeds |
 
----
+### Notes
 
-**Implementation complete. Ready for PR review.**
+- Write-only operations (cheques, payments, movements, COGS) remain in `writeBatch` - no race condition for writes
+- Transaction scope is minimal (only inventory item updates) to reduce contention
+- Firestore transactions automatically retry up to 5 times on conflicts
+
