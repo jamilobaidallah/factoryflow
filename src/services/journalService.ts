@@ -250,27 +250,20 @@ export async function createJournalEntry(
     const entryNumber = generateJournalEntryNumber();
     const now = new Date();
 
-    // Build document data without undefined fields (Firestore rejects undefined)
-    const docData: Record<string, unknown> = {
+    // Use null for optional fields (Firestore rejects undefined but accepts null)
+    // This maintains type safety and consistent document structure
+    const docData = {
       entryNumber,
       date: Timestamp.fromDate(date),
       description,
       lines,
-      status: 'posted', // Auto-post for simplicity
+      status: 'posted' as const, // Auto-post for simplicity
+      linkedTransactionId: linkedTransactionId ?? null,
+      linkedPaymentId: linkedPaymentId ?? null,
+      linkedDocumentType: linkedDocumentType ?? null,
       createdAt: Timestamp.fromDate(now),
       postedAt: Timestamp.fromDate(now),
     };
-
-    // Only add optional fields if they have values
-    if (linkedTransactionId) {
-      docData.linkedTransactionId = linkedTransactionId;
-    }
-    if (linkedPaymentId) {
-      docData.linkedPaymentId = linkedPaymentId;
-    }
-    if (linkedDocumentType) {
-      docData.linkedDocumentType = linkedDocumentType;
-    }
 
     const docRef = await addDoc(journalRef, docData);
 
