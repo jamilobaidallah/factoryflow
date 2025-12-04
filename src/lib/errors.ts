@@ -110,3 +110,54 @@ export function assertNonNegative(
   }
   return value;
 }
+
+// ======================
+// Inventory Errors
+// ======================
+
+/**
+ * Error thrown when an inventory item is not found.
+ * Use instead of throwing generic Error with string message.
+ */
+export class InventoryItemNotFoundError extends Error {
+  constructor(public readonly itemName: string) {
+    super(`Inventory item not found: ${itemName}`);
+    this.name = 'InventoryItemNotFoundError';
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, InventoryItemNotFoundError);
+    }
+  }
+}
+
+/**
+ * Error thrown when there's insufficient inventory quantity.
+ * Stores both available and requested quantities for error handling.
+ */
+export class InsufficientQuantityError extends Error {
+  constructor(
+    public readonly availableQuantity: number,
+    public readonly requestedQuantity: number,
+    public readonly itemName?: string
+  ) {
+    const itemInfo = itemName ? ` for "${itemName}"` : '';
+    super(`Insufficient quantity${itemInfo}: available ${availableQuantity}, requested ${requestedQuantity}`);
+    this.name = 'InsufficientQuantityError';
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, InsufficientQuantityError);
+    }
+  }
+}
+
+/**
+ * Type guard for InventoryItemNotFoundError
+ */
+export function isInventoryItemNotFoundError(error: unknown): error is InventoryItemNotFoundError {
+  return error instanceof InventoryItemNotFoundError;
+}
+
+/**
+ * Type guard for InsufficientQuantityError
+ */
+export function isInsufficientQuantityError(error: unknown): error is InsufficientQuantityError {
+  return error instanceof InsufficientQuantityError;
+}
