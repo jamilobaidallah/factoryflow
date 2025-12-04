@@ -107,29 +107,47 @@ export async function hasChartOfAccounts(userId: string): Promise<boolean> {
 export async function seedChartOfAccounts(
   userId: string
 ): Promise<ServiceResult<number>> {
+  console.log('[seedChartOfAccounts] Starting for userId:', userId);
   try {
     // Check if already seeded
     const exists = await hasChartOfAccounts(userId);
+    console.log('[seedChartOfAccounts] Already exists:', exists);
     if (exists) {
       return { success: true, data: 0 };
     }
 
+    console.log('[seedChartOfAccounts] Seeding accounts...');
     const batch = writeBatch(firestore);
     const accountsRef = collection(firestore, getAccountsPath(userId));
     const defaultAccounts = getDefaultAccountsForSeeding();
+    console.log('[seedChartOfAccounts] Default accounts count:', defaultAccounts.length);
 
     for (const account of defaultAccounts) {
       const docRef = doc(accountsRef);
-      batch.set(docRef, {
-        ...account,
+      // Build account data without undefined fields (Firestore rejects undefined)
+      const accountData: Record<string, unknown> = {
+        code: account.code,
+        name: account.name,
+        nameAr: account.nameAr,
+        type: account.type,
+        normalBalance: account.normalBalance,
+        isActive: account.isActive,
         createdAt: Timestamp.fromDate(account.createdAt),
-      });
+      };
+      if (account.parentCode) {
+        accountData.parentCode = account.parentCode;
+      }
+      if (account.description) {
+        accountData.description = account.description;
+      }
+      batch.set(docRef, accountData);
     }
 
     await batch.commit();
+    console.log('[seedChartOfAccounts] SUCCESS - seeded', defaultAccounts.length, 'accounts');
     return { success: true, data: defaultAccounts.length };
   } catch (error) {
-    console.error('Error seeding chart of accounts:', error);
+    console.error('[seedChartOfAccounts] ERROR:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to seed accounts',
@@ -232,29 +250,42 @@ export async function createJournalEntry(
     const entryNumber = generateJournalEntryNumber();
     const now = new Date();
 
-    const entryData: JournalEntryDocument = {
+    // Build document data without undefined fields (Firestore rejects undefined)
+    const docData: Record<string, unknown> = {
+      entryNumber,
+      date: Timestamp.fromDate(date),
+      description,
+      lines,
+      status: 'posted', // Auto-post for simplicity
+      createdAt: Timestamp.fromDate(now),
+      postedAt: Timestamp.fromDate(now),
+    };
+
+    // Only add optional fields if they have values
+    if (linkedTransactionId) {
+      docData.linkedTransactionId = linkedTransactionId;
+    }
+    if (linkedPaymentId) {
+      docData.linkedPaymentId = linkedPaymentId;
+    }
+    if (linkedDocumentType) {
+      docData.linkedDocumentType = linkedDocumentType;
+    }
+
+    const docRef = await addDoc(journalRef, docData);
+
+    const entry: JournalEntry = {
+      id: docRef.id,
       entryNumber,
       date,
       description,
       lines,
-      status: 'posted', // Auto-post for simplicity
+      status: 'posted',
       linkedTransactionId,
       linkedPaymentId,
       linkedDocumentType,
       createdAt: now,
       postedAt: now,
-    };
-
-    const docRef = await addDoc(journalRef, {
-      ...entryData,
-      date: Timestamp.fromDate(date),
-      createdAt: Timestamp.fromDate(now),
-      postedAt: Timestamp.fromDate(now),
-    });
-
-    const entry: JournalEntry = {
-      id: docRef.id,
-      ...entryData,
     };
 
     return { success: true, data: entry };
