@@ -88,6 +88,85 @@ function generateJournalEntryNumber(): string {
 }
 
 // ============================================================================
+// Helper Functions (DRY)
+// ============================================================================
+
+/**
+ * Create standard debit/credit journal lines from an account mapping
+ * Eliminates duplication across createJournalEntryFor* functions
+ */
+function createJournalLines(
+  mapping: AccountMapping,
+  amount: number,
+  description: string
+): JournalLine[] {
+  return [
+    {
+      accountCode: mapping.debitAccount,
+      accountName: mapping.debitAccount,
+      accountNameAr: mapping.debitAccountNameAr,
+      debit: roundCurrency(amount),
+      credit: 0,
+      description,
+    },
+    {
+      accountCode: mapping.creditAccount,
+      accountName: mapping.creditAccount,
+      accountNameAr: mapping.creditAccountNameAr,
+      debit: 0,
+      credit: roundCurrency(amount),
+      description,
+    },
+  ];
+}
+
+/**
+ * Determine account type from account code using standard ranges
+ */
+function getAccountTypeFromCode(accountCode: string): AccountType {
+  const codeNum = parseInt(accountCode);
+  if (codeNum >= 1000 && codeNum < 2000) return 'asset';
+  if (codeNum >= 2000 && codeNum < 3000) return 'liability';
+  if (codeNum >= 3000 && codeNum < 4000) return 'equity';
+  if (codeNum >= 4000 && codeNum < 5000) return 'revenue';
+  return 'expense';
+}
+
+/**
+ * Delete journal entries by a specific field query
+ * Eliminates duplication between deleteByTransaction and deleteByPayment
+ */
+async function deleteJournalEntriesByField(
+  userId: string,
+  fieldName: string,
+  fieldValue: string
+): Promise<ServiceResult<number>> {
+  try {
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const q = query(journalRef, where(fieldName, '==', fieldValue));
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      return { success: true, data: 0 };
+    }
+
+    const batch = writeBatch(firestore);
+    snapshot.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+
+    await batch.commit();
+    return { success: true, data: snapshot.size };
+  } catch (error) {
+    console.error(`Error deleting journal entries by ${fieldName}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete entries',
+    };
+  }
+}
+
+// ============================================================================
 // Chart of Accounts Operations
 // ============================================================================
 
@@ -107,25 +186,21 @@ export async function hasChartOfAccounts(userId: string): Promise<boolean> {
 export async function seedChartOfAccounts(
   userId: string
 ): Promise<ServiceResult<number>> {
-  console.log('[seedChartOfAccounts] Starting for userId:', userId);
   try {
     // Check if already seeded
     const exists = await hasChartOfAccounts(userId);
-    console.log('[seedChartOfAccounts] Already exists:', exists);
     if (exists) {
       return { success: true, data: 0 };
     }
 
-    console.log('[seedChartOfAccounts] Seeding accounts...');
     const batch = writeBatch(firestore);
     const accountsRef = collection(firestore, getAccountsPath(userId));
     const defaultAccounts = getDefaultAccountsForSeeding();
-    console.log('[seedChartOfAccounts] Default accounts count:', defaultAccounts.length);
 
     for (const account of defaultAccounts) {
       const docRef = doc(accountsRef);
-      // Build account data without undefined fields (Firestore rejects undefined)
-      const accountData: Record<string, unknown> = {
+      // Use null for optional fields (Firestore rejects undefined but accepts null)
+      const accountData = {
         code: account.code,
         name: account.name,
         nameAr: account.nameAr,
@@ -133,21 +208,16 @@ export async function seedChartOfAccounts(
         normalBalance: account.normalBalance,
         isActive: account.isActive,
         createdAt: Timestamp.fromDate(account.createdAt),
+        parentCode: account.parentCode ?? null,
+        description: account.description ?? null,
       };
-      if (account.parentCode) {
-        accountData.parentCode = account.parentCode;
-      }
-      if (account.description) {
-        accountData.description = account.description;
-      }
       batch.set(docRef, accountData);
     }
 
     await batch.commit();
-    console.log('[seedChartOfAccounts] SUCCESS - seeded', defaultAccounts.length, 'accounts');
     return { success: true, data: defaultAccounts.length };
   } catch (error) {
-    console.error('[seedChartOfAccounts] ERROR:', error);
+    console.error('Error seeding chart of accounts:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to seed accounts',
@@ -293,7 +363,6 @@ export async function createJournalEntry(
 
 /**
  * Create journal entry for a ledger entry (income/expense)
- *
  * Auto-determines debit/credit accounts based on category and type.
  */
 export async function createJournalEntryForLedger(
@@ -309,48 +378,15 @@ export async function createJournalEntryForLedger(
   immediateSettlement?: boolean
 ): Promise<ServiceResult<JournalEntry>> {
   const mapping = getAccountMappingForLedgerEntry(
-    type,
-    category,
-    subCategory,
-    isARAPEntry,
-    immediateSettlement
+    type, category, subCategory, isARAPEntry, immediateSettlement
   );
-
-  const lines: JournalLine[] = [
-    {
-      accountCode: mapping.debitAccount,
-      accountName: mapping.debitAccount,
-      accountNameAr: mapping.debitAccountNameAr,
-      debit: roundCurrency(amount),
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: mapping.creditAccount,
-      accountName: mapping.creditAccount,
-      accountNameAr: mapping.creditAccountNameAr,
-      debit: 0,
-      credit: roundCurrency(amount),
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    transactionId,
-    undefined,
-    'ledger'
-  );
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, transactionId, undefined, 'ledger');
 }
 
 /**
  * Create journal entry for a payment
- *
- * Receipt: DR Cash, CR AR
- * Disbursement: DR AP, CR Cash
+ * Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
  */
 export async function createJournalEntryForPayment(
   userId: string,
@@ -362,40 +398,12 @@ export async function createJournalEntryForPayment(
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
   const mapping = getAccountMappingForPayment(paymentType);
-
-  const lines: JournalLine[] = [
-    {
-      accountCode: mapping.debitAccount,
-      accountName: mapping.debitAccount,
-      accountNameAr: mapping.debitAccountNameAr,
-      debit: roundCurrency(amount),
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: mapping.creditAccount,
-      accountName: mapping.creditAccount,
-      accountNameAr: mapping.creditAccountNameAr,
-      debit: 0,
-      credit: roundCurrency(amount),
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,
-    paymentId,
-    'payment'
-  );
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, paymentId, 'payment');
 }
 
 /**
  * Create journal entry for COGS (inventory exit)
- *
  * DR COGS, CR Inventory
  */
 export async function createJournalEntryForCOGS(
@@ -406,40 +414,12 @@ export async function createJournalEntryForCOGS(
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
   const mapping = getAccountMappingForCOGS();
-
-  const lines: JournalLine[] = [
-    {
-      accountCode: mapping.debitAccount,
-      accountName: mapping.debitAccount,
-      accountNameAr: mapping.debitAccountNameAr,
-      debit: roundCurrency(amount),
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: mapping.creditAccount,
-      accountName: mapping.creditAccount,
-      accountNameAr: mapping.creditAccountNameAr,
-      debit: 0,
-      credit: roundCurrency(amount),
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,
-    undefined,
-    'inventory'
-  );
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'inventory');
 }
 
 /**
  * Create journal entry for depreciation
- *
  * DR Depreciation Expense, CR Accumulated Depreciation
  */
 export async function createJournalEntryForDepreciation(
@@ -450,35 +430,8 @@ export async function createJournalEntryForDepreciation(
   linkedTransactionId?: string
 ): Promise<ServiceResult<JournalEntry>> {
   const mapping = getAccountMappingForDepreciation();
-
-  const lines: JournalLine[] = [
-    {
-      accountCode: mapping.debitAccount,
-      accountName: mapping.debitAccount,
-      accountNameAr: mapping.debitAccountNameAr,
-      debit: roundCurrency(amount),
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: mapping.creditAccount,
-      accountName: mapping.creditAccount,
-      accountNameAr: mapping.creditAccountNameAr,
-      debit: 0,
-      credit: roundCurrency(amount),
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,
-    undefined,
-    'depreciation'
-  );
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'depreciation');
 }
 
 /**
@@ -623,19 +576,7 @@ export async function getAccountBalance(
       }
     }
 
-    // Determine account type from code range
-    const codeNum = parseInt(accountCode);
-    let accountType: AccountType = 'expense';
-    if (codeNum >= 1000 && codeNum < 2000) {
-      accountType = 'asset';
-    } else if (codeNum >= 2000 && codeNum < 3000) {
-      accountType = 'liability';
-    } else if (codeNum >= 3000 && codeNum < 4000) {
-      accountType = 'equity';
-    } else if (codeNum >= 4000 && codeNum < 5000) {
-      accountType = 'revenue';
-    }
-
+    const accountType = getAccountTypeFromCode(accountCode);
     const normalBalance = getNormalBalance(accountType);
     const balance = calculateAccountBalance(totalDebits, totalCredits, normalBalance);
 
@@ -856,35 +797,13 @@ export async function getBalanceSheet(
 
 /**
  * Delete journal entries linked to a transaction
- * Used when deleting a ledger entry or payment
+ * Used when deleting a ledger entry
  */
 export async function deleteJournalEntriesByTransaction(
   userId: string,
   transactionId: string
 ): Promise<ServiceResult<number>> {
-  try {
-    const journalRef = collection(firestore, getJournalEntriesPath(userId));
-    const q = query(journalRef, where('linkedTransactionId', '==', transactionId));
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) {
-      return { success: true, data: 0 };
-    }
-
-    const batch = writeBatch(firestore);
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-
-    await batch.commit();
-    return { success: true, data: snapshot.size };
-  } catch (error) {
-    console.error('Error deleting journal entries:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete entries',
-    };
-  }
+  return deleteJournalEntriesByField(userId, 'linkedTransactionId', transactionId);
 }
 
 /**
@@ -894,27 +813,5 @@ export async function deleteJournalEntriesByPayment(
   userId: string,
   paymentId: string
 ): Promise<ServiceResult<number>> {
-  try {
-    const journalRef = collection(firestore, getJournalEntriesPath(userId));
-    const q = query(journalRef, where('linkedPaymentId', '==', paymentId));
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) {
-      return { success: true, data: 0 };
-    }
-
-    const batch = writeBatch(firestore);
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-
-    await batch.commit();
-    return { success: true, data: snapshot.size };
-  } catch (error) {
-    console.error('Error deleting journal entries:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete entries',
-    };
-  }
+  return deleteJournalEntriesByField(userId, 'linkedPaymentId', paymentId);
 }
