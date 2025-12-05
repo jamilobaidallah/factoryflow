@@ -52,6 +52,7 @@ import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
 } from "@/services/journalService";
+import { handleError, ErrorType } from "@/lib/error-handling";
 
 // Import types
 import type {
@@ -349,19 +350,23 @@ export class LedgerService {
       try {
         await batch.commit();
       } catch (batchError) {
+        const { message, type } = handleError(batchError);
         console.error("Failed to commit ledger entry with journal:", batchError);
         return {
           success: false,
-          error: "حدث خطأ أثناء حفظ الحركة المالية والقيد المحاسبي",
+          error: message,
+          errorType: type,
         };
       }
 
       return { success: true, data: ledgerDocRef.id };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error creating simple ledger entry:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء حفظ الحركة المالية",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -494,19 +499,23 @@ export class LedgerService {
           console.error("Batch commit failed, attempting inventory rollback:", batchError);
           await rollbackInventoryChanges(this.userId, [inventoryResult.inventoryChange]);
         }
+        const { message, type } = handleError(batchError);
         console.error("Failed to commit ledger entry with journal:", batchError);
         return {
           success: false,
-          error: "حدث خطأ أثناء حفظ الحركة المالية والقيد المحاسبي",
+          error: message,
+          errorType: type,
         };
       }
 
       return { success: true, data: ledgerDocRef.id };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error creating ledger entry with related records:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء حفظ الحركة المالية",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -541,10 +550,12 @@ export class LedgerService {
 
       return { success: true };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error updating ledger entry:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء تحديث الحركة المالية",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -567,10 +578,12 @@ export class LedgerService {
       });
       return { success: true };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error updating AR/AP tracking:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء تحديث تتبع الذمم",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -685,16 +698,20 @@ export class LedgerService {
     } catch (error) {
       console.error("Error deleting ledger entry:", error);
 
+      // Preserve specific data integrity error handling
       if (isDataIntegrityError(error)) {
         return {
           success: false,
           error: "خطأ في سلامة البيانات: الكمية ستصبح سالبة. قد يكون هناك تكرار في الحذف أو خطأ في البيانات.",
+          errorType: ErrorType.VALIDATION,
         };
       }
 
+      const { message, type } = handleError(error);
       return {
         success: false,
-        error: "حدث خطأ أثناء حذف الحركة المالية",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -753,10 +770,12 @@ export class LedgerService {
       await batch.commit();
       return { success: true };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error adding payment to entry:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء إضافة الدفعة",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -803,10 +822,13 @@ export class LedgerService {
 
       await batch.commit();
       return { success: true };
-    } catch {
+    } catch (error) {
+      const { message, type } = handleError(error);
+      console.error("Error adding quick payment:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء إضافة الدفعة",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -837,11 +859,13 @@ export class LedgerService {
               return {
                 success: false,
                 error: "ليس لديك صلاحية لرفع الصور. يرجى التأكد من تسجيل الدخول والمحاولة مرة أخرى",
+                errorType: ErrorType.PERMISSION,
               };
             } else if (errorCode === "storage/quota-exceeded") {
               return {
                 success: false,
                 error: "تم تجاوز الحد المسموح به للتخزين",
+                errorType: ErrorType.RATE_LIMITED,
               };
             }
           }
@@ -957,10 +981,12 @@ export class LedgerService {
       await batch.commit();
       return { success: true };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error adding cheque to entry:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء إضافة الشيك",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -990,10 +1016,12 @@ export class LedgerService {
 
       return { success: true };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error adding inventory to entry:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء إضافة حركة المخزون",
+        error: message,
+        errorType: type,
       };
     }
   }
@@ -1035,10 +1063,12 @@ export class LedgerService {
       await addDoc(this.invoicesRef, invoiceDoc);
       return { success: true, data: invoiceNumber };
     } catch (error) {
+      const { message, type } = handleError(error);
       console.error("Error creating invoice:", error);
       return {
         success: false,
-        error: "حدث خطأ أثناء إنشاء الفاتورة",
+        error: message,
+        errorType: type,
       };
     }
   }

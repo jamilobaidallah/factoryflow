@@ -507,7 +507,7 @@ describe('QuickPayDialog', () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'خطأ',
-          description: 'حدث خطأ أثناء إضافة الدفعة',
+          description: 'حدث خطأ غير متوقع', // Classified error message from handleError()
           variant: 'destructive',
         });
       });

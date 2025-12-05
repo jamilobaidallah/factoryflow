@@ -1,66 +1,113 @@
-# Fix: Silent Journal Entry Failures (Critical)
+# Feature: Improve Error Classification in LedgerService
 
-## Problem Analysis
+## Problem
 
-Two hook files still use fire-and-forget patterns for journal entry creation. If the journal entry fails, users see "Success" while their accounting data is incomplete/corrupted.
+All errors in `LedgerService.ts` collapse to generic Arabic messages like "حدث خطأ أثناء حفظ الحركة المالية". Users cannot distinguish between:
+- Network issues (connectivity problems)
+- Permission errors (unauthorized access)
+- Validation failures (bad data)
+- Not found errors (missing records)
 
-### Affected Files
+## Analysis
 
-1. **`src/components/payments/hooks/usePaymentAllocations.ts:229-237`**
-   ```typescript
-   // Fire-and-forget after successful Firestore transaction
-   createJournalEntryForPayment(...)
-     .catch(err => console.error("Failed to create journal entry for payment:", err));
-   ```
+### Existing Infrastructure (Already Available!)
 
-2. **`src/components/fixed-assets/hooks/useFixedAssetsOperations.ts:285-291`**
-   ```typescript
-   // Fire-and-forget after successful batch.commit()
-   createJournalEntryForDepreciation(...)
-     .catch(err => console.error("Failed to create depreciation journal entry:", err));
-   ```
+The codebase already has comprehensive error handling in `src/lib/error-handling.ts`:
 
-### Why Can't We Use Atomic Batches?
+```typescript
+enum ErrorType {
+  VALIDATION, FIREBASE, NETWORK, DUPLICATE, NOT_FOUND, PERMISSION, RATE_LIMITED, UNKNOWN
+}
 
-The main `LedgerService.ts` already uses `addJournalEntryToBatch()` for atomic operations. However, these two hooks use **`runTransaction()`** which doesn't support adding arbitrary writes inside the callback. Journal entries are created AFTER the transaction commits.
+function handleError(error: unknown): AppError {
+  // Already classifies Firebase, Zod, network, and unknown errors
+  // Returns: { type, message, details?, field?, code? }
+}
+```
 
-### Solution Strategy
+This includes Arabic messages for Firebase error codes like:
+- `permission-denied` → "ليس لديك صلاحية للقيام بهذا الإجراء"
+- `not-found` → "البيانات المطلوبة غير موجودة"
+- `unavailable` → "الخدمة غير متاحة حالياً"
+- etc.
 
-Since rollback isn't feasible (main data already committed), we must:
-1. **Await** the journal entry creation
-2. **Return partial success** if journal entry fails
-3. **Surface warning to UI** (warning toast, not success)
-4. **Log context** for manual debugging
+### Current Problem in LedgerService.ts
+
+~15 catch blocks all return generic messages:
+```typescript
+catch (error) {
+  console.error("Error creating simple ledger entry:", error);
+  return {
+    success: false,
+    error: "حدث خطأ أثناء حفظ الحركة المالية", // Generic!
+  };
+}
+```
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/services/ledger/types.ts` | Add optional `errorType` to `ServiceResult` |
+| `src/services/ledger/LedgerService.ts` | Use `handleError` in all catch blocks |
+| `src/services/journalService.ts` | Same pattern (optional, if time permits) |
 
 ---
 
 ## Todo List
 
-- [x] **1. Fix `usePaymentAllocations.ts`**
-  - Await `createJournalEntryForPayment` call
-  - Show warning toast if journal fails (payment still saved)
-  - Log error with payment ID for manual fix
+- [ ] **1. Extend ServiceResult type**
+  - Add optional `errorType?: ErrorType` field
+  - Keeps backwards compatibility (callers can ignore it)
 
-- [x] **2. Fix `useFixedAssetsOperations.ts`**
-  - Await `createJournalEntryForDepreciation` call
-  - Show warning toast if journal fails (depreciation still recorded)
-  - Log error with transaction ID for manual fix
+- [ ] **2. Update LedgerService.ts catch blocks**
+  - Import `handleError`, `ErrorType`, `logError` from `@/lib/error-handling`
+  - Update all catch blocks (~15) to use classified messages
+  - Pattern:
+    ```typescript
+    catch (error) {
+      const appError = handleError(error);
+      logError(appError, { operation: 'createSimpleLedgerEntry', userId: this.userId });
+      return {
+        success: false,
+        error: appError.message,
+        errorType: appError.type,
+      };
+    }
+    ```
 
-- [x] **3. Verify TypeScript compiles**
-  - Run `npx tsc --noEmit` - PASSED
+- [ ] **3. Preserve existing specific error handlers**
+  - Keep `isDataIntegrityError` check in `deleteLedgerEntry`
+  - Keep validation errors (they should pass through as-is)
+  - Keep storage-specific errors in `addChequeToEntry`
 
-- [x] **4. Verify no other fire-and-forget patterns remain**
-  - Searched for `.catch(err => console.error` - None found
-  - All `createJournalEntry*` calls are now awaited
+- [ ] **4. Verify TypeScript compiles**
+  - Run `npx tsc --noEmit`
+
+- [ ] **5. Verify no sensitive data leaks**
+  - Ensure `appError.details` (contains internal error messages) is logged but NOT returned to user
+  - Only `appError.message` (Arabic user-friendly) goes to client
 
 ---
 
 ## Constraints
 
-- ✅ Don't change core business logic
-- ✅ Focus only on error handling flow
-- ✅ Keep changes minimal and traceable
-- ✅ Ensure existing functionality still works
+- Use existing `error-handling.ts` utilities (no reinventing)
+- Don't change return type structure drastically (backwards compatible)
+- Keep changes focused on error handling, not business logic
+- Maintain Arabic-first approach for user messages
+- Don't expose internal error details to users
+
+---
+
+## Expected Outcomes
+
+| Before | After |
+|--------|-------|
+| All errors: "حدث خطأ أثناء حفظ الحركة المالية" | Permission: "ليس لديك صلاحية للقيام بهذا الإجراء" |
+| No error classification | Network: "فشل الاتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى" |
+| Generic logs | Not found: "البيانات المطلوبة غير موجودة" |
+| | Structured logs with context |
 
 ---
 
@@ -68,64 +115,65 @@ Since rollback isn't feasible (main data already committed), we must:
 
 ### Summary of Changes
 
-Fixed silent journal entry failures by awaiting journal entry calls and showing actionable warning toasts when they fail. The main operations (payments, depreciation) still succeed, but users are now informed if the accounting entry could not be created.
+Improved error classification in LedgerService by leveraging the existing `handleError()` function from `src/lib/error-handling.ts`. Users now see context-appropriate Arabic error messages instead of generic ones.
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/components/payments/hooks/usePaymentAllocations.ts` | Added `useToast` import, await journal call, show warning toast on failure |
-| `src/components/fixed-assets/hooks/useFixedAssetsOperations.ts` | Await journal call, show warning toast on failure instead of success |
+| `src/services/ledger/types.ts` | Added `errorType?: ErrorType` to `ServiceResult` interface |
+| `src/services/ledger/LedgerService.ts` | Updated 12 catch blocks with consistent error handling pattern |
 
 ### Key Changes
 
-**usePaymentAllocations.ts:**
+**Consistent Pattern Applied to All Catch Blocks:**
 ```typescript
-// BEFORE (fire-and-forget)
-createJournalEntryForPayment(...).catch(err => console.error(...));
+// BEFORE (generic message)
+catch (error) {
+  console.error("Error creating ledger entry:", error);
+  return {
+    success: false,
+    error: "حدث خطأ أثناء حفظ الحركة المالية",  // Generic!
+  };
+}
 
-// AFTER (awaited with warning)
-const journalResult = await createJournalEntryForPayment(...);
-if (!journalResult.success) {
-  toast({
-    title: "تحذير",
-    description: "تم حفظ الدفعة لكن فشل تسجيل القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
-    variant: "destructive",
-  });
+// AFTER (classified message)
+catch (error) {
+  const { message, type } = handleError(error);
+  console.error("Error creating ledger entry:", error);
+  return {
+    success: false,
+    error: message,      // Arabic user-friendly message
+    errorType: type,     // For programmatic handling
+  };
 }
 ```
 
-**useFixedAssetsOperations.ts:**
-```typescript
-// BEFORE (fire-and-forget then success toast)
-createJournalEntryForDepreciation(...).catch(...);
-toast({ title: "تم تسجيل الاستهلاك بنجاح" });
+**Preserved Specific Error Handlers:**
+- `isDataIntegrityError` check in `deleteLedgerEntry` - custom inventory integrity message
+- Storage error handling in `addChequeToEntry` - specific permission/quota messages
 
-// AFTER (awaited with conditional toast)
-const journalResult = await createJournalEntryForDepreciation(...);
-if (journalCreated) {
-  toast({ title: "تم تسجيل الاستهلاك بنجاح" });
-} else {
-  toast({
-    title: "تحذير",
-    description: "تم تسجيل الاستهلاك لكن فشل إنشاء القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
-    variant: "destructive",
-  });
-}
-```
+### Error Messages Now Displayed
+
+| Error Type | Arabic Message |
+|------------|----------------|
+| Permission | ليس لديك صلاحية للقيام بهذا الإجراء |
+| Network | فشل الاتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى |
+| Not Found | البيانات المطلوبة غير موجودة |
+| Duplicate | البيانات موجودة مسبقاً |
+| Unknown | حدث خطأ غير متوقع |
 
 ### Verification Results
 
 | Check | Result |
 |-------|--------|
 | TypeScript | Compiles without errors |
-| Fire-and-forget patterns | None remaining |
-| Warning messages | Actionable (tells user what happened + what to do) |
+| Catch blocks updated | 12 blocks using consistent pattern |
+| Sensitive data leaks | None - only `message` returned, `details` logged |
+| Backwards compatibility | Maintained - `errorType` is optional |
 
-### Expected User Experience
+### Security Verification
 
-**Before:** User sees "Success" even if journal entry fails silently
-**After:** User sees warning toast explaining:
-- What succeeded (payment/depreciation saved)
-- What failed (accounting entry)
-- What to do (review logs or contact support)
+- `appError.message` (user-friendly Arabic) → returned to client
+- `appError.details` (internal error message) → logged only, not exposed
+- Full error object → logged to console for debugging

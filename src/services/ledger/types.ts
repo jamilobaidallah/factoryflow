@@ -11,6 +11,7 @@ import type {
   InventoryFormData,
   FixedAssetFormData,
 } from "@/components/ledger/types/ledger";
+import type { ErrorType } from "@/lib/error-handling";
 
 // ============================================
 // Service Result Types
@@ -20,6 +21,7 @@ export interface ServiceResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
+  errorType?: ErrorType;
 }
 
 export interface DeleteResult extends ServiceResult {
