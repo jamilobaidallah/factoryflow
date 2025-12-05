@@ -48,7 +48,10 @@ import {
   assertNonNegative,
   isDataIntegrityError,
 } from "@/lib/errors";
-import { createJournalEntryForLedger, createJournalEntryForCOGS } from "@/services/journalService";
+import {
+  addJournalEntryToBatch,
+  addCOGSJournalEntryToBatch,
+} from "@/services/journalService";
 
 // Import types
 import type {
@@ -310,7 +313,11 @@ export class LedgerService {
       const amount = parseAmount(formData.amount);
       const entryDate = new Date(formData.date);
 
-      const docRef = await addDoc(this.ledgerRef, {
+      const batch = writeBatch(firestore);
+      const ledgerDocRef = doc(this.ledgerRef);
+
+      // Add ledger entry to batch
+      batch.set(ledgerDocRef, {
         transactionId,
         description: formData.description,
         type: entryType,
@@ -325,20 +332,31 @@ export class LedgerService {
         createdAt: new Date(),
       });
 
-      createJournalEntryForLedger(
-        this.userId,
+      // Add journal entry to batch (atomic with ledger entry)
+      addJournalEntryToBatch(batch, this.userId, {
         transactionId,
-        formData.description,
+        description: formData.description,
         amount,
-        entryType,
-        formData.category,
-        formData.subCategory,
-        entryDate,
-        false,
-        false
-      ).catch((err) => console.error("Failed to create journal entry:", err));
+        type: entryType,
+        category: formData.category,
+        subCategory: formData.subCategory,
+        date: entryDate,
+        isARAPEntry: false,
+        immediateSettlement: false,
+      });
 
-      return { success: true, data: docRef.id };
+      // Commit batch - both ledger and journal succeed or fail together
+      try {
+        await batch.commit();
+      } catch (batchError) {
+        console.error("Failed to commit ledger entry with journal:", batchError);
+        return {
+          success: false,
+          error: "حدث خطأ أثناء حفظ الحركة المالية والقيد المحاسبي",
+        };
+      }
+
+      return { success: true, data: ledgerDocRef.id };
     } catch (error) {
       console.error("Error creating simple ledger entry:", error);
       return {
@@ -445,6 +463,29 @@ export class LedgerService {
         handleFixedAssetBatch(ctx, options.fixedAssetFormData);
       }
 
+      // Add journal entry to batch (atomic with ledger entry)
+      addJournalEntryToBatch(batch, this.userId, {
+        transactionId,
+        description: formData.description,
+        amount: totalAmount,
+        type: entryType,
+        category: formData.category,
+        subCategory: formData.subCategory,
+        date: new Date(formData.date),
+        isARAPEntry: formData.trackARAP,
+        immediateSettlement: formData.immediateSettlement,
+      });
+
+      // Add COGS journal entry to batch if applicable
+      if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
+        addCOGSJournalEntryToBatch(batch, this.userId, {
+          description: inventoryResult.cogsDescription,
+          amount: inventoryResult.cogsAmount,
+          date: new Date(formData.date),
+          linkedTransactionId: transactionId,
+        });
+      }
+
       // Commit batch - rollback inventory on failure
       try {
         await batch.commit();
@@ -453,31 +494,11 @@ export class LedgerService {
           console.error("Batch commit failed, attempting inventory rollback:", batchError);
           await rollbackInventoryChanges(this.userId, [inventoryResult.inventoryChange]);
         }
-        throw batchError;
-      }
-
-      // Create journal entries (async, non-blocking)
-      createJournalEntryForLedger(
-        this.userId,
-        transactionId,
-        formData.description,
-        totalAmount,
-        entryType,
-        formData.category,
-        formData.subCategory,
-        new Date(formData.date),
-        formData.trackARAP,
-        formData.immediateSettlement
-      ).catch((err) => console.error("Failed to create journal entry:", err));
-
-      if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
-        createJournalEntryForCOGS(
-          this.userId,
-          inventoryResult.cogsDescription,
-          inventoryResult.cogsAmount,
-          new Date(formData.date),
-          transactionId
-        ).catch((err) => console.error("Failed to create COGS journal entry:", err));
+        console.error("Failed to commit ledger entry with journal:", batchError);
+        return {
+          success: false,
+          error: "حدث خطأ أثناء حفظ الحركة المالية والقيد المحاسبي",
+        };
       }
 
       return { success: true, data: ledgerDocRef.id };
