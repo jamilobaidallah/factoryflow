@@ -54,23 +54,23 @@ Add a card-based mobile view that:
 
 ## Todo List
 
-- [ ] **1. Create LedgerCard component**
+- [x] **1. Create LedgerCard component**
   - New memoized component for mobile card view
   - Receives same props as LedgerTableRow
   - Displays all essential info in card format
 
-- [ ] **2. Update LedgerTable to show cards on mobile**
+- [x] **2. Update LedgerTable to show cards on mobile**
   - Add mobile card list with `md:hidden`
   - Wrap existing table with `hidden md:block`
   - Maintain empty state for both views
 
-- [ ] **3. Add cn utility import if missing**
+- [x] **3. Add cn utility import if missing**
   - Need `cn()` for conditional className merging
 
-- [ ] **4. Verify TypeScript compiles**
+- [x] **4. Verify TypeScript compiles**
   - Run `npx tsc --noEmit`
 
-- [ ] **5. Verify existing tests pass**
+- [x] **5. Verify existing tests pass**
   - Run tests for LedgerTable component
 
 ---
