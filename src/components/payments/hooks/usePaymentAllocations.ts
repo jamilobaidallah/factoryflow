@@ -17,7 +17,6 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
-import { useToast } from '@/hooks/use-toast';
 import {
   UnpaidTransaction,
   AllocationEntry,
@@ -26,6 +25,13 @@ import {
 import { calculatePaymentStatus } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
 import { createJournalEntryForPayment } from '@/services/journalService';
+
+/** Result from savePaymentWithAllocations */
+export interface SavePaymentResult {
+  paymentId: string;
+  /** True if journal entry failed (payment still saved) */
+  journalFailed?: boolean;
+}
 
 interface UsePaymentAllocationsResult {
   loading: boolean;
@@ -43,7 +49,7 @@ interface UsePaymentAllocationsResult {
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
-  ) => Promise<string | null>;
+  ) => Promise<SavePaymentResult | null>;
   reversePaymentAllocations: (paymentId: string) => Promise<boolean>;
 }
 
@@ -52,7 +58,6 @@ interface UsePaymentAllocationsResult {
  */
 export function usePaymentAllocations(): UsePaymentAllocationsResult {
   const { user } = useUser();
-  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,7 +131,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
-  ): Promise<string | null> => {
+  ): Promise<SavePaymentResult | null> => {
     if (!user) {
       setError('المستخدم غير مسجل الدخول');
       return null;
@@ -256,16 +261,10 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
       setLoading(false);
 
-      // Show warning if journal entry failed (payment itself succeeded)
-      if (!journalCreated) {
-        toast({
-          title: "تحذير",
-          description: "تم حفظ الدفعة لكن فشل تسجيل القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
-          variant: "destructive",
-        });
-      }
-
-      return paymentDocRef.id;
+      return {
+        paymentId: paymentDocRef.id,
+        journalFailed: !journalCreated,
+      };
     } catch (err) {
       console.error('Error saving payment with allocations:', err);
       setError('حدث خطأ أثناء حفظ الدفعة');

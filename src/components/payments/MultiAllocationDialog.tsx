@@ -294,7 +294,7 @@ export function MultiAllocationDialog({
 
     setSaving(true);
 
-    const paymentId = await savePaymentWithAllocations(
+    const result = await savePaymentWithAllocations(
       {
         clientName: formData.clientName,
         amount: paymentAmount,
@@ -310,13 +310,22 @@ export function MultiAllocationDialog({
 
     setSaving(false);
 
-    if (paymentId) {
-      toast({
-        title: isChequeCashing ? "تم تحصيل الشيك" : "تمت الإضافة بنجاح",
-        description: isChequeCashing
-          ? `تم تحصيل الشيك رقم ${chequeData?.chequeNumber} وتوزيع المبلغ على ${activeAllocations.length} معاملة`
-          : `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
-      });
+    if (result) {
+      // Show appropriate toast based on journal entry result
+      if (result.journalFailed) {
+        toast({
+          title: "تحذير",
+          description: "تم حفظ الدفعة لكن فشل تسجيل القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: isChequeCashing ? "تم تحصيل الشيك" : "تمت الإضافة بنجاح",
+          description: isChequeCashing
+            ? `تم تحصيل الشيك رقم ${chequeData?.chequeNumber} وتوزيع المبلغ على ${activeAllocations.length} معاملة`
+            : `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
+        });
+      }
       resetForm();
       onOpenChange(false);
 
@@ -324,7 +333,7 @@ export function MultiAllocationDialog({
       if (isChequeCashing && onChequeSuccess) {
         // Extract the transaction IDs that were paid
         const paidTransactionIds = activeAllocations.map((a) => a.transactionId);
-        onChequeSuccess(paymentId, paidTransactionIds);
+        onChequeSuccess(result.paymentId, paidTransactionIds);
       } else {
         onSuccess?.();
       }
