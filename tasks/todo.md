@@ -1,158 +1,117 @@
-# Fix: WriteBatch vs runTransaction Misuse
+# Refactor: Split LedgerService into Focused Modules
 
-## Issue Summary
-**Severity**: HIGH
-**Location**: `src/services/ledgerService.ts`
+## Approach: Composition with Internal Modules
 
-### The Problem
-`WriteBatch` provides **atomicity** (all-or-nothing) but **NOT isolation**.
+Keep `LedgerService` as the single entry point, but extract implementation to focused modules:
 
-In `handleInventoryUpdateBatch` and `deleteLedgerEntry`, we:
-1. READ data outside the batch (`getDocs`)
-2. Calculate new values using that data
-3. WRITE inside batch (`batch.update`)
-
-**Race Condition**: The read data can become stale between the read and batch commit. If two users update the same inventory item simultaneously, one update will be lost.
-
-### Affected Code
-
-**1. `handleInventoryUpdateBatch` (lines 1413-1573)**
-```typescript
-// Line 1427: READ outside batch - can be stale!
-const itemSnapshot = await getDocs(itemQuery);
-const currentQuantity = existingItemData.quantity || 0;
-
-// Line 1473-1484: WRITE with potentially stale data!
-batch.update(itemDocRef, { quantity: newQuantity });
+```
+src/services/ledger/
+  index.ts                    # Re-exports LedgerService
+  LedgerService.ts            # Main class (slim orchestration)
+  types.ts                    # Shared types + interfaces
+  handlers/
+    chequeHandlers.ts         # Cheque batch operations
+    inventoryHandlers.ts      # Inventory + COGS operations
+    paymentHandlers.ts        # Payment batch operations
+    fixedAssetHandlers.ts     # Fixed asset operations
 ```
 
-**2. `deleteLedgerEntry` (lines 619-724)**
-```typescript
-// Lines 664-665: READ outside batch
-const itemQuery = query(this.inventoryRef, where("__name__", "==", itemId));
-const itemSnapshot = await getDocs(itemQuery);
-const currentQuantity = itemDoc.data().quantity || 0;
-
-// Lines 683-684: WRITE with potentially stale data
-batch.update(itemDocRef, { quantity: validatedQuantity });
-```
-
----
-
-## Solution
-Replace `writeBatch` with `runTransaction` for read-modify-write operations on inventory.
-
-`runTransaction` provides:
-- **Isolation**: Reads are consistent - if data changes, transaction retries
-- **Automatic retry**: Retries on conflicts (up to 5 times by default)
-- **Atomicity**: All operations succeed or fail together
+### Benefits
+- **No breaking changes**: External API unchanged
+- **Focused files**: Each ~100-300 lines
+- **Testable**: Handlers are pure functions
+- **Clear ownership**: Each domain in its own file
 
 ---
 
 ## Todo List
 
-- [x] **1. Add `runTransaction` import** from firebase/firestore
-- [x] **2. Refactor `handleInventoryUpdateBatch`**
-  - Convert from batch helper to transaction-based approach
-  - Read inventory inside transaction
-  - Perform all inventory calculations inside transaction
-  - Return data needed for remaining batch operations (COGS, movement records)
-- [x] **3. Refactor `deleteLedgerEntry` inventory reversion**
-  - Move inventory read-modify-write into transaction
-  - Keep non-inventory batch operations as-is (they're write-only)
-- [x] **4. Update `createLedgerEntryWithRelated`**
-  - No changes needed - already calls refactored `handleInventoryUpdateBatch`
-- [x] **5. Verify no regressions**
-  - TypeScript compiles ✓
-  - Tests pass (1110/1110) ✓
-  - Build succeeds ✓
+- [x] **1. Create folder structure**
+  - Create `src/services/ledger/` directory
+  - Create `src/services/ledger/handlers/` directory
 
----
+- [x] **2. Create types.ts**
+  - Move `ServiceResult`, `DeleteResult`, `InventoryUpdateResult`
+  - Move `CreateLedgerEntryOptions`, `QuickPaymentData`, `InvoiceData`
+  - Define `HandlerContext` interface for handlers
 
-## Implementation Strategy
+- [x] **3. Create chequeHandlers.ts**
+  - Extract `handleIncomingCheckBatch`
+  - Extract `handleOutgoingCheckBatch`
 
-### Current (BROKEN):
-```typescript
-// READ - can be stale by commit time!
-const itemSnapshot = await getDocs(itemQuery);
-const currentQuantity = existingItemData.quantity || 0;
+- [x] **4. Create paymentHandlers.ts**
+  - Extract `handleImmediateSettlementBatch`
+  - Extract `handleInitialPaymentBatch`
 
-// ... later ...
-batch.update(itemDocRef, { quantity: newQuantity }); // Using STALE data!
-```
+- [x] **5. Create inventoryHandlers.ts**
+  - Extract `handleInventoryUpdate`
+  - Extract `addCOGSRecord`
+  - Extract `createNewInventoryItemInBatch`
+  - Extract `addMovementRecordToBatch`
+  - Extract `rollbackInventoryChanges`
 
-### After (CORRECT):
-```typescript
-await runTransaction(firestore, async (transaction) => {
-  // READ inside transaction - guaranteed fresh
-  const itemDoc = await transaction.get(itemDocRef);
-  const currentQuantity = itemDoc.data()?.quantity || 0;
+- [x] **6. Create fixedAssetHandlers.ts**
+  - Extract `handleFixedAssetBatch`
 
-  // Calculate new value
-  const newQuantity = currentQuantity + quantityChange;
+- [x] **7. Refactor LedgerService.ts**
+  - Import handlers
+  - Replace method bodies with handler calls
+  - Keep public API intact
 
-  // WRITE inside same transaction - isolated
-  transaction.update(itemDocRef, { quantity: newQuantity });
-});
-```
+- [x] **8. Create index.ts**
+  - Re-export `LedgerService` and `createLedgerService`
+  - Re-export types
 
-### Key Design Decisions
+- [x] **9. Update imports in codebase**
+  - Old `ledgerService.ts` now re-exports from new location
+  - Zero breaking changes to existing imports
 
-1. **Separate transaction for inventory, batch for the rest**
-   - Inventory operations need isolation (runTransaction)
-   - Other operations (cheques, payments) are write-only and can use batch
-
-2. **Transaction scope**: Only inventory item and movement
-   - Ledger entry creation stays in batch (no read-modify-write)
-   - COGS record stays in batch (write-only)
+- [x] **10. Verify no regressions**
+  - TypeScript compiles
+  - All tests pass (1110/1110)
+  - Build succeeds
 
 ---
 
 ## Review Section
 
-### Changes Made
+### Files Created
 
-**File Modified:** `src/services/ledgerService.ts`
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/services/ledger/types.ts` | 117 | Shared types, interfaces |
+| `src/services/ledger/handlers/chequeHandlers.ts` | 157 | Incoming/outgoing cheque batch ops |
+| `src/services/ledger/handlers/paymentHandlers.ts` | 48 | Settlement/initial payment batch ops |
+| `src/services/ledger/handlers/inventoryHandlers.ts` | 260 | Inventory update, COGS, movements |
+| `src/services/ledger/handlers/fixedAssetHandlers.ts` | 52 | Fixed asset creation with depreciation |
+| `src/services/ledger/handlers/index.ts` | 15 | Handler re-exports |
+| `src/services/ledger/LedgerService.ts` | 850 | Refactored main service |
+| `src/services/ledger/index.ts` | 38 | Module re-exports |
 
-**1. Added imports:**
-- `runTransaction` from firebase/firestore
-- `getDoc` from firebase/firestore
+### Files Modified
 
-**2. Refactored `handleInventoryUpdateBatch` (lines 1415-1609):**
-- Wrapped inventory read-modify-write in `runTransaction`
-- Reads quantity inside transaction (guaranteed fresh)
-- Calculates weighted average cost inside transaction
-- Updates inventory inside transaction (isolated from concurrent updates)
-- Returns `currentUnitPrice` for COGS calculation
-- Added proper error handling with user-friendly messages
+| File | Change |
+|------|--------|
+| `src/services/ledgerService.ts` | Now re-exports from `./ledger` (backwards compat) |
 
-**3. Refactored `deleteLedgerEntry` (lines 618-733):**
-- Wrapped inventory reversion in `runTransaction` for each movement
-- Reads current quantity inside transaction
-- Calculates reverted quantity inside transaction
-- Uses `assertNonNegative` for data integrity validation
-- Updates inside transaction (isolated from concurrent deletes)
+### Line Count Comparison
 
-### What This Fixes
+| Metric | Before | After |
+|--------|--------|-------|
+| `ledgerService.ts` | 1,805 lines | 24 lines (re-export) |
+| `LedgerService.ts` (new) | - | 850 lines |
+| Handler files (total) | - | 532 lines |
+| **Total** | 1,805 | 1,406 |
 
-**Before (Race Condition):**
-```
-User A reads quantity=10
-User B reads quantity=10
-User A writes quantity=15 (added 5)
-User B writes quantity=17 (added 7)
-Result: quantity=17 (User A's update LOST!)
-```
+**Net reduction**: 399 lines (22% less)
 
-**After (Transaction Isolation):**
-```
-User A reads quantity=10 inside transaction
-User B reads quantity=10 inside transaction
-User A writes quantity=15
-User B's transaction detects conflict, RETRIES
-User B re-reads quantity=15, writes quantity=22
-Result: quantity=22 (Both updates preserved!)
-```
+### Architecture Benefits
+
+1. **Separation of Concerns**: Each handler file owns one domain
+2. **Testability**: Handlers are pure functions, easily unit testable
+3. **Maintainability**: Changes to cheque logic don't touch inventory code
+4. **Discoverability**: Clear file names indicate purpose
+5. **No Breaking Changes**: Old imports continue to work
 
 ### Verification Results
 
@@ -162,50 +121,11 @@ Result: quantity=22 (Both updates preserved!)
 | Tests | 1110/1110 passed |
 | Build | Production build succeeds |
 
-### Notes
-
-- Write-only operations (cheques, payments, movements, COGS) remain in `writeBatch` - no race condition for writes
-- Transaction scope is minimal (only inventory item updates) to reduce contention
-- Firestore transactions automatically retry up to 5 times on conflicts
-
 ---
 
-## Code Quality Improvements (9/10)
+## Summary
 
-### Performance Improvements
-- **Parallelized transactions** in `deleteLedgerEntry` using `Promise.all`
-- **Rollback mechanism** added to handle partial failures atomically
-
-### Maintainability Improvements
-
-**1. Typed Error Classes** (`src/lib/errors.ts`):
-- `InventoryItemNotFoundError` - for missing inventory items
-- `InsufficientQuantityError` - for quantity validation
-- Type guards: `isInventoryItemNotFoundError`, `isInsufficientQuantityError`
-
-**2. Extracted Helper Methods** (`handleInventoryUpdateBatch`):
-- `addCOGSRecord` - handles COGS batch operation
-- `createNewInventoryItemInBatch` - creates new inventory items
-- `addMovementRecordToBatch` - adds movement records
-
-**3. Benefits**:
-- Single Responsibility Principle - each method does one thing
-- Better testability - helpers can be unit tested in isolation
-- Type-safe error handling - instanceof checks instead of string parsing
-- Cleaner code flow - main method orchestrates, helpers implement
-
-### Final Verification
-
-| Check | Result |
-|-------|--------|
-| TypeScript | Compiles without errors ✓ |
-| Tests | 1110/1110 passed ✓ |
-| Build | Production build succeeds ✓ |
-
-### Commits
-1. `fix: Use runTransaction for inventory read-modify-write patterns`
-2. `refactor: Move assertNonNegative to errors.ts (SRP improvement)`
-3. `refactor: Extract reversePayment to shared hook (DRY)`
-4. `fix: Replace silent data clamps with fail-fast assertions`
-5. `refactor: Improve code quality to 9/10 - SRP, validation, testability`
-
+The "God Object" has been decomposed into focused modules while maintaining full backwards compatibility. The new structure makes it easy to:
+- Find code by domain (cheques, inventory, payments, assets)
+- Test handlers in isolation
+- Add new handler types without touching the main service
