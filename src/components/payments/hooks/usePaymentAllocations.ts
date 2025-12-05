@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { useToast } from '@/hooks/use-toast';
 import {
   UnpaidTransaction,
   AllocationEntry,
@@ -51,6 +52,7 @@ interface UsePaymentAllocationsResult {
  */
 export function usePaymentAllocations(): UsePaymentAllocationsResult {
   const { user } = useUser();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -224,19 +226,45 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         }
       });
 
-      // Create journal entry for the payment (async, non-blocking)
+      // Create journal entry for the payment
       const paymentDescription = `دفعة ${paymentData.type === 'قبض' ? 'واردة من' : 'صادرة إلى'} ${paymentData.clientName}`;
-      createJournalEntryForPayment(
-        user.uid,
-        paymentDocRef.id,
-        paymentDescription,
-        totalAllocated,
-        paymentData.type as 'قبض' | 'صرف',
-        paymentData.date,
-        allocationTransactionIds[0] // Link to first transaction
-      ).catch(err => console.error("Failed to create journal entry for payment:", err));
+      let journalCreated = true;
+
+      try {
+        const journalResult = await createJournalEntryForPayment(
+          user.uid,
+          paymentDocRef.id,
+          paymentDescription,
+          totalAllocated,
+          paymentData.type as 'قبض' | 'صرف',
+          paymentData.date,
+          allocationTransactionIds[0] // Link to first transaction
+        );
+
+        if (!journalResult.success) {
+          journalCreated = false;
+          console.error(
+            "Journal entry failed for payment:",
+            paymentDocRef.id,
+            journalResult.error
+          );
+        }
+      } catch (err) {
+        journalCreated = false;
+        console.error("Failed to create journal entry for payment:", paymentDocRef.id, err);
+      }
 
       setLoading(false);
+
+      // Show warning if journal entry failed (payment itself succeeded)
+      if (!journalCreated) {
+        toast({
+          title: "تحذير",
+          description: "تم حفظ الدفعة لكن فشل تسجيل القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
+          variant: "destructive",
+        });
+      }
+
       return paymentDocRef.id;
     } catch (err) {
       console.error('Error saving payment with allocations:', err);
