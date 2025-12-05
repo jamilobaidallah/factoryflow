@@ -26,6 +26,13 @@ import { calculatePaymentStatus } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
 import { createJournalEntryForPayment } from '@/services/journalService';
 
+/** Result from savePaymentWithAllocations */
+export interface SavePaymentResult {
+  paymentId: string;
+  /** True if journal entry failed (payment still saved) */
+  journalFailed?: boolean;
+}
+
 interface UsePaymentAllocationsResult {
   loading: boolean;
   error: string | null;
@@ -42,7 +49,7 @@ interface UsePaymentAllocationsResult {
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
-  ) => Promise<string | null>;
+  ) => Promise<SavePaymentResult | null>;
   reversePaymentAllocations: (paymentId: string) => Promise<boolean>;
 }
 
@@ -124,7 +131,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
-  ): Promise<string | null> => {
+  ): Promise<SavePaymentResult | null> => {
     if (!user) {
       setError('المستخدم غير مسجل الدخول');
       return null;
@@ -224,20 +231,40 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         }
       });
 
-      // Create journal entry for the payment (async, non-blocking)
+      // Create journal entry for the payment
       const paymentDescription = `دفعة ${paymentData.type === 'قبض' ? 'واردة من' : 'صادرة إلى'} ${paymentData.clientName}`;
-      createJournalEntryForPayment(
-        user.uid,
-        paymentDocRef.id,
-        paymentDescription,
-        totalAllocated,
-        paymentData.type as 'قبض' | 'صرف',
-        paymentData.date,
-        allocationTransactionIds[0] // Link to first transaction
-      ).catch(err => console.error("Failed to create journal entry for payment:", err));
+      let journalCreated = true;
+
+      try {
+        const journalResult = await createJournalEntryForPayment(
+          user.uid,
+          paymentDocRef.id,
+          paymentDescription,
+          totalAllocated,
+          paymentData.type as 'قبض' | 'صرف',
+          paymentData.date,
+          allocationTransactionIds[0] // Link to first transaction
+        );
+
+        if (!journalResult.success) {
+          journalCreated = false;
+          console.error(
+            "Journal entry failed for payment:",
+            paymentDocRef.id,
+            journalResult.error
+          );
+        }
+      } catch (err) {
+        journalCreated = false;
+        console.error("Failed to create journal entry for payment:", paymentDocRef.id, err);
+      }
 
       setLoading(false);
-      return paymentDocRef.id;
+
+      return {
+        paymentId: paymentDocRef.id,
+        journalFailed: !journalCreated,
+      };
     } catch (err) {
       console.error('Error saving payment with allocations:', err);
       setError('حدث خطأ أثناء حفظ الدفعة');

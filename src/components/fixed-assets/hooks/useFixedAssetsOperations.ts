@@ -281,20 +281,46 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       await batch.commit();
 
       // Create journal entry for depreciation (DR Depreciation Expense, CR Accumulated Depreciation)
+      let journalCreated = true;
+
       if (totalDepreciation > 0) {
-        createJournalEntryForDepreciation(
-          user.uid,
-          `استهلاك أصول ثابتة - ${periodLabel}`,
-          totalDepreciation,
-          new Date(),
-          transactionId
-        ).catch(err => console.error("Failed to create depreciation journal entry:", err));
+        try {
+          const journalResult = await createJournalEntryForDepreciation(
+            user.uid,
+            `استهلاك أصول ثابتة - ${periodLabel}`,
+            totalDepreciation,
+            new Date(),
+            transactionId
+          );
+
+          if (!journalResult.success) {
+            journalCreated = false;
+            console.error(
+              "Depreciation journal entry failed:",
+              transactionId,
+              journalResult.error
+            );
+          }
+        } catch (err) {
+          journalCreated = false;
+          console.error("Failed to create depreciation journal entry:", transactionId, err);
+        }
       }
 
-      toast({
-        title: "تم تسجيل الاستهلاك بنجاح",
-        description: `إجمالي الاستهلاك: ${roundCurrency(totalDepreciation).toFixed(2)} دينار`,
-      });
+      // Show appropriate toast based on journal entry result
+      if (journalCreated) {
+        toast({
+          title: "تم تسجيل الاستهلاك بنجاح",
+          description: `إجمالي الاستهلاك: ${roundCurrency(totalDepreciation).toFixed(2)} دينار`,
+        });
+      } else {
+        toast({
+          title: "تحذير",
+          description: "تم تسجيل الاستهلاك لكن فشل إنشاء القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
+          variant: "destructive",
+        });
+      }
+
       return true;
     } catch (error) {
       const appError = handleError(error);
