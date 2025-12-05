@@ -18,6 +18,7 @@ import {
   orderBy,
   writeBatch,
   Timestamp,
+  WriteBatch,
 } from 'firebase/firestore';
 import {
   Account,
@@ -400,6 +401,147 @@ export async function createJournalEntryForDepreciation(
   const mapping = getAccountMappingForDepreciation();
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'depreciation');
+}
+
+// ============================================================================
+// Batch Operations (for atomic transactions with ledger)
+// ============================================================================
+
+/**
+ * Data required for adding a journal entry to a batch
+ */
+export interface JournalEntryBatchData {
+  transactionId: string;
+  description: string;
+  amount: number;
+  type: string;
+  category: string;
+  subCategory: string;
+  date: Date;
+  isARAPEntry?: boolean;
+  immediateSettlement?: boolean;
+}
+
+/**
+ * Data required for adding a COGS journal entry to a batch
+ */
+export interface COGSJournalEntryBatchData {
+  description: string;
+  amount: number;
+  date: Date;
+  linkedTransactionId?: string;
+}
+
+/**
+ * Internal helper to add a validated journal entry to a batch.
+ * Reduces duplication between different batch entry types.
+ */
+function addValidatedJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  lines: JournalLine[],
+  description: string,
+  date: Date,
+  linkedTransactionId: string | null,
+  linkedDocumentType: 'ledger' | 'inventory'
+): void {
+  const journalRef = collection(firestore, getJournalEntriesPath(userId));
+  const docRef = doc(journalRef);
+  const entryNumber = generateJournalEntryNumber();
+  const now = new Date();
+
+  batch.set(docRef, {
+    entryNumber,
+    date: Timestamp.fromDate(date),
+    description,
+    lines,
+    status: 'posted' as const,
+    linkedTransactionId,
+    linkedPaymentId: null,
+    linkedDocumentType,
+    createdAt: Timestamp.fromDate(now),
+    postedAt: Timestamp.fromDate(now),
+  });
+}
+
+/**
+ * Add a journal entry for a ledger entry to an existing WriteBatch.
+ * Use this for atomic operations where ledger and journal must succeed together.
+ *
+ * @throws {ValidationError} if inputs are invalid or entry is unbalanced
+ */
+export function addJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  data: JournalEntryBatchData
+): void {
+  validateUserId(userId);
+  validateAmount(data.amount);
+  validateDescription(data.description);
+  validateDate(data.date);
+
+  const mapping = getAccountMappingForLedgerEntry(
+    data.type,
+    data.category,
+    data.subCategory,
+    data.isARAPEntry,
+    data.immediateSettlement
+  );
+  const lines = createJournalLines(mapping, data.amount, data.description);
+
+  const validation = validateJournalEntry(lines);
+  if (!validation.isValid) {
+    throw new ValidationError(
+      `Journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
+    );
+  }
+
+  addValidatedJournalEntryToBatch(
+    batch,
+    userId,
+    lines,
+    data.description,
+    data.date,
+    data.transactionId,
+    'ledger'
+  );
+}
+
+/**
+ * Add a COGS journal entry to an existing WriteBatch.
+ * Use this for atomic operations where inventory COGS and journal must succeed together.
+ *
+ * @throws {ValidationError} if inputs are invalid or entry is unbalanced
+ */
+export function addCOGSJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  data: COGSJournalEntryBatchData
+): void {
+  validateUserId(userId);
+  validateAmount(data.amount);
+  validateDescription(data.description);
+  validateDate(data.date);
+
+  const mapping = getAccountMappingForCOGS();
+  const lines = createJournalLines(mapping, data.amount, data.description);
+
+  const validation = validateJournalEntry(lines);
+  if (!validation.isValid) {
+    throw new ValidationError(
+      `COGS journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
+    );
+  }
+
+  addValidatedJournalEntryToBatch(
+    batch,
+    userId,
+    lines,
+    data.description,
+    data.date,
+    data.linkedTransactionId ?? null,
+    'inventory'
+  );
 }
 
 /**
