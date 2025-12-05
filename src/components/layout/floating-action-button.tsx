@@ -87,7 +87,7 @@ export default function FloatingActionButton() {
 
       <div
         data-fab-container
-        className="fixed bottom-24 right-4 z-50 md:hidden flex flex-col-reverse items-end gap-3"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 z-50 md:hidden flex flex-col-reverse items-end gap-3"
         role="group"
         aria-label="الإجراءات السريعة"
       >
