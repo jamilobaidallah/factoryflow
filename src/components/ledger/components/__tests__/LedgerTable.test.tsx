@@ -3,10 +3,15 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { LedgerTable } from '../LedgerTable';
 import { LedgerEntry } from '../../utils/ledger-constants';
+
+// Helper to get desktop table container (hidden md:block)
+const getDesktopTable = (container: HTMLElement) => {
+  return container.querySelector('.hidden.md\\:block') as HTMLElement;
+};
 
 describe('LedgerTable', () => {
   const mockOnEdit = jest.fn();
@@ -140,7 +145,7 @@ describe('LedgerTable', () => {
     });
 
     it('should render entry data correctly', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockIncomeEntry]}
           onEdit={mockOnEdit}
@@ -150,16 +155,17 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('TXN-001')).toBeInTheDocument();
-      expect(screen.getByText('مبيعات منتجات')).toBeInTheDocument();
-      expect(screen.getByText('مبيعات')).toBeInTheDocument();
-      expect(screen.getByText('منتجات')).toBeInTheDocument();
-      expect(screen.getByText('عميل أ')).toBeInTheDocument();
-      expect(screen.getByText('1000 دينار')).toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      expect(within(desktopTable).getByText('TXN-001')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('مبيعات منتجات')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('مبيعات')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('منتجات')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('عميل أ')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('1000 دينار')).toBeInTheDocument();
     });
 
     it('should render multiple entries', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockIncomeEntry, mockExpenseEntry]}
           onEdit={mockOnEdit}
@@ -169,10 +175,11 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('TXN-001')).toBeInTheDocument();
-      expect(screen.getByText('TXN-002')).toBeInTheDocument();
-      expect(screen.getByText('مبيعات منتجات')).toBeInTheDocument();
-      expect(screen.getByText('رواتب موظفين')).toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      expect(within(desktopTable).getByText('TXN-001')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('TXN-002')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('مبيعات منتجات')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('رواتب موظفين')).toBeInTheDocument();
     });
 
     it('should show dash for missing associatedParty', () => {
@@ -186,10 +193,11 @@ describe('LedgerTable', () => {
         />
       );
 
-      // Check that the entry without associatedParty shows a dash in the table
-      expect(screen.getByText('رواتب موظفين')).toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      // Check that the entry renders in the table
+      expect(within(desktopTable).getByText('رواتب موظفين')).toBeInTheDocument();
       // The dash is in the row, verify it exists
-      const cells = container.querySelectorAll('td');
+      const cells = desktopTable.querySelectorAll('td');
       expect(cells.length).toBeGreaterThan(0);
     });
   });
@@ -206,7 +214,8 @@ describe('LedgerTable', () => {
         />
       );
 
-      const badge = container.querySelector('.bg-green-100.text-green-700');
+      const desktopTable = getDesktopTable(container);
+      const badge = desktopTable.querySelector('.bg-green-100.text-green-700');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('دخل');
     });
@@ -222,7 +231,8 @@ describe('LedgerTable', () => {
         />
       );
 
-      const badge = container.querySelector('.bg-red-100.text-red-700');
+      const desktopTable = getDesktopTable(container);
+      const badge = desktopTable.querySelector('.bg-red-100.text-red-700');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('مصروف');
     });
@@ -230,7 +240,7 @@ describe('LedgerTable', () => {
 
   describe('Payment Status Display', () => {
     it('should show unpaid status for AR/AP entries', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockARAPEntry]}
           onEdit={mockOnEdit}
@@ -240,12 +250,13 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('غير مدفوع')).toBeInTheDocument();
-      expect(screen.getByText(/متبقي: 2000/)).toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      expect(within(desktopTable).getByText('غير مدفوع')).toBeInTheDocument();
+      expect(within(desktopTable).getByText(/متبقي: 2000/)).toBeInTheDocument();
     });
 
     it('should show partial payment status', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockPartiallyPaidEntry]}
           onEdit={mockOnEdit}
@@ -255,13 +266,14 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('دفعة جزئية')).toBeInTheDocument();
-      expect(screen.getByText(/متبقي: 1200/)).toBeInTheDocument();
-      expect(screen.getByText(/مدفوع: 800/)).toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      expect(within(desktopTable).getByText('دفعة جزئية')).toBeInTheDocument();
+      expect(within(desktopTable).getByText(/متبقي: 1200/)).toBeInTheDocument();
+      expect(within(desktopTable).getByText(/مدفوع: 800/)).toBeInTheDocument();
     });
 
     it('should show paid status', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockPaidEntry]}
           onEdit={mockOnEdit}
@@ -271,8 +283,9 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('مدفوع')).toBeInTheDocument();
-      expect(screen.queryByText(/متبقي/)).not.toBeInTheDocument();
+      const desktopTable = getDesktopTable(container);
+      expect(within(desktopTable).getByText('مدفوع')).toBeInTheDocument();
+      expect(within(desktopTable).queryByText(/متبقي/)).not.toBeInTheDocument();
     });
 
     it('should show dash for non-AR/AP entries', () => {
@@ -420,7 +433,7 @@ describe('LedgerTable', () => {
         date: new Date('2025-01-15'),
       };
 
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[entry]}
           onEdit={mockOnEdit}
@@ -430,9 +443,10 @@ describe('LedgerTable', () => {
         />
       );
 
+      const desktopTable = getDesktopTable(container);
       // Date should be formatted using toLocaleDateString("ar-EG")
       const formattedDate = new Date('2025-01-15').toLocaleDateString("ar-EG");
-      expect(screen.getByText(formattedDate)).toBeInTheDocument();
+      expect(within(desktopTable).getByText(formattedDate)).toBeInTheDocument();
     });
   });
 
@@ -448,12 +462,13 @@ describe('LedgerTable', () => {
         />
       );
 
-      const paidBadge = screen.getByText('مدفوع');
+      const desktopTable = getDesktopTable(container);
+      const paidBadge = within(desktopTable).getByText('مدفوع');
       expect(paidBadge).toHaveClass('bg-green-100', 'text-green-700');
     });
 
     it('should use yellow badge for partial payment', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockPartiallyPaidEntry]}
           onEdit={mockOnEdit}
@@ -463,12 +478,13 @@ describe('LedgerTable', () => {
         />
       );
 
-      const partialBadge = screen.getByText('دفعة جزئية');
+      const desktopTable = getDesktopTable(container);
+      const partialBadge = within(desktopTable).getByText('دفعة جزئية');
       expect(partialBadge).toHaveClass('bg-yellow-100', 'text-yellow-700');
     });
 
     it('should use red badge for unpaid status', () => {
-      render(
+      const { container } = render(
         <LedgerTable
           entries={[mockARAPEntry]}
           onEdit={mockOnEdit}
@@ -478,7 +494,8 @@ describe('LedgerTable', () => {
         />
       );
 
-      const unpaidBadge = screen.getByText('غير مدفوع');
+      const desktopTable = getDesktopTable(container);
+      const unpaidBadge = within(desktopTable).getByText('غير مدفوع');
       expect(unpaidBadge).toHaveClass('bg-red-100', 'text-red-700');
     });
   });

@@ -1,179 +1,150 @@
-# Feature: Improve Error Classification in LedgerService
+# Feature: LedgerTable Mobile Card View
 
 ## Problem
 
-All errors in `LedgerService.ts` collapse to generic Arabic messages like "حدث خطأ أثناء حفظ الحركة المالية". Users cannot distinguish between:
-- Network issues (connectivity problems)
-- Permission errors (unauthorized access)
-- Validation failures (bad data)
-- Not found errors (missing records)
+The LedgerTable component has 10 columns which is unusable on mobile devices. Users have to scroll horizontally through a massive table, leading to poor UX.
+
+**Current columns:**
+1. رقم المعاملة (Transaction ID)
+2. التاريخ (Date)
+3. الوصف (Description)
+4. النوع (Type - income/expense)
+5. التصنيف (Category)
+6. الفئة الفرعية (SubCategory)
+7. الطرف المعني (Associated Party)
+8. المبلغ (Amount)
+9. حالة الدفع (Payment Status)
+10. الإجراءات (Actions)
 
 ## Analysis
 
-### Existing Infrastructure (Already Available!)
+### Current Implementation
 
-The codebase already has comprehensive error handling in `src/lib/error-handling.ts`:
+**File:** `src/components/ledger/components/LedgerTable.tsx`
+- Uses shadcn `Table` component
+- Has memoized `LedgerTableRow` for performance
+- No responsive handling - table renders same on all screen sizes
 
-```typescript
-enum ErrorType {
-  VALIDATION, FIREBASE, NETWORK, DUPLICATE, NOT_FOUND, PERMISSION, RATE_LIMITED, UNKNOWN
-}
+### Solution
 
-function handleError(error: unknown): AppError {
-  // Already classifies Firebase, Zod, network, and unknown errors
-  // Returns: { type, message, details?, field?, code? }
-}
+Add a card-based mobile view that:
+- Shows on `md:hidden` (mobile only)
+- Displays key info: description, amount, date, party, payment status
+- Provides all action buttons (Quick Pay, View Related, Edit, Delete)
+- Hides the table on mobile with `hidden md:block`
+
+### Card Layout Design
+
 ```
-
-This includes Arabic messages for Firebase error codes like:
-- `permission-denied` → "ليس لديك صلاحية للقيام بهذا الإجراء"
-- `not-found` → "البيانات المطلوبة غير موجودة"
-- `unavailable` → "الخدمة غير متاحة حالياً"
-- etc.
-
-### Current Problem in LedgerService.ts
-
-~15 catch blocks all return generic messages:
-```typescript
-catch (error) {
-  console.error("Error creating simple ledger entry:", error);
-  return {
-    success: false,
-    error: "حدث خطأ أثناء حفظ الحركة المالية", // Generic!
-  };
-}
+┌─────────────────────────────────────┐
+│ [Description]          [Amount badge]│
+│                        دخل/مصروف     │
+├─────────────────────────────────────┤
+│ [Date]              [Associated Party]│
+│ [Category > SubCategory]             │
+├─────────────────────────────────────┤
+│ [Payment Status - if AR/AP]          │
+│ Remaining: X دينار | Paid: Y دينار   │
+├─────────────────────────────────────┤
+│ [Quick Pay] [Related] [Edit] [Delete]│
+└─────────────────────────────────────┘
 ```
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/services/ledger/types.ts` | Add optional `errorType` to `ServiceResult` |
-| `src/services/ledger/LedgerService.ts` | Use `handleError` in all catch blocks |
-| `src/services/journalService.ts` | Same pattern (optional, if time permits) |
 
 ---
 
 ## Todo List
 
-- [ ] **1. Extend ServiceResult type**
-  - Add optional `errorType?: ErrorType` field
-  - Keeps backwards compatibility (callers can ignore it)
+- [ ] **1. Create LedgerCard component**
+  - New memoized component for mobile card view
+  - Receives same props as LedgerTableRow
+  - Displays all essential info in card format
 
-- [ ] **2. Update LedgerService.ts catch blocks**
-  - Import `handleError`, `ErrorType`, `logError` from `@/lib/error-handling`
-  - Update all catch blocks (~15) to use classified messages
-  - Pattern:
-    ```typescript
-    catch (error) {
-      const appError = handleError(error);
-      logError(appError, { operation: 'createSimpleLedgerEntry', userId: this.userId });
-      return {
-        success: false,
-        error: appError.message,
-        errorType: appError.type,
-      };
-    }
-    ```
+- [ ] **2. Update LedgerTable to show cards on mobile**
+  - Add mobile card list with `md:hidden`
+  - Wrap existing table with `hidden md:block`
+  - Maintain empty state for both views
 
-- [ ] **3. Preserve existing specific error handlers**
-  - Keep `isDataIntegrityError` check in `deleteLedgerEntry`
-  - Keep validation errors (they should pass through as-is)
-  - Keep storage-specific errors in `addChequeToEntry`
+- [ ] **3. Add cn utility import if missing**
+  - Need `cn()` for conditional className merging
 
 - [ ] **4. Verify TypeScript compiles**
   - Run `npx tsc --noEmit`
 
-- [ ] **5. Verify no sensitive data leaks**
-  - Ensure `appError.details` (contains internal error messages) is logged but NOT returned to user
-  - Only `appError.message` (Arabic user-friendly) goes to client
+- [ ] **5. Verify existing tests pass**
+  - Run tests for LedgerTable component
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/ledger/components/LedgerTable.tsx` | Add LedgerCard component, wrap table with responsive classes |
 
 ---
 
 ## Constraints
 
-- Use existing `error-handling.ts` utilities (no reinventing)
-- Don't change return type structure drastically (backwards compatible)
-- Keep changes focused on error handling, not business logic
-- Maintain Arabic-first approach for user messages
-- Don't expose internal error details to users
+- Keep existing table functionality intact (desktop)
+- Reuse existing action handlers (onEdit, onDelete, onQuickPay, onViewRelated)
+- Maintain memoization for performance
+- Preserve accessibility (aria-labels, roles)
+- Use existing shadcn Button component
+- Arabic-first UI text
 
 ---
 
-## Expected Outcomes
-
-| Before | After |
-|--------|-------|
-| All errors: "حدث خطأ أثناء حفظ الحركة المالية" | Permission: "ليس لديك صلاحية للقيام بهذا الإجراء" |
-| No error classification | Network: "فشل الاتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى" |
-| Generic logs | Not found: "البيانات المطلوبة غير موجودة" |
-| | Structured logs with context |
-
----
-
-## Review Section
+## Review
 
 ### Summary of Changes
 
-Improved error classification in LedgerService by leveraging the existing `handleError()` function from `src/lib/error-handling.ts`. Users now see context-appropriate Arabic error messages instead of generic ones.
+Added a responsive card-based mobile view for the LedgerTable component. On mobile (`md:hidden`), entries display as stacked cards with key information. On desktop (`hidden md:block`), the original table view remains unchanged.
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/services/ledger/types.ts` | Added `errorType?: ErrorType` to `ServiceResult` interface |
-| `src/services/ledger/LedgerService.ts` | Updated 12 catch blocks with consistent error handling pattern |
+| `src/components/ledger/components/LedgerTable.tsx` | Added `LedgerCard` component, wrapped table with responsive classes |
+| `src/components/ledger/components/__tests__/LedgerTable.test.tsx` | Updated tests to scope queries within desktop table |
 
-### Key Changes
+### New Component: LedgerCard
 
-**Consistent Pattern Applied to All Catch Blocks:**
-```typescript
-// BEFORE (generic message)
-catch (error) {
-  console.error("Error creating ledger entry:", error);
-  return {
-    success: false,
-    error: "حدث خطأ أثناء حفظ الحركة المالية",  // Generic!
-  };
-}
+A memoized card component for mobile that displays:
+- Description + Amount badge (color-coded by type)
+- Date + Associated Party
+- Category > SubCategory
+- Payment status (for AR/AP entries only)
+- Action buttons: Quick Pay, Related, Edit, Delete
 
-// AFTER (classified message)
-catch (error) {
-  const { message, type } = handleError(error);
-  console.error("Error creating ledger entry:", error);
-  return {
-    success: false,
-    error: message,      // Arabic user-friendly message
-    errorType: type,     // For programmatic handling
-  };
-}
+### Card Layout
+
 ```
-
-**Preserved Specific Error Handlers:**
-- `isDataIntegrityError` check in `deleteLedgerEntry` - custom inventory integrity message
-- Storage error handling in `addChequeToEntry` - specific permission/quota messages
-
-### Error Messages Now Displayed
-
-| Error Type | Arabic Message |
-|------------|----------------|
-| Permission | ليس لديك صلاحية للقيام بهذا الإجراء |
-| Network | فشل الاتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى |
-| Not Found | البيانات المطلوبة غير موجودة |
-| Duplicate | البيانات موجودة مسبقاً |
-| Unknown | حدث خطأ غير متوقع |
+┌─────────────────────────────────────┐
+│ مبيعات منتجات           1000 دينار │
+├─────────────────────────────────────┤
+│ ١٥/١/٢٠٢٥                   عميل أ │
+│ مبيعات > منتجات                     │
+├─────────────────────────────────────┤
+│ [غير مدفوع] متبقي: 1000            │
+├─────────────────────────────────────┤
+│ [دفعة] [مرتبط] [تعديل] [حذف]       │
+└─────────────────────────────────────┘
+```
 
 ### Verification Results
 
 | Check | Result |
 |-------|--------|
-| TypeScript | Compiles without errors |
-| Catch blocks updated | 12 blocks using consistent pattern |
-| Sensitive data leaks | None - only `message` returned, `details` logged |
-| Backwards compatibility | Maintained - `errorType` is optional |
+| TypeScript | ✅ Compiles without errors |
+| Tests | ✅ All 23 tests pass |
+| Desktop table | ✅ Unchanged functionality |
+| Mobile cards | ✅ Responsive card layout |
+| Memoization | ✅ LedgerCard is memoized |
+| Accessibility | ✅ aria-labels preserved |
 
-### Security Verification
+### Testing Recommendations
 
-- `appError.message` (user-friendly Arabic) → returned to client
-- `appError.details` (internal error message) → logged only, not exposed
-- Full error object → logged to console for debugging
+- Test on actual mobile device
+- Verify card actions work (edit, delete, quick pay)
+- Test with long descriptions (text should wrap)
+- Test with AR/AP entries (payment status visible)

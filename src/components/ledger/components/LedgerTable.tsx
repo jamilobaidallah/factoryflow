@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,6 +13,7 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { Edit, Trash2, DollarSign, FolderOpen } from "lucide-react";
 import { LedgerEntry } from "../utils/ledger-constants";
+import { cn } from "@/lib/utils";
 
 interface LedgerTableProps {
   entries: LedgerEntry[];
@@ -157,6 +158,124 @@ const LedgerTableRow = memo(function LedgerTableRow({
   );
 });
 
+// Memoized card for mobile view
+const LedgerCard = memo(function LedgerCard({
+  entry,
+  onEdit,
+  onDelete,
+  onQuickPay,
+  onViewRelated,
+}: {
+  entry: LedgerEntry;
+  onEdit: (entry: LedgerEntry) => void;
+  onDelete: (entry: LedgerEntry) => void;
+  onQuickPay: (entry: LedgerEntry) => void;
+  onViewRelated: (entry: LedgerEntry) => void;
+}) {
+  return (
+    <div className="bg-white border rounded-lg p-4 space-y-3 shadow-sm">
+      {/* Header: Description + Amount */}
+      <div className="flex justify-between items-start gap-2">
+        <span className="font-medium text-sm flex-1">{entry.description}</span>
+        <span
+          className={cn(
+            "px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap",
+            entry.type === "دخل"
+              ? "bg-green-100 text-green-700"
+              : "bg-red-100 text-red-700"
+          )}
+        >
+          {entry.amount || 0} دينار
+        </span>
+      </div>
+
+      {/* Meta: Date, Party, Category */}
+      <div className="space-y-1 text-xs text-gray-600">
+        <div className="flex justify-between">
+          <span>{new Date(entry.date).toLocaleDateString("ar-EG")}</span>
+          <span>{entry.associatedParty || "-"}</span>
+        </div>
+        <div className="text-gray-500">
+          {entry.category} {entry.subCategory && `> ${entry.subCategory}`}
+        </div>
+      </div>
+
+      {/* Payment Status (AR/AP entries only) */}
+      {entry.isARAPEntry && (
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              "px-2 py-1 rounded-full font-medium",
+              entry.paymentStatus === "paid"
+                ? "bg-green-100 text-green-700"
+                : entry.paymentStatus === "partial"
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-red-100 text-red-700"
+            )}
+          >
+            {entry.paymentStatus === "paid"
+              ? "مدفوع"
+              : entry.paymentStatus === "partial"
+              ? "جزئي"
+              : "غير مدفوع"}
+          </span>
+          {entry.paymentStatus !== "paid" && entry.remainingBalance && (
+            <span className="text-gray-600">
+              متبقي: {entry.remainingBalance.toFixed(2)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div
+        className="flex gap-2 pt-2 border-t"
+        role="group"
+        aria-label="إجراءات الحركة المالية"
+      >
+        {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => onQuickPay(entry)}
+            className="flex-1 bg-green-600 hover:bg-green-700"
+            aria-label={`إضافة دفعة لـ ${entry.description}`}
+          >
+            <DollarSign className="w-4 h-4 ml-1" aria-hidden="true" />
+            دفعة
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onViewRelated(entry)}
+          className="flex-1"
+          aria-label={`عرض السجلات المرتبطة بـ ${entry.description}`}
+        >
+          <FolderOpen className="w-4 h-4 ml-1" aria-hidden="true" />
+          مرتبط
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onEdit(entry)}
+          aria-label={`تعديل ${entry.description}`}
+        >
+          <Edit className="w-4 h-4" aria-hidden="true" />
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => onDelete(entry)}
+          aria-label={`حذف ${entry.description}`}
+        >
+          <Trash2 className="w-4 h-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
+  );
+});
+
 export const LedgerTable = memo(function LedgerTable({
   entries,
   onEdit,
@@ -173,24 +292,11 @@ export const LedgerTable = memo(function LedgerTable({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>رقم المعاملة</TableHead>
-          <TableHead>التاريخ</TableHead>
-          <TableHead>الوصف</TableHead>
-          <TableHead>النوع</TableHead>
-          <TableHead>التصنيف</TableHead>
-          <TableHead>الفئة الفرعية</TableHead>
-          <TableHead>الطرف المعني</TableHead>
-          <TableHead>المبلغ</TableHead>
-          <TableHead>حالة الدفع</TableHead>
-          <TableHead>الإجراءات</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Mobile: Card Layout */}
+      <div className="md:hidden space-y-3">
         {entries.map((entry) => (
-          <LedgerTableRow
+          <LedgerCard
             key={entry.id}
             entry={entry}
             onEdit={onEdit}
@@ -199,7 +305,39 @@ export const LedgerTable = memo(function LedgerTable({
             onViewRelated={onViewRelated}
           />
         ))}
-      </TableBody>
-    </Table>
+      </div>
+
+      {/* Desktop: Table Layout */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>رقم المعاملة</TableHead>
+              <TableHead>التاريخ</TableHead>
+              <TableHead>الوصف</TableHead>
+              <TableHead>النوع</TableHead>
+              <TableHead>التصنيف</TableHead>
+              <TableHead>الفئة الفرعية</TableHead>
+              <TableHead>الطرف المعني</TableHead>
+              <TableHead>المبلغ</TableHead>
+              <TableHead>حالة الدفع</TableHead>
+              <TableHead>الإجراءات</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry) => (
+              <LedgerTableRow
+                key={entry.id}
+                entry={entry}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onQuickPay={onQuickPay}
+                onViewRelated={onViewRelated}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 });
