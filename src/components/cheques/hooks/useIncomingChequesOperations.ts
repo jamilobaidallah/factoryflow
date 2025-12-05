@@ -18,6 +18,12 @@ import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { safeAdd, safeSubtract } from "@/lib/currency";
+import {
+  validateTransition,
+  validateDeletion,
+  InvalidChequeTransitionError,
+  type ChequeStatusValue,
+} from "@/lib/chequeStateMachine";
 
 interface UseIncomingChequesOperationsReturn {
   submitCheque: (
@@ -329,6 +335,21 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         variant: "destructive",
       });
       return false;
+    }
+
+    // Validate state transition: only PENDING cheques can be endorsed
+    try {
+      validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.ENDORSED);
+    } catch (error) {
+      if (error instanceof InvalidChequeTransitionError) {
+        toast({
+          title: "عملية غير مسموحة",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      throw error;
     }
 
     try {

@@ -1,8 +1,168 @@
-# Fix: Race Condition in Journal Entry Creation
+# Add: Cheque State Machine Validation
 
 ## Problem Analysis
 
-In `LedgerService.ts`, journal entries are created with fire-and-forget async calls AFTER `batch.commit()`:
+Cheques have implicit states (PENDING, CASHED, ENDORSED, BOUNCED) but no validation to prevent invalid state transitions. For example:
+- A CASHED cheque could be endorsed (money already received)
+- A BOUNCED cheque could be cashed again (bank rejected it)
+- An ENDORSED cheque could be modified (transferred to another party)
+
+**Risk**: Invalid state transitions can cause accounting inconsistencies and data corruption.
+
+## Solution
+
+Created a simple, clean state machine utility that defines valid transitions and validation functions. The validation guards are added at entry points in the cheque operation hooks.
+
+### State Machine Diagram
+
+```
+PENDING → CASHED | ENDORSED | BOUNCED | RETURNED | CANCELLED | DELETED
+CASHED → BOUNCED | RETURNED | PENDING (reversal)
+ENDORSED → (terminal state - no transitions allowed)
+BOUNCED → (terminal state - no transitions allowed)
+RETURNED → (terminal state - no transitions allowed)
+CANCELLED → (terminal state - no transitions allowed)
+COLLECTED → BOUNCED | RETURNED
+```
+
+---
+
+## Todo List
+
+- [x] **1. Explore codebase for existing structure**
+  - Located CHEQUE_STATUS_AR constants in `src/lib/constants.ts`
+  - Identified cheque operation hooks in `src/components/cheques/hooks/`
+  - Found three main operation files: useChequesOperations.ts, useIncomingChequesOperations.ts, useOutgoingChequesOperations.ts
+
+- [x] **2. Create lib/chequeStateMachine.ts**
+  - Defined valid state transitions as a simple map
+  - Created `canTransition(fromStatus, toStatus): boolean` function
+  - Created `validateTransition(fromStatus, toStatus): void` function (throws on invalid)
+  - Created `canDelete(currentStatus): boolean` function
+  - Created `validateDeletion(currentStatus): void` function (throws on invalid)
+  - Created `getValidTransitions(currentStatus): ChequeStatusValue[]` helper
+  - Created `InvalidChequeTransitionError` custom error class
+
+- [x] **3. Add validation guards to cheque operations**
+  - Added guards to `useChequesOperations.ts`:
+    - `clearCheque()` - validates PENDING → CASHED
+    - `bounceCheque()` - validates PENDING/CASHED → BOUNCED
+    - `endorseCheque()` - validates PENDING → ENDORSED
+    - `deleteCheque()` - validates deletion is allowed
+  - Added guards to `useIncomingChequesOperations.ts`:
+    - `endorseCheque()` - validates PENDING → ENDORSED
+  - Added guards to `useOutgoingChequesOperations.ts`:
+    - `submitCheque()` status changes - validates transitions
+
+- [x] **4. Write unit tests**
+  - Created `src/lib/__tests__/chequeStateMachine.test.ts`
+  - 43 tests covering all functions and business rules
+  - All tests passing
+
+- [x] **5. Verify TypeScript compiles**
+  - Run `npx tsc --noEmit` - PASSED
+
+---
+
+## Review Section
+
+### Summary of Changes
+
+Added cheque state machine validation to prevent invalid state transitions. The implementation is simple, clean, and follows the existing codebase patterns.
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `src/lib/chequeStateMachine.ts` | State machine utility with transition validation |
+| `src/lib/__tests__/chequeStateMachine.test.ts` | Unit tests (43 tests) |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/cheques/hooks/useChequesOperations.ts` | Added imports and validation guards to clearCheque, bounceCheque, endorseCheque, deleteCheque |
+| `src/components/cheques/hooks/useIncomingChequesOperations.ts` | Added imports and validation guard to endorseCheque |
+| `src/components/cheques/hooks/useOutgoingChequesOperations.ts` | Added imports and validation guards to submitCheque status transitions |
+
+### New Functions Added
+
+```typescript
+// chequeStateMachine.ts
+
+// Check if transition is valid
+export function canTransition(
+  fromStatus: ChequeStatusValue,
+  toStatus: ChequeStatusValue
+): boolean
+
+// Check if deletion is allowed
+export function canDelete(currentStatus: ChequeStatusValue): boolean
+
+// Validate transition (throws InvalidChequeTransitionError if invalid)
+export function validateTransition(
+  fromStatus: ChequeStatusValue,
+  toStatus: ChequeStatusValue
+): void
+
+// Validate deletion (throws InvalidChequeTransitionError if not allowed)
+export function validateDeletion(currentStatus: ChequeStatusValue): void
+
+// Get list of valid target states (useful for UI)
+export function getValidTransitions(
+  currentStatus: ChequeStatusValue
+): ChequeStatusValue[]
+
+// Custom error class with Arabic error messages
+export class InvalidChequeTransitionError extends Error
+```
+
+### Clean Code Standards Applied
+
+- **Simple design**: Single file, ~150 lines, easy to understand
+- **Clear naming**: Function names describe what they do
+- **Type safety**: Uses existing CHEQUE_STATUS_AR constants
+- **Fail fast**: Validation at entry points with clear error messages
+- **No over-engineering**: No complex frameworks or patterns
+- **Arabic error messages**: User-friendly messages for Arabic-speaking users
+
+### Error Handling
+
+All validation guards show clear toast messages in Arabic:
+```typescript
+toast({
+  title: "عملية غير مسموحة",
+  description: error.message, // e.g., "لا يمكن تغيير حالة الشيك من "مجيّر" إلى "تم الصرف""
+  variant: "destructive",
+});
+```
+
+### Verification Results
+
+| Check | Result |
+|-------|--------|
+| TypeScript | Compiles without errors |
+| Unit Tests | 43 tests passed |
+| Business Rules | All validated |
+
+---
+
+## Expected Outcome
+
+After the fix:
+- Invalid state transitions are blocked at entry points
+- Users see clear Arabic error messages explaining why operation is not allowed
+- Terminal states (ENDORSED, BOUNCED) cannot be modified
+- Deleted cheques must be in PENDING state
+- Business logic is centralized in one small utility file
+
+---
+
+## Previous Task: Fix Race Condition in Journal Entry Creation
+
+### Problem Analysis
+
+In `LedgerService.ts`, journal entries were created with fire-and-forget async calls AFTER `batch.commit()`:
 
 ```typescript
 // Lines 459-481 in LedgerService.ts
@@ -15,59 +175,9 @@ createJournalEntryForCOGS(...).catch((err) => console.error(...));
 
 **Risk**: If batch commits but journal creation fails, ledger and journal become out of sync.
 
-## Solution
+### Solution
 
-Create batch-compatible versions of journal entry functions that add to an existing `WriteBatch` instead of using `addDoc`. This ensures journal entries are part of the same atomic batch as ledger entries.
-
-### Key Locations
-
-| File | Function | Issue |
-|------|----------|-------|
-| `journalService.ts:329` | `createJournalEntryForLedger` | Uses `addDoc` (standalone) |
-| `journalService.ts:374` | `createJournalEntryForCOGS` | Uses `addDoc` (standalone) |
-| `LedgerService.ts:328` | `createSimpleLedgerEntry` | Fire-and-forget after addDoc |
-| `LedgerService.ts:460` | `createLedgerEntryWithRelated` | Fire-and-forget after batch.commit |
-| `LedgerService.ts:474` | `createLedgerEntryWithRelated` | Fire-and-forget COGS after batch.commit |
-
----
-
-## Todo List
-
-- [x] **1. Add batch versions in journalService.ts**
-  - Create `addJournalEntryToBatch(batch, userId, data)` function
-  - Create `addCOGSJournalEntryToBatch(batch, userId, data)` function
-  - These add to WriteBatch instead of using addDoc
-  - Keep existing async functions unchanged for backwards compatibility
-
-- [x] **2. Update createLedgerEntryWithRelated**
-  - Import batch functions in LedgerService.ts
-  - Call `addJournalEntryToBatch` BEFORE `batch.commit()`
-  - Call `addCOGSJournalEntryToBatch` BEFORE `batch.commit()` (when COGS exists)
-  - Remove fire-and-forget `.catch()` calls
-  - Add clear error handling with Arabic error message
-
-- [x] **3. Update createSimpleLedgerEntry**
-  - Convert to use WriteBatch instead of addDoc
-  - Call `addJournalEntryToBatch` before batch.commit()
-  - Remove fire-and-forget call
-  - Add clear error handling with Arabic error message
-
-- [x] **4. Verify TypeScript compiles**
-  - Run `npx tsc --noEmit` - PASSED
-
-- [x] **5. Run tests**
-  - Run full test suite - ALL TESTS PASSED
-
-- [x] **6. Build verification**
-  - Run `npm run build` - BUILD SUCCEEDED
-
----
-
-## Review Section
-
-### Summary of Changes
-
-Fixed a race condition where journal entries were created asynchronously after ledger entries, potentially causing data desync. Journal entries are now part of the same atomic Firestore batch.
+Created batch-compatible versions of journal entry functions that add to an existing `WriteBatch` instead of using `addDoc`. This ensures journal entries are part of the same atomic batch as ledger entries.
 
 ### Files Modified
 
@@ -76,60 +186,6 @@ Fixed a race condition where journal entries were created asynchronously after l
 | `src/services/journalService.ts` | Added `WriteBatch` import, `JournalEntryBatchData` interface, `COGSJournalEntryBatchData` interface, `addJournalEntryToBatch()` function, `addCOGSJournalEntryToBatch()` function |
 | `src/services/ledger/LedgerService.ts` | Updated import to use batch functions, refactored `createSimpleLedgerEntry` to use WriteBatch, refactored `createLedgerEntryWithRelated` to call journal batch functions before commit, added clear error handling |
 
-### New Functions Added
-
-```typescript
-// journalService.ts
-
-// Internal helper (DRY) - not exported
-function addValidatedJournalEntryToBatch(
-  batch: WriteBatch,
-  userId: string,
-  lines: JournalLine[],
-  description: string,
-  date: Date,
-  linkedTransactionId: string | null,
-  linkedDocumentType: 'ledger' | 'inventory'
-): void
-
-// Add journal entry to an existing batch (atomic with ledger)
-export function addJournalEntryToBatch(
-  batch: WriteBatch,
-  userId: string,
-  data: JournalEntryBatchData
-): void
-
-// Add COGS journal entry to an existing batch
-export function addCOGSJournalEntryToBatch(
-  batch: WriteBatch,
-  userId: string,
-  data: COGSJournalEntryBatchData
-): void
-```
-
-### Clean Code Standards Applied
-
-- **DRY**: Extracted `addValidatedJournalEntryToBatch` helper to avoid code duplication
-- **Single Responsibility**: Each function has one clear purpose
-- **Clear naming**: Function names describe what they do
-- **Type safety**: Interfaces define expected data shapes
-- **Proper error handling**: ValidationError thrown for invalid inputs
-
-### Error Handling
-
-Both functions now return a clear error message on batch failure:
-```typescript
-return {
-  success: false,
-  error: "حدث خطأ أثناء حفظ الحركة المالية والقيد المحاسبي",
-};
-```
-
-### Backwards Compatibility
-
-- Existing async functions (`createJournalEntryForLedger`, `createJournalEntryForCOGS`) remain unchanged
-- No breaking changes to public API
-
 ### Verification Results
 
 | Check | Result |
@@ -137,12 +193,3 @@ return {
 | TypeScript | Compiles without errors |
 | Tests | All tests passed |
 | Build | Production build succeeded |
-
----
-
-## Expected Outcome
-
-After the fix:
-- If `batch.commit()` succeeds -> ledger AND journal entries guaranteed to exist
-- If `batch.commit()` fails -> nothing is written (atomic rollback)
-- Error messages clearly indicate both ledger and journal operations were affected

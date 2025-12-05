@@ -19,6 +19,12 @@ import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { safeAdd, safeSubtract } from "@/lib/currency";
 import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
+import {
+  validateTransition,
+  validateDeletion,
+  InvalidChequeTransitionError,
+  type ChequeStatusValue,
+} from "@/lib/chequeStateMachine";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -194,6 +200,21 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
         // Important: Create payment record when cheque changes from pending to cleared
         if (wasPending && isNowCleared) {
+          // Validate state transition before proceeding
+          try {
+            validateTransition(oldStatus as ChequeStatusValue, newStatus as ChequeStatusValue);
+          } catch (error) {
+            if (error instanceof InvalidChequeTransitionError) {
+              toast({
+                title: "عملية غير مسموحة",
+                description: error.message,
+                variant: "destructive",
+              });
+              return false;
+            }
+            throw error;
+          }
+
           // Use atomic batch for status change operations
           const batch = writeBatch(firestore);
           const effectivePaymentDate = paymentDate || new Date();
@@ -263,6 +284,21 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             description: `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`,
           });
         } else if (wasCleared && isNowBouncedOrReverted) {
+          // Validate state transition before proceeding
+          try {
+            validateTransition(oldStatus as ChequeStatusValue, newStatus as ChequeStatusValue);
+          } catch (error) {
+            if (error instanceof InvalidChequeTransitionError) {
+              toast({
+                title: "عملية غير مسموحة",
+                description: error.message,
+                variant: "destructive",
+              });
+              return false;
+            }
+            throw error;
+          }
+
           // مهم: حذف سجل الدفع عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
           // Important: Delete payment record when cheque is bounced or reverted
           const chequeAmount = parseFloat(formData.amount);

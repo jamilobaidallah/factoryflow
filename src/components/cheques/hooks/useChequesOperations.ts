@@ -22,6 +22,12 @@ import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import { calculatePaymentStatus } from "@/lib/arap-utils";
 import { parseAmount, safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
+import {
+  validateTransition,
+  validateDeletion,
+  InvalidChequeTransitionError,
+  type ChequeStatusValue,
+} from "@/lib/chequeStateMachine";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -322,6 +328,21 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         return false;
       }
 
+      // Validate deletion: only PENDING cheques can be deleted
+      try {
+        validateDeletion(cheque.status as ChequeStatusValue);
+      } catch (error) {
+        if (error instanceof InvalidChequeTransitionError) {
+          toast({
+            title: "عملية غير مسموحة",
+            description: error.message,
+            variant: "destructive",
+          });
+          return false;
+        }
+        throw error;
+      }
+
       // Step 1: Find all associated payment records linked to this cheque
       const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
       const paymentsQuery = query(
@@ -426,6 +447,21 @@ export function useChequesOperations(): UseChequesOperationsReturn {
       return false;
     }
 
+    // Validate state transition: only PENDING cheques can be endorsed
+    try {
+      validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.ENDORSED);
+    } catch (error) {
+      if (error instanceof InvalidChequeTransitionError) {
+        toast({
+          title: "عملية غير مسموحة",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      throw error;
+    }
+
     try {
       // Use atomic batch for all operations
       const batch = writeBatch(firestore);
@@ -494,6 +530,21 @@ export function useChequesOperations(): UseChequesOperationsReturn {
    */
   const clearCheque = async (cheque: Cheque, paymentDate?: Date): Promise<boolean> => {
     if (!user) return false;
+
+    // Validate state transition: only PENDING cheques can be cashed
+    try {
+      validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.CASHED);
+    } catch (error) {
+      if (error instanceof InvalidChequeTransitionError) {
+        toast({
+          title: "عملية غير مسموحة",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      throw error;
+    }
 
     try {
       // Use atomic batch for all operations
@@ -573,6 +624,21 @@ export function useChequesOperations(): UseChequesOperationsReturn {
 
   const bounceCheque = async (cheque: Cheque): Promise<boolean> => {
     if (!user) return false;
+
+    // Validate state transition: only PENDING or CASHED cheques can be bounced
+    try {
+      validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.BOUNCED);
+    } catch (error) {
+      if (error instanceof InvalidChequeTransitionError) {
+        toast({
+          title: "عملية غير مسموحة",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      throw error;
+    }
 
     try {
       const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
