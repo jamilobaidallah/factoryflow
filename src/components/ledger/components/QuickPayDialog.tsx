@@ -140,16 +140,29 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="quickPayAmount">المبلغ المدفوع</Label>
-            <Input
-              id="quickPayAmount"
-              type="number"
-              step="0.01"
-              placeholder="أدخل المبلغ"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-            />
-            {entry && entry.remainingBalance && (
+            <div className="flex gap-2">
+              <Input
+                id="quickPayAmount"
+                type="number"
+                step="0.01"
+                placeholder="أدخل المبلغ"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="flex-1"
+                required
+              />
+              {entry?.remainingBalance !== undefined && entry.remainingBalance > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAmount(entry.remainingBalance!.toFixed(2))}
+                >
+                  دفع الكل
+                </Button>
+              )}
+            </div>
+            {entry?.remainingBalance !== undefined && entry.remainingBalance > 0 && (
               <p className="text-xs text-gray-500">
                 الحد الأقصى: {entry.remainingBalance.toFixed(2)} دينار
               </p>
