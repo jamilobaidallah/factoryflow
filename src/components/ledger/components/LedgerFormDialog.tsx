@@ -566,47 +566,131 @@ export function LedgerFormDialog() {
               </div>
             )}
 
-            {/* ===== STEP 3: Related Records (Additional Options) ===== */}
-            {step === 3 && !editingEntry && (
-              <div className="space-y-4 border-t pt-4">
-                <h3 className="font-semibold text-sm">السجلات المرتبطة</h3>
+            {/* Related Records Options - Show on Step 2 to enable Step 3 */}
+            {step === 2 && !editingEntry && (
+              <div className="space-y-4 p-4 border rounded-lg bg-blue-50">
+                <h4 className="font-medium text-sm">هل تريد إضافة سجلات مرتبطة؟</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Incoming Cheques Option */}
+                  {(currentEntryType === "دخل" || currentEntryType === "إيراد") && (
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input
+                        type="checkbox"
+                        id="enableIncomingCheck"
+                        checked={hasIncomingCheck}
+                        onChange={(e) => {
+                          setHasIncomingCheck(e.target.checked);
+                          if (e.target.checked && incomingChequesList.length === 0) {
+                            addIncomingCheque();
+                          }
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="enableIncomingCheck" className="cursor-pointer text-sm">
+                        شيكات واردة
+                      </Label>
+                    </div>
+                  )}
 
-                {/* Incoming Check Option - Multiple Cheques Support */}
-                {(currentEntryType === "دخل" || currentEntryType === "إيراد") && (
-                  <div className="space-y-2">
+                  {/* Outgoing Cheques Option */}
+                  {currentEntryType === "مصروف" && (
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input
+                        type="checkbox"
+                        id="enableOutgoingCheck"
+                        checked={hasOutgoingCheck}
+                        onChange={(e) => {
+                          setHasOutgoingCheck(e.target.checked);
+                          if (e.target.checked && outgoingChequesList.length === 0) {
+                            addOutgoingCheque();
+                          }
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="enableOutgoingCheck" className="cursor-pointer text-sm">
+                        شيكات صادرة
+                      </Label>
+                    </div>
+                  )}
+
+                  {/* Inventory Update Option */}
+                  <div className="flex items-center space-x-2 space-x-reverse">
+                    <input
+                      type="checkbox"
+                      id="enableInventoryUpdate"
+                      checked={hasInventoryUpdate}
+                      onChange={(e) => setHasInventoryUpdate(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="enableInventoryUpdate" className="cursor-pointer text-sm">
+                      تحديث المخزون
+                    </Label>
+                  </div>
+
+                  {/* Fixed Asset Option */}
+                  {currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input
+                        type="checkbox"
+                        id="enableFixedAsset"
+                        checked={hasFixedAsset}
+                        onChange={(e) => setHasFixedAsset(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="enableFixedAsset" className="cursor-pointer text-sm">
+                        إضافة كأصل ثابت
+                      </Label>
+                    </div>
+                  )}
+
+                  {/* Create Invoice Option */}
+                  {currentEntryType === "دخل" && formData.associatedParty && setCreateInvoice && (
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <input
+                        type="checkbox"
+                        id="enableCreateInvoice"
+                        checked={createInvoice || false}
+                        onChange={(e) => setCreateInvoice(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="enableCreateInvoice" className="cursor-pointer text-sm">
+                        إنشاء فاتورة
+                      </Label>
+                    </div>
+                  )}
+                </div>
+                {hasRelatedRecords && (
+                  <p className="text-xs text-blue-600">
+                    ستظهر تفاصيل السجلات المختارة في الخطوة التالية
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ===== STEP 3: Related Records Details ===== */}
+            {step === 3 && !editingEntry && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">تفاصيل السجلات المرتبطة</h3>
+
+                {/* Incoming Cheques Details */}
+                {hasIncomingCheck && (currentEntryType === "دخل" || currentEntryType === "إيراد") && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <input type="checkbox"
-                          id="hasIncomingCheck"
-                          checked={hasIncomingCheck}
-                          onChange={(e) => {
-                            setHasIncomingCheck(e.target.checked);
-                            // If enabling and list is empty, add one cheque
-                            if (e.target.checked && incomingChequesList.length === 0) {
-                              addIncomingCheque();
-                            }
-                          }}
-                        />
-                        <Label htmlFor="hasIncomingCheck" className="cursor-pointer">
-                          إضافة شيكات واردة
-                        </Label>
-                      </div>
-                      {hasIncomingCheck && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={addIncomingCheque}
-                          className="flex items-center gap-1"
-                        >
-                          <Plus className="h-4 w-4" />
-                          إضافة شيك آخر
-                        </Button>
-                      )}
+                      <h4 className="font-medium text-sm">شيكات واردة</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addIncomingCheque}
+                        className="flex items-center gap-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        إضافة شيك آخر
+                      </Button>
                     </div>
 
-                    {hasIncomingCheck && incomingChequesList.length > 0 && (
-                      <div className="pr-6 space-y-4">
+                    {incomingChequesList.length > 0 && (
+                      <div className="space-y-4">
                         {incomingChequesList.map((cheque, index) => (
                           <div key={cheque.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                             <div className="flex items-center justify-between">
@@ -724,42 +808,25 @@ export function LedgerFormDialog() {
                   </div>
                 )}
 
-                {/* Outgoing Check Option - Multiple Cheques Support */}
-                {currentEntryType === "مصروف" && (
-                  <div className="space-y-2">
+                {/* Outgoing Cheques Details */}
+                {hasOutgoingCheck && currentEntryType === "مصروف" && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <input type="checkbox"
-                          id="hasOutgoingCheck"
-                          checked={hasOutgoingCheck}
-                          onChange={(e) => {
-                            setHasOutgoingCheck(e.target.checked);
-                            // If enabling and list is empty, add one cheque
-                            if (e.target.checked && outgoingChequesList.length === 0) {
-                              addOutgoingCheque();
-                            }
-                          }}
-                        />
-                        <Label htmlFor="hasOutgoingCheck" className="cursor-pointer">
-                          إضافة شيكات صادرة
-                        </Label>
-                      </div>
-                      {hasOutgoingCheck && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={addOutgoingCheque}
-                          className="flex items-center gap-1"
-                        >
-                          <Plus className="h-4 w-4" />
-                          إضافة شيك آخر
-                        </Button>
-                      )}
+                      <h4 className="font-medium text-sm">شيكات صادرة</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addOutgoingCheque}
+                        className="flex items-center gap-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        إضافة شيك آخر
+                      </Button>
                     </div>
 
-                    {hasOutgoingCheck && outgoingChequesList.length > 0 && (
-                      <div className="pr-6 space-y-4">
+                    {outgoingChequesList.length > 0 && (
+                      <div className="space-y-4">
                         {outgoingChequesList.map((cheque, index) => (
                           <div key={cheque.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
                             <div className="flex items-center justify-between">
@@ -877,23 +944,11 @@ export function LedgerFormDialog() {
                   </div>
                 )}
 
-                {/* Inventory Update Option */}
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <input type="checkbox"
-                      id="hasInventoryUpdate"
-                      checked={hasInventoryUpdate}
-                      onChange={(e) =>
-                        setHasInventoryUpdate(e.target.checked)
-                      }
-                    />
-                    <Label htmlFor="hasInventoryUpdate" className="cursor-pointer">
-                      تحديث المخزون
-                    </Label>
-                  </div>
-
-                  {hasInventoryUpdate && (
-                    <div className="pr-6 space-y-2">
+                {/* Inventory Update Details */}
+                {hasInventoryUpdate && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                    <h4 className="font-medium text-sm">تحديث المخزون</h4>
+                    <div className="space-y-2">
                       <Input
                         type="text"
                         placeholder="اسم الصنف"
@@ -974,27 +1029,14 @@ export function LedgerFormDialog() {
                         />
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Fixed Asset Option */}
-                {currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input type="checkbox"
-                        id="hasFixedAsset"
-                        checked={hasFixedAsset}
-                        onChange={(e) =>
-                          setHasFixedAsset(e.target.checked)
-                        }
-                      />
-                      <Label htmlFor="hasFixedAsset" className="cursor-pointer">
-                        إضافة كأصل ثابت
-                      </Label>
-                    </div>
-
-                    {hasFixedAsset && (
-                      <div className="pr-6 space-y-2">
+                {/* Fixed Asset Details */}
+                {hasFixedAsset && currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                    <h4 className="font-medium text-sm">إضافة كأصل ثابت</h4>
+                    <div className="space-y-2">
                         <Input
                           type="text"
                           placeholder="اسم الأصل"
@@ -1043,34 +1085,17 @@ export function LedgerFormDialog() {
                             دينار/شهر
                           </p>
                         )}
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
-                {/*
-                  خيار إنشاء فاتورة - للقبض مع عميل محدد فقط
-                  Create Invoice Option - for income with client only
-                */}
-                {currentEntryType === "دخل" && formData.associatedParty && setCreateInvoice && (
-                  <div className="space-y-2 p-3 bg-blue-50 rounded-md border border-blue-200">
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input
-                        type="checkbox"
-                        id="createInvoice"
-                        checked={createInvoice || false}
-                        onChange={(e) => setCreateInvoice(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="createInvoice" className="cursor-pointer font-medium">
-                        إنشاء فاتورة لهذه الدفعة
-                      </Label>
-                    </div>
-                    {createInvoice && (
-                      <p className="text-xs text-blue-700 pr-6">
-                        سيتم فتح نموذج إنشاء فاتورة جديدة للعميل &quot;{formData.associatedParty}&quot; بعد حفظ هذه الحركة.
-                      </p>
-                    )}
+                {/* Create Invoice Info */}
+                {createInvoice && currentEntryType === "دخل" && formData.associatedParty && (
+                  <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
+                    <h4 className="font-medium text-sm mb-2">إنشاء فاتورة</h4>
+                    <p className="text-xs text-blue-700">
+                      سيتم فتح نموذج إنشاء فاتورة جديدة للعميل &quot;{formData.associatedParty}&quot; بعد حفظ هذه الحركة.
+                    </p>
                   </div>
                 )}
               </div>
