@@ -200,6 +200,21 @@ export function LedgerFormDialog() {
     }
   };
 
+  // Guard against accidental form submission when not on final step
+  const handleFormSubmit = (e: React.FormEvent) => {
+    // For new entries, only allow submission on the final step
+    if (!editingEntry && step < totalSteps) {
+      e.preventDefault();
+      return;
+    }
+    // Validate before submitting
+    if (!editingEntry && !validateStep(step)) {
+      e.preventDefault();
+      return;
+    }
+    onSubmit(e);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -246,7 +261,7 @@ export function LedgerFormDialog() {
           </div>
         )}
 
-        <form onSubmit={onSubmit}>
+        <form onSubmit={handleFormSubmit}>
           <div className="grid gap-4 py-4">
             {/* ===== STEP 1: Basic Info ===== */}
             {(step === 1 || editingEntry) && (
