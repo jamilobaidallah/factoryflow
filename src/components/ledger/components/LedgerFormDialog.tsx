@@ -3,7 +3,7 @@
  * Uses LedgerFormContext to eliminate prop drilling
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { CATEGORIES } from "../utils/ledger-constants";
 import { getCategoryType } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
@@ -71,6 +71,9 @@ export function LedgerFormDialog() {
   // Wizard step state (only for new entries)
   const [step, setStep] = useState(1);
   const [stepError, setStepError] = useState<string | null>(null);
+
+  // Ref to track intentional submit clicks (prevents auto-submit bugs)
+  const intentionalSubmitRef = useRef(false);
 
   // Determine if step 3 is needed (related records)
   const hasRelatedRecords = hasIncomingCheck || hasOutgoingCheck ||
@@ -194,22 +197,35 @@ export function LedgerFormDialog() {
   };
 
   // Handle next step with validation
-  const handleNextStep = () => {
+  const handleNextStep = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (validateStep(step)) {
       setStep(step + 1);
     }
   };
 
+  // Handle intentional submit button click
+  const handleSubmitClick = () => {
+    intentionalSubmitRef.current = true;
+  };
+
   // Guard against accidental form submission when not on final step
   const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); // Always prevent default first
+
+    // Only allow submission if user intentionally clicked submit
+    if (!intentionalSubmitRef.current) {
+      return;
+    }
+    intentionalSubmitRef.current = false; // Reset for next time
+
     // For new entries, only allow submission on the final step
     if (!editingEntry && step < totalSteps) {
-      e.preventDefault();
       return;
     }
     // Validate before submitting
     if (!editingEntry && !validateStep(step)) {
-      e.preventDefault();
       return;
     }
     onSubmit(e);
@@ -1085,7 +1101,7 @@ export function LedgerFormDialog() {
 
               {/* For editing: show save button */}
               {editingEntry ? (
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading} onClick={handleSubmitClick}>
                   {loading ? "جاري الحفظ..." : "تحديث"}
                 </Button>
               ) : (
@@ -1095,7 +1111,7 @@ export function LedgerFormDialog() {
                     التالي
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={loading}>
+                  <Button type="submit" disabled={loading} onClick={handleSubmitClick}>
                     {loading ? "جاري الحفظ..." : "إضافة"}
                   </Button>
                 )
