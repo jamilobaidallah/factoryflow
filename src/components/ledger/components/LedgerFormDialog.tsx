@@ -9,6 +9,7 @@ import { getCategoryType } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
 import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
 import { useAllClients } from "@/hooks/useAllClients";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,15 @@ export function LedgerFormDialog() {
   // Associated party dropdown state
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
 
+  // Wizard step state (only for new entries)
+  const [step, setStep] = useState(1);
+  const [stepError, setStepError] = useState<string | null>(null);
+
+  // Determine if step 3 is needed (related records)
+  const hasRelatedRecords = hasIncomingCheck || hasOutgoingCheck ||
+                            hasInventoryUpdate || hasFixedAsset || createInvoice;
+  const totalSteps = !editingEntry ? (hasRelatedRecords ? 3 : 2) : 1;
+
   // Filter clients based on search input
   const filteredClients = useMemo(() => {
     if (!formData.associatedParty?.trim()) {
@@ -83,10 +93,12 @@ export function LedgerFormDialog() {
     setShowPartyDropdown(false);
   };
 
-  // Close dropdown when dialog closes
+  // Reset state when dialog opens/closes
   useEffect(() => {
     if (!isOpen) {
       setShowPartyDropdown(false);
+      setStep(1); // Reset wizard to first step
+      setStepError(null); // Clear any validation errors
     }
   }, [isOpen]);
 
@@ -143,6 +155,51 @@ export function LedgerFormDialog() {
 
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
 
+  // Validate current step before advancing
+  const validateStep = (currentStep: number): boolean => {
+    setStepError(null);
+
+    if (currentStep === 1) {
+      if (!formData.description?.trim()) {
+        setStepError("الوصف مطلوب");
+        return false;
+      }
+      if (!formData.category) {
+        setStepError("التصنيف الرئيسي مطلوب");
+        return false;
+      }
+      if (!formData.subCategory) {
+        setStepError("الفئة الفرعية مطلوبة");
+        return false;
+      }
+      if (!formData.amount || parseFloat(formData.amount) <= 0) {
+        setStepError("المبلغ مطلوب ويجب أن يكون أكبر من صفر");
+        return false;
+      }
+      if (!formData.date) {
+        setStepError("التاريخ مطلوب");
+        return false;
+      }
+    }
+
+    if (currentStep === 2) {
+      // Owner is required for capital transactions
+      if (formData.category === "رأس المال" && !formData.ownerName) {
+        setStepError("اسم الشريك/المالك مطلوب لعمليات رأس المال");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Handle next step with validation
+  const handleNextStep = () => {
+    if (validateStep(step)) {
+      setStep(step + 1);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -156,63 +213,104 @@ export function LedgerFormDialog() {
               : "أدخل بيانات الحركة المالية الجديدة أدناه"}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Step Progress Indicator - Only for new entries */}
+        {!editingEntry && (
+          <div className="mb-4">
+            {/* Step labels */}
+            <div className="flex justify-between text-xs text-gray-500 mb-2">
+              <span className={cn(step >= 1 && "text-primary font-medium")}>
+                المعلومات الأساسية
+              </span>
+              <span className={cn(step >= 2 && "text-primary font-medium")}>
+                الطرف والذمم
+              </span>
+              {hasRelatedRecords && (
+                <span className={cn(step >= 3 && "text-primary font-medium")}>
+                  السجلات المرتبطة
+                </span>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div className="flex gap-2">
+              {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
+                <div
+                  key={s}
+                  className={cn(
+                    "h-2 flex-1 rounded transition-colors",
+                    s <= step ? "bg-primary" : "bg-gray-200"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={onSubmit}>
           <div className="grid gap-4 py-4">
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">الوصف</Label>
-              <Input
-                id="description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                required
-              />
-            </div>
+            {/* ===== STEP 1: Basic Info ===== */}
+            {(step === 1 || editingEntry) && (
+              <>
+                {/* Description */}
+                <div className="space-y-2">
+                  <Label htmlFor="description">الوصف</Label>
+                  <Input
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                    required
+                  />
+                </div>
 
-            {/* Category & Subcategory */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="category">التصنيف الرئيسي</Label>
-                <select
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value, subCategory: "" })
-                  }
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">اختر التصنيف</option>
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat.name} value={cat.name}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subCategory">الفئة الفرعية</Label>
-                <select
-                  id="subCategory"
-                  value={formData.subCategory}
-                  onChange={(e) =>
-                    setFormData({ ...formData, subCategory: e.target.value })
-                  }
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  required
-                  disabled={!formData.category}
-                >
-                  <option value="">اختر الفئة الفرعية</option>
-                  {formData.category && CATEGORIES
-                    .find(cat => cat.name === formData.category)
-                    ?.subcategories.map((sub) => (
-                      <option key={sub} value={sub}>{sub}</option>
-                    ))}
-                </select>
-              </div>
-            </div>
+                {/* Category & Subcategory */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">التصنيف الرئيسي</Label>
+                    <select
+                      id="category"
+                      value={formData.category}
+                      onChange={(e) =>
+                        setFormData({ ...formData, category: e.target.value, subCategory: "" })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                    >
+                      <option value="">اختر التصنيف</option>
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat.name} value={cat.name}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="subCategory">الفئة الفرعية</Label>
+                    <select
+                      id="subCategory"
+                      value={formData.subCategory}
+                      onChange={(e) =>
+                        setFormData({ ...formData, subCategory: e.target.value })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                      disabled={!formData.category}
+                    >
+                      <option value="">اختر الفئة الفرعية</option>
+                      {formData.category && CATEGORIES
+                        .find(cat => cat.name === formData.category)
+                        ?.subcategories.map((sub) => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
 
-            {/* Associated Party */}
+            {/* ===== STEP 2: Party & AR/AP ===== */}
+            {(step === 2 || editingEntry) && (
+              <>
+                {/* Associated Party */}
             <div className="space-y-2 relative">
               <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
               <div className="relative">
@@ -311,62 +409,68 @@ export function LedgerFormDialog() {
                 </select>
               </div>
             )}
+              </>
+            )}
 
-            {/* Amount & Date */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">المبلغ (دينار)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, amount: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="date">التاريخ</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                  required
-                />
-              </div>
-            </div>
+            {/* Amount & Date - Part of Step 1 */}
+            {(step === 1 || editingEntry) && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">المبلغ (دينار)</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) =>
+                        setFormData({ ...formData, amount: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">التاريخ</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) =>
+                        setFormData({ ...formData, date: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                </div>
 
-            {/* Reference & Notes */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="reference">رقم المرجع (اختياري)</Label>
-                <Input
-                  id="reference"
-                  value={formData.reference}
-                  onChange={(e) =>
-                    setFormData({ ...formData, reference: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">ملاحظات (اختياري)</Label>
-                <Input
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
-                />
-              </div>
-            </div>
+                {/* Reference & Notes */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reference">رقم المرجع (اختياري)</Label>
+                    <Input
+                      id="reference"
+                      value={formData.reference}
+                      onChange={(e) =>
+                        setFormData({ ...formData, reference: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">ملاحظات (اختياري)</Label>
+                    <Input
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) =>
+                        setFormData({ ...formData, notes: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
-            {/* AR/AP Tracking - Only for revenue/expense entries, not for editing */}
-            {!editingEntry && (currentEntryType === "دخل" || currentEntryType === "مصروف") && (
+            {/* AR/AP Tracking - Part of Step 2 (new entries only) */}
+            {step === 2 && !editingEntry && (currentEntryType === "دخل" || currentEntryType === "مصروف") && (
               <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
                 <div className="flex items-center space-x-2 space-x-reverse">
                   <input
@@ -431,10 +535,10 @@ export function LedgerFormDialog() {
               </div>
             )}
 
-            {/* Additional Options - Only when adding new entry */}
-            {!editingEntry && (
+            {/* ===== STEP 3: Related Records (Additional Options) ===== */}
+            {step === 3 && !editingEntry && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="font-semibold text-sm">خيارات إضافية</h3>
+                <h3 className="font-semibold text-sm">السجلات المرتبطة</h3>
 
                 {/* Incoming Check Option - Multiple Cheques Support */}
                 {(currentEntryType === "دخل" || currentEntryType === "إيراد") && (
@@ -942,13 +1046,46 @@ export function LedgerFormDialog() {
             )}
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              إلغاء
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "جاري الحفظ..." : editingEntry ? "تحديث" : "إضافة"}
-            </Button>
+          {/* Validation Error Message */}
+          {stepError && (
+            <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600">{stepError}</p>
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            {/* Previous button - only for wizard mode, step > 1 */}
+            {!editingEntry && step > 1 ? (
+              <Button type="button" variant="outline" onClick={() => { setStepError(null); setStep(step - 1); }}>
+                السابق
+              </Button>
+            ) : (
+              <div /> /* Spacer for alignment */
+            )}
+
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                إلغاء
+              </Button>
+
+              {/* For editing: show save button */}
+              {editingEntry ? (
+                <Button type="submit" disabled={loading}>
+                  {loading ? "جاري الحفظ..." : "تحديث"}
+                </Button>
+              ) : (
+                /* For new entries: show next or save based on step */
+                step < totalSteps ? (
+                  <Button type="button" onClick={handleNextStep}>
+                    التالي
+                  </Button>
+                ) : (
+                  <Button type="submit" disabled={loading}>
+                    {loading ? "جاري الحفظ..." : "إضافة"}
+                  </Button>
+                )
+              )}
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

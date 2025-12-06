@@ -1,94 +1,75 @@
-# Feature: QuickPayDialog "Pay Full Amount" Button
+# Feature: LedgerFormDialog Step Wizard
 
 ## Problem
 
-User must manually type the remaining balance when making a quick payment. This is tedious and error-prone.
+LedgerFormDialog is a massive 958-line form that shows everything at once:
+- Description, category, amount, date
+- Associated party with dropdown
+- AR/AP tracking options
+- Cheques (incoming/outgoing with multiple support)
+- Inventory updates
+- Fixed assets
+- Invoice creation
+
+This creates cognitive overload for users, especially when adding new entries.
 
 ## Solution
 
-Add a "دفع الكل" (Pay Full) button next to the amount input that auto-fills the remaining balance.
+Convert the form into a step wizard for **new entries only**:
+- **Step 1**: Basic Info (description, category, subcategory, amount, date, reference, notes)
+- **Step 2**: Party & AR/AP (associated party, owner for capital, AR/AP tracking)
+- **Step 3**: Related Records (cheques, inventory, fixed assets, invoice - only if any checkbox is checked)
 
-## Current Implementation
-
-**File:** `src/components/ledger/components/QuickPayDialog.tsx`
-
-The amount input (lines 143-151) is standalone. User sees the max amount as helper text but must type it manually.
-
-```tsx
-<Input
-  id="quickPayAmount"
-  type="number"
-  step="0.01"
-  placeholder="أدخل المبلغ"
-  value={amount}
-  onChange={(e) => setAmount(e.target.value)}
-  required
-/>
-```
-
-## Proposed Change
-
-Wrap input and button in a flex container:
-
-```tsx
-<div className="flex gap-2">
-  <Input
-    id="quickPayAmount"
-    type="number"
-    step="0.01"
-    placeholder="أدخل المبلغ"
-    value={amount}
-    onChange={(e) => setAmount(e.target.value)}
-    className="flex-1"
-    required
-  />
-  {entry?.remainingBalance && (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => setAmount(entry.remainingBalance!.toFixed(2))}
-    >
-      دفع الكل
-    </Button>
-  )}
-</div>
-```
+For **edit mode**, keep the current single-page form since most additional options don't apply.
 
 ---
 
 ## Todo List
 
-- [ ] **1. Add flex container around amount input**
-  - Wrap Input in `<div className="flex gap-2">`
-  - Add `className="flex-1"` to Input for proper sizing
+- [x] **1. Add wizard state and progress indicator**
+  - Add `step` state (1, 2, or 3)
+  - Calculate `totalSteps` based on whether related records are selected
+  - Add progress bar UI at top of dialog
 
-- [ ] **2. Add "دفع الكل" button**
-  - Conditionally render when `entry?.remainingBalance` exists
-  - onClick fills amount with `entry.remainingBalance.toFixed(2)`
+- [x] **2. Create Step 1: Basic Info section**
+  - Wrap description, category/subcategory, amount/date, reference/notes in a conditional `{step === 1 && ...}`
+  - These are required fields for all entries
 
-- [ ] **3. Verify TypeScript compiles**
-  - Run `npx tsc --noEmit`
+- [x] **3. Create Step 2: Party & AR/AP section**
+  - Wrap associated party dropdown, owner dropdown (capital), and AR/AP tracking in `{step === 2 && ...}`
 
-- [ ] **4. Verify existing tests pass**
-  - Run tests for QuickPayDialog
+- [x] **4. Create Step 3: Related Records section**
+  - Wrap "Additional Options" section (cheques, inventory, fixed assets, invoice) in `{step === 3 && ...}`
+  - This step only appears if user checks any related record option
+
+- [x] **5. Update DialogFooter with navigation buttons**
+  - "السابق" (Previous) button when step > 1
+  - "التالي" (Next) button when step < totalSteps
+  - "حفظ" (Save) button on final step
+  - Keep original buttons for edit mode
+
+- [x] **6. Add step validation before advancing**
+  - Step 1: Require description, category, subcategory, amount, date
+  - Step 2: Require owner if capital transaction
+  - Prevent advancing if validation fails
+
+- [x] **7. Handle edit mode - skip wizard**
+  - When `editingEntry` exists, show single-page form (current behavior)
+  - Wizard only applies to new entries
+
+- [x] **8. Verify TypeScript compiles**
+  - Run `npx tsc --noEmit` - PASSED
+
+- [x] **9. Build successful**
+  - Run `npm run build` - PASSED
 
 ---
 
-## Files to Modify
+## Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/components/ledger/components/QuickPayDialog.tsx` | Add flex wrapper and "دفع الكل" button |
-
----
-
-## Constraints
-
-- Keep change minimal - only modify the amount input section
-- Use existing Button component with `variant="outline"` and `size="sm"`
-- Arabic text: "دفع الكل" (Pay All)
-- No new dependencies
+| `src/components/ledger/components/LedgerFormDialog.tsx` | Added wizard state, progress bar, step sections, navigation, validation |
 
 ---
 
@@ -96,25 +77,38 @@ Wrap input and button in a flex container:
 
 ### Summary of Changes
 
-Added a "دفع الكل" (Pay Full) button to the QuickPayDialog component. Users can now click this button to auto-fill the remaining balance instead of typing it manually.
+Converted the 958-line LedgerFormDialog from a monolithic form into a 3-step wizard for new entries:
 
-### Files Modified
+1. **Step 1 - Basic Info**: Description, Category/Subcategory, Amount/Date, Reference/Notes
+2. **Step 2 - Party & AR/AP**: Associated Party dropdown, Owner dropdown (for capital), AR/AP tracking options
+3. **Step 3 - Related Records**: Cheques (incoming/outgoing), Inventory updates, Fixed assets, Invoice creation
 
-| File | Changes |
-|------|---------|
-| `src/components/ledger/components/QuickPayDialog.tsx` | Added flex container around amount input, added "دفع الكل" button |
+### Key Implementation Details
 
-### Implementation Details
+- **Wizard for new entries only** - Edit mode retains the original single-page form
+- **Dynamic step count** - 2 steps if no related records, 3 steps if any checkbox is checked
+- **Progress indicator** - Visual progress bar with Arabic step labels
+- **Step validation** - Validates required fields before allowing navigation to next step
+- **Error display** - Shows validation errors in a red highlighted box
 
-- Wrapped amount Input in `<div className="flex gap-2">`
-- Added `className="flex-1"` to Input for proper sizing
-- Added Button with `variant="outline"` and `size="sm"`
-- Button only renders when `entry?.remainingBalance` exists
-- onClick fills amount with `entry.remainingBalance.toFixed(2)`
+### Technical Changes
 
-### Verification Results
+1. Added `step` and `stepError` state variables
+2. Added `hasRelatedRecords` and `totalSteps` computed values
+3. Added `validateStep()` and `handleNextStep()` functions
+4. Wrapped form sections in step conditionals: `{(step === N || editingEntry) && ...}`
+5. Updated DialogFooter with Previous/Next/Save navigation
+6. Added progress indicator with step labels in Arabic
+
+### Verification
 
 | Check | Result |
 |-------|--------|
-| TypeScript | ✅ Compiles without errors |
-| Tests | ✅ All 24 tests pass |
+| TypeScript | Compiles without errors |
+| Build | Production build successful |
+| Edit mode | Unchanged (single-page form) |
+| New entry | 3-step wizard flow |
+
+---
+
+**PR Ready for Review**
