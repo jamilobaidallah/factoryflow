@@ -455,11 +455,35 @@ export class LedgerService {
 
       // Handle immediate settlement
       if (formData.immediateSettlement) {
-        const cashAmount =
-          options.hasIncomingCheck && options.checkFormData
-            ? safeSubtract(totalAmount, parseAmount(options.checkFormData.chequeAmount))
-            : totalAmount;
-        handleImmediateSettlementBatch(ctx, cashAmount);
+        let totalChequeAmount = 0;
+
+        // Calculate total from incoming cashed cheques
+        if (options.hasIncomingCheck) {
+          if (options.incomingChequesList?.length) {
+            totalChequeAmount += options.incomingChequesList
+              .filter(c => (c.accountingType || "cashed") === "cashed")
+              .reduce((sum, c) => sum + parseAmount(c.chequeAmount), 0);
+          } else if (options.checkFormData && (options.checkFormData.accountingType || "cashed") === "cashed") {
+            totalChequeAmount += parseAmount(options.checkFormData.chequeAmount);
+          }
+        }
+
+        // Calculate total from outgoing cashed cheques
+        if (options.hasOutgoingCheck) {
+          if (options.outgoingChequesList?.length) {
+            totalChequeAmount += options.outgoingChequesList
+              .filter(c => (c.accountingType || "cashed") === "cashed")
+              .reduce((sum, c) => sum + parseAmount(c.chequeAmount), 0);
+          } else if (options.outgoingCheckFormData && (options.outgoingCheckFormData.accountingType || "cashed") === "cashed") {
+            totalChequeAmount += parseAmount(options.outgoingCheckFormData.chequeAmount);
+          }
+        }
+
+        // Only create cash payment if there's a remaining amount after cheques
+        const cashAmount = safeSubtract(totalAmount, totalChequeAmount);
+        if (cashAmount > 0) {
+          handleImmediateSettlementBatch(ctx, cashAmount);
+        }
       }
 
       // Handle initial payment
