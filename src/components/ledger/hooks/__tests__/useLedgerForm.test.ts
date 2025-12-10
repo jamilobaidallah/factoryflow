@@ -23,7 +23,7 @@ describe('useLedgerForm', () => {
         ownerName: "",
         reference: "",
         notes: "",
-        trackARAP: false,
+        trackARAP: true, // Default to "آجل" (credit) for new entries
         immediateSettlement: false,
       });
     });
@@ -582,7 +582,7 @@ describe('useLedgerForm', () => {
         result.current.resetAllForms();
       });
 
-      expect(result.current.formData.trackARAP).toBe(false);
+      expect(result.current.formData.trackARAP).toBe(true); // Default is now true ("آجل")
       expect(result.current.hasInitialPayment).toBe(false);
       expect(result.current.initialPaymentAmount).toBe("");
     });

@@ -107,7 +107,7 @@ const initialFormData: LedgerFormState = {
   ownerName: "",
   reference: "",
   notes: "",
-  trackARAP: false,
+  trackARAP: true, // Default to "آجل" (credit) for new entries
   immediateSettlement: false,
 };
 

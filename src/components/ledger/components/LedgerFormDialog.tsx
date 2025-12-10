@@ -501,69 +501,80 @@ export function LedgerFormDialog() {
               </>
             )}
 
-            {/* AR/AP Tracking - Part of Step 2 (new entries only) */}
+            {/* Payment Status - Part of Step 2 (new entries only) */}
             {step === 2 && !editingEntry && (currentEntryType === "دخل" || currentEntryType === "مصروف") && (
               <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                <div className="flex items-center space-x-2 space-x-reverse">
-                  <input
-                    type="checkbox"
-                    id="trackARAP"
-                    checked={formData.trackARAP}
-                    onChange={(e) =>
-                      setFormData({ ...formData, trackARAP: e.target.checked })
-                    }
-                    className="h-4 w-4"
-                  />
-                  <Label htmlFor="trackARAP" className="cursor-pointer">
-                    تتبع الذمم (حسابات القبض/الدفع)
-                  </Label>
-                </div>
+                <Label className="font-medium">حالة الدفع</Label>
+                <div className="space-y-3">
+                  {/* Option 1: Fully Paid */}
+                  <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentStatus"
+                      value="paid"
+                      checked={formData.immediateSettlement && !hasInitialPayment}
+                      onChange={() => {
+                        setFormData({ ...formData, immediateSettlement: true, trackARAP: true });
+                        setHasInitialPayment(false);
+                        setInitialPaymentAmount("");
+                      }}
+                      className="h-4 w-4"
+                    />
+                    <span>مدفوع بالكامل (نقدي أو شيك صرف)</span>
+                  </label>
 
-                {formData.trackARAP && (
-                  <div className="space-y-4 pr-6">
-                    {/* Immediate Settlement Option */}
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input type="checkbox"
-                        id="immediateSettlement"
-                        checked={formData.immediateSettlement}
-                        onChange={(e) =>
-                          setFormData({ ...formData, immediateSettlement: e.target.checked })
-                        }
+                  {/* Option 2: On Credit */}
+                  <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentStatus"
+                      value="credit"
+                      checked={formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment}
+                      onChange={() => {
+                        setFormData({ ...formData, trackARAP: true, immediateSettlement: false });
+                        setHasInitialPayment(false);
+                        setInitialPaymentAmount("");
+                      }}
+                      className="h-4 w-4"
+                    />
+                    <span>آجل - سيتم تتبع الذمم</span>
+                  </label>
+
+                  {/* Option 3: Partial Payment */}
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paymentStatus"
+                        value="partial"
+                        checked={hasInitialPayment}
+                        onChange={() => {
+                          setFormData({ ...formData, trackARAP: true, immediateSettlement: false });
+                          setHasInitialPayment(true);
+                        }}
+                        className="h-4 w-4"
                       />
-                      <Label htmlFor="immediateSettlement" className="cursor-pointer">
-                        تسوية فورية (نقدي)
-                      </Label>
-                    </div>
-
-                    {/* Initial Payment Option (only if not immediate settlement) */}
-                    {!formData.immediateSettlement && (
-                      <div className="space-y-2">
-                        <div className="flex items-center space-x-2 space-x-reverse">
-                          <input type="checkbox"
-                            id="hasInitialPayment"
-                            checked={hasInitialPayment}
-                            onChange={(e) =>
-                              setHasInitialPayment(e.target.checked)
-                            }
-                          />
-                          <Label htmlFor="hasInitialPayment" className="cursor-pointer">
-                            دفعة أولية
-                          </Label>
-                        </div>
-                        {hasInitialPayment && (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="المبلغ المدفوع"
-                            value={initialPaymentAmount}
-                            onChange={(e) => setInitialPaymentAmount(e.target.value)}
-                            className="mr-6"
-                          />
-                        )}
-                      </div>
+                      <span>دفعة جزئية</span>
+                    </label>
+                    {hasInitialPayment && (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="المبلغ المدفوع"
+                        value={initialPaymentAmount}
+                        onChange={(e) => setInitialPaymentAmount(e.target.value)}
+                        className="mr-6 max-w-[200px]"
+                      />
                     )}
                   </div>
-                )}
+                </div>
+
+                {/* Helper text */}
+                <p className="text-xs text-gray-500">
+                  {formData.immediateSettlement && !hasInitialPayment && "سيتم تسجيل المبلغ كمدفوع بالكامل"}
+                  {formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment && "سيتم إنشاء ذمة (مدين/دائن) لمتابعة الدفع"}
+                  {hasInitialPayment && "سيتم تسجيل الدفعة الجزئية وإنشاء ذمة للمبلغ المتبقي"}
+                </p>
               </div>
             )}
 

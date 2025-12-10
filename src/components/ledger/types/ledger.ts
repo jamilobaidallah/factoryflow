@@ -188,7 +188,7 @@ export const initialLedgerFormData: LedgerFormData = {
   reference: "",
   notes: "",
   immediateSettlement: false,
-  trackARAP: false,
+  trackARAP: true, // Default to "آجل" (credit) for new entries
 };
 
 export const initialCheckFormData: CheckFormData = {
