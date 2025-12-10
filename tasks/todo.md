@@ -1,53 +1,80 @@
-# Task: Extract Wizard Step Components from LedgerFormDialog
+# Task: Collapsible Grouped Sidebar Navigation
 
 ## Context
-Refactoring LedgerFormDialog.tsx by extracting all three wizard step contents into reusable components.
+The current sidebar has 15 flat menu items, making it cluttered and hard to scan. Users requested collapsible groups to organize navigation into logical categories.
 
-## Goal
-Create `<StepBasicInfo />`, `<StepPartyARAP />`, and `<StepRelatedRecords />` components to reduce LedgerFormDialog complexity.
+## Branch
+`feature/collapsible-sidebar-navigation`
 
 ---
 
-## Completed
+## Analysis
 
-### Step 1: StepBasicInfo
-- [x] Create `src/components/ledger/steps/StepBasicInfo.tsx`
-- [x] Extract description, category, subcategory, amount, date, reference, notes fields
-- [x] Use `onUpdate(Partial<LedgerFormData>)` pattern
-- [x] Handle category change (clears subcategory)
+### Current State
+- **Sidebar location:** `src/components/layout/sidebar.tsx`
+- **Mobile nav location:** `src/components/layout/mobile-nav.tsx`
+- **15 flat menu items** with no grouping
+- **Dependencies available:** `@radix-ui/react-accordion` already installed
+- **No existing Collapsible/Accordion UI component** - needs creation
 
-### Step 2: StepPartyARAP
-- [x] Create `src/components/ledger/steps/StepPartyARAP.tsx`
-- [x] Move local state: `showPartyDropdown`, `filteredClients` useMemo
-- [x] Extract Associated Party searchable dropdown
-- [x] Extract Owner dropdown (for capital transactions)
-- [x] Extract Payment Status radio buttons
-- [x] Extract Related Records checkboxes
+### Proposed Groups (5 categories)
+1. **الحسابات (Accounts):** Ledger, Payments, Invoices
+2. **الشيكات (Cheques):** Incoming, Outgoing
+3. **الأطراف (Parties):** Clients, Partners, Employees
+4. **المخزون والإنتاج (Inventory & Production):** Inventory, Production, Fixed Assets
+5. **التقارير والنسخ (Reports & Backup):** Reports, Backup
 
-### Step 3: StepRelatedRecords
-- [x] Create `src/components/ledger/steps/StepRelatedRecords.tsx`
-- [x] Extract Incoming Cheques section with ChequeFormCard
-- [x] Extract Outgoing Cheques section with ChequeFormCard
-- [x] Extract Inventory section with InventoryFormCard
-- [x] Extract Fixed Asset section with FixedAssetFormCard
-- [x] Extract Invoice info section
+### Top-Level Items (always visible)
+- Dashboard (لوحة التحكم)
+- Search (البحث عن معاملة)
 
-### LedgerFormDialog Updates
-- [x] Add imports for all three step components
-- [x] Replace Step 1 content with `<StepBasicInfo />`
-- [x] Replace Step 2 content with `<StepPartyARAP />`
-- [x] Replace Step 3 content with `<StepRelatedRecords />`
-- [x] Remove unused imports (Label, Input, Plus, ChequeFormCard, InventoryFormCard, FixedAssetFormCard)
+---
 
-### Code Review & Cleanup
-- [x] All components have JSDoc comments
-- [x] All props interfaces are complete with comments
-- [x] No `any` types
-- [x] No unused imports
-- [x] Created `steps/index.ts` barrel export
-- [x] Created `forms/index.ts` barrel export
-- [x] Lint check - PASSED (no new warnings)
-- [x] Type check - PASSED
+## Plan
+
+### Phase 1: Create Collapsible UI Component
+- [x] Create `src/components/ui/collapsible.tsx` using `@radix-ui/react-collapsible`
+
+### Phase 2: Refactor Desktop Sidebar
+- [x] Define TypeScript interfaces (`NavGroup`, `NavItem`)
+- [x] Create `navigationGroups` data structure
+- [x] Create `topLevelItems` data structure
+- [x] Create `SidebarGroup` component with collapse/expand logic
+- [x] Add localStorage persistence for group open/closed state
+- [x] Implement active group auto-expand based on current route
+- [x] Add chevron icon rotation animation (RTL-aware)
+- [x] Add indentation for sub-items
+- [x] Style active item highlight
+
+### Phase 3: Update Mobile Navigation
+- [x] Update mobile-nav.tsx to match grouped structure
+- [x] Ensure all navigation items are accessible from mobile
+
+### Phase 4: Testing & Verification
+- [x] Update sidebar tests for new grouped structure
+- [x] Run TypeScript check (`npx tsc --noEmit`) - PASSED
+- [x] Run lint check (`npm run lint`) - PASSED (pre-existing warnings only)
+- [x] Run sidebar tests (`npm test`) - 23/23 PASSED
+- [x] Run build (`npm run build`) - PASSED
+
+### Phase 5: Finalization
+- [x] Add Review section to this file
+- [ ] Push branch to remote
+- [ ] Create PR
+
+---
+
+## Acceptance Criteria
+- [x] Sidebar items grouped into 5 logical categories
+- [x] Groups are collapsible (click to expand/collapse)
+- [x] Dashboard and Search remain always visible at top
+- [x] Active page's group auto-expands
+- [x] Active item is highlighted
+- [x] Collapse state persists (localStorage)
+- [x] RTL layout correct (chevron on left side for RTL)
+- [x] Mobile sidebar works correctly
+- [x] No TypeScript errors
+- [x] Smooth expand/collapse animation
 
 ---
 
@@ -57,37 +84,61 @@ Create `<StepBasicInfo />`, `<StepPartyARAP />`, and `<StepRelatedRecords />` co
 
 | File | Change |
 |------|--------|
-| `src/components/ledger/steps/StepBasicInfo.tsx` | **NEW** - 120 lines |
-| `src/components/ledger/steps/StepPartyARAP.tsx` | **NEW** - 395 lines |
-| `src/components/ledger/steps/StepRelatedRecords.tsx` | **NEW** - 205 lines |
-| `src/components/ledger/steps/index.ts` | **NEW** - barrel export |
-| `src/components/ledger/forms/index.ts` | **NEW** - barrel export |
-| `src/components/ledger/components/LedgerFormDialog.tsx` | ~391 lines (orchestrator) |
+| `src/components/ui/collapsible.tsx` | **NEW** - Collapsible UI component using @radix-ui/react-collapsible |
+| `src/components/layout/sidebar.tsx` | **MODIFIED** - Grouped navigation with collapsible sections |
+| `src/components/layout/mobile-nav.tsx` | **MODIFIED** - Grouped navigation in mobile menu |
+| `src/components/layout/__tests__/sidebar.test.tsx` | **MODIFIED** - Updated tests for new structure |
+| `tailwind.config.ts` | **MODIFIED** - Added collapsible-down/up animations |
 
 ### Architecture Summary
 
 ```
-LedgerFormDialog.tsx (orchestrator)
-├── StepBasicInfo (Step 1)
-│   └── Description, Category, Amount, Date, Reference, Notes
-├── StepPartyARAP (Step 2)
-│   ├── Associated Party dropdown
-│   ├── Owner dropdown (capital)
-│   ├── Payment Status radios
-│   └── Related Records checkboxes
-└── StepRelatedRecords (Step 3)
-    ├── ChequeFormCard (incoming)
-    ├── ChequeFormCard (outgoing)
-    ├── InventoryFormCard
-    ├── FixedAssetFormCard
-    └── Invoice info
+Sidebar (Desktop)
+├── FactoryFlow Branding
+├── Top-Level Items (always visible)
+│   ├── لوحة التحكم (Dashboard)
+│   └── البحث عن معاملة (Search)
+├── ─────────── Divider ───────────
+└── Collapsible Groups
+    ├── الحسابات (Accounts) [default open]
+    │   ├── دفتر الأستاذ (Ledger)
+    │   ├── المدفوعات (Payments)
+    │   └── الفواتير (Invoices)
+    ├── الشيكات (Cheques)
+    │   ├── الشيكات الواردة (Incoming)
+    │   └── الشيكات الصادرة (Outgoing)
+    ├── الأطراف (Parties)
+    │   ├── العملاء (Clients)
+    │   ├── الشركاء (Partners)
+    │   └── الموظفين (Employees)
+    ├── المخزون والإنتاج (Inventory & Production)
+    │   ├── المخزون (Inventory)
+    │   ├── الإنتاج (Production)
+    │   └── الأصول الثابتة (Fixed Assets)
+    └── التقارير والنسخ (Reports & Backup)
+        ├── التقارير (Reports)
+        └── النسخ الاحتياطي (Backup)
 ```
 
-### Total Impact
-- **New step components:** ~720 lines (well-organized, reusable)
-- **LedgerFormDialog.tsx:** ~391 lines (orchestration + cheque CRUD)
-- **Original size:** ~760 lines → Now split into focused modules
+### Key Features Implemented
+
+1. **Collapsible Groups:** Click group header to expand/collapse
+2. **localStorage Persistence:** Open/closed states saved across sessions
+3. **Auto-Expand:** When navigating to a page, its group automatically opens
+4. **Visual Indicators:**
+   - Chevron rotates 90° when expanded (RTL-aware: points left)
+   - Active group header highlighted with `bg-primary/10`
+   - Active item highlighted with `bg-primary text-white`
+   - Sub-items indented with right border
+5. **Smooth Animation:** 0.2s ease-out expand/collapse transition
+
+### Test Results
+
+```
+PASS src/components/layout/__tests__/sidebar.test.tsx
+  23 tests passed, 0 failed
+```
 
 ---
 
-## Status: COMPLETE - Ready for PR
+## Status: READY FOR PR

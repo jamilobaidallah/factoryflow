@@ -15,6 +15,11 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   LayoutDashboard,
   Users,
   BookOpen,
@@ -24,78 +29,178 @@ import {
   Package,
   Settings,
   LogOut,
-  ArrowDownLeft,
-  ArrowUpRight,
+  Search,
+  FilePlus,
+  FileMinus,
+  Users2,
+  UserCheck,
+  Building2,
+  BarChart3,
+  Receipt,
+  Database,
+  ChevronLeft,
 } from "lucide-react";
 
-const mainNavItems = [
+/** Navigation item */
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+/** Navigation group */
+interface NavGroup {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: NavItem[];
+}
+
+/** Bottom bar items (always visible) */
+const bottomBarItems: NavItem[] = [
+  { label: "الرئيسية", href: "/dashboard", icon: LayoutDashboard },
+  { label: "البحث", href: "/search", icon: Search },
+  { label: "دفتر الأستاذ", href: "/ledger", icon: BookOpen },
+];
+
+/** Navigation groups for the "More" menu */
+const navigationGroups: NavGroup[] = [
   {
-    title: "الرئيسية",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "العملاء",
-    href: "/clients",
-    icon: Users,
-  },
-  {
-    title: "دفتر الأستاذ",
-    href: "/ledger",
+    id: "accounts",
+    label: "الحسابات",
     icon: BookOpen,
-  },
-];
-
-const chequePages = [
-  {
-    title: "الشيكات الواردة",
-    href: "/incoming-cheques",
-    icon: ArrowDownLeft,
+    items: [
+      { label: "المدفوعات", href: "/payments", icon: CreditCard },
+      { label: "الفواتير", href: "/invoices", icon: Receipt },
+    ],
   },
   {
-    title: "الشيكات الصادرة",
-    href: "/outgoing-cheques",
-    icon: ArrowUpRight,
-  },
-];
-
-const moreMenuItems = [
-  {
-    title: "المدفوعات",
-    href: "/payments",
-    icon: CreditCard,
+    id: "cheques",
+    label: "الشيكات",
+    icon: FileText,
+    items: [
+      { label: "الشيكات الواردة", href: "/incoming-cheques", icon: FilePlus },
+      { label: "الشيكات الصادرة", href: "/outgoing-cheques", icon: FileMinus },
+    ],
   },
   {
-    title: "المخزون",
-    href: "/inventory",
+    id: "parties",
+    label: "الأطراف",
+    icon: Users,
+    items: [
+      { label: "العملاء", href: "/clients", icon: Users },
+      { label: "الشركاء", href: "/partners", icon: Users2 },
+      { label: "الموظفين", href: "/employees", icon: UserCheck },
+    ],
+  },
+  {
+    id: "inventory",
+    label: "المخزون والإنتاج",
     icon: Package,
+    items: [
+      { label: "المخزون", href: "/inventory", icon: Package },
+      { label: "الإنتاج", href: "/production", icon: Settings },
+      { label: "الأصول الثابتة", href: "/fixed-assets", icon: Building2 },
+    ],
   },
   {
-    title: "الإعدادات",
-    href: "/production",
-    icon: Settings,
+    id: "reports",
+    label: "التقارير والنسخ",
+    icon: BarChart3,
+    items: [
+      { label: "التقارير", href: "/reports", icon: BarChart3 },
+      { label: "النسخ الاحتياطي", href: "/backup", icon: Database },
+    ],
   },
 ];
+
+/** Get all hrefs from navigation groups */
+function getAllGroupHrefs(): string[] {
+  return navigationGroups.flatMap((group) => group.items.map((item) => item.href));
+}
+
+interface MobileNavGroupProps {
+  group: NavGroup;
+  pathname: string;
+  onNavigate: () => void;
+}
+
+function MobileNavGroup({ group, pathname, onNavigate }: MobileNavGroupProps) {
+  const [isOpen, setIsOpen] = useState(() =>
+    group.items.some((item) => pathname === item.href)
+  );
+  const Icon = group.icon;
+  const hasActiveItem = group.items.some((item) => pathname === item.href);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger
+        className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-colors",
+          hasActiveItem
+            ? "bg-primary/10 text-primary"
+            : "text-gray-700 hover:bg-gray-100"
+        )}
+      >
+        <div className="flex items-center gap-4">
+          <Icon className="w-5 h-5" aria-hidden="true" />
+          <span className="font-medium">{group.label}</span>
+        </div>
+        <ChevronLeft
+          className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isOpen && "-rotate-90"
+          )}
+          aria-hidden="true"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="mr-6 mt-1 space-y-1 border-r border-gray-200 pr-2">
+          {group.items.map((item) => {
+            const ItemIcon = item.icon;
+            const isActive = pathname === item.href;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-sm",
+                  isActive
+                    ? "bg-primary text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                )}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <ItemIcon className="w-4 h-4" aria-hidden="true" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function MobileNav() {
   const pathname = usePathname();
   const { toast } = useToast();
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [isChequesOpen, setIsChequesOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href;
-  const isMoreActive = moreMenuItems.some((item) => pathname === item.href);
-  const isChequesActive = chequePages.some((item) => pathname === item.href);
+  const isMenuActive = getAllGroupHrefs().includes(pathname);
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setIsMoreOpen(false);
+      setIsMenuOpen(false);
       toast({
         title: "تم تسجيل الخروج",
         description: "نراك قريباً",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء تسجيل الخروج",
@@ -114,7 +219,7 @@ export default function MobileNav() {
         <div className="bg-white/95 backdrop-blur-lg border-t border-gray-200 shadow-lg">
           <div className="pb-safe">
             <div className="flex items-center justify-around px-2 py-2">
-              {mainNavItems.map((item) => {
+              {bottomBarItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
 
@@ -129,7 +234,7 @@ export default function MobileNav() {
                         : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                     )}
                     aria-current={active ? "page" : undefined}
-                    aria-label={item.title}
+                    aria-label={item.label}
                   >
                     <Icon
                       className={cn("w-6 h-6 mb-1", active && "text-primary")}
@@ -141,58 +246,32 @@ export default function MobileNav() {
                         active ? "text-primary" : "text-gray-500"
                       )}
                     >
-                      {item.title}
+                      {item.label}
                     </span>
                   </Link>
                 );
               })}
 
               <button
-                onClick={() => setIsChequesOpen(true)}
+                onClick={() => setIsMenuOpen(true)}
                 className={cn(
                   "flex flex-col items-center justify-center min-w-[64px] py-2 px-3 rounded-xl transition-all duration-200",
-                  isChequesActive
-                    ? "text-primary bg-primary/10"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                )}
-                aria-label="الشيكات"
-                aria-expanded={isChequesOpen}
-                aria-haspopup="dialog"
-              >
-                <FileText
-                  className={cn("w-6 h-6 mb-1", isChequesActive && "text-primary")}
-                  aria-hidden="true"
-                />
-                <span
-                  className={cn(
-                    "text-[10px] font-medium leading-tight",
-                    isChequesActive ? "text-primary" : "text-gray-500"
-                  )}
-                >
-                  الشيكات
-                </span>
-              </button>
-
-              <button
-                onClick={() => setIsMoreOpen(true)}
-                className={cn(
-                  "flex flex-col items-center justify-center min-w-[64px] py-2 px-3 rounded-xl transition-all duration-200",
-                  isMoreActive
+                  isMenuActive
                     ? "text-primary bg-primary/10"
                     : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                 )}
                 aria-label="المزيد من الخيارات"
-                aria-expanded={isMoreOpen}
+                aria-expanded={isMenuOpen}
                 aria-haspopup="dialog"
               >
                 <Menu
-                  className={cn("w-6 h-6 mb-1", isMoreActive && "text-primary")}
+                  className={cn("w-6 h-6 mb-1", isMenuActive && "text-primary")}
                   aria-hidden="true"
                 />
                 <span
                   className={cn(
                     "text-[10px] font-medium leading-tight",
-                    isMoreActive ? "text-primary" : "text-gray-500"
+                    isMenuActive ? "text-primary" : "text-gray-500"
                   )}
                 >
                   المزيد
@@ -203,74 +282,22 @@ export default function MobileNav() {
         </div>
       </nav>
 
-      <Sheet open={isChequesOpen} onOpenChange={setIsChequesOpen}>
-        <SheetContent>
-          <SheetHeader className="text-right">
-            <SheetTitle>الشيكات</SheetTitle>
-            <SheetDescription>اختر نوع الشيكات</SheetDescription>
-          </SheetHeader>
-
-          <div className="py-4 px-2">
-            <div className="space-y-2">
-              {chequePages.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsChequesOpen(false)}
-                    className={cn(
-                      "flex items-center gap-4 px-4 py-4 rounded-xl transition-colors",
-                      active
-                        ? "bg-primary text-white"
-                        : "text-gray-700 hover:bg-gray-100"
-                    )}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon className="w-6 h-6" aria-hidden="true" />
-                    <span className="font-medium text-base">{item.title}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
-        <SheetContent>
+      <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <SheetContent className="overflow-y-auto">
           <SheetHeader className="text-right">
             <SheetTitle>القائمة</SheetTitle>
-            <SheetDescription>الوصول السريع للخيارات الإضافية</SheetDescription>
+            <SheetDescription>الوصول السريع لجميع الأقسام</SheetDescription>
           </SheetHeader>
 
-          <div className="py-4 px-2">
-            <div className="space-y-1">
-              {moreMenuItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsMoreOpen(false)}
-                    className={cn(
-                      "flex items-center gap-4 px-4 py-3 rounded-xl transition-colors",
-                      active
-                        ? "bg-primary text-white"
-                        : "text-gray-700 hover:bg-gray-100"
-                    )}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon className="w-5 h-5" aria-hidden="true" />
-                    <span className="font-medium">{item.title}</span>
-                  </Link>
-                );
-              })}
-            </div>
+          <div className="py-4 space-y-2">
+            {navigationGroups.map((group) => (
+              <MobileNavGroup
+                key={group.id}
+                group={group}
+                pathname={pathname}
+                onNavigate={() => setIsMenuOpen(false)}
+              />
+            ))}
 
             <div className="my-4 border-t border-gray-200" />
 
