@@ -6,6 +6,7 @@ import { auth } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { GlobalSearch } from "@/components/search";
 
 export default function Header() {
   const { user } = useUser();
@@ -29,16 +30,21 @@ export default function Header() {
 
   return (
     <header
-      className="min-h-[56px] md:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 py-2 md:py-0"
+      className="min-h-[56px] md:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 py-2 md:py-0 gap-4"
       role="banner"
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-shrink-0">
         <h2 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
           نظام إدارة المصنع
         </h2>
       </div>
 
-      <div className="hidden md:flex items-center gap-4">
+      {/* Global Search - center on desktop, full width on mobile */}
+      <div className="flex-1 max-w-md">
+        <GlobalSearch />
+      </div>
+
+      <div className="hidden md:flex items-center gap-4 flex-shrink-0">
         <div
           className="flex items-center gap-2 text-sm text-gray-600"
           aria-label="معلومات المستخدم"
