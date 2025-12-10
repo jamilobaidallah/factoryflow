@@ -19,12 +19,14 @@ export interface InventoryItemOption {
 interface UseInventoryItemsResult {
   items: InventoryItemOption[];
   loading: boolean;
+  error: string | null;
 }
 
 export function useInventoryItems(): UseInventoryItemsResult {
   const { user } = useUser();
   const [items, setItems] = useState<InventoryItemOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -32,25 +34,34 @@ export function useInventoryItems(): UseInventoryItemsResult {
       return;
     }
 
+    setError(null);
     const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
     const q = query(inventoryRef, orderBy('itemName', 'asc'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const itemsData: InventoryItemOption[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        itemsData.push({
-          id: doc.id,
-          name: data.itemName || '',
-          unit: data.unit || '',
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const itemsData: InventoryItemOption[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          itemsData.push({
+            id: doc.id,
+            name: data.itemName || '',
+            unit: data.unit || '',
+          });
         });
-      });
-      setItems(itemsData);
-      setLoading(false);
-    });
+        setItems(itemsData);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching inventory items:', err);
+        setError('حدث خطأ أثناء جلب أصناف المخزون');
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);
 
-  return { items, loading };
+  return { items, loading, error };
 }

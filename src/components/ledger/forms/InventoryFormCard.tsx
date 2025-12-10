@@ -5,12 +5,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  unit: string;
-}
+import type { InventoryItemOption } from "@/hooks/useInventoryItems";
 
 export interface InventoryFormCardProps {
   formData: {
@@ -26,8 +21,9 @@ export interface InventoryFormCardProps {
   };
   onUpdate: (field: string, value: string) => void;
   onItemSelect: (itemId: string, itemName: string, unit: string) => void;
-  inventoryItems: InventoryItem[];
+  inventoryItems: InventoryItemOption[];
   isLoadingItems?: boolean;
+  error?: string | null;
 }
 
 export function InventoryFormCard({
@@ -36,6 +32,7 @@ export function InventoryFormCard({
   onItemSelect,
   inventoryItems,
   isLoadingItems = false,
+  error = null,
 }: InventoryFormCardProps) {
   const handleItemSelect = (itemId: string) => {
     if (!itemId) {
@@ -72,7 +69,10 @@ export function InventoryFormCard({
               </option>
             ))}
           </select>
-          {inventoryItems.length === 0 && !isLoadingItems && (
+          {error && (
+            <p className="text-xs text-red-600">{error}</p>
+          )}
+          {!error && inventoryItems.length === 0 && !isLoadingItems && (
             <p className="text-xs text-amber-600">
               لا توجد أصناف في المخزون. يرجى إضافة أصناف من صفحة المخزون أولاً.
             </p>

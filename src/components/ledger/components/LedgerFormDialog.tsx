@@ -67,7 +67,7 @@ export function LedgerFormDialog() {
   const { clients: allClients, loading: clientsLoading } = useAllClients({ includeClientsCollection: true });
 
   // Get inventory items for dropdown
-  const { items: inventoryItems, loading: inventoryLoading } = useInventoryItems();
+  const { items: inventoryItems, loading: inventoryLoading, error: inventoryError } = useInventoryItems();
 
   // Associated party dropdown state
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
@@ -792,6 +792,7 @@ export function LedgerFormDialog() {
                     }
                     inventoryItems={inventoryItems}
                     isLoadingItems={inventoryLoading}
+                    error={inventoryError}
                   />
                 )}
 
