@@ -3,6 +3,17 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Header from '../header';
 
+// Mock Next.js navigation (required for GlobalSearch component)
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+  }),
+}));
+
 // Mock Firebase auth
 const mockSignOut = jest.fn();
 jest.mock('firebase/auth', () => ({
@@ -11,6 +22,16 @@ jest.mock('firebase/auth', () => ({
 
 jest.mock('@/firebase/config', () => ({
   auth: { currentUser: null },
+  firestore: {},
+}));
+
+// Mock Firestore functions (required for useGlobalSearch)
+jest.mock('firebase/firestore', () => ({
+  collection: jest.fn(),
+  query: jest.fn(),
+  orderBy: jest.fn(),
+  limit: jest.fn(),
+  getDocs: jest.fn(() => Promise.resolve({ forEach: jest.fn() })),
 }));
 
 // Mock useUser
