@@ -19,15 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import { ChequeFormCard } from "../forms/ChequeFormCard";
-import { InventoryFormCard } from "../forms/InventoryFormCard";
-import { FixedAssetFormCard } from "../forms/FixedAssetFormCard";
 import { StepBasicInfo } from "../steps/StepBasicInfo";
 import { StepPartyARAP } from "../steps/StepPartyARAP";
+import { StepRelatedRecords } from "../steps/StepRelatedRecords";
 
 export function LedgerFormDialog() {
   const {
@@ -309,139 +304,42 @@ export function LedgerFormDialog() {
 
             {/* ===== STEP 3: Related Records Details ===== */}
             {step === 3 && !editingEntry && (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-sm">تفاصيل السجلات المرتبطة</h3>
-
-                {/* Incoming Cheques Details */}
-                {hasIncomingCheck && (currentEntryType === "دخل" || currentEntryType === "إيراد") && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm">شيكات واردة</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addIncomingCheque}
-                        className="flex items-center gap-1"
-                      >
-                        <Plus className="h-4 w-4" />
-                        إضافة شيك آخر
-                      </Button>
-                    </div>
-
-                    {incomingChequesList.length > 0 && (
-                      <div className="space-y-4">
-                        {incomingChequesList.map((cheque, index) => (
-                          <ChequeFormCard
-                            key={cheque.id}
-                            cheque={cheque}
-                            index={index}
-                            direction="incoming"
-                            onUpdate={updateIncomingCheque}
-                            onRemove={removeIncomingCheque}
-                            canRemove={incomingChequesList.length > 1}
-                          />
-                        ))}
-
-                        {/* Total cheques amount */}
-                        {incomingChequesList.length > 1 && (
-                          <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                            <p className="text-sm font-medium text-blue-700">
-                              مجموع الشيكات: {incomingChequesList.reduce((sum, c) => sum + (parseFloat(c.chequeAmount) || 0), 0).toFixed(2)} دينار
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Outgoing Cheques Details */}
-                {hasOutgoingCheck && currentEntryType === "مصروف" && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm">شيكات صادرة</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addOutgoingCheque}
-                        className="flex items-center gap-1"
-                      >
-                        <Plus className="h-4 w-4" />
-                        إضافة شيك آخر
-                      </Button>
-                    </div>
-
-                    {outgoingChequesList.length > 0 && (
-                      <div className="space-y-4">
-                        {outgoingChequesList.map((cheque, index) => (
-                          <ChequeFormCard
-                            key={cheque.id}
-                            cheque={cheque}
-                            index={index}
-                            direction="outgoing"
-                            onUpdate={updateOutgoingCheque}
-                            onRemove={removeOutgoingCheque}
-                            canRemove={outgoingChequesList.length > 1}
-                          />
-                        ))}
-
-                        {/* Total cheques amount */}
-                        {outgoingChequesList.length > 1 && (
-                          <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                            <p className="text-sm font-medium text-blue-700">
-                              مجموع الشيكات: {outgoingChequesList.reduce((sum, c) => sum + (parseFloat(c.chequeAmount) || 0), 0).toFixed(2)} دينار
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Inventory Update Details */}
-                {hasInventoryUpdate && (
-                  <InventoryFormCard
-                    formData={inventoryFormData}
-                    onUpdate={(field, value) =>
-                      setInventoryFormData({ ...inventoryFormData, [field]: value })
-                    }
-                    onItemSelect={(itemId, itemName, unit) =>
-                      setInventoryFormData({
-                        ...inventoryFormData,
-                        itemId,
-                        itemName,
-                        unit: unit || inventoryFormData.unit,
-                      })
-                    }
-                    inventoryItems={inventoryItems}
-                    isLoadingItems={inventoryLoading}
-                    error={inventoryError}
-                  />
-                )}
-
-                {/* Fixed Asset Details */}
-                {hasFixedAsset && currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
-                  <FixedAssetFormCard
-                    formData={fixedAssetFormData}
-                    onUpdate={(field, value) =>
-                      setFixedAssetFormData({ ...fixedAssetFormData, [field]: value })
-                    }
-                    entryAmount={formData.amount}
-                  />
-                )}
-
-                {/* Create Invoice Info */}
-                {createInvoice && currentEntryType === "دخل" && formData.associatedParty && (
-                  <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
-                    <h4 className="font-medium text-sm mb-2">إنشاء فاتورة</h4>
-                    <p className="text-xs text-blue-700">
-                      سيتم فتح نموذج إنشاء فاتورة جديدة للعميل &quot;{formData.associatedParty}&quot; بعد حفظ هذه الحركة.
-                    </p>
-                  </div>
-                )}
-              </div>
+              <StepRelatedRecords
+                formData={formData}
+                currentEntryType={currentEntryType}
+                hasIncomingCheck={hasIncomingCheck}
+                incomingChequesList={incomingChequesList}
+                onAddIncomingCheque={addIncomingCheque}
+                onUpdateIncomingCheque={updateIncomingCheque}
+                onRemoveIncomingCheque={removeIncomingCheque}
+                hasOutgoingCheck={hasOutgoingCheck}
+                outgoingChequesList={outgoingChequesList}
+                onAddOutgoingCheque={addOutgoingCheque}
+                onUpdateOutgoingCheque={updateOutgoingCheque}
+                onRemoveOutgoingCheque={removeOutgoingCheque}
+                hasInventoryUpdate={hasInventoryUpdate}
+                inventoryFormData={inventoryFormData}
+                onUpdateInventory={(field, value) =>
+                  setInventoryFormData({ ...inventoryFormData, [field]: value })
+                }
+                onInventoryItemSelect={(itemId, itemName, unit) =>
+                  setInventoryFormData({
+                    ...inventoryFormData,
+                    itemId,
+                    itemName,
+                    unit: unit || inventoryFormData.unit,
+                  })
+                }
+                inventoryItems={inventoryItems}
+                inventoryItemsLoading={inventoryLoading}
+                inventoryItemsError={inventoryError}
+                hasFixedAsset={hasFixedAsset}
+                fixedAssetFormData={fixedAssetFormData}
+                onUpdateFixedAsset={(field, value) =>
+                  setFixedAssetFormData({ ...fixedAssetFormData, [field]: value })
+                }
+                createInvoice={createInvoice || false}
+              />
             )}
           </div>
 

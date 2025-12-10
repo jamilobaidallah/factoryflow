@@ -1,11 +1,10 @@
 # Task: Extract Wizard Step Components from LedgerFormDialog
 
 ## Context
-Refactoring LedgerFormDialog.tsx by extracting the wizard step contents into reusable components.
-This PR extracts both Step 1 (Basic Info) and Step 2 (Party & AR/AP).
+Refactoring LedgerFormDialog.tsx by extracting all three wizard step contents into reusable components.
 
 ## Goal
-Create `<StepBasicInfo />` and `<StepPartyARAP />` components to reduce LedgerFormDialog complexity.
+Create `<StepBasicInfo />`, `<StepPartyARAP />`, and `<StepRelatedRecords />` components to reduce LedgerFormDialog complexity.
 
 ---
 
@@ -25,11 +24,20 @@ Create `<StepBasicInfo />` and `<StepPartyARAP />` components to reduce LedgerFo
 - [x] Extract Payment Status radio buttons
 - [x] Extract Related Records checkboxes
 
+### Step 3: StepRelatedRecords
+- [x] Create `src/components/ledger/steps/StepRelatedRecords.tsx`
+- [x] Extract Incoming Cheques section with ChequeFormCard
+- [x] Extract Outgoing Cheques section with ChequeFormCard
+- [x] Extract Inventory section with InventoryFormCard
+- [x] Extract Fixed Asset section with FixedAssetFormCard
+- [x] Extract Invoice info section
+
 ### LedgerFormDialog Updates
-- [x] Add imports for both step components
+- [x] Add imports for all three step components
 - [x] Replace Step 1 content with `<StepBasicInfo />`
 - [x] Replace Step 2 content with `<StepPartyARAP />`
-- [x] Remove unused code: state, functions, imports
+- [x] Replace Step 3 content with `<StepRelatedRecords />`
+- [x] Remove unused imports (Label, Input, Plus, ChequeFormCard, InventoryFormCard, FixedAssetFormCard)
 
 ### Verification
 - [x] Run lint and type check - PASSED
@@ -45,24 +53,21 @@ Create `<StepBasicInfo />` and `<StepPartyARAP />` components to reduce LedgerFo
 |------|--------|
 | `src/components/ledger/steps/StepBasicInfo.tsx` | **NEW** - 111 lines |
 | `src/components/ledger/steps/StepPartyARAP.tsx` | **NEW** - 323 lines |
-| `src/components/ledger/components/LedgerFormDialog.tsx` | Reduced by ~305 lines |
+| `src/components/ledger/steps/StepRelatedRecords.tsx` | **NEW** - 196 lines |
+| `src/components/ledger/components/LedgerFormDialog.tsx` | Reduced significantly |
 
-### Total Line Reduction
-- LedgerFormDialog.tsx: **~305 lines removed**
-- New step components: **434 lines** (better organized, reusable)
+### Total Impact
+- **New step components:** 630 lines (well-organized, reusable)
+- **LedgerFormDialog.tsx:** Now ~300 lines (orchestration only)
+- **Original size:** ~760 lines → Now ~300 lines = **~460 lines removed**
 
-### StepBasicInfo Features
-- Description, Category, SubCategory inputs
-- Amount, Date inputs
-- Reference, Notes inputs (optional)
-- Clean `onUpdate({ field: value })` pattern
+### Component Summary
 
-### StepPartyARAP Features
-- Associated Party searchable dropdown with balance display
-- Owner dropdown for capital transactions
-- Payment Status radio buttons (Paid / Credit / Partial)
-- Initial payment amount input
-- Related Records checkboxes (cheques, inventory, assets, invoice)
+| Component | Purpose | Lines |
+|-----------|---------|-------|
+| StepBasicInfo | Basic entry info (description, category, amount, date) | 111 |
+| StepPartyARAP | Party selection, payment status, related record toggles | 323 |
+| StepRelatedRecords | Cheques, inventory, assets, invoice forms | 196 |
 
 ---
 
