@@ -39,9 +39,15 @@ Create `<StepBasicInfo />`, `<StepPartyARAP />`, and `<StepRelatedRecords />` co
 - [x] Replace Step 3 content with `<StepRelatedRecords />`
 - [x] Remove unused imports (Label, Input, Plus, ChequeFormCard, InventoryFormCard, FixedAssetFormCard)
 
-### Verification
-- [x] Run lint and type check - PASSED
-- [x] Verify build works - PASSED
+### Code Review & Cleanup
+- [x] All components have JSDoc comments
+- [x] All props interfaces are complete with comments
+- [x] No `any` types
+- [x] No unused imports
+- [x] Created `steps/index.ts` barrel export
+- [x] Created `forms/index.ts` barrel export
+- [x] Lint check - PASSED (no new warnings)
+- [x] Type check - PASSED
 
 ---
 
@@ -51,23 +57,36 @@ Create `<StepBasicInfo />`, `<StepPartyARAP />`, and `<StepRelatedRecords />` co
 
 | File | Change |
 |------|--------|
-| `src/components/ledger/steps/StepBasicInfo.tsx` | **NEW** - 111 lines |
-| `src/components/ledger/steps/StepPartyARAP.tsx` | **NEW** - 323 lines |
-| `src/components/ledger/steps/StepRelatedRecords.tsx` | **NEW** - 196 lines |
-| `src/components/ledger/components/LedgerFormDialog.tsx` | Reduced significantly |
+| `src/components/ledger/steps/StepBasicInfo.tsx` | **NEW** - 120 lines |
+| `src/components/ledger/steps/StepPartyARAP.tsx` | **NEW** - 395 lines |
+| `src/components/ledger/steps/StepRelatedRecords.tsx` | **NEW** - 205 lines |
+| `src/components/ledger/steps/index.ts` | **NEW** - barrel export |
+| `src/components/ledger/forms/index.ts` | **NEW** - barrel export |
+| `src/components/ledger/components/LedgerFormDialog.tsx` | ~391 lines (orchestrator) |
+
+### Architecture Summary
+
+```
+LedgerFormDialog.tsx (orchestrator)
+├── StepBasicInfo (Step 1)
+│   └── Description, Category, Amount, Date, Reference, Notes
+├── StepPartyARAP (Step 2)
+│   ├── Associated Party dropdown
+│   ├── Owner dropdown (capital)
+│   ├── Payment Status radios
+│   └── Related Records checkboxes
+└── StepRelatedRecords (Step 3)
+    ├── ChequeFormCard (incoming)
+    ├── ChequeFormCard (outgoing)
+    ├── InventoryFormCard
+    ├── FixedAssetFormCard
+    └── Invoice info
+```
 
 ### Total Impact
-- **New step components:** 630 lines (well-organized, reusable)
-- **LedgerFormDialog.tsx:** Now ~300 lines (orchestration only)
-- **Original size:** ~760 lines → Now ~300 lines = **~460 lines removed**
-
-### Component Summary
-
-| Component | Purpose | Lines |
-|-----------|---------|-------|
-| StepBasicInfo | Basic entry info (description, category, amount, date) | 111 |
-| StepPartyARAP | Party selection, payment status, related record toggles | 323 |
-| StepRelatedRecords | Cheques, inventory, assets, invoice forms | 196 |
+- **New step components:** ~720 lines (well-organized, reusable)
+- **LedgerFormDialog.tsx:** ~391 lines (orchestration + cheque CRUD)
+- **Original size:** ~760 lines → Now split into focused modules
 
 ---
 
