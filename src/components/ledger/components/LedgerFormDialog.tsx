@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, ChevronDown } from "lucide-react";
 import { ChequeFormCard } from "../forms/ChequeFormCard";
 import { InventoryFormCard } from "../forms/InventoryFormCard";
+import { FixedAssetFormCard } from "../forms/FixedAssetFormCard";
 
 export function LedgerFormDialog() {
   const {
@@ -798,59 +799,13 @@ export function LedgerFormDialog() {
 
                 {/* Fixed Asset Details */}
                 {hasFixedAsset && currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                    <h4 className="font-medium text-sm">إضافة كأصل ثابت</h4>
-                    <div className="space-y-2">
-                      <Input
-                        type="text"
-                        placeholder="اسم الأصل"
-                        value={fixedAssetFormData.assetName}
-                        onChange={(e) =>
-                          setFixedAssetFormData({ ...fixedAssetFormData, assetName: e.target.value })
-                        }
-                        required={hasFixedAsset}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="usefulLifeYears">العمر الإنتاجي (سنوات)</Label>
-                          <Input
-                            id="usefulLifeYears"
-                            type="number"
-                            step="0.1"
-                            placeholder="مثال: 5"
-                            value={fixedAssetFormData.usefulLifeYears}
-                            onChange={(e) =>
-                              setFixedAssetFormData({ ...fixedAssetFormData, usefulLifeYears: e.target.value })
-                            }
-                            required={hasFixedAsset}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="salvageValue">القيمة المتبقية (دينار)</Label>
-                          <Input
-                            id="salvageValue"
-                            type="number"
-                            step="0.01"
-                            placeholder="مثال: 500"
-                            value={fixedAssetFormData.salvageValue}
-                            onChange={(e) =>
-                              setFixedAssetFormData({ ...fixedAssetFormData, salvageValue: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
-                      {fixedAssetFormData.usefulLifeYears && fixedAssetFormData.salvageValue && (
-                        <p className="text-xs text-gray-600 pr-2">
-                          الإهلاك الشهري المقدر:{" "}
-                          {(
-                            (parseFloat(formData.amount || "0") - parseFloat(fixedAssetFormData.salvageValue)) /
-                            (parseFloat(fixedAssetFormData.usefulLifeYears) * 12)
-                          ).toFixed(2)}{" "}
-                          دينار/شهر
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  <FixedAssetFormCard
+                    formData={fixedAssetFormData}
+                    onUpdate={(field, value) =>
+                      setFixedAssetFormData({ ...fixedAssetFormData, [field]: value })
+                    }
+                    entryAmount={formData.amount}
+                  />
                 )}
 
                 {/* Create Invoice Info */}
