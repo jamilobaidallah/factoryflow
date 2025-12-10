@@ -1,60 +1,57 @@
-# Task: Collapsible Grouped Sidebar Navigation
+# Task: Global Search with Command Palette (Cmd+K)
 
 ## Context
-The current sidebar has 15 flat menu items, making it cluttered and hard to scan. Users requested collapsible groups to organize navigation into logical categories.
+Users reported "hard to find information" as a major pain point. Creating a powerful global search (command palette) that searches across ledger entries, clients, cheques, and payments from anywhere in the app.
 
 ## Branch
-`feature/collapsible-sidebar-navigation`
+`feature/global-search-command-palette`
 
 ---
 
 ## Analysis
 
 ### Current State
-- **Sidebar location:** `src/components/layout/sidebar.tsx`
-- **Mobile nav location:** `src/components/layout/mobile-nav.tsx`
-- **15 flat menu items** with no grouping
-- **Dependencies available:** `@radix-ui/react-accordion` already installed
-- **No existing Collapsible/Accordion UI component** - needs creation
+- **Existing search:** `src/components/search/transaction-search-page.tsx` (searches by transaction ID only)
+- **cmdk dependency:** Already installed (`"cmdk": "^1.0.0"`)
+- **No Command UI component:** Needs creation
+- **Header location:** `src/components/layout/header.tsx` (will add GlobalSearch trigger)
+- **Auth hook:** `useUser()` from `@/firebase/provider`
+- **Firestore:** Available from `@/firebase/config`
 
-### Proposed Groups (5 categories)
-1. **الحسابات (Accounts):** Ledger, Payments, Invoices
-2. **الشيكات (Cheques):** Incoming, Outgoing
-3. **الأطراف (Parties):** Clients, Partners, Employees
-4. **المخزون والإنتاج (Inventory & Production):** Inventory, Production, Fixed Assets
-5. **التقارير والنسخ (Reports & Backup):** Reports, Backup
+### Data Collections to Search
+1. **Ledger** (`users/{uid}/ledger`) - Search by description, associatedParty
+2. **Clients** (`users/{uid}/clients`) - Search by name
+3. **Cheques** (`users/{uid}/cheques`) - Search by chequeNumber, clientName
+4. **Payments** (`users/{uid}/payments`) - Search by clientName, notes
 
-### Top-Level Items (always visible)
-- Dashboard (لوحة التحكم)
-- Search (البحث عن معاملة)
+### Routes for Navigation
+- `/ledger?highlight={id}`
+- `/clients?highlight={id}`
+- `/incoming-cheques?highlight={id}`
+- `/outgoing-cheques?highlight={id}`
+- `/payments?highlight={id}`
 
 ---
 
 ## Plan
 
-### Phase 1: Create Collapsible UI Component
-- [x] Create `src/components/ui/collapsible.tsx` using `@radix-ui/react-collapsible`
+### Phase 1: Create UI Components
+- [x] Create `src/components/ui/command.tsx` - shadcn Command wrapper for cmdk
 
-### Phase 2: Refactor Desktop Sidebar
-- [x] Define TypeScript interfaces (`NavGroup`, `NavItem`)
-- [x] Create `navigationGroups` data structure
-- [x] Create `topLevelItems` data structure
-- [x] Create `SidebarGroup` component with collapse/expand logic
-- [x] Add localStorage persistence for group open/closed state
-- [x] Implement active group auto-expand based on current route
-- [x] Add chevron icon rotation animation (RTL-aware)
-- [x] Add indentation for sub-items
-- [x] Style active item highlight
+### Phase 2: Create Search Components
+- [x] Create `src/components/search/useGlobalSearch.ts` - Search hook with debounce
+- [x] Create `src/components/search/SearchDialog.tsx` - Modal with keyboard navigation
+- [x] Create `src/components/search/SearchResults.tsx` - Grouped results display
+- [x] Create `src/components/search/GlobalSearch.tsx` - Trigger button with Cmd+K
+- [x] Create `src/components/search/index.ts` - Barrel export
 
-### Phase 3: Update Mobile Navigation
-- [x] Update mobile-nav.tsx to match grouped structure
-- [x] Ensure all navigation items are accessible from mobile
+### Phase 3: Integration
+- [x] Add `<GlobalSearch />` to Header component
+- [x] Style for RTL layout
 
 ### Phase 4: Testing & Verification
-- [x] Update sidebar tests for new grouped structure
 - [x] Run TypeScript check (`npx tsc --noEmit`) - PASSED
 - [x] Run lint check (`npm run lint`) - PASSED (pre-existing warnings only)
-- [x] Run sidebar tests (`npm test`) - 23/23 PASSED
 - [x] Run build (`npm run build`) - PASSED
 
 ### Phase 5: Finalization
@@ -65,16 +62,44 @@ The current sidebar has 15 flat menu items, making it cluttered and hard to scan
 ---
 
 ## Acceptance Criteria
-- [x] Sidebar items grouped into 5 logical categories
-- [x] Groups are collapsible (click to expand/collapse)
-- [x] Dashboard and Search remain always visible at top
-- [x] Active page's group auto-expands
-- [x] Active item is highlighted
-- [x] Collapse state persists (localStorage)
-- [x] RTL layout correct (chevron on left side for RTL)
-- [x] Mobile sidebar works correctly
+- [x] GlobalSearch button appears in header
+- [x] Cmd+K / Ctrl+K opens search dialog
+- [x] Typing searches across ledger, clients, cheques
+- [x] Results grouped by type with Arabic labels
+- [x] Clicking result navigates to correct page
+- [x] Keyboard navigation works (up/down, Enter, Esc)
+- [x] Debounced search (300ms)
+- [x] Loading state shows spinner
+- [x] Empty state shows helpful message
+- [x] RTL layout correct
+- [x] Mobile responsive
 - [x] No TypeScript errors
-- [x] Smooth expand/collapse animation
+
+---
+
+## Component Architecture
+
+```
+GlobalSearch (trigger in header)
+├── Button with search icon + ⌘K badge
+└── SearchDialog (modal)
+    ├── Command.Input (search input)
+    ├── Command.List
+    │   ├── Command.Empty (no results)
+    │   └── Command.Group (per type)
+    │       └── Command.Item[] (results)
+    └── Footer (keyboard hints)
+```
+
+## Type Labels (Arabic)
+```typescript
+const typeLabels = {
+  ledger: "الحركات المالية",
+  client: "العملاء",
+  cheque: "الشيكات",
+  payment: "المدفوعات",
+};
+```
 
 ---
 
@@ -84,59 +109,53 @@ The current sidebar has 15 flat menu items, making it cluttered and hard to scan
 
 | File | Change |
 |------|--------|
-| `src/components/ui/collapsible.tsx` | **NEW** - Collapsible UI component using @radix-ui/react-collapsible |
-| `src/components/layout/sidebar.tsx` | **MODIFIED** - Grouped navigation with collapsible sections |
-| `src/components/layout/mobile-nav.tsx` | **MODIFIED** - Grouped navigation in mobile menu |
-| `src/components/layout/__tests__/sidebar.test.tsx` | **MODIFIED** - Updated tests for new structure |
-| `tailwind.config.ts` | **MODIFIED** - Added collapsible-down/up animations |
+| `src/components/ui/command.tsx` | **NEW** - Command UI component (shadcn wrapper for cmdk) |
+| `src/components/search/useGlobalSearch.ts` | **NEW** - Search hook with debounced Firestore queries |
+| `src/components/search/SearchDialog.tsx` | **NEW** - Command palette modal dialog |
+| `src/components/search/SearchResults.tsx` | **NEW** - Grouped results display component |
+| `src/components/search/GlobalSearch.tsx` | **NEW** - Trigger button with Cmd+K shortcut |
+| `src/components/search/index.ts` | **NEW** - Barrel exports |
+| `src/components/layout/header.tsx` | **MODIFIED** - Added GlobalSearch component |
 
 ### Architecture Summary
 
 ```
-Sidebar (Desktop)
-├── FactoryFlow Branding
-├── Top-Level Items (always visible)
-│   ├── لوحة التحكم (Dashboard)
-│   └── البحث عن معاملة (Search)
-├── ─────────── Divider ───────────
-└── Collapsible Groups
-    ├── الحسابات (Accounts) [default open]
-    │   ├── دفتر الأستاذ (Ledger)
-    │   ├── المدفوعات (Payments)
-    │   └── الفواتير (Invoices)
-    ├── الشيكات (Cheques)
-    │   ├── الشيكات الواردة (Incoming)
-    │   └── الشيكات الصادرة (Outgoing)
-    ├── الأطراف (Parties)
-    │   ├── العملاء (Clients)
-    │   ├── الشركاء (Partners)
-    │   └── الموظفين (Employees)
-    ├── المخزون والإنتاج (Inventory & Production)
-    │   ├── المخزون (Inventory)
-    │   ├── الإنتاج (Production)
-    │   └── الأصول الثابتة (Fixed Assets)
-    └── التقارير والنسخ (Reports & Backup)
-        ├── التقارير (Reports)
-        └── النسخ الاحتياطي (Backup)
+Header
+└── GlobalSearch
+    ├── Trigger Button (⌘K badge)
+    └── SearchDialog (CommandDialog)
+        ├── CommandInput (RTL, Arabic placeholder)
+        ├── CommandList
+        │   ├── Loading state (spinner)
+        │   ├── Empty state ("ابدأ الكتابة للبحث...")
+        │   ├── No results state
+        │   └── SearchResults
+        │       ├── Group: الحركات المالية (ledger)
+        │       ├── Group: العملاء (clients)
+        │       ├── Group: الشيكات (cheques)
+        │       └── Group: المدفوعات (payments)
+        └── Footer (keyboard hints)
 ```
 
 ### Key Features Implemented
 
-1. **Collapsible Groups:** Click group header to expand/collapse
-2. **localStorage Persistence:** Open/closed states saved across sessions
-3. **Auto-Expand:** When navigating to a page, its group automatically opens
-4. **Visual Indicators:**
-   - Chevron rotates 90° when expanded (RTL-aware: points left)
-   - Active group header highlighted with `bg-primary/10`
-   - Active item highlighted with `bg-primary text-white`
-   - Sub-items indented with right border
-5. **Smooth Animation:** 0.2s ease-out expand/collapse transition
+1. **Command Palette (Cmd+K / Ctrl+K):** Opens search dialog from anywhere
+2. **Debounced Search (300ms):** Prevents excessive API calls
+3. **Multi-Collection Search:** Searches ledger, clients, cheques, payments
+4. **Grouped Results:** Results organized by type with Arabic labels
+5. **Keyboard Navigation:** Arrow keys to navigate, Enter to select, Esc to close
+6. **Loading State:** Spinner while searching
+7. **Empty States:** Helpful messages for initial state and no results
+8. **RTL Layout:** Proper Arabic/RTL support throughout
+9. **Mobile Responsive:** Works on all screen sizes
+10. **Direct Navigation:** Clicking result navigates to correct page with highlight param
 
 ### Test Results
 
 ```
-PASS src/components/layout/__tests__/sidebar.test.tsx
-  23 tests passed, 0 failed
+TypeScript: PASSED (no errors)
+ESLint: PASSED (pre-existing warnings only)
+Build: PASSED (21/21 pages generated)
 ```
 
 ---
