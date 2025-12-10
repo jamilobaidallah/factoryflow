@@ -9,6 +9,10 @@ interface SearchResultsProps {
   onSelect: (href: string) => void;
 }
 
+/**
+ * Displays grouped search results organized by type (ledger, client, cheque, payment).
+ * Each result shows an icon, title, subtitle, and navigation arrow.
+ */
 export function SearchResults({ groupedResults, onSelect }: SearchResultsProps) {
   const groupOrder: Array<SearchResult["type"]> = ["ledger", "client", "cheque", "payment"];
 
@@ -16,7 +20,9 @@ export function SearchResults({ groupedResults, onSelect }: SearchResultsProps) 
     <>
       {groupOrder.map((type) => {
         const results = groupedResults[type];
-        if (!results || results.length === 0) return null;
+        if (!results || results.length === 0) {
+          return null;
+        }
 
         return (
           <CommandGroup key={type} heading={typeLabels[type]}>

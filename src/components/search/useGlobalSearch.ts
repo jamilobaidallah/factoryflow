@@ -3,6 +3,7 @@ import { useUser } from "@/firebase/provider";
 import { collection, orderBy, limit, getDocs, query as firestoreQuery } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
+/** Represents a single search result item */
 export interface SearchResult {
   id: string;
   type: "ledger" | "client" | "cheque" | "payment";
@@ -12,6 +13,7 @@ export interface SearchResult {
   icon: string;
 }
 
+/** Return type for the useGlobalSearch hook */
 export interface UseGlobalSearchReturn {
   query: string;
   setQuery: (q: string) => void;
@@ -35,6 +37,12 @@ export const typeIcons: Record<string, string> = {
   payment: "💰",
 };
 
+/**
+ * Hook for global search across ledger, clients, cheques, and payments.
+ * Implements debounced search (300ms) with grouped results.
+ *
+ * @returns Search state and controls including query, results, loading state, and grouped results
+ */
 export function useGlobalSearch(): UseGlobalSearchReturn {
   const { user } = useUser();
   const [query, setQuery] = useState("");
@@ -161,7 +169,9 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
   const groupedResults = useMemo(() => {
     return results.reduce((acc, result) => {
       const group = result.type;
-      if (!acc[group]) acc[group] = [];
+      if (!acc[group]) {
+        acc[group] = [];
+      }
       acc[group].push(result);
       return acc;
     }, {} as Record<string, SearchResult[]>);

@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 import { SearchDialog } from "./SearchDialog";
 
+/**
+ * Global search trigger button with Cmd+K / Ctrl+K keyboard shortcut.
+ * Opens the SearchDialog modal for searching across all data types.
+ */
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
 

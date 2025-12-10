@@ -5,13 +5,11 @@ import { useCallback } from "react";
 import {
   CommandDialog,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
   CommandLoading,
 } from "@/components/ui/command";
-import { useGlobalSearch, typeLabels } from "./useGlobalSearch";
+import { useGlobalSearch } from "./useGlobalSearch";
 import { SearchResults } from "./SearchResults";
 
 interface SearchDialogProps {
@@ -19,6 +17,10 @@ interface SearchDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Search dialog modal with command palette interface.
+ * Displays search input, grouped results, and keyboard navigation hints.
+ */
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const router = useRouter();
   const { query, setQuery, isLoading, groupedResults, clearResults } = useGlobalSearch();
