@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronDown } from "lucide-react";
 import { ChequeFormCard } from "../forms/ChequeFormCard";
+import { InventoryFormCard } from "../forms/InventoryFormCard";
 
 export function LedgerFormDialog() {
   const {
@@ -772,90 +773,12 @@ export function LedgerFormDialog() {
 
                 {/* Inventory Update Details */}
                 {hasInventoryUpdate && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                    <h4 className="font-medium text-sm">تحديث المخزون</h4>
-                    <div className="space-y-2">
-                      <Input
-                        type="text"
-                        placeholder="اسم الصنف"
-                        value={inventoryFormData.itemName}
-                        onChange={(e) =>
-                          setInventoryFormData({ ...inventoryFormData, itemName: e.target.value })
-                        }
-                        required={hasInventoryUpdate}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="الكمية"
-                          value={inventoryFormData.quantity}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, quantity: e.target.value })
-                          }
-                          required={hasInventoryUpdate}
-                        />
-                        <Input
-                          type="text"
-                          placeholder="الوحدة (كغ، متر، قطعة)"
-                          value={inventoryFormData.unit}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, unit: e.target.value })
-                          }
-                          required={hasInventoryUpdate}
-                        />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="السماكة (مم)"
-                          value={inventoryFormData.thickness}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, thickness: e.target.value })
-                          }
-                        />
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="العرض (متر)"
-                          value={inventoryFormData.width}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, width: e.target.value })
-                          }
-                        />
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="الطول (متر)"
-                          value={inventoryFormData.length}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, length: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="تكلفة الشحن (اختياري)"
-                          value={inventoryFormData.shippingCost}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, shippingCost: e.target.value })
-                          }
-                        />
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="تكاليف أخرى (اختياري)"
-                          value={inventoryFormData.otherCosts}
-                          onChange={(e) =>
-                            setInventoryFormData({ ...inventoryFormData, otherCosts: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <InventoryFormCard
+                    formData={inventoryFormData}
+                    onUpdate={(field, value) =>
+                      setInventoryFormData({ ...inventoryFormData, [field]: value })
+                    }
+                  />
                 )}
 
                 {/* Fixed Asset Details */}
