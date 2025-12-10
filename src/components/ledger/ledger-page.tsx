@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer } from "react";
+import { useReducer, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +43,9 @@ import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
 // Context
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
 
+// Filters
+import { useLedgerFilters, LedgerFilters } from "./filters";
+
 export default function LedgerPage() {
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -57,6 +60,21 @@ export default function LedgerPage() {
   });
   const { submitLedgerEntry, deleteLedgerEntry, addPaymentToEntry, addChequeToEntry, addInventoryToEntry } = useLedgerOperations();
   const formHook = useLedgerForm();
+
+  // Filters
+  const {
+    filters,
+    setDatePreset,
+    setEntryType,
+    setCategory,
+    setPaymentStatus,
+    clearFilters,
+    hasActiveFilters,
+    filterEntries,
+  } = useLedgerFilters();
+
+  // Apply filters to entries
+  const filteredEntries = useMemo(() => filterEntries(entries), [filterEntries, entries]);
 
   // Related records forms (from original hook)
   const {
@@ -229,16 +247,32 @@ export default function LedgerPage() {
         <LedgerStats entries={entries} />
       )}
 
+      {/* Filters */}
+      {!dataLoading && (
+        <LedgerFilters
+          filters={filters}
+          onDatePresetChange={setDatePreset}
+          onEntryTypeChange={setEntryType}
+          onCategoryChange={setCategory}
+          onPaymentStatusChange={setPaymentStatus}
+          onClearFilters={clearFilters}
+          hasActiveFilters={hasActiveFilters}
+          entries={entries}
+          filteredCount={filteredEntries.length}
+          totalCount={entries.length}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>سجل الحركات المالية ({entries.length})</CardTitle>
-            {entries.length > 0 && (
+            <CardTitle>سجل الحركات المالية ({filteredEntries.length})</CardTitle>
+            {filteredEntries.length > 0 && (
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportLedgerToExcel(entries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                  onClick={() => exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
                 >
                   <Download className="w-4 h-4 ml-2" />
                   Excel
@@ -246,7 +280,7 @@ export default function LedgerPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportLedgerToHTML(entries)}
+                  onClick={() => exportLedgerToHTML(filteredEntries)}
                   title="طباعة باللغة العربية"
                 >
                   <Download className="w-4 h-4 ml-2" />
@@ -255,7 +289,7 @@ export default function LedgerPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportLedgerToPDF(entries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                  onClick={() => exportLedgerToPDF(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
                 >
                   <Download className="w-4 h-4 ml-2" />
                   PDF (EN)
@@ -269,7 +303,7 @@ export default function LedgerPage() {
             <TableSkeleton rows={10} />
           ) : (
             <LedgerTable
-              entries={entries}
+              entries={filteredEntries}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onQuickPay={openQuickPayDialog}
@@ -280,7 +314,7 @@ export default function LedgerPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">عرض {entries.length} من {totalCount} حركة</div>
+              <div className="text-sm text-muted-foreground">عرض {filteredEntries.length} من {totalCount} حركة</div>
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
