@@ -14,6 +14,7 @@ import {
 } from "./useLedgerFilters";
 import { LedgerEntry } from "../types/ledger";
 
+/** Props for LedgerFilters component */
 interface LedgerFiltersProps {
   filters: LedgerFiltersState;
   onDatePresetChange: (preset: DatePreset) => void;
@@ -42,6 +43,11 @@ const paymentStatusOptions: { value: PaymentStatus; label: string }[] = [
   { value: "partial", label: "جزئي" },
 ];
 
+/**
+ * Main filter bar component for the Ledger page.
+ * Combines date presets, dropdown filters, and a clear button.
+ * Displays filtered results count.
+ */
 export function LedgerFilters({
   filters,
   onDatePresetChange,

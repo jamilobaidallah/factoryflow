@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Props for FilterDropdown component */
 interface FilterDropdownProps {
   label: string;
   value: string;
@@ -16,6 +17,10 @@ interface FilterDropdownProps {
   placeholder?: string;
 }
 
+/**
+ * Reusable dropdown filter component with label.
+ * Used for type, category, and payment status filters.
+ */
 export function FilterDropdown({
   label,
   value,

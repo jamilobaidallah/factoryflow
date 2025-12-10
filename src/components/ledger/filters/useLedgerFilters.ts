@@ -9,10 +9,15 @@ import {
 } from "date-fns";
 import { LedgerEntry } from "../types/ledger";
 
+/** Date filter preset options */
 export type DatePreset = "today" | "week" | "month" | "all" | "custom";
+/** Entry type filter options (income/expense) */
 export type EntryType = "all" | "دخل" | "مصروف";
+
+/** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial";
 
+/** Current state of all ledger filters */
 export interface LedgerFiltersState {
   datePreset: DatePreset;
   dateRange: { from: Date | null; to: Date | null };
@@ -21,15 +26,25 @@ export interface LedgerFiltersState {
   paymentStatus: PaymentStatus;
 }
 
+/** Return type for the useLedgerFilters hook */
 export interface UseLedgerFiltersReturn {
+  /** Current filter state */
   filters: LedgerFiltersState;
+  /** Set date preset (today, week, month, all, custom) */
   setDatePreset: (preset: DatePreset) => void;
+  /** Set custom date range */
   setCustomDateRange: (from: Date | null, to: Date | null) => void;
+  /** Set entry type filter */
   setEntryType: (type: EntryType) => void;
+  /** Set category filter */
   setCategory: (category: string) => void;
+  /** Set payment status filter */
   setPaymentStatus: (status: PaymentStatus) => void;
+  /** Reset all filters to default */
   clearFilters: () => void;
+  /** Whether any filter is active */
   hasActiveFilters: boolean;
+  /** Filter entries based on current filter state */
   filterEntries: (entries: LedgerEntry[]) => LedgerEntry[];
 }
 
@@ -41,6 +56,17 @@ const initialFilters: LedgerFiltersState = {
   paymentStatus: "all",
 };
 
+/**
+ * Hook for managing ledger entry filters.
+ * Provides state and handlers for filtering by date, type, category, and payment status.
+ * All filtering is performed client-side for fast performance.
+ *
+ * @example
+ * ```tsx
+ * const { filters, setDatePreset, filterEntries } = useLedgerFilters();
+ * const filtered = filterEntries(entries);
+ * ```
+ */
 export function useLedgerFilters(): UseLedgerFiltersReturn {
   const [filters, setFilters] = useState<LedgerFiltersState>(initialFilters);
 
