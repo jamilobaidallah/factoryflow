@@ -1152,63 +1152,53 @@ export class LedgerService {
 
     if (formData.trackARAP || hasCashedCheques) {
       if (formData.immediateSettlement) {
-        const chequeAccountingType = options.checkFormData?.accountingType || "cashed";
-        const chequeAmount = parseFloat(options.checkFormData?.chequeAmount || "0");
+        // Immediate settlement = full amount paid
+        initialPaid = totalAmount;
+        initialStatus = "paid";
+      } else {
+        // Accumulate all payment sources (initial payment + cashed cheques)
 
-        if (options.hasIncomingCheck && options.checkFormData) {
-          if (chequeAccountingType === "cashed") {
-            initialPaid = totalAmount;
-            initialStatus = "paid";
-          } else {
-            const cashAmount = totalAmount - chequeAmount;
-            initialPaid = cashAmount;
-            initialStatus = cashAmount >= totalAmount ? "paid" : cashAmount > 0 ? "partial" : "unpaid";
-          }
-        } else {
-          initialPaid = totalAmount;
-          initialStatus = "paid";
+        // Add initial payment if exists (partial payment option)
+        if (options.hasInitialPayment && options.initialPaymentAmount) {
+          initialPaid += parseFloat(options.initialPaymentAmount);
         }
-      } else if (options.hasInitialPayment && options.initialPaymentAmount) {
-        initialPaid = parseFloat(options.initialPaymentAmount);
-        initialStatus = initialPaid >= totalAmount ? "paid" : "partial";
-      } else if (options.hasIncomingCheck) {
-        if (options.incomingChequesList?.length) {
-          let totalCashedAmount = 0;
-          options.incomingChequesList.forEach((cheque) => {
-            const accountingType = cheque.accountingType || "cashed";
-            if (accountingType === "cashed") {
-              totalCashedAmount += parseFloat(cheque.chequeAmount || "0");
+
+        // Add cashed incoming cheques
+        if (options.hasIncomingCheck) {
+          if (options.incomingChequesList?.length) {
+            options.incomingChequesList.forEach((cheque) => {
+              const accountingType = cheque.accountingType || "cashed";
+              if (accountingType === "cashed") {
+                initialPaid += parseFloat(cheque.chequeAmount || "0");
+              }
+            });
+          } else if (options.checkFormData) {
+            const chequeAccountingType = options.checkFormData.accountingType || "cashed";
+            if (chequeAccountingType === "cashed") {
+              initialPaid += parseFloat(options.checkFormData.chequeAmount || "0");
             }
-          });
-          initialPaid = totalCashedAmount;
-          initialStatus = totalCashedAmount >= totalAmount ? "paid" : totalCashedAmount > 0 ? "partial" : "unpaid";
-        } else if (options.checkFormData) {
-          const chequeAccountingType = options.checkFormData.accountingType || "cashed";
-          if (chequeAccountingType === "cashed") {
-            const chequeAmount = parseFloat(options.checkFormData.chequeAmount || "0");
-            initialPaid = chequeAmount;
-            initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
           }
         }
-      } else if (options.hasOutgoingCheck) {
-        if (options.outgoingChequesList?.length) {
-          let totalCashedAmount = 0;
-          options.outgoingChequesList.forEach((cheque) => {
-            const accountingType = cheque.accountingType || "cashed";
-            if (accountingType === "cashed" || accountingType === "endorsed") {
-              totalCashedAmount += parseFloat(cheque.chequeAmount || "0");
+
+        // Add cashed outgoing cheques
+        if (options.hasOutgoingCheck) {
+          if (options.outgoingChequesList?.length) {
+            options.outgoingChequesList.forEach((cheque) => {
+              const accountingType = cheque.accountingType || "cashed";
+              if (accountingType === "cashed" || accountingType === "endorsed") {
+                initialPaid += parseFloat(cheque.chequeAmount || "0");
+              }
+            });
+          } else if (options.outgoingCheckFormData) {
+            const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
+            if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
+              initialPaid += parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
             }
-          });
-          initialPaid = totalCashedAmount;
-          initialStatus = totalCashedAmount >= totalAmount ? "paid" : totalCashedAmount > 0 ? "partial" : "unpaid";
-        } else if (options.outgoingCheckFormData) {
-          const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
-          if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
-            const chequeAmount = parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
-            initialPaid = chequeAmount;
-            initialStatus = chequeAmount >= totalAmount ? "paid" : "partial";
           }
         }
+
+        // Calculate status based on total paid
+        initialStatus = initialPaid >= totalAmount ? "paid" : initialPaid > 0 ? "partial" : "unpaid";
       }
     } else if (formData.immediateSettlement) {
       initialPaid = totalAmount;

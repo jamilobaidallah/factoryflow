@@ -50,13 +50,40 @@ Updated `LedgerService.ts`:
 
 ---
 
+## Part 5: Bug Fix - Payment Status When Partial + Cheque = Full Amount
+
+### Problem
+When user selected "دفعة جزئية" (Partial Payment) + cashed cheque, and sum = full amount:
+- Payments created correctly (2 payments)
+- BUT ledger status showed "دفعة جزئية" instead of "مدفوع"
+
+### Root Cause
+`calculateARAPTracking` method used `else if` branches, so when `hasInitialPayment` was true,
+cashed cheque amounts were never added to `initialPaid`.
+
+### Fix Applied
+Rewrote `calculateARAPTracking` to **accumulate all payment sources**:
+1. Initial payment amount (if partial payment selected)
+2. PLUS cashed incoming cheques
+3. PLUS cashed outgoing cheques
+4. Then calculate status based on total paid vs total amount
+
+### Test Scenarios
+| Scenario | Expected Result |
+|----------|-----------------|
+| دفعة جزئية (1000) + cashed cheque (1000) on 2000 entry | status = "مدفوع" |
+| دفعة جزئية (500) + cashed cheque (500) on 2000 entry | status = "دفعة جزئية" |
+| دفعة جزئية only (no cheque) | status = "دفعة جزئية" |
+
+---
+
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | `src/components/ledger/forms/ChequeFormCard.tsx` | **NEW** |
 | `src/components/ledger/components/LedgerFormDialog.tsx` | Radio buttons, uses ChequeFormCard |
-| `src/services/ledger/LedgerService.ts` | Fixed double payment, detects cheque method |
+| `src/services/ledger/LedgerService.ts` | Fixed double payment, status calculation, cheque method detection |
 | `src/services/ledger/handlers/chequeHandlers.ts` | Skip payment when immediateSettlement + cashed |
 | `src/services/ledger/handlers/paymentHandlers.ts` | Added method param to settlement |
 
