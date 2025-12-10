@@ -21,7 +21,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Plus, ChevronDown } from "lucide-react";
+import { ChequeFormCard } from "../forms/ChequeFormCard";
 
 export function LedgerFormDialog() {
   const {
@@ -119,7 +120,7 @@ export function LedgerFormDialog() {
     setIncomingChequesList([...incomingChequesList, newCheque]);
   };
 
-  const updateIncomingCheque = (id: string, field: keyof CheckFormDataItem, value: string) => {
+  const updateIncomingCheque = (id: string, field: string, value: string) => {
     setIncomingChequesList(
       incomingChequesList.map((cheque) =>
         cheque.id === id ? { ...cheque, [field]: value } : cheque
@@ -144,7 +145,7 @@ export function LedgerFormDialog() {
     setOutgoingChequesList([...outgoingChequesList, newCheque]);
   };
 
-  const updateOutgoingCheque = (id: string, field: keyof OutgoingCheckFormDataItem, value: string) => {
+  const updateOutgoingCheque = (id: string, field: string, value: string) => {
     setOutgoingChequesList(
       outgoingChequesList.map((cheque) =>
         cheque.id === id ? { ...cheque, [field]: value } : cheque
@@ -692,107 +693,15 @@ export function LedgerFormDialog() {
                     {incomingChequesList.length > 0 && (
                       <div className="space-y-4">
                         {incomingChequesList.map((cheque, index) => (
-                          <div key={cheque.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-sm">شيك {index + 1}</h4>
-                              {incomingChequesList.length > 1 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeIncomingCheque(cheque.id)}
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Cheque Type Selection */}
-                            <div className="space-y-2">
-                              <Label>نوع الشيك المحاسبي</Label>
-                              <select
-                                value={cheque.accountingType || "cashed"}
-                                onChange={(e) =>
-                                  updateIncomingCheque(cheque.id, "accountingType", e.target.value)
-                                }
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                required
-                              >
-                                <option value="cashed">شيك صرف - يُصرف فوراً</option>
-                                <option value="postponed">شيك مؤجل - يُصرف لاحقاً</option>
-                                <option value="endorsed">شيك مظهر - تحويل لطرف ثالث</option>
-                              </select>
-                            </div>
-
-                            {/* Endorsee field - only for endorsed cheques */}
-                            {cheque.accountingType === 'endorsed' && (
-                              <div className="space-y-2 p-3 bg-purple-50 rounded-md border border-purple-200">
-                                <Label>مظهر إلى (اسم المستفيد)</Label>
-                                <Input
-                                  type="text"
-                                  placeholder="أدخل اسم الجهة المظهر لها الشيك"
-                                  value={cheque.endorsedToName || ""}
-                                  onChange={(e) =>
-                                    updateIncomingCheque(cheque.id, "endorsedToName", e.target.value)
-                                  }
-                                  required
-                                />
-                              </div>
-                            )}
-
-                            {/* Postponed cheque warning */}
-                            {cheque.accountingType === 'postponed' && (
-                              <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
-                                <p className="text-xs text-yellow-700">
-                                  الشيك المؤجل: سيظهر في قائمة الشيكات المعلقة
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Cheque details */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <Input
-                                type="text"
-                                placeholder="رقم الشيك"
-                                value={cheque.chequeNumber}
-                                onChange={(e) =>
-                                  updateIncomingCheque(cheque.id, "chequeNumber", e.target.value)
-                                }
-                                required
-                              />
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="مبلغ الشيك"
-                                value={cheque.chequeAmount}
-                                onChange={(e) =>
-                                  updateIncomingCheque(cheque.id, "chequeAmount", e.target.value)
-                                }
-                                required
-                              />
-                              <Input
-                                type="text"
-                                placeholder="اسم البنك"
-                                value={cheque.bankName}
-                                onChange={(e) =>
-                                  updateIncomingCheque(cheque.id, "bankName", e.target.value)
-                                }
-                                required
-                              />
-                              <div className="space-y-1">
-                                <Input
-                                  type="date"
-                                  value={cheque.dueDate}
-                                  onChange={(e) =>
-                                    updateIncomingCheque(cheque.id, "dueDate", e.target.value)
-                                  }
-                                  required
-                                />
-                                <p className="text-xs text-gray-500">تاريخ الاستحقاق</p>
-                              </div>
-                            </div>
-                          </div>
+                          <ChequeFormCard
+                            key={cheque.id}
+                            cheque={cheque}
+                            index={index}
+                            direction="incoming"
+                            onUpdate={updateIncomingCheque}
+                            onRemove={removeIncomingCheque}
+                            canRemove={incomingChequesList.length > 1}
+                          />
                         ))}
 
                         {/* Total cheques amount */}
@@ -828,107 +737,15 @@ export function LedgerFormDialog() {
                     {outgoingChequesList.length > 0 && (
                       <div className="space-y-4">
                         {outgoingChequesList.map((cheque, index) => (
-                          <div key={cheque.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-sm">شيك {index + 1}</h4>
-                              {outgoingChequesList.length > 1 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeOutgoingCheque(cheque.id)}
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Cheque Type Selection */}
-                            <div className="space-y-2">
-                              <Label>نوع الشيك المحاسبي</Label>
-                              <select
-                                value={cheque.accountingType || "cashed"}
-                                onChange={(e) =>
-                                  updateOutgoingCheque(cheque.id, "accountingType", e.target.value)
-                                }
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                required
-                              >
-                                <option value="cashed">شيك صرف - يُصرف فوراً</option>
-                                <option value="postponed">شيك مؤجل - يُصرف لاحقاً</option>
-                                <option value="endorsed">شيك مظهر - شيك وارد نمرره للمورد</option>
-                              </select>
-                            </div>
-
-                            {/* Endorsed from field - only for endorsed cheques */}
-                            {cheque.accountingType === 'endorsed' && (
-                              <div className="space-y-2 p-3 bg-purple-50 rounded-md border border-purple-200">
-                                <Label>مظهر من (مصدر الشيك الأصلي)</Label>
-                                <Input
-                                  type="text"
-                                  placeholder="أدخل اسم العميل/الجهة التي استلمنا منها الشيك"
-                                  value={cheque.endorsedFromName || ""}
-                                  onChange={(e) =>
-                                    updateOutgoingCheque(cheque.id, "endorsedFromName", e.target.value)
-                                  }
-                                  required
-                                />
-                              </div>
-                            )}
-
-                            {/* Postponed cheque warning */}
-                            {cheque.accountingType === 'postponed' && (
-                              <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
-                                <p className="text-xs text-yellow-700">
-                                  الشيك المؤجل: سيظهر في قائمة الشيكات الصادرة المعلقة
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Cheque details */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <Input
-                                type="text"
-                                placeholder="رقم الشيك"
-                                value={cheque.chequeNumber}
-                                onChange={(e) =>
-                                  updateOutgoingCheque(cheque.id, "chequeNumber", e.target.value)
-                                }
-                                required
-                              />
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="مبلغ الشيك"
-                                value={cheque.chequeAmount}
-                                onChange={(e) =>
-                                  updateOutgoingCheque(cheque.id, "chequeAmount", e.target.value)
-                                }
-                                required
-                              />
-                              <Input
-                                type="text"
-                                placeholder="اسم البنك"
-                                value={cheque.bankName}
-                                onChange={(e) =>
-                                  updateOutgoingCheque(cheque.id, "bankName", e.target.value)
-                                }
-                                required
-                              />
-                              <div className="space-y-1">
-                                <Input
-                                  type="date"
-                                  value={cheque.dueDate}
-                                  onChange={(e) =>
-                                    updateOutgoingCheque(cheque.id, "dueDate", e.target.value)
-                                  }
-                                  required
-                                />
-                                <p className="text-xs text-gray-500">تاريخ الاستحقاق</p>
-                              </div>
-                            </div>
-                          </div>
+                          <ChequeFormCard
+                            key={cheque.id}
+                            cheque={cheque}
+                            index={index}
+                            direction="outgoing"
+                            onUpdate={updateOutgoingCheque}
+                            onRemove={removeOutgoingCheque}
+                            canRemove={outgoingChequesList.length > 1}
+                          />
                         ))}
 
                         {/* Total cheques amount */}
