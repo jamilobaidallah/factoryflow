@@ -9,23 +9,33 @@ import type { HandlerContext } from "../types";
 
 /**
  * Handle immediate settlement batch operation
- * Creates a cash payment record for full immediate payment
+ * Creates a payment record for full immediate payment
+ *
+ * @param ctx - Handler context with batch, refs, and form data
+ * @param amount - The payment amount
+ * @param method - Payment method: "cash" or "cheque" (default: "cash")
  */
 export function handleImmediateSettlementBatch(
   ctx: HandlerContext,
-  cashAmount: number
+  amount: number,
+  method: "cash" | "cheque" = "cash"
 ): void {
   const { batch, transactionId, formData, entryType, refs } = ctx;
 
-  if (cashAmount > 0) {
+  if (amount > 0) {
     const paymentDocRef = doc(refs.payments);
+    const isCheque = method === "cheque";
+
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
-      amount: cashAmount,
+      amount: amount,
       type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
+      method: method,
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
-      notes: `تسوية فورية نقدية - ${formData.description}`,
+      notes: isCheque
+        ? `تسوية فورية بشيك - ${formData.description}`
+        : `تسوية فورية نقدية - ${formData.description}`,
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),

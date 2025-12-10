@@ -454,36 +454,38 @@ export class LedgerService {
       }
 
       // Handle immediate settlement
+      // Note: When immediateSettlement is true, cheque handlers skip creating their
+      // own payments (for cashed cheques) to avoid double payment. This logic handles
+      // all payment creation for immediate settlements.
       if (formData.immediateSettlement) {
-        let totalChequeAmount = 0;
+        // Check if there are cashed cheques that need payment records
+        let hasCashedIncoming = false;
+        let hasCashedOutgoing = false;
 
-        // Calculate total from incoming cashed cheques
         if (options.hasIncomingCheck) {
           if (options.incomingChequesList?.length) {
-            totalChequeAmount += options.incomingChequesList
-              .filter(c => (c.accountingType || "cashed") === "cashed")
-              .reduce((sum, c) => sum + parseAmount(c.chequeAmount), 0);
-          } else if (options.checkFormData && (options.checkFormData.accountingType || "cashed") === "cashed") {
-            totalChequeAmount += parseAmount(options.checkFormData.chequeAmount);
+            hasCashedIncoming = options.incomingChequesList.some(
+              c => (c.accountingType || "cashed") === "cashed"
+            );
+          } else if (options.checkFormData) {
+            hasCashedIncoming = (options.checkFormData.accountingType || "cashed") === "cashed";
           }
         }
 
-        // Calculate total from outgoing cashed cheques
         if (options.hasOutgoingCheck) {
           if (options.outgoingChequesList?.length) {
-            totalChequeAmount += options.outgoingChequesList
-              .filter(c => (c.accountingType || "cashed") === "cashed")
-              .reduce((sum, c) => sum + parseAmount(c.chequeAmount), 0);
-          } else if (options.outgoingCheckFormData && (options.outgoingCheckFormData.accountingType || "cashed") === "cashed") {
-            totalChequeAmount += parseAmount(options.outgoingCheckFormData.chequeAmount);
+            hasCashedOutgoing = options.outgoingChequesList.some(
+              c => (c.accountingType || "cashed") === "cashed"
+            );
+          } else if (options.outgoingCheckFormData) {
+            hasCashedOutgoing = (options.outgoingCheckFormData.accountingType || "cashed") === "cashed";
           }
         }
 
-        // Only create cash payment if there's a remaining amount after cheques
-        const cashAmount = safeSubtract(totalAmount, totalChequeAmount);
-        if (cashAmount > 0) {
-          handleImmediateSettlementBatch(ctx, cashAmount);
-        }
+        // Create the settlement payment
+        // Use "cheque" method if payment involves cashed cheques
+        const paymentMethod = (hasCashedIncoming || hasCashedOutgoing) ? "cheque" : "cash";
+        handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod);
       }
 
       // Handle initial payment

@@ -12,33 +12,41 @@
 - [x] Replaced nested checkboxes with intuitive radio button group
 - [x] Default changed to "آجل" (credit) selected by default
 
-## Part 4: Bug Fix - Double Payment with Cashed Cheques
+## Part 4: Bug Fix - Double Payment with Cashed Cheques (v2)
 
 ### Problem
 When user selected "مدفوع بالكامل" + added cashed cheque:
 - System created TWO payments (cash + cheque)
 - This double-counted the payment amount
 
-### Root Cause
-The immediate settlement logic only checked for incoming cheques and didn't:
-1. Check for outgoing cheques
-2. Account for multiple cheques in lists
-3. Verify cheque `accountingType === "cashed"`
+### Root Cause (Previous Fix Did Not Work)
+Previous fix tried to subtract cheque amounts from cash payment, but still had edge cases.
 
-### Fix Applied
-Updated `createLedgerEntryWithRelated` in `LedgerService.ts`:
-- Now calculates total amount from ALL cashed cheques (incoming + outgoing)
-- Supports both single cheque and multiple cheques in lists
-- Only creates cash payment for remaining amount after cheques
-- If cheques cover full amount → No cash payment created
+The actual issue was that **both** handlers were creating payments:
+1. `chequeHandlers.ts` - Created payment for cashed cheques
+2. `handleImmediateSettlementBatch` - Created cash payment for immediate settlement
+
+### Final Fix Applied (Option B)
+Updated `chequeHandlers.ts` to **skip payment creation** when:
+- `formData.immediateSettlement === true` AND
+- `accountingType === "cashed"`
+
+Updated `paymentHandlers.ts`:
+- Added `method` parameter ("cash" | "cheque")
+- Notes reflect payment method appropriately
+
+Updated `LedgerService.ts`:
+- Immediate settlement now detects if cashed cheques exist
+- Creates ONE payment with correct `method` ("cheque" if paid by cheque)
 
 ### Test Scenarios
 | Scenario | Expected Result |
 |----------|-----------------|
-| مدفوع بالكامل + cashed cheque = full amount | 1 payment (cheque only) |
-| مدفوع بالكامل + cashed cheque < full amount | 2 payments (cheque + cash for diff) |
-| مدفوع بالكامل + no cheque | 1 payment (cash) |
-| مدفوع بالكامل + postponed cheque | 1 payment (cash - postponed doesn't count) |
+| مدفوع بالكامل + cashed cheque | 1 payment (method: "cheque") |
+| مدفوع بالكامل + no cheque | 1 payment (method: "cash") |
+| مدفوع بالكامل + postponed cheque | 1 payment (method: "cash") |
+| آجل + cashed cheque | 1 payment (method: "cheque") - created by cheque handler |
+| آجل + postponed cheque | 0 payments - cheque only tracked |
 
 ---
 
@@ -48,8 +56,9 @@ Updated `createLedgerEntryWithRelated` in `LedgerService.ts`:
 |------|--------|
 | `src/components/ledger/forms/ChequeFormCard.tsx` | **NEW** |
 | `src/components/ledger/components/LedgerFormDialog.tsx` | Radio buttons, uses ChequeFormCard |
-| `src/services/ledger/LedgerService.ts` | Fixed double payment + cashed cheque tracking |
-| `src/services/ledger/handlers/chequeHandlers.ts` | Added category to payments |
+| `src/services/ledger/LedgerService.ts` | Fixed double payment, detects cheque method |
+| `src/services/ledger/handlers/chequeHandlers.ts` | Skip payment when immediateSettlement + cashed |
+| `src/services/ledger/handlers/paymentHandlers.ts` | Added method param to settlement |
 
 ---
 

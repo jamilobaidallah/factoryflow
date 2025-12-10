@@ -11,6 +11,10 @@ import type { HandlerContext } from "../types";
 /**
  * Handle incoming cheque batch operation
  * Supports single cheque or multiple cheques
+ *
+ * Note: When immediateSettlement is true and cheque is cashed, payment creation
+ * is skipped here to avoid double payments. The immediate settlement logic in
+ * LedgerService handles creating a single consolidated payment.
  */
 export function handleIncomingCheckBatch(
   ctx: HandlerContext,
@@ -53,7 +57,9 @@ export function handleIncomingCheckBatch(
 
   batch.set(chequeDocRef, chequeData);
 
-  if (accountingType === "cashed") {
+  // Skip payment creation for cashed cheques when immediateSettlement is true
+  // to avoid double payment. The settlement logic will handle it.
+  if (accountingType === "cashed" && !formData.immediateSettlement) {
     const paymentDocRef = doc(refs.payments);
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
@@ -99,6 +105,10 @@ export function handleIncomingCheckBatch(
 /**
  * Handle outgoing cheque batch operation
  * Supports single cheque or multiple cheques
+ *
+ * Note: When immediateSettlement is true and cheque is cashed, payment creation
+ * is skipped here to avoid double payments. The immediate settlement logic in
+ * LedgerService handles creating a single consolidated payment.
  */
 export function handleOutgoingCheckBatch(
   ctx: HandlerContext,
@@ -142,7 +152,9 @@ export function handleOutgoingCheckBatch(
 
   batch.set(chequeDocRef, chequeData);
 
-  if (accountingType === "cashed") {
+  // Skip payment creation for cashed cheques when immediateSettlement is true
+  // to avoid double payment. The settlement logic will handle it.
+  if (accountingType === "cashed" && !formData.immediateSettlement) {
     const paymentDocRef = doc(refs.payments);
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
