@@ -63,6 +63,8 @@ export function handleIncomingCheckBatch(
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
       notes: `شيك صرف رقم ${checkFormData.chequeNumber} - ${formData.description}`,
+      category: formData.category,
+      subCategory: formData.subCategory,
       createdAt: new Date(),
     });
   } else if (accountingType === "endorsed") {
@@ -150,6 +152,8 @@ export function handleOutgoingCheckBatch(
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
       notes: `شيك صرف رقم ${outgoingCheckFormData.chequeNumber} - ${formData.description}`,
+      category: formData.category,
+      subCategory: formData.subCategory,
       createdAt: new Date(),
     });
   } else if (accountingType === "endorsed") {
@@ -162,6 +166,8 @@ export function handleOutgoingCheckBatch(
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
       notes: `شيك مظهر رقم ${outgoingCheckFormData.chequeNumber} من ${outgoingCheckFormData.endorsedFromName} - ${formData.description}`,
+      category: formData.category,
+      subCategory: formData.subCategory,
       createdAt: new Date(),
       isEndorsement: true,
     });

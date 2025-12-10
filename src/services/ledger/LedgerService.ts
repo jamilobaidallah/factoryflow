@@ -393,12 +393,25 @@ export class LedgerService {
       const ledgerDocRef = doc(this.ledgerRef);
       const ctx = this.getHandlerContext(batch, transactionId, formData, entryType);
 
-      // Calculate AR/AP tracking
+      // Check if there are cashed cheques (which should also track payment status)
+      const hasCashedOutgoingCheques =
+        (options.hasOutgoingCheck && options.outgoingChequesList?.some(c => (c.accountingType || "cashed") === "cashed")) ||
+        (options.hasOutgoingCheck && options.outgoingCheckFormData && (options.outgoingCheckFormData.accountingType || "cashed") === "cashed");
+      const hasCashedIncomingCheques =
+        (options.hasIncomingCheck && options.incomingChequesList?.some(c => (c.accountingType || "cashed") === "cashed")) ||
+        (options.hasIncomingCheck && options.checkFormData && (options.checkFormData.accountingType || "cashed") === "cashed");
+      const hasCashedCheques = hasCashedOutgoingCheques || hasCashedIncomingCheques;
+
+      // Calculate AR/AP tracking (also for cashed cheques even without explicit trackARAP)
       const { initialPaid, initialStatus } = this.calculateARAPTracking(
         formData,
         options,
-        totalAmount
+        totalAmount,
+        hasCashedCheques
       );
+
+      // Determine if we should track AR/AP (either explicit or via cashed cheques)
+      const shouldTrackARAP = formData.trackARAP || hasCashedCheques;
 
       // Add ledger entry
       batch.set(ledgerDocRef, {
@@ -414,7 +427,7 @@ export class LedgerService {
         reference: formData.reference,
         notes: formData.notes,
         createdAt: new Date(),
-        ...(formData.trackARAP && {
+        ...(shouldTrackARAP && {
           isARAPEntry: true,
           totalPaid: initialPaid,
           remainingBalance: safeSubtract(totalAmount, initialPaid),
@@ -1105,12 +1118,13 @@ export class LedgerService {
   private calculateARAPTracking(
     formData: LedgerFormData,
     options: CreateLedgerEntryOptions,
-    totalAmount: number
+    totalAmount: number,
+    hasCashedCheques: boolean = false
   ): { initialPaid: number; initialStatus: "paid" | "unpaid" | "partial" } {
     let initialPaid = 0;
     let initialStatus: "paid" | "unpaid" | "partial" = "unpaid";
 
-    if (formData.trackARAP) {
+    if (formData.trackARAP || hasCashedCheques) {
       if (formData.immediateSettlement) {
         const chequeAccountingType = options.checkFormData?.accountingType || "cashed";
         const chequeAmount = parseFloat(options.checkFormData?.chequeAmount || "0");
