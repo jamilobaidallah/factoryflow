@@ -782,6 +782,14 @@ export function LedgerFormDialog() {
                     onUpdate={(field, value) =>
                       setInventoryFormData({ ...inventoryFormData, [field]: value })
                     }
+                    onItemSelect={(itemId, itemName, unit) =>
+                      setInventoryFormData({
+                        ...inventoryFormData,
+                        itemId,
+                        itemName,
+                        unit: unit || inventoryFormData.unit,
+                      })
+                    }
                     inventoryItems={inventoryItems}
                     isLoadingItems={inventoryLoading}
                   />

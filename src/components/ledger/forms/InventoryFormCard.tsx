@@ -25,6 +25,7 @@ export interface InventoryFormCardProps {
     otherCosts: string;
   };
   onUpdate: (field: string, value: string) => void;
+  onItemSelect: (itemId: string, itemName: string, unit: string) => void;
   inventoryItems: InventoryItem[];
   isLoadingItems?: boolean;
 }
@@ -32,15 +33,19 @@ export interface InventoryFormCardProps {
 export function InventoryFormCard({
   formData,
   onUpdate,
+  onItemSelect,
   inventoryItems,
   isLoadingItems = false,
 }: InventoryFormCardProps) {
   const handleItemSelect = (itemId: string) => {
+    if (!itemId) {
+      // Clear selection
+      onItemSelect("", "", "");
+      return;
+    }
     const selectedItem = inventoryItems.find((item) => item.id === itemId);
-    onUpdate("itemId", itemId);
-    onUpdate("itemName", selectedItem?.name || "");
-    if (selectedItem?.unit) {
-      onUpdate("unit", selectedItem.unit);
+    if (selectedItem) {
+      onItemSelect(selectedItem.id, selectedItem.name, selectedItem.unit);
     }
   };
 
@@ -52,7 +57,7 @@ export function InventoryFormCard({
         <div className="space-y-2">
           <Label>اسم الصنف</Label>
           <select
-            value={formData.itemId}
+            value={formData.itemId || ""}
             onChange={(e) => handleItemSelect(e.target.value)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             required
