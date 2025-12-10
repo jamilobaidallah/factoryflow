@@ -3,7 +3,7 @@
  * Uses LedgerFormContext to eliminate prop drilling
  */
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CATEGORIES } from "../utils/ledger-constants";
 import { getCategoryType } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
@@ -22,11 +22,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronDown } from "lucide-react";
+import { Plus } from "lucide-react";
 import { ChequeFormCard } from "../forms/ChequeFormCard";
 import { InventoryFormCard } from "../forms/InventoryFormCard";
 import { FixedAssetFormCard } from "../forms/FixedAssetFormCard";
 import { StepBasicInfo } from "../steps/StepBasicInfo";
+import { StepPartyARAP } from "../steps/StepPartyARAP";
 
 export function LedgerFormDialog() {
   const {
@@ -71,9 +72,6 @@ export function LedgerFormDialog() {
   // Get inventory items for dropdown
   const { items: inventoryItems, loading: inventoryLoading, error: inventoryError } = useInventoryItems();
 
-  // Associated party dropdown state
-  const [showPartyDropdown, setShowPartyDropdown] = useState(false);
-
   // Wizard step state (only for new entries)
   const [step, setStep] = useState(1);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -83,29 +81,12 @@ export function LedgerFormDialog() {
 
   // Determine if step 3 is needed (related records)
   const hasRelatedRecords = hasIncomingCheck || hasOutgoingCheck ||
-                            hasInventoryUpdate || hasFixedAsset || createInvoice;
+                            hasInventoryUpdate || hasFixedAsset || !!createInvoice;
   const totalSteps = !editingEntry ? (hasRelatedRecords ? 3 : 2) : 1;
-
-  // Filter clients based on search input
-  const filteredClients = useMemo(() => {
-    if (!formData.associatedParty?.trim()) {
-      return allClients;
-    }
-    const searchTerm = formData.associatedParty.toLowerCase();
-    return allClients.filter((client) =>
-      client.name.toLowerCase().includes(searchTerm)
-    );
-  }, [allClients, formData.associatedParty]);
-
-  const handlePartySelect = (partyName: string) => {
-    setFormData({ ...formData, associatedParty: partyName });
-    setShowPartyDropdown(false);
-  };
 
   // Reset state when dialog opens/closes
   useEffect(() => {
     if (!isOpen) {
-      setShowPartyDropdown(false);
       setStep(1); // Reset wizard to first step
       setStepError(null); // Clear any validation errors
     }
@@ -296,285 +277,34 @@ export function LedgerFormDialog() {
 
             {/* ===== STEP 2: Party & AR/AP ===== */}
             {(step === 2 || editingEntry) && (
-              <>
-                {/* Associated Party */}
-                <div className="space-y-2 relative">
-                  <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
-                  <div className="relative">
-                    <Input
-                      id="associatedParty"
-                      value={formData.associatedParty}
-                      onChange={(e) => {
-                        setFormData({ ...formData, associatedParty: e.target.value });
-                        setShowPartyDropdown(true);
-                      }}
-                      onFocus={() => setShowPartyDropdown(true)}
-                      placeholder={clientsLoading ? "جاري التحميل..." : "اختر أو ابحث... (اتركه فارغاً للمصاريف اليومية)"}
-                      autoComplete="off"
-                    />
-                    <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  {showPartyDropdown && !clientsLoading && (
-                    <div className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                      {/* Option to clear/leave empty */}
-                      {formData.associatedParty && (
-                        <button
-                          type="button"
-                          onClick={() => handlePartySelect("")}
-                          className="w-full px-3 py-2 text-right text-sm border-b hover:bg-gray-100 text-gray-500"
-                        >
-                          × مسح الاختيار (بدون طرف معني)
-                        </button>
-                      )}
-                      {filteredClients.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          {allClients.length === 0 ? "لا يوجد عملاء مسجلين في الدفتر" : "لا توجد نتائج"}
-                        </div>
-                      ) : (
-                        filteredClients.map((client) => (
-                          <button
-                            key={client.name}
-                            type="button"
-                            onClick={() => handlePartySelect(client.name)}
-                            className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 flex items-center justify-between"
-                          >
-                            <span>{client.name}</span>
-                            <div className="flex items-center gap-1">
-                              {client.hasBalance && client.balance !== 0 && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                  client.balance && client.balance > 0
-                                    ? 'bg-red-100 text-red-700' // They owe us (receivable)
-                                    : 'bg-green-100 text-green-700' // We owe them (payable)
-                                }`}>
-                                  {client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
-                                  {Math.abs(client.balance || 0).toFixed(2)}
-                                </span>
-                              )}
-                              <span className="text-xs text-gray-400">
-                                {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
-                              </span>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                      {/* Option to add new party manually */}
-                      {formData.associatedParty?.trim() && !allClients.some(c => c.name === formData.associatedParty?.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() => setShowPartyDropdown(false)}
-                          className="w-full px-3 py-2 text-right text-sm border-t hover:bg-blue-50 text-blue-600"
-                        >
-                          + استخدام &quot;{formData.associatedParty}&quot; كاسم جديد
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني
-                  </p>
-                </div>
-
-                {/* Owner dropdown for capital transactions */}
-                {formData.category === "رأس المال" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="ownerName">اسم الشريك/المالك *</Label>
-                    <select
-                      id="ownerName"
-                      value={formData.ownerName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ownerName: e.target.value })
-                      }
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      required
-                    >
-                      <option value="">اختر الشريك</option>
-                      {partners.map((partner) => (
-                        <option key={partner.id} value={partner.name}>
-                          {partner.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Payment Status - Part of Step 2 (new entries only) */}
-            {step === 2 && !editingEntry && (currentEntryType === "دخل" || currentEntryType === "مصروف") && (
-              <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-                <Label className="font-medium">حالة الدفع</Label>
-                <div className="space-y-3">
-                  {/* Option 1: Fully Paid */}
-                  <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
-                    <input
-                      type="radio"
-                      name="paymentStatus"
-                      value="paid"
-                      checked={formData.immediateSettlement && !hasInitialPayment}
-                      onChange={() => {
-                        setFormData({ ...formData, immediateSettlement: true, trackARAP: true });
-                        setHasInitialPayment(false);
-                        setInitialPaymentAmount("");
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <span>مدفوع بالكامل (نقدي أو شيك صرف)</span>
-                  </label>
-
-                  {/* Option 2: On Credit */}
-                  <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
-                    <input
-                      type="radio"
-                      name="paymentStatus"
-                      value="credit"
-                      checked={formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment}
-                      onChange={() => {
-                        setFormData({ ...formData, trackARAP: true, immediateSettlement: false });
-                        setHasInitialPayment(false);
-                        setInitialPaymentAmount("");
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <span>آجل - سيتم تتبع الذمم</span>
-                  </label>
-
-                  {/* Option 3: Partial Payment */}
-                  <div className="space-y-2">
-                    <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
-                      <input
-                        type="radio"
-                        name="paymentStatus"
-                        value="partial"
-                        checked={hasInitialPayment}
-                        onChange={() => {
-                          setFormData({ ...formData, trackARAP: true, immediateSettlement: false });
-                          setHasInitialPayment(true);
-                        }}
-                        className="h-4 w-4"
-                      />
-                      <span>دفعة جزئية</span>
-                    </label>
-                    {hasInitialPayment && (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="المبلغ المدفوع"
-                        value={initialPaymentAmount}
-                        onChange={(e) => setInitialPaymentAmount(e.target.value)}
-                        className="mr-6 max-w-[200px]"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* Helper text */}
-                <p className="text-xs text-gray-500">
-                  {formData.immediateSettlement && !hasInitialPayment && "سيتم تسجيل المبلغ كمدفوع بالكامل"}
-                  {formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment && "سيتم إنشاء ذمة (مدين/دائن) لمتابعة الدفع"}
-                  {hasInitialPayment && "سيتم تسجيل الدفعة الجزئية وإنشاء ذمة للمبلغ المتبقي"}
-                </p>
-              </div>
-            )}
-
-            {/* Related Records Options - Show on Step 2 to enable Step 3 */}
-            {step === 2 && !editingEntry && (
-              <div className="space-y-4 p-4 border rounded-lg bg-blue-50">
-                <h4 className="font-medium text-sm">هل تريد إضافة سجلات مرتبطة؟</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Incoming Cheques Option */}
-                  {(currentEntryType === "دخل" || currentEntryType === "إيراد") && (
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input
-                        type="checkbox"
-                        id="enableIncomingCheck"
-                        checked={hasIncomingCheck}
-                        onChange={(e) => {
-                          setHasIncomingCheck(e.target.checked);
-                          if (e.target.checked && incomingChequesList.length === 0) {
-                            addIncomingCheque();
-                          }
-                        }}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="enableIncomingCheck" className="cursor-pointer text-sm">
-                        شيكات واردة
-                      </Label>
-                    </div>
-                  )}
-
-                  {/* Outgoing Cheques Option */}
-                  {currentEntryType === "مصروف" && (
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input
-                        type="checkbox"
-                        id="enableOutgoingCheck"
-                        checked={hasOutgoingCheck}
-                        onChange={(e) => {
-                          setHasOutgoingCheck(e.target.checked);
-                          if (e.target.checked && outgoingChequesList.length === 0) {
-                            addOutgoingCheque();
-                          }
-                        }}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="enableOutgoingCheck" className="cursor-pointer text-sm">
-                        شيكات صادرة
-                      </Label>
-                    </div>
-                  )}
-
-                  {/* Inventory Update Option */}
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <input
-                      type="checkbox"
-                      id="enableInventoryUpdate"
-                      checked={hasInventoryUpdate}
-                      onChange={(e) => setHasInventoryUpdate(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="enableInventoryUpdate" className="cursor-pointer text-sm">
-                      تحديث المخزون
-                    </Label>
-                  </div>
-
-                  {/* Fixed Asset Option */}
-                  {currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input
-                        type="checkbox"
-                        id="enableFixedAsset"
-                        checked={hasFixedAsset}
-                        onChange={(e) => setHasFixedAsset(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="enableFixedAsset" className="cursor-pointer text-sm">
-                        إضافة كأصل ثابت
-                      </Label>
-                    </div>
-                  )}
-
-                  {/* Create Invoice Option */}
-                  {currentEntryType === "دخل" && formData.associatedParty && setCreateInvoice && (
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <input
-                        type="checkbox"
-                        id="enableCreateInvoice"
-                        checked={createInvoice || false}
-                        onChange={(e) => setCreateInvoice(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="enableCreateInvoice" className="cursor-pointer text-sm">
-                        إنشاء فاتورة
-                      </Label>
-                    </div>
-                  )}
-                </div>
-                {hasRelatedRecords && (
-                  <p className="text-xs text-blue-600">
-                    ستظهر تفاصيل السجلات المختارة في الخطوة التالية
-                  </p>
-                )}
-              </div>
+              <StepPartyARAP
+                formData={formData}
+                onUpdate={(updates) => setFormData({ ...formData, ...updates })}
+                allClients={allClients}
+                clientsLoading={clientsLoading}
+                partners={partners}
+                currentEntryType={currentEntryType}
+                isEditMode={!!editingEntry}
+                hasInitialPayment={hasInitialPayment}
+                setHasInitialPayment={setHasInitialPayment}
+                initialPaymentAmount={initialPaymentAmount}
+                setInitialPaymentAmount={setInitialPaymentAmount}
+                hasIncomingCheck={hasIncomingCheck}
+                setHasIncomingCheck={setHasIncomingCheck}
+                hasOutgoingCheck={hasOutgoingCheck}
+                setHasOutgoingCheck={setHasOutgoingCheck}
+                hasInventoryUpdate={hasInventoryUpdate}
+                setHasInventoryUpdate={setHasInventoryUpdate}
+                hasFixedAsset={hasFixedAsset}
+                setHasFixedAsset={setHasFixedAsset}
+                createInvoice={createInvoice || false}
+                setCreateInvoice={setCreateInvoice}
+                onAddIncomingCheque={addIncomingCheque}
+                onAddOutgoingCheque={addOutgoingCheque}
+                incomingChequesCount={incomingChequesList.length}
+                outgoingChequesCount={outgoingChequesList.length}
+                hasRelatedRecords={hasRelatedRecords}
+              />
             )}
 
             {/* ===== STEP 3: Related Records Details ===== */}
