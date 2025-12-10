@@ -31,7 +31,7 @@ export function LedgerFormDialog() {
     editingEntry,
     onSubmit,
     loading,
-    clients,
+    // clients - not used here, using allClients from useAllClients hook
     partners,
     formData,
     setFormData,
@@ -47,10 +47,8 @@ export function LedgerFormDialog() {
     setHasInitialPayment,
     initialPaymentAmount,
     setInitialPaymentAmount,
-    checkFormData,
-    setCheckFormData,
-    outgoingCheckFormData,
-    setOutgoingCheckFormData,
+    // checkFormData - legacy, using incomingChequesList instead
+    // outgoingCheckFormData - legacy, using outgoingChequesList instead
     incomingChequesList,
     setIncomingChequesList,
     outgoingChequesList,
