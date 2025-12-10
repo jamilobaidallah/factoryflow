@@ -1,46 +1,38 @@
-# Task: Extract InventoryFormCard Component
+# Task: Improve Inventory Form UX - Dropdown + Consistent Units
 
 ## Context
-Continuing refactoring of LedgerFormDialog.tsx by extracting reusable form components.
-Previous extraction: ChequeFormCard - reduced ~180 lines.
-
-## Goal
-Create a reusable `<InventoryFormCard />` component that handles inventory updates in ledger entries.
+Building on the InventoryFormCard extraction, this task improves the UX by:
+1. Replacing free text with a dropdown for item selection
+2. Making dimension units consistent (cm everywhere)
 
 ---
 
 ## Plan
 
-### Step 1: Create InventoryFormCard.tsx
-- [x] Create new file: `src/components/ledger/forms/InventoryFormCard.tsx`
-- [x] Add JSDoc comment at top of file
-- [x] Define `InventoryFormCardProps` interface with:
-  - `formData`: object with itemName, quantity, unit, thickness, width, length, shippingCost, otherCosts
-  - `onUpdate`: callback function `(field: string, value: string) => void`
-- [x] Extract JSX from LedgerFormDialog.tsx lines 774-858
-- [x] Adapt onChange handlers to use `onUpdate(fieldName, value)` pattern
+### Part 1: Update Types
+- [x] Add `itemId` field to `InventoryFormData` interface
+- [x] Update `initialInventoryFormData` to include `itemId: ""`
 
-### Step 2: Update LedgerFormDialog.tsx
-- [x] Add import statement for InventoryFormCard
-- [x] Replace inline inventory section with `<InventoryFormCard />` component
-- [x] Pass `inventoryFormData` as `formData` prop
-- [x] Pass update callback: `(field, value) => setInventoryFormData({ ...inventoryFormData, [field]: value })`
+### Part 2: Create useInventoryItems Hook
+- [x] Create `src/hooks/useInventoryItems.ts`
+- [x] Fetch from `users/${user.uid}/inventory` collection
+- [x] Return `{ items, loading }` with `{ id, name, unit }`
 
-### Step 3: Verify
-- [x] No TypeScript errors (`npx tsc --noEmit`)
-- [x] Visual appearance unchanged
-- [x] All fields functional (itemName, quantity, unit, dimensions, costs)
+### Part 3: Update InventoryFormCard Component
+- [x] Add new props: `inventoryItems`, `isLoadingItems`
+- [x] Replace text input with `<select>` dropdown
+- [x] Auto-fill unit when item selected
+- [x] Show warning if no inventory items
+- [x] Update dimension placeholders to سم (cm)
 
----
+### Part 4: Update LedgerFormDialog.tsx
+- [x] Import `useInventoryItems` hook
+- [x] Pass inventory items to InventoryFormCard
 
-## Acceptance Criteria
-- [x] New file: `src/components/ledger/forms/InventoryFormCard.tsx`
-- [x] Component properly typed with TypeScript
-- [x] JSDoc comment added
-- [x] LedgerFormDialog.tsx imports and uses new component
-- [x] All inventory fields work (itemName, quantity, unit, thickness, width, length, shippingCost, otherCosts)
+### Part 5: Verify
 - [x] No TypeScript errors
-- [x] Visual appearance identical
+- [x] Dropdown works correctly
+- [x] Unit auto-fill works
 
 ---
 
@@ -50,20 +42,18 @@ Create a reusable `<InventoryFormCard />` component that handles inventory updat
 
 | File | Change |
 |------|--------|
-| `src/components/ledger/forms/InventoryFormCard.tsx` | **NEW** - 93 lines |
-| `src/components/ledger/components/LedgerFormDialog.tsx` | Uses InventoryFormCard |
-
-### Line Reduction
-- **Before:** 977 lines
-- **After:** 899 lines
-- **Reduction:** 78 lines (8%)
+| `src/components/ledger/types/ledger.ts` | Added `itemId` to InventoryFormData |
+| `src/hooks/useInventoryItems.ts` | **NEW** - Hook to fetch inventory items |
+| `src/components/ledger/forms/InventoryFormCard.tsx` | Dropdown + cm units |
+| `src/components/ledger/components/LedgerFormDialog.tsx` | Uses hook, passes items |
 
 ### Summary
-Extracted inventory update form fields into a clean, reusable `<InventoryFormCard />` component following the same pattern as `ChequeFormCard`. The component:
-- Has JSDoc documentation
-- Uses typed props with `InventoryFormCardProps` interface
-- Handles all 8 inventory fields (itemName, quantity, unit, thickness, width, length, shippingCost, otherCosts)
-- Uses consistent `onUpdate(field, value)` callback pattern
+- Replaced free text input with dropdown for inventory item selection
+- Dropdown shows all items from user's inventory collection
+- Selecting an item auto-fills the unit field
+- Warning message shows if no inventory items exist
+- All dimension placeholders now use consistent سم (cm) units
+- Unit field is disabled when item is selected (auto-filled)
 
 ---
 

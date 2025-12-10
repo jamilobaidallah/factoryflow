@@ -9,6 +9,7 @@ import { getCategoryType } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
 import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
 import { useAllClients } from "@/hooks/useAllClients";
+import { useInventoryItems } from "@/hooks/useInventoryItems";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -64,6 +65,9 @@ export function LedgerFormDialog() {
 
   // Get all clients from ledger, partners, AND clients collection for dropdown
   const { clients: allClients, loading: clientsLoading } = useAllClients({ includeClientsCollection: true });
+
+  // Get inventory items for dropdown
+  const { items: inventoryItems, loading: inventoryLoading } = useInventoryItems();
 
   // Associated party dropdown state
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
@@ -778,6 +782,8 @@ export function LedgerFormDialog() {
                     onUpdate={(field, value) =>
                       setInventoryFormData({ ...inventoryFormData, [field]: value })
                     }
+                    inventoryItems={inventoryItems}
+                    isLoadingItems={inventoryLoading}
                   />
                 )}
 

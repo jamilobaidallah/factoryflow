@@ -81,6 +81,7 @@ export interface OutgoingCheckFormDataItem extends OutgoingCheckFormData {
  * Inventory Form Data
  */
 export interface InventoryFormData {
+  itemId: string;
   itemName: string;
   quantity: string;
   unit: string;
@@ -210,6 +211,7 @@ export const initialOutgoingCheckFormData: OutgoingCheckFormData = {
 };
 
 export const initialInventoryFormData: InventoryFormData = {
+  itemId: "",
   itemName: "",
   quantity: "",
   unit: "",
