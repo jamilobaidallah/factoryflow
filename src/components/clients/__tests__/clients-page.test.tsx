@@ -150,8 +150,8 @@ describe('ClientsPage', () => {
       render(<ClientsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/1000/)).toBeInTheDocument();
-        expect(screen.getByText(/2500/)).toBeInTheDocument();
+        expect(screen.getByText(/1,000/)).toBeInTheDocument();
+        expect(screen.getByText(/2,500/)).toBeInTheDocument();
       });
     });
   });
