@@ -192,7 +192,7 @@ describe('Dialog Components', () => {
       expect(header).toHaveClass('space-y-1.5');
     });
 
-    it('should have RTL text alignment', () => {
+    it('should have border styling', () => {
       render(
         <Dialog open={true}>
           <DialogContent>
@@ -203,7 +203,8 @@ describe('Dialog Components', () => {
         </Dialog>
       );
 
-      expect(screen.getByTestId('header')).toHaveClass('sm:text-right');
+      expect(screen.getByTestId('header')).toHaveClass('border-b');
+      expect(screen.getByTestId('header')).toHaveClass('border-slate-100');
     });
   });
 
@@ -269,8 +270,7 @@ describe('Dialog Components', () => {
       const title = screen.getByTestId('title');
       expect(title).toHaveClass('text-lg');
       expect(title).toHaveClass('font-semibold');
-      expect(title).toHaveClass('leading-none');
-      expect(title).toHaveClass('tracking-tight');
+      expect(title).toHaveClass('text-slate-900');
     });
 
     it('should forward ref', () => {
@@ -313,7 +313,7 @@ describe('Dialog Components', () => {
 
       const desc = screen.getByTestId('desc');
       expect(desc).toHaveClass('text-sm');
-      expect(desc).toHaveClass('text-muted-foreground');
+      expect(desc).toHaveClass('text-slate-500');
     });
   });
 

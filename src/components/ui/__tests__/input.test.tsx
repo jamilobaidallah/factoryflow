@@ -37,7 +37,7 @@ describe('Input Component', () => {
       expect(input).toHaveClass('flex');
       expect(input).toHaveClass('h-10');
       expect(input).toHaveClass('w-full');
-      expect(input).toHaveClass('rounded-md');
+      expect(input).toHaveClass('rounded-lg');
       expect(input).toHaveClass('border');
     });
   });
@@ -161,19 +161,19 @@ describe('Input Component', () => {
     it('should have placeholder styling', () => {
       render(<Input placeholder="placeholder" data-testid="input" />);
 
-      expect(screen.getByTestId('input')).toHaveClass('placeholder:text-muted-foreground');
+      expect(screen.getByTestId('input')).toHaveClass('placeholder:text-slate-400');
     });
   });
 
   describe('Focus Styles', () => {
-    it('should have focus-visible ring styles', () => {
+    it('should have focus ring styles', () => {
       render(<Input data-testid="input" />);
 
       const input = screen.getByTestId('input');
-      expect(input).toHaveClass('focus-visible:outline-none');
-      expect(input).toHaveClass('focus-visible:ring-2');
-      expect(input).toHaveClass('focus-visible:ring-ring');
-      expect(input).toHaveClass('focus-visible:ring-offset-2');
+      expect(input).toHaveClass('focus:outline-none');
+      expect(input).toHaveClass('focus:ring-2');
+      expect(input).toHaveClass('focus:ring-primary-500/20');
+      expect(input).toHaveClass('focus:border-primary-500');
     });
 
     it('should be focusable', () => {
