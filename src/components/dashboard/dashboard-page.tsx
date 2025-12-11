@@ -308,15 +308,15 @@ export default function DashboardPage() {
   // Calculate net profit
   const netProfit = totalRevenue - totalExpenses;
 
-  // Memoize stats with modern styling
+  // Memoize stats with modern styling (using Tailwind built-in colors for reliability)
   const stats = useMemo(() => [
     {
       title: "إجمالي العملاء",
       value: clientsCount.toString(),
       icon: Users,
       cardClass: "stats-card-primary",
-      iconBgClass: "bg-primary-500/10",
-      iconClass: "text-primary-600",
+      iconBgClass: "bg-blue-100",
+      iconClass: "text-blue-600",
       valueClass: "text-slate-900",
     },
     {
@@ -324,36 +324,36 @@ export default function DashboardPage() {
       value: `${totalRevenue.toFixed(2)} دينار`,
       icon: TrendingUp,
       cardClass: "stats-card-success",
-      iconBgClass: "bg-success-500/10",
-      iconClass: "text-success-600",
-      valueClass: "text-success-700",
+      iconBgClass: "bg-green-100",
+      iconClass: "text-green-600",
+      valueClass: "text-green-700",
     },
     {
       title: "المصروفات",
       value: `${totalExpenses.toFixed(2)} دينار`,
       icon: TrendingDown,
       cardClass: "stats-card-danger",
-      iconBgClass: "bg-danger-500/10",
-      iconClass: "text-danger-600",
-      valueClass: "text-danger-700",
+      iconBgClass: "bg-red-100",
+      iconClass: "text-red-600",
+      valueClass: "text-red-700",
     },
     {
       title: "صافي الربح",
       value: `${netProfit.toFixed(2)} دينار`,
       icon: DollarSign,
       cardClass: "",
-      iconBgClass: netProfit >= 0 ? "bg-success-500/10" : "bg-danger-500/10",
-      iconClass: netProfit >= 0 ? "text-success-600" : "text-danger-600",
-      valueClass: netProfit >= 0 ? "text-success-700" : "text-danger-700",
+      iconBgClass: netProfit >= 0 ? "bg-green-100" : "bg-red-100",
+      iconClass: netProfit >= 0 ? "text-green-600" : "text-red-600",
+      valueClass: netProfit >= 0 ? "text-green-700" : "text-red-700",
     },
     {
       title: "صافي التدفق النقدي",
       value: `${netCashFlow.toFixed(2)} دينار`,
       icon: Activity,
       cardClass: "stats-card-warning",
-      iconBgClass: "bg-warning-500/10",
-      iconClass: "text-warning-600",
-      valueClass: netCashFlow >= 0 ? "text-success-700" : "text-danger-700",
+      iconBgClass: "bg-amber-100",
+      iconClass: "text-amber-600",
+      valueClass: netCashFlow >= 0 ? "text-green-700" : "text-red-700",
     },
   ], [clientsCount, totalRevenue, totalExpenses, netProfit, netCashFlow]);
 
