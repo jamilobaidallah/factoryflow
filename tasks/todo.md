@@ -332,4 +332,170 @@ The dashboard charts work but look basic. Updated them with a modern color palet
 
 ---
 
-## Status: READY FOR PR
+## Status: COMPLETED
+
+---
+
+# Phase 5: Apply Modern Table Styling to All Data Pages
+
+## Context
+The Ledger table was modernized with card-modern container, row hover effects, modern badges, and styled action buttons. Now we apply the same patterns to all other data pages for consistency.
+
+## Branch
+`feature/modernize-all-tables`
+
+## Analysis
+
+### CSS Classes Available (in `globals.css`)
+- `card-modern` - Card container with rounded corners and shadow
+- `table-row-hover` - Hover effect for table rows
+- `badge-success` - Green badge (paid, active, cleared)
+- `badge-danger` - Red badge (unpaid, bounced, inactive)
+- `badge-warning` - Yellow badge (pending)
+- `badge-primary` - Blue badge (endorsed, new)
+- `badge-neutral` - Gray badge (cancelled)
+
+### Pages to Update
+
+| # | Page | File Location | Table Type |
+|---|------|---------------|------------|
+| 1 | Clients | `src/components/clients/clients-page.tsx` | Inline table |
+| 2 | Payments | `src/components/payments/payments-page.tsx` | Inline table |
+| 3 | Incoming Cheques | `src/components/cheques/components/IncomingChequesTable.tsx` | Separate component |
+| 4 | Outgoing Cheques | `src/components/cheques/components/OutgoingChequesTable.tsx` | Separate component |
+| 5 | Inventory | `src/components/inventory/inventory-page.tsx` | Inline table |
+| 6 | Employees | `src/components/employees/components/EmployeesTable.tsx` | Separate component |
+| 7 | Partners | `src/components/partners/partners-page.tsx` | Inline table |
+| 8 | Fixed Assets | `src/components/fixed-assets/components/FixedAssetsTable.tsx` | Separate component |
+| 9 | Invoices | `src/components/invoices/invoices-page.tsx` | Inline table |
+
+---
+
+## Detailed Plan
+
+### 1. Clients Page (`clients-page.tsx`)
+**Changes:**
+- [ ] Replace `<Card>` wrapping table with `<div className="card-modern overflow-hidden">`
+- [ ] Add header row styling: `className="bg-slate-50/80 hover:bg-slate-50/80"`
+- [ ] Add `font-semibold text-slate-700 text-right` to each `<TableHead>`
+- [ ] Add `table-row-hover` to each `<TableRow>` in body
+- [ ] Style balance: green for positive, red for negative
+- [ ] Update action buttons to ghost variant with colored hover
+
+### 2. Payments Page (`payments-page.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace inline badge styles with badge-success/badge-danger
+- [ ] Style amount colors based on type
+- [ ] Update action buttons to ghost variant
+
+### 3. Incoming Cheques Table (`IncomingChequesTable.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace `getStatusColor` with badge classes
+- [ ] Update action buttons to ghost variant
+
+### 4. Outgoing Cheques Table (`OutgoingChequesTable.tsx`)
+**Changes:**
+- [ ] Add `card-modern overflow-hidden` to the table Card wrapper
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace `getStatusColor` with badge classes
+- [ ] Update action buttons to ghost variant
+
+### 5. Inventory Page (`inventory-page.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace inline status badges with badge-success/badge-danger
+- [ ] Update action buttons to ghost variant
+
+### 6. Employees Table (`EmployeesTable.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace overtime badges with badge-success/badge-neutral
+- [ ] Update action buttons to ghost variant
+
+### 7. Partners Page (`partners-page.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace status badges with badge-success/badge-neutral
+- [ ] Update action buttons to ghost variant
+
+### 8. Fixed Assets Table (`FixedAssetsTable.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace status badges with badge-success/badge-neutral
+- [ ] Update action buttons to ghost variant
+
+### 9. Invoices Page (`invoices-page.tsx`)
+**Changes:**
+- [ ] Wrap table in `<div className="card-modern overflow-hidden">`
+- [ ] Style header row
+- [ ] Add `table-row-hover` to body rows
+- [ ] Replace `getStatusColor` with badge classes
+- [ ] Update action buttons to ghost variant
+
+---
+
+## Execution Checklist
+
+- [x] 1. Clients page - Modernize table
+- [x] 2. Payments page - Modernize table
+- [x] 3. Incoming Cheques table - Modernize table
+- [x] 4. Outgoing Cheques table - Modernize table
+- [x] 5. Inventory page - Modernize table
+- [x] 6. Employees table - Modernize table
+- [x] 7. Partners page - Modernize table
+- [x] 8. Fixed Assets table - Modernize table
+- [x] 9. Invoices page - Modernize table
+- [x] 10. Run build to verify no errors
+- [x] 11. Create PR
+
+---
+
+## Review
+
+### Changes Made
+
+All 9 data pages have been modernized with consistent table styling:
+
+| File | Changes |
+|------|---------|
+| `clients-page.tsx` | card-modern container, styled header, table-row-hover, balance colors (green/red), ghost action buttons |
+| `payments-page.tsx` | card-modern container, badge-success/danger for type, styled amounts by type, ghost buttons |
+| `IncomingChequesTable.tsx` | card-modern container, getStatusBadgeClass function, badge-primary for endorsements, ghost buttons |
+| `OutgoingChequesTable.tsx` | card-modern on summary cards and table, badge classes for status, ghost buttons |
+| `inventory-page.tsx` | card-modern container, badge-success/danger for stock status, styled prices, ghost buttons |
+| `EmployeesTable.tsx` | card-modern container, badge-success/neutral for overtime, styled salary, ghost buttons |
+| `partners-page.tsx` | card-modern container, badge-success/neutral for status, styled investment, ghost buttons |
+| `FixedAssetsTable.tsx` | card-modern container, colored values (cost/depreciation/book), badge for status, ghost buttons |
+| `invoices-page.tsx` | card-modern container, getStatusBadgeClass function, styled amounts, improved status select |
+
+### Patterns Applied
+
+1. **Table Container**: `<div className="card-modern overflow-hidden">`
+2. **Header Row**: `className="bg-slate-50/80 hover:bg-slate-50/80"`
+3. **Table Headers**: `className="text-right font-semibold text-slate-700"`
+4. **Body Rows**: `className="table-row-hover"`
+5. **Status Badges**: `badge-success`, `badge-danger`, `badge-warning`, `badge-primary`, `badge-neutral`
+6. **Amounts**: `font-semibold` with contextual colors
+7. **Action Buttons**: `variant="ghost" size="icon"` with colored hover states
+
+### Build Status
+✅ Build passed successfully (warnings only, no errors)
+
+---
+
+## Status: COMPLETED
