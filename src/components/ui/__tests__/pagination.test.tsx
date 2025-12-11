@@ -184,7 +184,7 @@ describe('Pagination Components', () => {
         </Pagination>
       );
 
-      expect(screen.getByTestId('link')).toHaveClass('hover:bg-accent');
+      expect(screen.getByTestId('link')).toHaveClass('hover:bg-slate-100');
     });
 
     it('should apply outline variant when active', () => {

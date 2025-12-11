@@ -42,14 +42,14 @@ describe('Button Component', () => {
       render(<Button variant="default">Default</Button>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('bg-primary');
+      expect(button).toHaveClass('bg-primary-600');
     });
 
     it('should render destructive variant', () => {
       render(<Button variant="destructive">Delete</Button>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('bg-destructive');
+      expect(button).toHaveClass('bg-red-600');
     });
 
     it('should render outline variant', () => {
@@ -57,28 +57,28 @@ describe('Button Component', () => {
 
       const button = screen.getByRole('button');
       expect(button).toHaveClass('border');
-      expect(button).toHaveClass('border-input');
+      expect(button).toHaveClass('border-slate-200');
     });
 
     it('should render secondary variant', () => {
       render(<Button variant="secondary">Secondary</Button>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('bg-secondary');
+      expect(button).toHaveClass('bg-slate-100');
     });
 
     it('should render ghost variant', () => {
       render(<Button variant="ghost">Ghost</Button>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('hover:bg-accent');
+      expect(button).toHaveClass('hover:bg-slate-100');
     });
 
     it('should render link variant', () => {
       render(<Button variant="link">Link</Button>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('text-primary');
+      expect(button).toHaveClass('text-primary-600');
       expect(button).toHaveClass('underline-offset-4');
     });
   });
@@ -175,7 +175,7 @@ describe('Button Component', () => {
       );
 
       const link = screen.getByRole('link');
-      expect(link).toHaveClass('bg-destructive');
+      expect(link).toHaveClass('bg-red-600');
     });
   });
 
@@ -219,7 +219,7 @@ describe('Button Component', () => {
     it('should return correct classes for default variant and size', () => {
       const classes = buttonVariants({ variant: 'default', size: 'default' });
 
-      expect(classes).toContain('bg-primary');
+      expect(classes).toContain('bg-primary-600');
       expect(classes).toContain('h-10');
     });
 
@@ -227,7 +227,7 @@ describe('Button Component', () => {
       const classes = buttonVariants({});
 
       // Should use defaults
-      expect(classes).toContain('bg-primary');
+      expect(classes).toContain('bg-primary-600');
       expect(classes).toContain('h-10');
     });
 
