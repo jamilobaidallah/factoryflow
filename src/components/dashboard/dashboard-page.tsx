@@ -1,10 +1,37 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, memo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, DollarSign, TrendingUp, TrendingDown, Package, Activity } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Skeleton, StatCardSkeleton, ListSkeleton } from "@/components/ui/loading-skeleton";
+import { collection, onSnapshot } from "firebase/firestore";
+import {
+  Line,
+  Bar,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { Users, DollarSign, TrendingUp, TrendingDown, Activity } from "lucide-react";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton, StatCardSkeleton } from "@/components/ui/loading-skeleton";
+import { useUser } from "@/firebase/provider";
+import { firestore } from "@/firebase/config";
+import { toDate } from "@/lib/firestore-utils";
+import { CASH_FLOW_LABELS } from "@/lib/constants";
+
+// Chart skeleton for loading state
+function ChartSkeleton() {
+  return (
+    <div className="h-[300px] w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
+      <span className="text-gray-400">جاري تحميل الرسم البياني...</span>
+    </div>
+  );
+}
 
 // Lazy load heavy chart components
 const LazyLineChart = dynamic(
@@ -23,33 +50,6 @@ const LazyComposedChart = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.ComposedChart })),
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
-
-// Chart skeleton for loading state
-function ChartSkeleton() {
-  return (
-    <div className="h-[300px] w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
-      <span className="text-gray-400">جاري تحميل الرسم البياني...</span>
-    </div>
-  );
-}
-import { useUser } from "@/firebase/provider";
-import { collection, onSnapshot, query, orderBy, getDocs } from "firebase/firestore";
-import { firestore } from "@/firebase/config";
-import { toDate } from "@/lib/firestore-utils";
-import { CASH_FLOW_LABELS } from "@/lib/constants";
-// Import only what we need from recharts (tree shaking)
-import {
-  Line,
-  Bar,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 
 interface LedgerEntry {
   id: string;
