@@ -14,6 +14,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { Users, DollarSign, TrendingUp, TrendingDown, Activity } from "lucide-react";
 
@@ -581,7 +582,7 @@ export default function DashboardPage() {
                 <LazyBarChart
                   data={topCustomers}
                   layout="vertical"
-                  margin={{ top: 20, right: 30, left: 140, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
                   <XAxis
@@ -595,9 +596,8 @@ export default function DashboardPage() {
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    width={130}
-                    interval={0}
-                    tick={{ fill: "#334155", fontSize: 12, textAnchor: "end" }}
+                    tick={false}
+                    width={1}
                   />
                   <Tooltip
                     contentStyle={tooltipStyle.contentStyle}
@@ -608,8 +608,16 @@ export default function DashboardPage() {
                     dataKey="amount"
                     fill={CHART_COLORS.primary}
                     radius={[0, 4, 4, 0]}
-                    maxBarSize={24}
-                  />
+                    maxBarSize={28}
+                  >
+                    <LabelList
+                      dataKey="name"
+                      position="insideRight"
+                      fill="#ffffff"
+                      fontSize={12}
+                      fontWeight={500}
+                    />
+                  </Bar>
                 </LazyBarChart>
               </ResponsiveContainer>
             )}
