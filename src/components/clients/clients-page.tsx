@@ -310,62 +310,67 @@ export default function ClientsPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>قائمة العملاء ({clients.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {dataLoading ? (
-            <TableSkeleton rows={10} />
-          ) : clients.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا يوجد عملاء حالياً. اضغط على &quot;إضافة عميل جديد&quot; للبدء.
-            </p>
-          ) : (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">قائمة العملاء ({clients.length})</h2>
+        {dataLoading ? (
+          <TableSkeleton rows={10} />
+        ) : clients.length === 0 ? (
+          <p className="text-slate-500 text-center py-12">
+            لا يوجد عملاء حالياً. اضغط على &quot;إضافة عميل جديد&quot; للبدء.
+          </p>
+        ) : (
+          <div className="card-modern overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>الاسم</TableHead>
-                  <TableHead>الهاتف</TableHead>
-                  <TableHead>البريد الإلكتروني</TableHead>
-                  <TableHead>العنوان</TableHead>
-                  <TableHead>الرصيد</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                  <TableHead className="text-right font-semibold text-slate-700">الاسم</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الهاتف</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">البريد الإلكتروني</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">العنوان</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الرصيد</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {clients.map((client) => (
-                  <TableRow key={client.id}>
+                  <TableRow key={client.id} className="table-row-hover">
                     <TableCell className="font-medium">{client.name}</TableCell>
                     <TableCell>{client.phone}</TableCell>
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
-                    <TableCell>{client.balance || 0} دينار</TableCell>
                     <TableCell>
-                      <div className="flex gap-2" role="group" aria-label="إجراءات العميل">
+                      <span className={`font-semibold ${(client.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(client.balance || 0).toLocaleString()} دينار
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1" role="group" aria-label="إجراءات العميل">
                         <Button
-                          variant="default"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                           onClick={() => router.push(`/clients/${client.id}`)}
                           aria-label={`عرض تفاصيل ${client.name}`}
                         >
-                          <Eye className="w-4 h-4" aria-hidden="true" />
+                          <Eye className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           onClick={() => handleEdit(client)}
                           aria-label={`تعديل ${client.name}`}
                         >
-                          <Edit className="w-4 h-4" aria-hidden="true" />
+                          <Edit className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(client.id)}
                           aria-label={`حذف ${client.name}`}
                         >
-                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>
                     </TableCell>
@@ -373,9 +378,9 @@ export default function ClientsPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
