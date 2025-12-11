@@ -4,48 +4,106 @@
 
 @layer base {
   :root {
+    /* Background colors */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background-secondary: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    /* Card styling */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 11%;
+    --card-border: 214 32% 91%;
+
+    /* Popover */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary */
+    --primary: 221 83% 53%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+
+    /* Secondary */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted colors */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+
+    /* Success */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-bg: 142 76% 96%;
+
+    /* Danger */
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --danger-bg: 0 86% 97%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-bg: 48 96% 95%;
+
+    /* Border & Input & Ring */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    /* Radius */
+    --radius: 0.625rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 84% 5%;
+    --background-secondary: 217 33% 10%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+
+    --card: 222 84% 5%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --card-border: 217 33% 17%;
+
+    --popover: 222 84% 5%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+
+    --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+
+    --success: 142 71% 35%;
+    --success-foreground: 0 0% 100%;
+    --success-bg: 142 50% 12%;
+
+    --danger: 0 63% 31%;
+    --danger-foreground: 0 0% 100%;
+    --danger-bg: 0 50% 12%;
+
+    --warning: 38 92% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-bg: 38 50% 12%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 224 76% 48%;
   }
 }
 
@@ -55,13 +113,69 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Cairo', 'Segoe UI', 'Tahoma', sans-serif;
+    font-family: "Cairo", "Segoe UI", "Tahoma", sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Modern card styles */
+@layer components {
+  .card-modern {
+    @apply bg-white rounded-xl border border-slate-200/60 shadow-card transition-shadow duration-200;
+  }
+  .card-modern:hover {
+    @apply shadow-card-hover;
+  }
+
+  /* Stats card gradient backgrounds */
+  .stats-card-primary {
+    @apply bg-gradient-to-br from-primary-50 to-primary-100/50 border-primary-200/50;
+  }
+  .stats-card-success {
+    @apply bg-gradient-to-br from-success-50 to-success-100/50 border-success-200/50;
+  }
+  .stats-card-danger {
+    @apply bg-gradient-to-br from-danger-50 to-danger-100/50 border-danger-200/50;
+  }
+  .stats-card-warning {
+    @apply bg-gradient-to-br from-warning-50 to-warning-100/50 border-warning-200/50;
+  }
+
+  /* Modern badge styles */
+  .badge-success {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700;
+  }
+  .badge-danger {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger-100 text-danger-700;
+  }
+  .badge-warning {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700;
+  }
+  .badge-primary {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700;
+  }
+  .badge-neutral {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700;
+  }
+
+  /* Table row hover */
+  .table-row-hover {
+    @apply transition-colors duration-150 hover:bg-slate-50/80;
+  }
+
+  /* Button modern */
+  .btn-modern {
+    @apply transition-all duration-200 shadow-soft-xs hover:shadow-soft active:scale-[0.98];
   }
 }
 
 /* Arabic RTL Support */
 [dir="rtl"] {
   direction: rtl;
+  text-align: right;
+}
+
+[dir="rtl"] .card-modern {
   text-align: right;
 }
 
