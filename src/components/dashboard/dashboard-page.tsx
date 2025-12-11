@@ -581,7 +581,7 @@ export default function DashboardPage() {
                 <LazyBarChart
                   data={topCustomers}
                   layout="vertical"
-                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 140, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
                   <XAxis
@@ -595,21 +595,9 @@ export default function DashboardPage() {
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    width={150}
+                    width={130}
                     interval={0}
-                    tick={({ x, y, payload }) => (
-                      <text
-                        x={x}
-                        y={y}
-                        dy={4}
-                        textAnchor="end"
-                        fill="#334155"
-                        fontSize={12}
-                        style={{ direction: "rtl" }}
-                      >
-                        {payload.value}
-                      </text>
-                    )}
+                    tick={{ fill: "#334155", fontSize: 12, textAnchor: "end" }}
                   />
                   <Tooltip
                     contentStyle={tooltipStyle.contentStyle}
