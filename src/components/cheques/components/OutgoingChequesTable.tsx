@@ -48,18 +48,18 @@ export function OutgoingChequesTable({
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case CHEQUE_STATUS_AR.CASHED:
-        return "bg-green-100 text-green-700";
+        return "badge-success";
       case CHEQUE_STATUS_AR.PENDING:
-        return "bg-yellow-100 text-yellow-700";
+        return "badge-warning";
       case CHEQUE_STATUS_AR.RETURNED:
-        return "bg-orange-100 text-orange-700";
+        return "badge-danger";
       case CHEQUE_STATUS_AR.CANCELLED:
-        return "bg-red-100 text-red-700";
+        return "badge-neutral";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "badge-neutral";
     }
   };
 
@@ -79,86 +79,84 @@ export function OutgoingChequesTable({
     <>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-        <Card>
+        <Card className="card-modern">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">قيد الانتظار</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">قيد الانتظار</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{pendingCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalPendingValue.toFixed(2)} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{totalPendingValue.toLocaleString()} دينار</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="card-modern">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">تم الصرف</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">تم الصرف</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{cashedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalCashedValue.toFixed(2)} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{totalCashedValue.toLocaleString()} دينار</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="card-modern">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">مرتجع</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">مرتجع</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{bouncedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalBouncedValue.toFixed(2)} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{totalBouncedValue.toLocaleString()} دينار</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="card-modern">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">شيكات مظهرة</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">شيكات مظهرة</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">{endorsedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalEndorsedValue.toFixed(2)} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{totalEndorsedValue.toLocaleString()} دينار</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="card-modern">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">ملغي</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">ملغي</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{cancelledCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">شيكات ملغاة</p>
+            <p className="text-xs text-slate-500 mt-1">شيكات ملغاة</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Cheques Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>سجل الشيكات الصادرة ({cheques.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cheques.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد شيكات صادرة مسجلة. اضغط على &quot;إضافة شيك صادر&quot; للبدء.
-            </p>
-          ) : (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">سجل الشيكات الصادرة ({cheques.length})</h2>
+        {cheques.length === 0 ? (
+          <p className="text-slate-500 text-center py-12">
+            لا توجد شيكات صادرة مسجلة. اضغط على &quot;إضافة شيك صادر&quot; للبدء.
+          </p>
+        ) : (
+          <div className="card-modern overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>رقم الشيك</TableHead>
-                  <TableHead>اسم المستفيد</TableHead>
-                  <TableHead>البنك</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>تاريخ الاستحقاق</TableHead>
-                  <TableHead>رقم المعاملة</TableHead>
-                  <TableHead>صورة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                  <TableHead className="text-right font-semibold text-slate-700">رقم الشيك</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">اسم المستفيد</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">البنك</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">تاريخ الاستحقاق</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">رقم المعاملة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">صورة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {cheques.map((cheque) => (
-                  <TableRow key={cheque.id}>
+                  <TableRow key={cheque.id} className="table-row-hover">
                     <TableCell className="font-medium">
                       <div className="space-y-1">
                         <div>{cheque.chequeNumber}</div>
                         {cheque.isEndorsedCheque && (
-                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                          <span className="badge-primary">
                             شيك مظهر
                           </span>
                         )}
@@ -168,18 +166,18 @@ export function OutgoingChequesTable({
                       <div className="space-y-1">
                         <div className="font-medium">{cheque.clientName}</div>
                         {cheque.notes && cheque.isEndorsedCheque && (
-                          <div className="text-xs text-gray-500">{cheque.notes}</div>
+                          <div className="text-xs text-slate-500">{cheque.notes}</div>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>{cheque.bankName}</TableCell>
-                    <TableCell>{cheque.amount || 0} دينار</TableCell>
                     <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
-                          cheque.status
-                        )}`}
-                      >
+                      <span className="font-semibold text-slate-900">
+                        {(cheque.amount || 0).toLocaleString()} دينار
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={getStatusBadgeClass(cheque.status)}>
                         {cheque.status}
                       </span>
                     </TableCell>
@@ -221,7 +219,7 @@ export function OutgoingChequesTable({
                           </div>
                         )}
                         {!cheque.linkedTransactionId && (!cheque.paidTransactionIds || cheque.paidTransactionIds.length === 0) && (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-slate-400">-</span>
                         )}
                       </div>
                     </TableCell>
@@ -229,44 +227,47 @@ export function OutgoingChequesTable({
                       {cheque.chequeImageUrl ? (
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                           onClick={() => onViewImage(cheque.chequeImageUrl!)}
                           title="عرض صورة الشيك"
                         >
-                          <ImageIcon className="w-4 h-4 text-blue-600" />
+                          <ImageIcon className="h-4 w-4" />
                         </Button>
                       ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        <span className="text-xs text-slate-400">-</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-1">
                         {!cheque.isEndorsedCheque ? (
                           <>
                             <Button
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                               onClick={() => onEdit(cheque)}
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="destructive"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                               onClick={() => onDelete(cheque.id)}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </>
                         ) : (
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                             onClick={() => onLinkTransaction(cheque)}
                             title="ربط بفاتورة"
-                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
                           >
-                            <Link className="w-4 h-4" />
+                            <Link className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -275,9 +276,9 @@ export function OutgoingChequesTable({
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
     </>
   );
 }
