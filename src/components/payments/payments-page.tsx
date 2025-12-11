@@ -538,47 +538,45 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>سجل المدفوعات ({payments.length})</CardTitle>
-            {payments.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
-                aria-label="تصدير المدفوعات إلى ملف Excel"
-              >
-                <Download className="w-4 h-4 ml-2" aria-hidden="true" />
-                Excel
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {dataLoading ? (
-            <TableSkeleton rows={10} />
-          ) : payments.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد مدفوعات مسجلة. اضغط على &quot;إضافة مدفوعة&quot; للبدء.
-            </p>
-          ) : (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">سجل المدفوعات ({payments.length})</h2>
+          {payments.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
+              aria-label="تصدير المدفوعات إلى ملف Excel"
+            >
+              <Download className="w-4 h-4 ml-2" aria-hidden="true" />
+              Excel
+            </Button>
+          )}
+        </div>
+        {dataLoading ? (
+          <TableSkeleton rows={10} />
+        ) : payments.length === 0 ? (
+          <p className="text-slate-500 text-center py-12">
+            لا توجد مدفوعات مسجلة. اضغط على &quot;إضافة مدفوعة&quot; للبدء.
+          </p>
+        ) : (
+          <div className="card-modern overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>اسم العميل</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead>الفئة</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>رقم المعاملة</TableHead>
-                  <TableHead>ملاحظات</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                  <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">اسم العميل</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">النوع</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">رقم المعاملة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">ملاحظات</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payments.map((payment) => (
-                  <TableRow key={payment.id}>
+                  <TableRow key={payment.id} className="table-row-hover">
                     <TableCell>
                       {new Date(payment.date).toLocaleDateString("ar-EG")}
                     </TableCell>
@@ -588,18 +586,14 @@ export default function PaymentsPage() {
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            payment.type === "قبض"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
+                          className={payment.type === "قبض" ? "badge-success" : "badge-danger"}
                           role="status"
                           aria-label={`النوع: ${payment.type}`}
                         >
                           {payment.type}
                         </span>
                         {payment.isEndorsement && (
-                          <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+                          <span className="badge-primary">
                             تظهير شيك
                           </span>
                         )}
@@ -609,16 +603,20 @@ export default function PaymentsPage() {
                       <div className="flex flex-col text-sm">
                         {payment.category && (
                           <>
-                            <span className="font-medium text-gray-700">{payment.category}</span>
+                            <span className="font-medium text-slate-700">{payment.category}</span>
                             {payment.subCategory && (
-                              <span className="text-xs text-gray-500">{payment.subCategory}</span>
+                              <span className="text-xs text-slate-500">{payment.subCategory}</span>
                             )}
                           </>
                         )}
-                        {!payment.category && <span className="text-gray-400 text-xs">-</span>}
+                        {!payment.category && <span className="text-slate-400 text-xs">-</span>}
                       </div>
                     </TableCell>
-                    <TableCell>{payment.amount || 0} دينار</TableCell>
+                    <TableCell>
+                      <span className={`font-semibold ${payment.type === "قبض" ? 'text-green-600' : 'text-red-600'}`}>
+                        {(payment.amount || 0).toLocaleString()} دينار
+                      </span>
+                    </TableCell>
                     <TableCell>
                       {payment.isMultiAllocation && payment.allocationTransactionIds?.length ? (
                         <div className="flex flex-col gap-1">
@@ -632,7 +630,7 @@ export default function PaymentsPage() {
                           ))}
                         </div>
                       ) : payment.isMultiAllocation ? (
-                        <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
+                        <span className="badge-primary">
                           {payment.allocationCount} معاملات
                         </span>
                       ) : payment.linkedTransactionId ? (
@@ -643,27 +641,29 @@ export default function PaymentsPage() {
                           <CopyButton text={payment.linkedTransactionId} size="sm" />
                         </div>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-slate-400">-</span>
                       )}
                     </TableCell>
                     <TableCell>{payment.notes}</TableCell>
                     <TableCell>
-                      <div className="flex gap-2" role="group" aria-label="إجراءات المدفوعة">
+                      <div className="flex items-center gap-1" role="group" aria-label="إجراءات المدفوعة">
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           onClick={() => handleEdit(payment)}
                           aria-label={`تعديل مدفوعة ${payment.clientName}`}
                         >
-                          <Edit className="w-4 h-4" aria-hidden="true" />
+                          <Edit className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(payment.id)}
                           aria-label={`حذف مدفوعة ${payment.clientName}`}
                         >
-                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>
                     </TableCell>
@@ -671,61 +671,61 @@ export default function PaymentsPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
+          </div>
+        )}
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                عرض {payments.length} من {totalCount} مدفوعة
-              </div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
-                      }}
-                      className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-
-                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setCurrentPage(pageNum);
-                          }}
-                          isActive={currentPage === pageNum}
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  })}
-
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (currentPage > 1) { setCurrentPage(currentPage - 1); }
-                      }}
-                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              عرض {payments.length} من {totalCount} مدفوعة
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
+                    }}
+                    className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+
+                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(pageNum);
+                        }}
+                        isActive={currentPage === pageNum}
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) { setCurrentPage(currentPage - 1); }
+                    }}
+                    className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
