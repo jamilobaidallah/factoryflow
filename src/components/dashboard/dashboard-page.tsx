@@ -24,11 +24,46 @@ import { firestore } from "@/firebase/config";
 import { toDate } from "@/lib/firestore-utils";
 import { CASH_FLOW_LABELS } from "@/lib/constants";
 
+// Modern chart color palette
+const CHART_COLORS = {
+  primary: "#3b82f6",      // Blue
+  success: "#22c55e",      // Green
+  danger: "#ef4444",       // Red
+  warning: "#f59e0b",      // Amber
+  info: "#06b6d4",         // Cyan
+  purple: "#8b5cf6",       // Purple
+  pink: "#ec4899",         // Pink
+  slate: "#64748b",        // Gray
+
+  // For pie/donut charts - harmonious palette
+  pieColors: [
+    "#3b82f6", // Blue
+    "#22c55e", // Green
+    "#f59e0b", // Amber
+    "#8b5cf6", // Purple
+    "#ec4899", // Pink
+    "#06b6d4", // Cyan
+    "#64748b", // Slate
+  ],
+};
+
+// Modern tooltip styles
+const tooltipStyle = {
+  contentStyle: {
+    backgroundColor: "white",
+    border: "none",
+    borderRadius: "8px",
+    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+    padding: "12px",
+  },
+  labelStyle: { color: "#334155", fontWeight: 600, marginBottom: "4px" },
+};
+
 // Chart skeleton for loading state
 function ChartSkeleton() {
   return (
-    <div className="h-[300px] w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
-      <span className="text-gray-400">جاري تحميل الرسم البياني...</span>
+    <div className="h-[300px] w-full bg-slate-100 animate-pulse rounded-lg flex items-center justify-center">
+      <span className="text-slate-400">جاري تحميل الرسم البياني...</span>
     </div>
   );
 }
@@ -357,14 +392,11 @@ export default function DashboardPage() {
     },
   ], [clientsCount, totalRevenue, totalExpenses, netProfit, netCashFlow]);
 
-  // Memoize colors to avoid recreation
-  const COLORS = useMemo(() => ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'], []);
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">لوحة التحكم</h1>
-        <p className="text-gray-600 mt-2">نظرة عامة على إحصائيات المصنع</p>
+        <h1 className="text-3xl font-bold text-slate-900">لوحة التحكم</h1>
+        <p className="text-slate-600 mt-2">نظرة عامة على إحصائيات المصنع</p>
       </div>
 
       {/* Stats Cards */}
@@ -406,42 +438,126 @@ export default function DashboardPage() {
       {/* Charts Row 1: Revenue vs Expenses + Cash Flow */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue vs Expenses Trend */}
-        <Card>
-          <CardHeader>
-            <CardTitle>الإيرادات والمصروفات (آخر 6 أشهر)</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              الإيرادات والمصروفات (آخر 6 أشهر)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LazyLineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="الإيرادات" stroke="#10b981" strokeWidth={2} />
-                <Line type="monotone" dataKey="المصروفات" stroke="#ef4444" strokeWidth={2} />
-                <Line type="monotone" dataKey="الربح" stroke="#3b82f6" strokeWidth={2} />
+              <LazyLineChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle.contentStyle}
+                  labelStyle={tooltipStyle.labelStyle}
+                  formatter={(value: number, name: string) => [
+                    `${value.toLocaleString()} دينار`,
+                    name
+                  ]}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: "20px" }}
+                  formatter={(value) => (
+                    <span style={{ color: "#475569", fontSize: "14px" }}>{value}</span>
+                  )}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="الإيرادات"
+                  stroke={CHART_COLORS.success}
+                  strokeWidth={2.5}
+                  dot={{ fill: CHART_COLORS.success, strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="المصروفات"
+                  stroke={CHART_COLORS.danger}
+                  strokeWidth={2.5}
+                  dot={{ fill: CHART_COLORS.danger, strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="الربح"
+                  stroke={CHART_COLORS.primary}
+                  strokeWidth={2.5}
+                  dot={{ fill: CHART_COLORS.primary, strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
               </LazyLineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Cash Flow */}
-        <Card>
-          <CardHeader>
-            <CardTitle>التدفق النقدي (آخر 6 أشهر)</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              التدفق النقدي (آخر 6 أشهر)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LazyComposedChart data={cashFlowData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey={CASH_FLOW_LABELS.CASH_IN} fill="#10b981" />
-                <Bar dataKey={CASH_FLOW_LABELS.CASH_OUT} fill="#ef4444" />
-                <Line type="monotone" dataKey="صافي التدفق" stroke="#3b82f6" strokeWidth={2} />
+              <LazyComposedChart data={cashFlowData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle.contentStyle}
+                  labelStyle={tooltipStyle.labelStyle}
+                  cursor={{ fill: "rgba(148, 163, 184, 0.1)" }}
+                  formatter={(value: number, name: string) => [
+                    `${value.toLocaleString()} دينار`,
+                    name
+                  ]}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: "20px" }}
+                  formatter={(value) => (
+                    <span style={{ color: "#475569", fontSize: "14px" }}>{value}</span>
+                  )}
+                />
+                <Bar
+                  dataKey={CASH_FLOW_LABELS.CASH_IN}
+                  fill={CHART_COLORS.success}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
+                <Bar
+                  dataKey={CASH_FLOW_LABELS.CASH_OUT}
+                  fill={CHART_COLORS.danger}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="صافي التدفق"
+                  stroke={CHART_COLORS.primary}
+                  strokeWidth={2.5}
+                  dot={{ fill: CHART_COLORS.primary, strokeWidth: 2, r: 4 }}
+                />
               </LazyComposedChart>
             </ResponsiveContainer>
           </CardContent>
@@ -451,21 +567,48 @@ export default function DashboardPage() {
       {/* Charts Row 2: Top Customers + Expenses by Category */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Customers */}
-        <Card>
-          <CardHeader>
-            <CardTitle>أفضل 5 عملاء (حسب الإيرادات)</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              أفضل 5 عملاء (حسب الإيرادات)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {topCustomers.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">لا توجد بيانات بعد</p>
+              <p className="text-slate-500 text-center py-8">لا توجد بيانات بعد</p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <LazyBarChart data={topCustomers} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} />
-                  <Tooltip />
-                  <Bar dataKey="amount" fill="#3b82f6" />
+                <LazyBarChart
+                  data={topCustomers}
+                  layout="vertical"
+                  margin={{ top: 20, right: 30, left: 80, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
+                  <XAxis
+                    type="number"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#334155", fontSize: 13 }}
+                    width={70}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle.contentStyle}
+                    labelStyle={tooltipStyle.labelStyle}
+                    formatter={(value: number) => [`${value.toLocaleString()} دينار`, "الإيرادات"]}
+                  />
+                  <Bar
+                    dataKey="amount"
+                    fill={CHART_COLORS.primary}
+                    radius={[0, 4, 4, 0]}
+                    maxBarSize={24}
+                  />
                 </LazyBarChart>
               </ResponsiveContainer>
             )}
@@ -473,13 +616,15 @@ export default function DashboardPage() {
         </Card>
 
         {/* Expenses by Category */}
-        <Card>
-          <CardHeader>
-            <CardTitle>المصروفات حسب الفئة</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              المصروفات حسب الفئة
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {expensesByCategory.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">لا توجد مصروفات بعد</p>
+              <p className="text-slate-500 text-center py-8">لا توجد مصروفات بعد</p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <LazyPieChart>
@@ -487,17 +632,32 @@ export default function DashboardPage() {
                     data={expensesByCategory}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={(entry) => `${entry.name}`}
-                    outerRadius={80}
-                    fill="#8884d8"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
                     dataKey="value"
+                    stroke="none"
                   >
-                    {expensesByCategory.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {expensesByCategory.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={CHART_COLORS.pieColors[index % CHART_COLORS.pieColors.length]}
+                      />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={tooltipStyle.contentStyle}
+                    labelStyle={tooltipStyle.labelStyle}
+                    formatter={(value: number) => [`${value.toLocaleString()} دينار`]}
+                  />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    formatter={(value) => (
+                      <span style={{ color: "#475569", fontSize: "13px" }}>{value}</span>
+                    )}
+                  />
                 </LazyPieChart>
               </ResponsiveContainer>
             )}
@@ -507,15 +667,17 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>آخر الحركات المالية</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              آخر الحركات المالية
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {transactionsLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
                     <div className="space-y-2">
                       <Skeleton className="h-4 w-32" />
                       <Skeleton className="h-3 w-24" />
@@ -525,17 +687,17 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : recentTransactions.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">لا توجد حركات مالية بعد</p>
+              <p className="text-slate-500 text-center py-8">لا توجد حركات مالية بعد</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {recentTransactions.map((transaction) => (
                   <div
                     key={transaction.id}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
+                    className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors rounded-lg px-2 -mx-2"
                   >
                     <div>
-                      <div className="font-medium">{transaction.description || transaction.category}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="font-medium text-slate-800">{transaction.description || transaction.category}</div>
+                      <div className="text-xs text-slate-500">
                         {transaction.date.toLocaleDateString("ar-EG")}
                       </div>
                     </div>
@@ -556,15 +718,17 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>العملاء الجدد</CardTitle>
+        <Card className="card-modern">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-slate-800">
+              العملاء الجدد
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {clientsLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
                     <div className="space-y-2">
                       <Skeleton className="h-4 w-32" />
                       <Skeleton className="h-3 w-24" />
@@ -574,21 +738,21 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : recentClients.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">لا يوجد عملاء بعد</p>
+              <p className="text-slate-500 text-center py-8">لا يوجد عملاء بعد</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {recentClients.map((client) => (
                   <div
                     key={client.id}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
+                    className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors rounded-lg px-2 -mx-2"
                   >
                     <div>
-                      <div className="font-medium">{client.name}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="font-medium text-slate-800">{client.name}</div>
+                      <div className="text-xs text-slate-500">
                         {client.phone || "لا يوجد رقم هاتف"}
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-slate-600">
                       {client.company || "لا توجد شركة"}
                     </div>
                   </div>

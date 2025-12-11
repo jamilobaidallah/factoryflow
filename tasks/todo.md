@@ -1,4 +1,4 @@
-# Task: Modern Design System - Phase 1, 2 & 3
+# Task: Modern Design System - Phase 1, 2, 3 & 4
 
 ## Branch
 `feature/modern-design-system`
@@ -215,6 +215,120 @@ Apply the new design tokens to the Ledger page data table to make it visually mo
   - Delete: `text-red-600 hover:bg-red-50`
 - **Mobile Card**: Updated to use `card-modern` class, consistent badge styling
 - **Text Colors**: Replaced `text-gray-*` with `text-slate-*` throughout
+
+---
+
+# Phase 4: Modernize Dashboard Charts
+
+## Context
+The dashboard charts work but look basic. Updated them with a modern color palette, better styling, and improved tooltips.
+
+## Plan
+
+### Add Chart Color Constants
+- [x] Create CHART_COLORS constant with harmonious palette
+- [x] Create tooltipStyle constant for consistent tooltips
+
+### Update Line Chart (Revenue vs Expenses)
+- [x] Add modern margins and remove vertical grid lines
+- [x] Style axis with no axis lines, subtle tick colors
+- [x] Add modern tooltip with white background and shadow
+- [x] Update legend with proper formatting
+- [x] Add smooth lines with dots and active dots
+
+### Update Composed Chart (Cash Flow)
+- [x] Apply same axis and grid styling
+- [x] Add rounded corners to bars with radius
+- [x] Add cursor highlight on hover
+- [x] Style tooltip consistently
+
+### Update Bar Chart (Top Customers)
+- [x] Apply horizontal layout styling
+- [x] Add rounded corners to bars
+- [x] Style axis labels
+- [x] Format tooltip for currency
+
+### Update Pie Chart (Expenses by Category)
+- [x] Convert to donut chart (innerRadius)
+- [x] Add padding between segments
+- [x] Use harmonious color palette
+- [x] Add vertical legend on right side
+
+### Update Card Containers
+- [x] Add `card-modern` class to all chart cards
+- [x] Update CardHeader with `pb-2` for tighter spacing
+- [x] Update CardTitle with `text-base font-semibold text-slate-800`
+- [x] Update page header to use slate colors
+
+### Update Recent Activity Cards
+- [x] Add `card-modern` class
+- [x] Update border colors to slate-100
+- [x] Add hover effect on list items
+- [x] Update text colors to slate palette
+
+### Verification
+- [x] Run TypeScript check - PASSED
+- [x] Run build - PASSED (21/21 pages)
+- [x] Run lint - PASSED (pre-existing warnings only)
+
+---
+
+## Acceptance Criteria
+
+### Phase 4: Dashboard Charts
+- [x] Line chart has smooth lines with modern colors
+- [x] Bar charts have rounded corners
+- [x] Pie chart is donut style with harmonious colors
+- [x] All tooltips have white background with shadow
+- [x] Grid lines are subtle (light gray, dashed)
+- [x] Axis labels are readable but not prominent
+- [x] Legends have proper Arabic labels
+- [x] All chart cards use card-modern styling
+- [x] Recent activity cards have hover effects
+- [x] Build passes
+- [x] No lint errors
+
+---
+
+## Files Changed (Phase 4)
+
+| File | Change |
+|------|--------|
+| `src/components/dashboard/dashboard-page.tsx` | **MODIFIED** - Modernized all charts and cards |
+
+### Summary of Changes (Phase 4)
+
+#### dashboard-page.tsx
+- **CHART_COLORS constant**: Added modern color palette with primary, success, danger, warning, info, purple, pink, slate colors and pieColors array
+- **tooltipStyle constant**: Reusable tooltip styling with white background, shadow, rounded corners
+- **ChartSkeleton**: Updated to use slate colors
+- **Page Header**: Changed from gray to slate colors
+- **Line Chart**:
+  - Added margins, removed vertical grid lines
+  - Styled axis with no lines, slate tick colors
+  - Modern tooltip and legend formatting
+  - Lines with strokeWidth 2.5, dots with r=4, activeDot r=6
+- **Composed Chart (Cash Flow)**:
+  - Same axis/grid styling
+  - Bars with radius [4,4,0,0] and maxBarSize 40
+  - Cursor highlight on hover
+- **Bar Chart (Top Customers)**:
+  - Horizontal layout with proper margins
+  - Bars with radius [0,4,4,0]
+  - Styled axis labels
+- **Pie Chart (Expenses)**:
+  - Donut style with innerRadius 60, outerRadius 100
+  - paddingAngle 2 between segments
+  - Vertical legend on right
+  - Uses CHART_COLORS.pieColors
+- **All Cards**:
+  - Added `card-modern` class
+  - CardHeader with `pb-2`
+  - CardTitle with `text-base font-semibold text-slate-800`
+- **Recent Activity**:
+  - Hover effect on list items
+  - Updated borders to slate-100
+  - Text colors to slate palette
 
 ---
 
