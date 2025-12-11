@@ -48,179 +48,187 @@ export function IncomingChequesTable({
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "تم الصرف":
-        return "bg-green-100 text-green-700";
+        return "badge-success";
       case "قيد الانتظار":
-        return "bg-yellow-100 text-yellow-700";
+        return "badge-warning";
       case "مجيّر":
-        return "bg-purple-100 text-purple-700";
+        return "badge-primary";
       case "مرفوض":
-        return "bg-red-100 text-red-700";
+        return "badge-danger";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "badge-neutral";
     }
   };
 
   if (cheques.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">
+      <p className="text-slate-500 text-center py-12">
         لا توجد شيكات واردة مسجلة. اضغط على &quot;إضافة شيك وارد&quot; للبدء.
       </p>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>رقم الشيك</TableHead>
-          <TableHead>اسم العميل</TableHead>
-          <TableHead>البنك</TableHead>
-          <TableHead>المبلغ</TableHead>
-          <TableHead>تصنيف الشيك</TableHead>
-          <TableHead>الحالة</TableHead>
-          <TableHead>تاريخ الاستحقاق</TableHead>
-          <TableHead>رقم المعاملة</TableHead>
-          <TableHead>صورة</TableHead>
-          <TableHead>الإجراءات</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {cheques.map((cheque) => (
-          <TableRow key={cheque.id}>
-            <TableCell className="font-medium">
-              {cheque.chequeNumber}
-            </TableCell>
-            <TableCell>
-              <div className="space-y-1">
-                <div className="font-medium">{cheque.clientName}</div>
-                {cheque.endorsedTo && (
-                  <div className="flex items-center gap-1">
-                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                      ← مظهر إلى: {cheque.endorsedTo}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </TableCell>
-            <TableCell>{cheque.bankName}</TableCell>
-            <TableCell>{cheque.amount || 0} دينار</TableCell>
-            <TableCell>
-              <span className="text-sm">
-                {cheque.chequeType === "مجير" ? "شيك مجير" : "عادي"}
-              </span>
-            </TableCell>
-            <TableCell>
-              <span
-                className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
-                  cheque.status
-                )}`}
-              >
-                {cheque.status}
-              </span>
-            </TableCell>
-            <TableCell>
-              {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
-            </TableCell>
-            <TableCell className="font-mono text-xs">
-              <div className="space-y-1">
-                {cheque.linkedTransactionId && (
-                  <div className="flex items-center gap-1" title="رقم المعاملة المرتبطة">
-                    <span>{cheque.linkedTransactionId}</span>
-                    <button
-                      onClick={() => copyToClipboard(cheque.linkedTransactionId)}
-                      className="p-0.5 hover:bg-gray-100 rounded"
-                      title="نسخ"
-                    >
-                      <Copy className="w-3 h-3 text-gray-400 hover:text-gray-600" />
-                    </button>
-                  </div>
-                )}
-                {cheque.paidTransactionIds && cheque.paidTransactionIds.length > 0 && (
-                  <div className="space-y-0.5">
-                    {cheque.paidTransactionIds.map((txnId, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded border border-green-200 text-xs"
-                        title="معاملة مدفوعة"
-                      >
-                        <span className="flex-1">{txnId}</span>
-                        <button
-                          onClick={() => copyToClipboard(txnId)}
-                          className="p-0.5 hover:bg-green-100 rounded"
-                          title="نسخ"
-                        >
-                          <Copy className="w-3 h-3 text-green-500 hover:text-green-700" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!cheque.linkedTransactionId && (!cheque.paidTransactionIds || cheque.paidTransactionIds.length === 0) && "-"}
-              </div>
-            </TableCell>
-            <TableCell>
-              {cheque.chequeImageUrl ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onViewImage(cheque.chequeImageUrl!)}
-                  title="عرض صورة الشيك"
-                >
-                  <ImageIcon className="w-4 h-4 text-blue-600" />
-                </Button>
-              ) : (
-                <span className="text-xs text-gray-400">-</span>
-              )}
-            </TableCell>
-            <TableCell>
-              <div className="flex gap-2">
-                {/* Show endorse button only for pending cheques that are not endorsed */}
-                {cheque.status === "قيد الانتظار" &&
-                  cheque.chequeType !== "مجير" && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => onEndorse(cheque)}
-                      title="تظهير الشيك"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  )}
-                {/* Show cancel endorsement button for endorsed cheques */}
-                {cheque.status === "مجيّر" &&
-                  cheque.chequeType === "مجير" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onCancelEndorsement(cheque)}
-                      title="إلغاء التظهير"
-                      className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onEdit(cheque)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => onDelete(cheque.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </TableCell>
+    <div className="card-modern overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+            <TableHead className="text-right font-semibold text-slate-700">رقم الشيك</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">اسم العميل</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">البنك</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">تصنيف الشيك</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">تاريخ الاستحقاق</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">رقم المعاملة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">صورة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {cheques.map((cheque) => (
+            <TableRow key={cheque.id} className="table-row-hover">
+              <TableCell className="font-medium">
+                {cheque.chequeNumber}
+              </TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <div className="font-medium">{cheque.clientName}</div>
+                  {cheque.endorsedTo && (
+                    <div className="flex items-center gap-1">
+                      <span className="badge-primary">
+                        ← مظهر إلى: {cheque.endorsedTo}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>{cheque.bankName}</TableCell>
+              <TableCell>
+                <span className="font-semibold text-slate-900">
+                  {(cheque.amount || 0).toLocaleString()} دينار
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="text-sm text-slate-600">
+                  {cheque.chequeType === "مجير" ? "شيك مجير" : "عادي"}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className={getStatusBadgeClass(cheque.status)}>
+                  {cheque.status}
+                </span>
+              </TableCell>
+              <TableCell>
+                {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
+              </TableCell>
+              <TableCell className="font-mono text-xs">
+                <div className="space-y-1">
+                  {cheque.linkedTransactionId && (
+                    <div className="flex items-center gap-1" title="رقم المعاملة المرتبطة">
+                      <span>{cheque.linkedTransactionId}</span>
+                      <button
+                        onClick={() => copyToClipboard(cheque.linkedTransactionId)}
+                        className="p-0.5 hover:bg-slate-100 rounded"
+                        title="نسخ"
+                      >
+                        <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                      </button>
+                    </div>
+                  )}
+                  {cheque.paidTransactionIds && cheque.paidTransactionIds.length > 0 && (
+                    <div className="space-y-0.5">
+                      {cheque.paidTransactionIds.map((txnId, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded border border-green-200 text-xs"
+                          title="معاملة مدفوعة"
+                        >
+                          <span className="flex-1">{txnId}</span>
+                          <button
+                            onClick={() => copyToClipboard(txnId)}
+                            className="p-0.5 hover:bg-green-100 rounded"
+                            title="نسخ"
+                          >
+                            <Copy className="w-3 h-3 text-green-500 hover:text-green-700" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!cheque.linkedTransactionId && (!cheque.paidTransactionIds || cheque.paidTransactionIds.length === 0) && (
+                    <span className="text-slate-400">-</span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {cheque.chequeImageUrl ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                    onClick={() => onViewImage(cheque.chequeImageUrl!)}
+                    title="عرض صورة الشيك"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <span className="text-xs text-slate-400">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  {/* Show endorse button only for pending cheques that are not endorsed */}
+                  {cheque.status === "قيد الانتظار" &&
+                    cheque.chequeType !== "مجير" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-400 hover:text-purple-600 hover:bg-purple-50"
+                        onClick={() => onEndorse(cheque)}
+                        title="تظهير الشيك"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    )}
+                  {/* Show cancel endorsement button for endorsed cheques */}
+                  {cheque.status === "مجيّر" &&
+                    cheque.chequeType === "مجير" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-purple-500 hover:text-purple-700 hover:bg-purple-50"
+                        onClick={() => onCancelEndorsement(cheque)}
+                        title="إلغاء التظهير"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                    onClick={() => onEdit(cheque)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => onDelete(cheque.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
