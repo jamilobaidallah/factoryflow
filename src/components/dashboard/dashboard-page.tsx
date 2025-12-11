@@ -582,7 +582,7 @@ export default function DashboardPage() {
                 <LazyBarChart
                   data={topCustomers}
                   layout="vertical"
-                  margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 120, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
                   <XAxis
@@ -612,10 +612,11 @@ export default function DashboardPage() {
                   >
                     <LabelList
                       dataKey="name"
-                      position="insideRight"
-                      fill="#ffffff"
+                      position="left"
+                      fill="#334155"
                       fontSize={12}
                       fontWeight={500}
+                      offset={10}
                     />
                   </Bar>
                 </LazyBarChart>
