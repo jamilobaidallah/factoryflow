@@ -120,14 +120,14 @@ export default function InvoicesPage() {
     return labels[status];
   };
 
-  const getStatusColor = (status: Invoice["status"]) => {
-    const colors = {
-      draft: "bg-gray-100 text-gray-800",
-      sent: "bg-blue-100 text-blue-800",
-      paid: "bg-green-100 text-green-800",
-      overdue: "bg-red-100 text-red-800",
+  const getStatusBadgeClass = (status: Invoice["status"]) => {
+    const classes = {
+      draft: "badge-neutral",
+      sent: "badge-primary",
+      paid: "badge-success",
+      overdue: "badge-danger",
     };
-    return colors[status];
+    return classes[status];
   };
 
   return (
@@ -187,43 +187,45 @@ export default function InvoicesPage() {
       </div>
 
       {/* Invoices Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>قائمة الفواتير</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">قائمة الفواتير</h2>
+        <div className="card-modern overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>رقم الفاتورة</TableHead>
-                <TableHead>رقم يدوي</TableHead>
-                <TableHead>العميل</TableHead>
-                <TableHead>التاريخ</TableHead>
-                <TableHead>المبلغ</TableHead>
-                <TableHead>الحالة</TableHead>
-                <TableHead>صورة</TableHead>
-                <TableHead>الإجراءات</TableHead>
+              <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                <TableHead className="text-right font-semibold text-slate-700">رقم الفاتورة</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">رقم يدوي</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">العميل</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">صورة</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                     لا توجد فواتير بعد. انقر على &quot;فاتورة جديدة&quot; للبدء.
                   </TableCell>
                 </TableRow>
               ) : (
                 invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
+                  <TableRow key={invoice.id} className="table-row-hover">
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                    <TableCell className="text-gray-600 text-sm">
+                    <TableCell className="text-slate-600 text-sm">
                       {invoice.manualInvoiceNumber || "-"}
                     </TableCell>
                     <TableCell>{invoice.clientName}</TableCell>
                     <TableCell>{invoice.invoiceDate.toLocaleDateString("ar-JO")}</TableCell>
-                    <TableCell>{invoice.total.toFixed(2)} د.أ</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs ${getStatusColor(invoice.status)}`}>
+                      <span className="font-semibold text-slate-900">
+                        {invoice.total.toLocaleString()} د.أ
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={getStatusBadgeClass(invoice.status)}>
                         {getStatusLabel(invoice.status)}
                       </span>
                     </TableCell>
@@ -231,46 +233,49 @@ export default function InvoicesPage() {
                       {invoice.invoiceImageUrl ? (
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                           onClick={() => setSelectedImageUrl(invoice.invoiceImageUrl || null)}
                           title="عرض صورة الفاتورة"
-                          className="text-blue-600 hover:text-blue-800"
                         >
-                          <Image className="w-4 h-4" />
+                          <Image className="h-4 w-4" />
                         </Button>
                       ) : (
-                        <span className="text-gray-400 text-xs">-</span>
+                        <span className="text-slate-400 text-xs">-</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                           onClick={() => handlePreview(invoice)}
                           title="معاينة"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
                           onClick={() => exportPDF(invoice)}
                           title="تصدير PDF"
                         >
-                          <Download className="w-4 h-4" />
+                          <Download className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           onClick={() => handleEdit(invoice)}
                           title="تعديل"
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="h-4 w-4" />
                         </Button>
                         {invoice.status !== "paid" && (
                           <select
-                            className="text-xs border rounded px-2 py-1"
+                            className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
                             value={invoice.status}
                             onChange={(e) =>
                               handleUpdateStatus(invoice.id, e.target.value as Invoice["status"])
@@ -284,10 +289,11 @@ export default function InvoicesPage() {
                         )}
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(invoice.id)}
                         >
-                          <Trash2 className="w-4 h-4 text-red-600" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -296,8 +302,8 @@ export default function InvoicesPage() {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Dialogs */}
       <InvoicesFormDialog

@@ -402,49 +402,47 @@ export default function InventoryPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>سجل المخزون ({items.length})</CardTitle>
-            {items.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
-              >
-                <Download className="w-4 h-4 ml-2" />
-                Excel
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {dataLoading ? (
-            <TableSkeleton rows={10} />
-          ) : items.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا توجد عناصر في المخزون. اضغط على &quot;إضافة عنصر للمخزون&quot; للبدء.
-            </p>
-          ) : (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">سجل المخزون ({items.length})</h2>
+          {items.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
+            >
+              <Download className="w-4 h-4 ml-2" />
+              Excel
+            </Button>
+          )}
+        </div>
+        {dataLoading ? (
+          <TableSkeleton rows={10} />
+        ) : items.length === 0 ? (
+          <p className="text-slate-500 text-center py-12">
+            لا توجد عناصر في المخزون. اضغط على &quot;إضافة عنصر للمخزون&quot; للبدء.
+          </p>
+        ) : (
+          <div className="card-modern overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>اسم العنصر</TableHead>
-                  <TableHead>الفئة</TableHead>
-                  <TableHead>الكمية</TableHead>
-                  <TableHead>الوحدة</TableHead>
-                  <TableHead>السماكة</TableHead>
-                  <TableHead>العرض</TableHead>
-                  <TableHead>الطول</TableHead>
-                  <TableHead>سعر الوحدة</TableHead>
-                  <TableHead>الموقع</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                  <TableHead className="text-right font-semibold text-slate-700">اسم العنصر</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الكمية</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الوحدة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">السماكة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">العرض</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الطول</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">سعر الوحدة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الموقع</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((item) => (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.id} className="table-row-hover">
                     <TableCell className="font-medium">{item.itemName}</TableCell>
                     <TableCell>{item.category}</TableCell>
                     <TableCell>{item.quantity || 0}</TableCell>
@@ -452,41 +450,48 @@ export default function InventoryPage() {
                     <TableCell>{item.thickness ? `${item.thickness} سم` : '-'}</TableCell>
                     <TableCell>{item.width ? `${item.width} سم` : '-'}</TableCell>
                     <TableCell>{item.length ? `${item.length} سم` : '-'}</TableCell>
-                    <TableCell>{item.unitPrice || 0} دينار</TableCell>
+                    <TableCell>
+                      <span className="font-semibold text-slate-900">
+                        {(item.unitPrice || 0).toLocaleString()} دينار
+                      </span>
+                    </TableCell>
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
                       {item.quantity <= item.minStock ? (
-                        <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">
+                        <span className="badge-danger">
                           مخزون منخفض
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
+                        <span className="badge-success">
                           متوفر
                         </span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-1">
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
                           onClick={() => handleMovement(item)}
                         >
-                          <TrendingUp className="w-4 h-4" />
+                          <TrendingUp className="h-4 w-4" />
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           onClick={() => handleEdit(item)}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="h-4 w-4" />
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(item.id)}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -494,61 +499,61 @@ export default function InventoryPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
+          </div>
+        )}
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                عرض {items.length} من {totalCount} عنصر
-              </div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
-                      }}
-                      className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-
-                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setCurrentPage(pageNum);
-                          }}
-                          isActive={currentPage === pageNum}
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  })}
-
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (currentPage > 1) { setCurrentPage(currentPage - 1); }
-                      }}
-                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              عرض {items.length} من {totalCount} عنصر
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
+                    }}
+                    className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+
+                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(pageNum);
+                        }}
+                        isActive={currentPage === pageNum}
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) { setCurrentPage(currentPage - 1); }
+                    }}
+                    className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </div>
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

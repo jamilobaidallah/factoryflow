@@ -21,75 +21,85 @@ interface FixedAssetsTableProps {
 export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableProps) {
   if (assets.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">
+      <p className="text-slate-500 text-center py-12">
         لا توجد أصول ثابتة. اضغط على &quot;إضافة أصل ثابت&quot; للبدء.
       </p>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>رقم الأصل</TableHead>
-          <TableHead>اسم الأصل</TableHead>
-          <TableHead>الفئة</TableHead>
-          <TableHead>تاريخ الشراء</TableHead>
-          <TableHead>التكلفة الأصلية</TableHead>
-          <TableHead>الاستهلاك المتراكم</TableHead>
-          <TableHead>القيمة الدفترية</TableHead>
-          <TableHead>الحالة</TableHead>
-          <TableHead>الإجراءات</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {assets.map((asset) => (
-          <TableRow key={asset.id}>
-            <TableCell className="font-mono text-xs">
-              {asset.assetNumber}
-            </TableCell>
-            <TableCell className="font-medium">
-              {asset.assetName}
-            </TableCell>
-            <TableCell>{asset.category}</TableCell>
-            <TableCell>
-              {new Date(asset.purchaseDate).toLocaleDateString("ar-EG")}
-            </TableCell>
-            <TableCell>{(asset.purchaseCost ?? 0).toFixed(2)} د</TableCell>
-            <TableCell>{(asset.accumulatedDepreciation ?? 0).toFixed(2)} د</TableCell>
-            <TableCell>{(asset.bookValue ?? 0).toFixed(2)} د</TableCell>
-            <TableCell>
-              <span
-                className={`px-2 py-1 rounded-full text-xs ${
-                  asset.status === "active"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {asset.status === "active" ? "نشط" : asset.status}
-              </span>
-            </TableCell>
-            <TableCell>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onEdit(asset)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => onDelete(asset.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </TableCell>
+    <div className="card-modern overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+            <TableHead className="text-right font-semibold text-slate-700">رقم الأصل</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">اسم الأصل</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">تاريخ الشراء</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">التكلفة الأصلية</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الاستهلاك المتراكم</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">القيمة الدفترية</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {assets.map((asset) => (
+            <TableRow key={asset.id} className="table-row-hover">
+              <TableCell className="font-mono text-xs">
+                {asset.assetNumber}
+              </TableCell>
+              <TableCell className="font-medium">
+                {asset.assetName}
+              </TableCell>
+              <TableCell>{asset.category}</TableCell>
+              <TableCell>
+                {new Date(asset.purchaseDate).toLocaleDateString("ar-EG")}
+              </TableCell>
+              <TableCell>
+                <span className="font-semibold text-slate-900">
+                  {(asset.purchaseCost ?? 0).toLocaleString()} د
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="font-semibold text-red-600">
+                  {(asset.accumulatedDepreciation ?? 0).toLocaleString()} د
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="font-semibold text-green-600">
+                  {(asset.bookValue ?? 0).toLocaleString()} د
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className={asset.status === "active" ? "badge-success" : "badge-neutral"}>
+                  {asset.status === "active" ? "نشط" : asset.status}
+                </span>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                    onClick={() => onEdit(asset)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => onDelete(asset.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

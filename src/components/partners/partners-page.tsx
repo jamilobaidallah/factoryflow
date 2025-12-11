@@ -303,66 +303,64 @@ export default function PartnersPage() {
       {/* Partners Equity Report */}
       <PartnersEquityReport />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>قائمة الشركاء ({partners.filter((p) => p.active).length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {partners.length === 0 ? (
-            <p className="text-gray-500 text-center py-12">
-              لا يوجد شركاء حالياً. اضغط على &quot;إضافة شريك جديد&quot; للبدء.
-            </p>
-          ) : (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">قائمة الشركاء ({partners.filter((p) => p.active).length})</h2>
+        {partners.length === 0 ? (
+          <p className="text-slate-500 text-center py-12">
+            لا يوجد شركاء حالياً. اضغط على &quot;إضافة شريك جديد&quot; للبدء.
+          </p>
+        ) : (
+          <div className="card-modern overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>الاسم</TableHead>
-                  <TableHead>نسبة الملكية</TableHead>
-                  <TableHead>الاستثمار الأولي</TableHead>
-                  <TableHead>الهاتف</TableHead>
-                  <TableHead>البريد الإلكتروني</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                  <TableHead className="text-right font-semibold text-slate-700">الاسم</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">نسبة الملكية</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الاستثمار الأولي</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الهاتف</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">البريد الإلكتروني</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {partners.map((partner) => (
-                  <TableRow key={partner.id}>
+                  <TableRow key={partner.id} className="table-row-hover">
                     <TableCell className="font-medium">{partner.name}</TableCell>
                     <TableCell>
                       <span className="font-semibold text-blue-600">
                         {partner.ownershipPercentage}%
                       </span>
                     </TableCell>
-                    <TableCell>{partner.initialInvestment.toFixed(2)} د.أ</TableCell>
+                    <TableCell>
+                      <span className="font-semibold text-slate-900">
+                        {partner.initialInvestment.toLocaleString()} د.أ
+                      </span>
+                    </TableCell>
                     <TableCell>{partner.phone}</TableCell>
                     <TableCell>{partner.email}</TableCell>
                     <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          partner.active
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
+                      <span className={partner.active ? "badge-success" : "badge-neutral"}>
                         {partner.active ? "نشط" : "غير نشط"}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-1">
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           onClick={() => handleEdit(partner)}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="h-4 w-4" />
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(partner.id)}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -370,9 +368,9 @@ export default function PartnersPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
