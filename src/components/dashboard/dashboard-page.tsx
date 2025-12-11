@@ -616,7 +616,8 @@ export default function DashboardPage() {
                       fill="#334155"
                       fontSize={12}
                       fontWeight={500}
-                      offset={35}
+                      offset={10}
+                      style={{ textAnchor: "end" }}
                     />
                   </Bar>
                 </LazyBarChart>
