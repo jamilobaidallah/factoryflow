@@ -305,44 +305,57 @@ export default function DashboardPage() {
 
   const netCashFlow = totalCashIn - totalCashOut;
 
-  // Memoize stats to avoid recalculation on every render
+  // Calculate net profit
+  const netProfit = totalRevenue - totalExpenses;
+
+  // Memoize stats with modern styling
   const stats = useMemo(() => [
     {
       title: "إجمالي العملاء",
       value: clientsCount.toString(),
       icon: Users,
-      color: "text-blue-600",
-      bgColor: "bg-blue-100",
+      cardClass: "stats-card-primary",
+      iconBgClass: "bg-primary-500/10",
+      iconClass: "text-primary-600",
+      valueClass: "text-slate-900",
     },
     {
       title: "الإيرادات",
       value: `${totalRevenue.toFixed(2)} دينار`,
       icon: TrendingUp,
-      color: "text-green-600",
-      bgColor: "bg-green-100",
+      cardClass: "stats-card-success",
+      iconBgClass: "bg-success-500/10",
+      iconClass: "text-success-600",
+      valueClass: "text-success-700",
     },
     {
       title: "المصروفات",
       value: `${totalExpenses.toFixed(2)} دينار`,
       icon: TrendingDown,
-      color: "text-red-600",
-      bgColor: "bg-red-100",
+      cardClass: "stats-card-danger",
+      iconBgClass: "bg-danger-500/10",
+      iconClass: "text-danger-600",
+      valueClass: "text-danger-700",
     },
     {
       title: "صافي الربح",
-      value: `${(totalRevenue - totalExpenses).toFixed(2)} دينار`,
+      value: `${netProfit.toFixed(2)} دينار`,
       icon: DollarSign,
-      color: totalRevenue - totalExpenses >= 0 ? "text-green-600" : "text-red-600",
-      bgColor: totalRevenue - totalExpenses >= 0 ? "bg-green-100" : "bg-red-100",
+      cardClass: "",
+      iconBgClass: netProfit >= 0 ? "bg-success-500/10" : "bg-danger-500/10",
+      iconClass: netProfit >= 0 ? "text-success-600" : "text-danger-600",
+      valueClass: netProfit >= 0 ? "text-success-700" : "text-danger-700",
     },
     {
       title: "صافي التدفق النقدي",
       value: `${netCashFlow.toFixed(2)} دينار`,
       icon: Activity,
-      color: netCashFlow >= 0 ? "text-green-600" : "text-red-600",
-      bgColor: netCashFlow >= 0 ? "bg-green-100" : "bg-red-100",
+      cardClass: "stats-card-warning",
+      iconBgClass: "bg-warning-500/10",
+      iconClass: "text-warning-600",
+      valueClass: netCashFlow >= 0 ? "text-success-700" : "text-danger-700",
     },
-  ], [clientsCount, totalRevenue, totalExpenses, netCashFlow]);
+  ], [clientsCount, totalRevenue, totalExpenses, netProfit, netCashFlow]);
 
   // Memoize colors to avoid recreation
   const COLORS = useMemo(() => ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'], []);
@@ -355,7 +368,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {statsLoading ? (
           <>
             <StatCardSkeleton />
@@ -368,17 +381,21 @@ export default function DashboardPage() {
           stats.map((stat, index) => {
             const Icon = stat.icon;
             return (
-              <Card key={index}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">
-                    {stat.title}
-                  </CardTitle>
-                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                    <Icon className={`w-5 h-5 ${stat.color}`} />
+              <Card key={index} className={`card-modern ${stat.cardClass} group cursor-default`}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-slate-600">
+                        {stat.title}
+                      </p>
+                      <p className={`text-2xl font-bold ${stat.valueClass}`}>
+                        {stat.value}
+                      </p>
+                    </div>
+                    <div className={`h-12 w-12 rounded-xl ${stat.iconBgClass} flex items-center justify-center group-hover:scale-110 transition-transform duration-200`}>
+                      <Icon className={`h-6 w-6 ${stat.iconClass}`} />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
                 </CardContent>
               </Card>
             );
