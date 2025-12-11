@@ -1,4 +1,4 @@
-# Task: Modern Design System - Phase 1 & 2
+# Task: Modern Design System - Phase 1, 2 & 3
 
 ## Branch
 `feature/modern-design-system`
@@ -141,6 +141,80 @@ Build: PASSED (21/21 pages generated)
 | `stats-card-success` | Green gradient background |
 | `stats-card-danger` | Red gradient background |
 | `stats-card-warning` | Amber gradient background |
+
+---
+
+# Phase 3: Modernize Ledger Page Data Table
+
+## Context
+Apply the new design tokens to the Ledger page data table to make it visually modern and consistent with the design system.
+
+## Plan
+
+### Update LedgerTable Component
+- [x] Wrap desktop table in `card-modern` container with overflow-hidden
+- [x] Update TableHeader with `bg-slate-50/80` background
+- [x] Add `font-semibold text-slate-700` styling to TableHead
+- [x] Add `table-row-hover` class to TableRow components
+- [x] Update type badges to use `badge-success` / `badge-danger`
+- [x] Update payment status badges to use `badge-success` / `badge-warning` / `badge-danger`
+- [x] Style amounts with semantic colors (green for income, red for expense)
+- [x] Modernize action buttons to ghost style with colored hover states
+- [x] Update mobile card to use `card-modern` class
+- [x] Replace `text-gray-*` with `text-slate-*` for consistency
+
+### Update Tests
+- [x] Update badge class assertions from inline classes to `badge-*` classes
+- [x] Update dash element selector from `text-gray-400` to `text-slate-400`
+
+### Verification
+- [x] Run TypeScript check - PASSED
+- [x] Run build - PASSED (21/21 pages)
+- [x] Run lint - PASSED (pre-existing warnings only)
+- [x] Run tests - PASSED (1150 tests, 44 suites)
+
+---
+
+## Acceptance Criteria
+
+### Phase 3: Ledger Data Table
+- [x] Table wrapped in card-modern container
+- [x] Table header has subtle background color
+- [x] Table rows have hover effect
+- [x] Type badges use badge-success/badge-danger classes
+- [x] Payment status badges use modern badge classes
+- [x] Income amounts styled green, expense amounts styled red
+- [x] Action buttons use ghost variant with colored hover states
+- [x] Mobile cards use card-modern styling
+- [x] All tests pass
+- [x] Build passes
+- [x] No lint errors
+
+---
+
+## Files Changed (Phase 3)
+
+| File | Change |
+|------|--------|
+| `src/components/ledger/components/LedgerTable.tsx` | **MODIFIED** - Modernized table styling |
+| `src/components/ledger/components/__tests__/LedgerTable.test.tsx` | **MODIFIED** - Updated tests for new class names |
+
+### Summary of Changes (Phase 3)
+
+#### LedgerTable.tsx
+- **Table Container**: Added `card-modern overflow-hidden` to desktop table wrapper
+- **Table Header**: Added `bg-slate-50/80` background, `font-semibold text-slate-700` to heads
+- **Table Row**: Added `table-row-hover` class for hover effect
+- **Type Badge**: Changed from inline classes to `badge-success` / `badge-danger`
+- **Payment Status Badge**: Changed from inline classes to `badge-success` / `badge-warning` / `badge-danger`
+- **Amount Display**: Added semantic colors with `text-green-600` / `text-red-600` and `font-semibold`
+- **Action Buttons**: Changed to ghost variant with colored hover states:
+  - Quick Pay: `text-green-600 hover:bg-green-50`
+  - View Related: `text-blue-600 hover:bg-blue-50`
+  - Edit: `text-slate-600 hover:bg-slate-100`
+  - Delete: `text-red-600 hover:bg-red-50`
+- **Mobile Card**: Updated to use `card-modern` class, consistent badge styling
+- **Text Colors**: Replaced `text-gray-*` with `text-slate-*` throughout
 
 ---
 

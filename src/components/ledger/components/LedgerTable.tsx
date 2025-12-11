@@ -38,7 +38,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
   onViewRelated: (entry: LedgerEntry) => void;
 }) {
   return (
-    <TableRow>
+    <TableRow className="table-row-hover">
       <TableCell>
         {entry.transactionId ? (
           <div className="flex items-center gap-1">
@@ -58,11 +58,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       <TableCell>
         <span
-          className={`px-2 py-1 rounded-full text-xs ${
-            entry.type === "دخل"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-700"
-          }`}
+          className={entry.type === "دخل" ? "badge-success" : "badge-danger"}
           role="status"
           aria-label={`النوع: ${entry.type}`}
         >
@@ -73,20 +69,27 @@ const LedgerTableRow = memo(function LedgerTableRow({
       <TableCell>{entry.category}</TableCell>
       <TableCell>{entry.subCategory}</TableCell>
       <TableCell>{entry.associatedParty || "-"}</TableCell>
-      <TableCell>{entry.amount || 0} دينار</TableCell>
+      <TableCell>
+        <span className={cn(
+          "font-semibold",
+          entry.type === "دخل" ? "text-green-600" : "text-red-600"
+        )}>
+          {entry.amount || 0} دينار
+        </span>
+      </TableCell>
 
       <TableCell>
         {entry.isARAPEntry ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span
-                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                className={cn(
                   entry.paymentStatus === "paid"
-                    ? "bg-green-100 text-green-700"
+                    ? "badge-success"
                     : entry.paymentStatus === "partial"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-red-100 text-red-700"
-                }`}
+                    ? "badge-warning"
+                    : "badge-danger"
+                )}
                 role="status"
                 aria-label={`حالة الدفع: ${entry.paymentStatus === "paid" ? "مدفوع" : entry.paymentStatus === "partial" ? "دفعة جزئية" : "غير مدفوع"}`}
               >
@@ -98,57 +101,60 @@ const LedgerTableRow = memo(function LedgerTableRow({
               </span>
             </div>
             {entry.paymentStatus !== "paid" && (
-              <div className="text-xs text-gray-600">
+              <div className="text-xs text-slate-600">
                 متبقي: {entry.remainingBalance?.toFixed(2)} دينار
               </div>
             )}
             {entry.totalPaid && entry.totalPaid > 0 && (
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-slate-500">
                 مدفوع: {entry.totalPaid.toFixed(2)} دينار
               </div>
             )}
           </div>
         ) : (
-          <span className="text-xs text-gray-400">-</span>
+          <span className="text-xs text-slate-400">-</span>
         )}
       </TableCell>
 
       <TableCell>
-        <div className="flex gap-2" role="group" aria-label="إجراءات الحركة المالية">
+        <div className="flex gap-1" role="group" aria-label="إجراءات الحركة المالية">
           {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
             <Button
-              variant="default"
+              variant="ghost"
               size="sm"
               onClick={() => onQuickPay(entry)}
               title="إضافة دفعة"
               aria-label={`إضافة دفعة لـ ${entry.description}`}
-              className="bg-green-600 hover:bg-green-700"
+              className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
             >
               <DollarSign className="w-4 h-4" aria-hidden="true" />
             </Button>
           )}
           <Button
-            variant="secondary"
+            variant="ghost"
             size="sm"
             onClick={() => onViewRelated(entry)}
             title="إدارة السجلات المرتبطة"
             aria-label={`عرض السجلات المرتبطة بـ ${entry.description}`}
+            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
           >
             <FolderOpen className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => onEdit(entry)}
             aria-label={`تعديل ${entry.description}`}
+            className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-100"
           >
             <Edit className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button
-            variant="destructive"
+            variant="ghost"
             size="sm"
             onClick={() => onDelete(entry)}
             aria-label={`حذف ${entry.description}`}
+            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" />
           </Button>
@@ -173,16 +179,14 @@ const LedgerCard = memo(function LedgerCard({
   onViewRelated: (entry: LedgerEntry) => void;
 }) {
   return (
-    <div className="bg-white border rounded-lg p-4 space-y-3 shadow-sm">
+    <div className="card-modern p-4 space-y-3">
       {/* Header: Description + Amount */}
       <div className="flex justify-between items-start gap-2">
         <span className="font-medium text-sm flex-1">{entry.description}</span>
         <span
           className={cn(
-            "px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap",
-            entry.type === "دخل"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-700"
+            "font-semibold whitespace-nowrap",
+            entry.type === "دخل" ? "text-green-600" : "text-red-600"
           )}
         >
           {entry.amount || 0} دينار
@@ -190,55 +194,59 @@ const LedgerCard = memo(function LedgerCard({
       </div>
 
       {/* Meta: Date, Party, Category */}
-      <div className="space-y-1 text-xs text-gray-600">
+      <div className="space-y-1 text-xs text-slate-600">
         <div className="flex justify-between">
           <span>{new Date(entry.date).toLocaleDateString("ar-EG")}</span>
           <span>{entry.associatedParty || "-"}</span>
         </div>
-        <div className="text-gray-500">
+        <div className="text-slate-500">
           {entry.category} {entry.subCategory && `> ${entry.subCategory}`}
         </div>
       </div>
 
-      {/* Payment Status (AR/AP entries only) */}
-      {entry.isARAPEntry && (
-        <div className="flex items-center gap-2 text-xs">
-          <span
-            className={cn(
-              "px-2 py-1 rounded-full font-medium",
-              entry.paymentStatus === "paid"
-                ? "bg-green-100 text-green-700"
+      {/* Type + Payment Status */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className={entry.type === "دخل" ? "badge-success" : "badge-danger"}>
+          {entry.type}
+        </span>
+        {entry.isARAPEntry && (
+          <>
+            <span
+              className={cn(
+                entry.paymentStatus === "paid"
+                  ? "badge-success"
+                  : entry.paymentStatus === "partial"
+                  ? "badge-warning"
+                  : "badge-danger"
+              )}
+            >
+              {entry.paymentStatus === "paid"
+                ? "مدفوع"
                 : entry.paymentStatus === "partial"
-                ? "bg-yellow-100 text-yellow-700"
-                : "bg-red-100 text-red-700"
-            )}
-          >
-            {entry.paymentStatus === "paid"
-              ? "مدفوع"
-              : entry.paymentStatus === "partial"
-              ? "جزئي"
-              : "غير مدفوع"}
-          </span>
-          {entry.paymentStatus !== "paid" && entry.remainingBalance && (
-            <span className="text-gray-600">
-              متبقي: {entry.remainingBalance.toFixed(2)}
+                ? "جزئي"
+                : "غير مدفوع"}
             </span>
-          )}
-        </div>
-      )}
+            {entry.paymentStatus !== "paid" && entry.remainingBalance && (
+              <span className="text-slate-600">
+                متبقي: {entry.remainingBalance.toFixed(2)}
+              </span>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Actions */}
       <div
-        className="flex gap-2 pt-2 border-t"
+        className="flex gap-2 pt-2 border-t border-slate-100"
         role="group"
         aria-label="إجراءات الحركة المالية"
       >
         {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
           <Button
-            variant="default"
+            variant="ghost"
             size="sm"
             onClick={() => onQuickPay(entry)}
-            className="flex-1 bg-green-600 hover:bg-green-700"
+            className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
             aria-label={`إضافة دفعة لـ ${entry.description}`}
           >
             <DollarSign className="w-4 h-4 ml-1" aria-hidden="true" />
@@ -246,28 +254,30 @@ const LedgerCard = memo(function LedgerCard({
           </Button>
         )}
         <Button
-          variant="secondary"
+          variant="ghost"
           size="sm"
           onClick={() => onViewRelated(entry)}
-          className="flex-1"
+          className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
           aria-label={`عرض السجلات المرتبطة بـ ${entry.description}`}
         >
           <FolderOpen className="w-4 h-4 ml-1" aria-hidden="true" />
           مرتبط
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={() => onEdit(entry)}
           aria-label={`تعديل ${entry.description}`}
+          className="text-slate-600 hover:text-slate-700 hover:bg-slate-100"
         >
           <Edit className="w-4 h-4" aria-hidden="true" />
         </Button>
         <Button
-          variant="destructive"
+          variant="ghost"
           size="sm"
           onClick={() => onDelete(entry)}
           aria-label={`حذف ${entry.description}`}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
         >
           <Trash2 className="w-4 h-4" aria-hidden="true" />
         </Button>
@@ -285,7 +295,7 @@ export const LedgerTable = memo(function LedgerTable({
 }: LedgerTableProps) {
   if (entries.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">
+      <p className="text-slate-500 text-center py-12">
         لا توجد حركات مالية مسجلة. اضغط على &quot;إضافة حركة مالية&quot; للبدء.
       </p>
     );
@@ -308,20 +318,20 @@ export const LedgerTable = memo(function LedgerTable({
       </div>
 
       {/* Desktop: Table Layout */}
-      <div className="hidden md:block">
+      <div className="hidden md:block card-modern overflow-hidden">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>رقم المعاملة</TableHead>
-              <TableHead>التاريخ</TableHead>
-              <TableHead>الوصف</TableHead>
-              <TableHead>النوع</TableHead>
-              <TableHead>التصنيف</TableHead>
-              <TableHead>الفئة الفرعية</TableHead>
-              <TableHead>الطرف المعني</TableHead>
-              <TableHead>المبلغ</TableHead>
-              <TableHead>حالة الدفع</TableHead>
-              <TableHead>الإجراءات</TableHead>
+          <TableHeader className="bg-slate-50/80">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="font-semibold text-slate-700">رقم المعاملة</TableHead>
+              <TableHead className="font-semibold text-slate-700">التاريخ</TableHead>
+              <TableHead className="font-semibold text-slate-700">الوصف</TableHead>
+              <TableHead className="font-semibold text-slate-700">النوع</TableHead>
+              <TableHead className="font-semibold text-slate-700">التصنيف</TableHead>
+              <TableHead className="font-semibold text-slate-700">الفئة الفرعية</TableHead>
+              <TableHead className="font-semibold text-slate-700">الطرف المعني</TableHead>
+              <TableHead className="font-semibold text-slate-700">المبلغ</TableHead>
+              <TableHead className="font-semibold text-slate-700">حالة الدفع</TableHead>
+              <TableHead className="font-semibold text-slate-700">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

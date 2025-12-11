@@ -215,7 +215,7 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      const badge = desktopTable.querySelector('.bg-green-100.text-green-700');
+      const badge = desktopTable.querySelector('.badge-success');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('دخل');
     });
@@ -232,7 +232,7 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      const badge = desktopTable.querySelector('.bg-red-100.text-red-700');
+      const badge = desktopTable.querySelector('.badge-danger');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('مصروف');
     });
@@ -300,7 +300,7 @@ describe('LedgerTable', () => {
       );
 
       // Check for dash in payment status column for non-AR/AP entry
-      const dashElement = container.querySelector('.text-xs.text-gray-400');
+      const dashElement = container.querySelector('.text-xs.text-slate-400');
       expect(dashElement).toBeInTheDocument();
       expect(dashElement).toHaveTextContent('-');
     });
@@ -451,7 +451,7 @@ describe('LedgerTable', () => {
   });
 
   describe('Payment Status Badge Colors', () => {
-    it('should use green badge for paid status', () => {
+    it('should use success badge for paid status', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockPaidEntry]}
@@ -464,10 +464,10 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       const paidBadge = within(desktopTable).getByText('مدفوع');
-      expect(paidBadge).toHaveClass('bg-green-100', 'text-green-700');
+      expect(paidBadge).toHaveClass('badge-success');
     });
 
-    it('should use yellow badge for partial payment', () => {
+    it('should use warning badge for partial payment', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockPartiallyPaidEntry]}
@@ -480,10 +480,10 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       const partialBadge = within(desktopTable).getByText('دفعة جزئية');
-      expect(partialBadge).toHaveClass('bg-yellow-100', 'text-yellow-700');
+      expect(partialBadge).toHaveClass('badge-warning');
     });
 
-    it('should use red badge for unpaid status', () => {
+    it('should use danger badge for unpaid status', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockARAPEntry]}
@@ -496,7 +496,7 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       const unpaidBadge = within(desktopTable).getByText('غير مدفوع');
-      expect(unpaidBadge).toHaveClass('bg-red-100', 'text-red-700');
+      expect(unpaidBadge).toHaveClass('badge-danger');
     });
   });
 });
