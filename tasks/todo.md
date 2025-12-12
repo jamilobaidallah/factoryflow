@@ -98,4 +98,62 @@ firebase deploy --only firestore:rules,storage:rules
 
 ---
 
-## Status: COMPLETED - READY FOR PR
+## Code Review - Security Audit
+
+### Review Checklist
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| No hardcoded secrets | ✅ PASS | No API keys, tokens, or credentials |
+| No wildcard permissions | ✅ PASS | All paths explicitly defined |
+| Authentication required | ✅ PASS | `isAuthenticated()` checked everywhere |
+| Data ownership validated | ✅ PASS | `isDataOwner(userId)` on all subcollections |
+| Role checks implemented | ✅ PASS | `canRead()`/`canWrite()` on all operations |
+| Input validation present | ✅ PASS | Field types and values validated |
+| Deny-by-default | ✅ PASS | Final `match /{document=**}` denies all |
+| No privilege escalation | ✅ PASS | Users cannot modify their own role |
+
+### Issues Found & Fixed
+
+#### Issue #1: getUserRole() Null Check (FIXED)
+- **Severity:** High
+- **Problem:** `getUserRole()` would fail if user document doesn't exist
+- **Original code:**
+  ```javascript
+  return userDoc.data.role != null ? userDoc.data.role : 'owner';
+  ```
+- **Fix applied:**
+  ```javascript
+  return (userDoc != null && userDoc.data.role != null) ? userDoc.data.role : 'owner';
+  ```
+- **Commit:** `10fd11a fix: Handle missing user document in getUserRole()`
+
+### Security Analysis
+
+1. **Role Bypass Prevention:** ✅
+   - Roles are stored server-side in Firestore, not in client tokens
+   - `get()` function fetches fresh role on each request
+   - Users cannot forge their role
+
+2. **Cross-User Access:** ✅
+   - `isDataOwner(userId)` ensures users only access their own data
+   - No path allows accessing another user's subcollections
+
+3. **Write Protection:** ✅
+   - Viewers cannot create, update, or delete any data
+   - `canWrite()` only returns true for owner/accountant roles
+
+4. **Access Requests Security:** ✅
+   - Users can only create requests for themselves (`uid == request.auth.uid`)
+   - Only target owner can read/approve requests
+   - No deletion allowed (audit trail preserved)
+
+### Commits on Branch
+```
+10fd11a fix: Handle missing user document in getUserRole()
+9f37b63 feat: Add RBAC to Firestore security rules
+```
+
+---
+
+## Status: CODE REVIEW COMPLETE - READY FOR MERGE
