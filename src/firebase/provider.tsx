@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { Firestore, doc, getDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, collection, getDocs, limit, query } from 'firebase/firestore';
 import { auth, firestore, storage } from './config';
 import { User } from '@/lib/definitions';
 import { FirebaseStorage } from 'firebase/storage';
@@ -19,6 +19,52 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 
 interface FirebaseProviderProps {
   children: ReactNode;
+}
+
+/**
+ * Check if a user is a legacy owner by looking for existing data in their collections
+ * يتحقق إذا كان المستخدم مالك قديم من خلال البحث عن بيانات موجودة في مجموعاته
+ *
+ * Returns: 'legacy' if user has data, 'new' if definitely new, 'unknown' if check failed
+ */
+async function checkIfLegacyOwner(uid: string): Promise<'legacy' | 'new' | 'unknown'> {
+  // Check common collections for existing data
+  // نتحقق من المجموعات الشائعة للبيانات الموجودة
+  const collectionsToCheck = ['ledger', 'cheques', 'inventory', 'clients', 'partners'];
+  let successfulChecks = 0;
+  let totalErrors = 0;
+
+  for (const collectionName of collectionsToCheck) {
+    try {
+      const collectionRef = collection(firestore, `users/${uid}/${collectionName}`);
+      const q = query(collectionRef, limit(1));
+      const snapshot = await getDocs(q);
+      successfulChecks++;
+
+      if (!snapshot.empty) {
+        // User has data - they are a legacy owner
+        // المستخدم لديه بيانات - هو مالك قديم
+        console.log(`Legacy owner detected: found data in ${collectionName}`);
+        return 'legacy';
+      }
+    } catch (error) {
+      // Permission error or other issue
+      totalErrors++;
+      console.error(`Error checking ${collectionName}:`, error);
+    }
+  }
+
+  // If we couldn't check ANY collection successfully, return unknown
+  // إذا لم نتمكن من فحص أي مجموعة بنجاح، نرجع unknown
+  if (successfulChecks === 0) {
+    console.log('Could not check any collections - treating as unknown');
+    return 'unknown';
+  }
+
+  // We successfully checked some collections and found no data
+  // فحصنا بعض المجموعات بنجاح ولم نجد بيانات
+  console.log(`Checked ${successfulChecks} collections, no data found - treating as new user`);
+  return 'new';
 }
 
 /**
@@ -44,7 +90,8 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
         // Fetch user role from Firestore
         // جلب دور المستخدم من قاعدة البيانات
         try {
-          const userDoc = await getDoc(doc(firestore, 'users', firebaseUser.uid));
+          const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             const userData = userDoc.data();
             // If user document exists with role field → use that role
@@ -54,12 +101,42 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
               setRole(userData.role as UserRole);
             } else {
               // Legacy user without role field - default to owner for backwards compatibility
+              // Also update the document to include the role field
+              await setDoc(userDocRef, {
+                ...userData,
+                role: 'owner',
+                email: firebaseUser.email?.toLowerCase().trim(),
+                displayName: firebaseUser.displayName,
+              }, { merge: true });
               setRole('owner');
             }
           } else {
-            // No user document = NEW user → role = null (must request access)
-            // مستخدم جديد بدون مستند = يجب طلب الوصول
-            setRole(null);
+            // No user document - check if this is a legacy owner with existing data
+            // مستخدم بدون مستند - تحقق إذا كان مالك قديم لديه بيانات
+            const legacyStatus = await checkIfLegacyOwner(firebaseUser.uid);
+
+            if (legacyStatus === 'legacy' || legacyStatus === 'unknown') {
+              // Legacy owner OR unknown (be lenient for backwards compatibility)
+              // مالك قديم أو غير معروف - نتعامل معهم كمالك للتوافق
+              console.log(`User ${firebaseUser.email} treated as owner (status: ${legacyStatus})`);
+
+              // Create their user document with owner role
+              // إنشاء مستند المستخدم بدور المالك
+              await setDoc(userDocRef, {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email?.toLowerCase().trim(),
+                displayName: firebaseUser.displayName,
+                role: 'owner',
+                createdAt: new Date(),
+                isLegacyMigrated: true,
+              });
+              setRole('owner');
+            } else {
+              // Definitely a NEW user → role = null (must request access)
+              // مستخدم جديد بالتأكيد = يجب طلب الوصول
+              console.log(`New user ${firebaseUser.email} - role set to null`);
+              setRole(null);
+            }
           }
         } catch (error) {
           console.error('Error fetching user role:', error);
