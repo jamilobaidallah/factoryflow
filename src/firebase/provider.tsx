@@ -47,17 +47,25 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
           const userDoc = await getDoc(doc(firestore, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            // Default to 'owner' if no role field (backwards compatible)
-            // المستخدمون الحاليون بدون دور يصبحون مالكين
-            setRole((userData.role as UserRole) || 'owner');
+            // If user document exists with role field → use that role
+            // If user document exists but NO role field → legacy user → default to 'owner'
+            // إذا كان المستند موجود بدون حقل الدور = مستخدم قديم = مالك
+            if (userData.role !== undefined) {
+              setRole(userData.role as UserRole);
+            } else {
+              // Legacy user without role field - default to owner for backwards compatibility
+              setRole('owner');
+            }
           } else {
-            // No user document = existing user, default to owner
-            setRole('owner');
+            // No user document = NEW user → role = null (must request access)
+            // مستخدم جديد بدون مستند = يجب طلب الوصول
+            setRole(null);
           }
         } catch (error) {
           console.error('Error fetching user role:', error);
-          // Default to owner on error to not break existing users
-          setRole('owner');
+          // On error, set null to prevent unauthorized access
+          // عند الخطأ، نضع null لمنع الوصول غير المصرح
+          setRole(null);
         }
       } else {
         setUser(null);

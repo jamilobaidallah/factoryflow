@@ -7,13 +7,15 @@ import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import MobileNav from "@/components/layout/mobile-nav";
 import FloatingActionButton from "@/components/layout/floating-action-button";
+import { AccessRequestForm } from "@/components/auth";
+import { Factory } from "lucide-react";
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useUser();
+  const { user, role, loading, signOut } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +34,42 @@ export default function MainLayout({
 
   if (!user) {
     return null;
+  }
+
+  // User exists but has no role - show access request form
+  // المستخدم موجود لكن بدون دور - عرض نموذج طلب الوصول
+  if (role === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-2xl mx-auto py-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-primary rounded-full">
+                <Factory className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">مرحباً في FactoryFlow</h1>
+            <p className="text-gray-600">
+              لا يوجد لديك صلاحية للوصول حالياً. يرجى طلب الوصول من مالك المصنع.
+            </p>
+          </div>
+
+          {/* Access Request Form */}
+          <AccessRequestForm />
+
+          {/* Sign out option */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => signOut()}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              تسجيل الخروج واستخدام حساب آخر
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
