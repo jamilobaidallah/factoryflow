@@ -2,14 +2,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for validation
+    // ============================================
+    // HELPER FUNCTIONS - Authentication
+    // ============================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
+    function isDataOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
+    // ============================================
+    // HELPER FUNCTIONS - RBAC (Role-Based Access)
+    // ============================================
+
+    // Get user's role from their profile document
+    // Returns 'owner' as default for backwards compatibility
+    function getUserRole(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc.data.role != null ? userDoc.data.role : 'owner';
+    }
+
+    // Check if user has 'owner' role
+    function isRoleOwner(userId) {
+      return getUserRole(userId) == 'owner';
+    }
+
+    // Check if user can write (owner or accountant)
+    function canWrite(userId) {
+      let role = getUserRole(userId);
+      return role == 'owner' || role == 'accountant';
+    }
+
+    // Check if user can read (any valid role)
+    function canRead(userId) {
+      let role = getUserRole(userId);
+      return role == 'owner' || role == 'accountant' || role == 'viewer';
+    }
+
+    // ============================================
+    // HELPER FUNCTIONS - Validation
+    // ============================================
 
     function isValidNumber(value) {
       return value is number && value >= 0;
@@ -31,14 +66,26 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(fields);
     }
 
-    // User data root - read/write access for authenticated owner
+    // ============================================
+    // USER PROFILE DOCUMENT
+    // ============================================
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      // Read own profile: any authenticated user
+      allow read: if isDataOwner(userId);
+
+      // Write own profile: only data owner
+      // Note: Role changes should be controlled by owner only in future
+      allow write: if isDataOwner(userId);
+
+      // ============================================
+      // SUBCOLLECTIONS - Data Collections
+      // ============================================
 
       // Ledger collection - accounting entries
       match /ledger/{ledgerId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['transactionId', 'description', 'type', 'amount', 'category', 'date', 'createdAt'])
           && isValidString(request.resource.data.description)
           && isValidAmount(request.resource.data.amount)
@@ -46,61 +93,61 @@ service cloud.firestore {
           && isValidString(request.resource.data.category)
           && request.resource.data.date is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
-          && request.resource.data.transactionId == resource.data.transactionId // Cannot change transaction ID
+        allow update: if isDataOwner(userId) && canWrite(userId)
+          && request.resource.data.transactionId == resource.data.transactionId
           && isValidString(request.resource.data.description)
           && isValidAmount(request.resource.data.amount);
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Partners collection - business partners/owners
       match /partners/{partnerId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'ownershipPercentage', 'initialInvestment', 'joinDate', 'active'])
           && isValidString(request.resource.data.name)
           && isValidPercentage(request.resource.data.ownershipPercentage)
           && isValidNumber(request.resource.data.initialInvestment)
           && request.resource.data.joinDate is timestamp
           && request.resource.data.active is bool;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && isValidString(request.resource.data.name)
           && isValidPercentage(request.resource.data.ownershipPercentage)
           && isValidNumber(request.resource.data.initialInvestment);
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Clients collection
       match /clients/{clientId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'createdAt'])
           && isValidString(request.resource.data.name)
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && isValidString(request.resource.data.name);
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Payments collection
       match /payments/{paymentId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['clientName', 'amount', 'type', 'date', 'createdAt'])
           && isValidString(request.resource.data.clientName)
           && isValidAmount(request.resource.data.amount)
           && request.resource.data.type in ['قبض', 'صرف']
           && request.resource.data.date is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && isValidAmount(request.resource.data.amount);
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Cheques collection
       match /cheques/{chequeId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['chequeNumber', 'clientName', 'amount', 'type', 'status', 'dueDate', 'createdAt'])
           && isValidString(request.resource.data.chequeNumber)
           && isValidString(request.resource.data.clientName)
@@ -109,29 +156,29 @@ service cloud.firestore {
           && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي']
           && request.resource.data.dueDate is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي'];
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Inventory collection
       match /inventory/{itemId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['itemName', 'quantity', 'unit', 'createdAt'])
           && isValidString(request.resource.data.itemName)
           && isValidNumber(request.resource.data.quantity)
           && isValidString(request.resource.data.unit)
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && isValidNumber(request.resource.data.quantity);
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Fixed Assets collection
       match /fixedAssets/{assetId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['assetName', 'purchaseAmount', 'purchaseDate', 'usefulLifeYears', 'createdAt'])
           && isValidString(request.resource.data.assetName)
           && isValidAmount(request.resource.data.purchaseAmount)
@@ -139,28 +186,28 @@ service cloud.firestore {
           && isValidNumber(request.resource.data.usefulLifeYears)
           && request.resource.data.usefulLifeYears > 0
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId);
-        allow delete: if isOwner(userId);
+        allow update: if isDataOwner(userId) && canWrite(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Production collection
       match /production/{productionId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['outputItemName', 'outputQuantity', 'productionDate', 'createdAt'])
           && isValidString(request.resource.data.outputItemName)
           && isValidNumber(request.resource.data.outputQuantity)
           && request.resource.data.outputQuantity > 0
           && request.resource.data.productionDate is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId);
-        allow delete: if isOwner(userId);
+        allow update: if isDataOwner(userId) && canWrite(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Employees collection
       match /employees/{employeeId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'position', 'salary', 'hireDate', 'active', 'createdAt'])
           && isValidString(request.resource.data.name)
           && isValidString(request.resource.data.position)
@@ -168,32 +215,62 @@ service cloud.firestore {
           && request.resource.data.hireDate is timestamp
           && request.resource.data.active is bool
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId)
+        allow update: if isDataOwner(userId) && canWrite(userId)
           && isValidNumber(request.resource.data.salary)
           && request.resource.data.active is bool;
-        allow delete: if isOwner(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
       // Invoices collection
       match /invoices/{invoiceId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['invoiceNumber', 'clientName', 'totalAmount', 'issueDate', 'createdAt'])
           && isValidString(request.resource.data.invoiceNumber)
           && isValidString(request.resource.data.clientName)
           && isValidAmount(request.resource.data.totalAmount)
           && request.resource.data.issueDate is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if isOwner(userId);
-        allow delete: if isOwner(userId);
+        allow update: if isDataOwner(userId) && canWrite(userId);
+        allow delete: if isDataOwner(userId) && canWrite(userId);
+      }
+
+      // Catch-all for any other subcollections (incoming-cheques, outgoing-cheques, etc.)
+      match /{collection}/{docId} {
+        allow read: if isDataOwner(userId) && canRead(userId);
+        allow write: if isDataOwner(userId) && canWrite(userId);
       }
     }
 
-    // Deny all other access
+    // ============================================
+    // ACCESS REQUESTS - For self-registration flow
+    // ============================================
+
+    match /access_requests/{requestId} {
+      // Anyone authenticated can create an access request
+      allow create: if isAuthenticated()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Only the target organization owner can read requests for their org
+      allow read: if isAuthenticated()
+        && resource.data.targetOwnerId == request.auth.uid;
+
+      // Only the target org owner can approve/reject (update status)
+      allow update: if isAuthenticated()
+        && resource.data.targetOwnerId == request.auth.uid
+        && request.resource.data.status in ['approved', 'rejected'];
+
+      // No deletion - maintain audit trail
+      allow delete: if false;
+    }
+
+    // ============================================
+    // DENY ALL OTHER ACCESS
+    // ============================================
+
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
-
-
