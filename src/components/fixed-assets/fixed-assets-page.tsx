@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, TrendingDown } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
@@ -117,20 +118,22 @@ export default function FixedAssetsPage() {
           <h1 className="text-3xl font-bold text-gray-900">الأصول الثابتة</h1>
           <p className="text-gray-600 mt-2">إدارة الأصول الثابتة وحساب الاستهلاك</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            className="gap-2"
-            variant="outline"
-            onClick={() => setIsDepreciationDialogOpen(true)}
-          >
-            <TrendingDown className="w-4 h-4" />
-            تسجيل استهلاك شهري
-          </Button>
-          <Button className="gap-2" onClick={openAddDialog}>
-            <Plus className="w-4 h-4" />
-            إضافة أصل ثابت
-          </Button>
-        </div>
+        <PermissionGate action="create" module="fixed-assets">
+          <div className="flex gap-2">
+            <Button
+              className="gap-2"
+              variant="outline"
+              onClick={() => setIsDepreciationDialogOpen(true)}
+            >
+              <TrendingDown className="w-4 h-4" />
+              تسجيل استهلاك شهري
+            </Button>
+            <Button className="gap-2" onClick={openAddDialog}>
+              <Plus className="w-4 h-4" />
+              إضافة أصل ثابت
+            </Button>
+          </div>
+        </PermissionGate>
       </div>
 
       {dataLoading ? (

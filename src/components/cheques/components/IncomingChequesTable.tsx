@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Edit, Trash2, Image as ImageIcon, RefreshCw, X, Copy } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { Cheque } from "../types/cheques";
 import { useToast } from "@/hooks/use-toast";
 
@@ -182,47 +183,55 @@ export function IncomingChequesTable({
               <TableCell>
                 <div className="flex items-center gap-1">
                   {/* Show endorse button only for pending cheques that are not endorsed */}
-                  {cheque.status === "قيد الانتظار" &&
-                    cheque.chequeType !== "مجير" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-400 hover:text-purple-600 hover:bg-purple-50"
-                        onClick={() => onEndorse(cheque)}
-                        title="تظهير الشيك"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    )}
+                  <PermissionGate action="update" module="cheques">
+                    {cheque.status === "قيد الانتظار" &&
+                      cheque.chequeType !== "مجير" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-purple-600 hover:bg-purple-50"
+                          onClick={() => onEndorse(cheque)}
+                          title="تظهير الشيك"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      )}
+                  </PermissionGate>
                   {/* Show cancel endorsement button for endorsed cheques */}
-                  {cheque.status === "مجيّر" &&
-                    cheque.chequeType === "مجير" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-purple-500 hover:text-purple-700 hover:bg-purple-50"
-                        onClick={() => onCancelEndorsement(cheque)}
-                        title="إلغاء التظهير"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                    onClick={() => onEdit(cheque)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => onDelete(cheque.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <PermissionGate action="update" module="cheques">
+                    {cheque.status === "مجيّر" &&
+                      cheque.chequeType === "مجير" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-purple-500 hover:text-purple-700 hover:bg-purple-50"
+                          onClick={() => onCancelEndorsement(cheque)}
+                          title="إلغاء التظهير"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                  </PermissionGate>
+                  <PermissionGate action="update" module="cheques">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                      onClick={() => onEdit(cheque)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </PermissionGate>
+                  <PermissionGate action="delete" module="cheques">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => onDelete(cheque.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </PermissionGate>
                 </div>
               </TableCell>
             </TableRow>

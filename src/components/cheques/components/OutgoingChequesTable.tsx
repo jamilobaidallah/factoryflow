@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Edit, Trash2, Image as ImageIcon, Link, Copy } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { Cheque } from "../types/cheques";
 import { CHEQUE_STATUS_AR } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
@@ -242,33 +243,39 @@ export function OutgoingChequesTable({
                       <div className="flex items-center gap-1">
                         {!cheque.isEndorsedCheque ? (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                              onClick={() => onEdit(cheque)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                              onClick={() => onDelete(cheque.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <PermissionGate action="update" module="cheques">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                                onClick={() => onEdit(cheque)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </PermissionGate>
+                            <PermissionGate action="delete" module="cheques">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => onDelete(cheque.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </PermissionGate>
                           </>
                         ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                            onClick={() => onLinkTransaction(cheque)}
-                            title="ربط بفاتورة"
-                          >
-                            <Link className="h-4 w-4" />
-                          </Button>
+                          <PermissionGate action="update" module="cheques">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => onLinkTransaction(cheque)}
+                              title="ربط بفاتورة"
+                            >
+                              <Link className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
                         )}
                       </div>
                     </TableCell>

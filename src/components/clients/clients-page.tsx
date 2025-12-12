@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
@@ -304,10 +305,12 @@ export default function ClientsPage() {
           <h1 className="text-3xl font-bold text-gray-900">إدارة العملاء</h1>
           <p className="text-gray-600 mt-2">إضافة وتتبع معلومات العملاء</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة عميل جديد">
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          إضافة عميل جديد
-        </Button>
+        <PermissionGate action="create" module="clients">
+          <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة عميل جديد">
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            إضافة عميل جديد
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="space-y-4">
@@ -354,24 +357,28 @@ export default function ClientsPage() {
                         >
                           <Eye className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          onClick={() => handleEdit(client)}
-                          aria-label={`تعديل ${client.name}`}
-                        >
-                          <Edit className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(client.id)}
-                          aria-label={`حذف ${client.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </Button>
+                        <PermissionGate action="update" module="clients">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => handleEdit(client)}
+                            aria-label={`تعديل ${client.name}`}
+                          >
+                            <Edit className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="delete" module="clients">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(client.id)}
+                            aria-label={`حذف ${client.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </PermissionGate>
                       </div>
                     </TableCell>
                   </TableRow>

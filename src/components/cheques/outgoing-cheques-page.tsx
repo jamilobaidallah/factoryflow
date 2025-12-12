@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 
@@ -276,10 +277,12 @@ export default function OutgoingChequesPage() {
           <h1 className="text-3xl font-bold text-gray-900">الشيكات الصادرة</h1>
           <p className="text-gray-600 mt-2">إدارة الشيكات الصادرة للموردين والدائنين</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
-          إضافة شيك صادر
-        </Button>
+        <PermissionGate action="create" module="cheques">
+          <Button className="gap-2" onClick={openAddDialog}>
+            <Plus className="w-4 h-4" />
+            إضافة شيك صادر
+          </Button>
+        </PermissionGate>
       </div>
 
       <OutgoingChequesTable

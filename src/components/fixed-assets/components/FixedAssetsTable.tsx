@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Edit, Trash2 } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { FixedAsset } from "../types/fixed-assets";
 
 interface FixedAssetsTableProps {
@@ -78,22 +79,26 @@ export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableP
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                    onClick={() => onEdit(asset)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => onDelete(asset.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <PermissionGate action="update" module="fixed-assets">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                      onClick={() => onEdit(asset)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </PermissionGate>
+                  <PermissionGate action="delete" module="fixed-assets">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => onDelete(asset.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </PermissionGate>
                 </div>
               </TableCell>
             </TableRow>

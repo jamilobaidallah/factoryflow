@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Users } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -229,10 +230,12 @@ export default function PartnersPage() {
           <h1 className="text-3xl font-bold text-gray-900">إدارة الشركاء</h1>
           <p className="text-gray-600 mt-2">إضافة وتتبع معلومات الشركاء والملاك</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
-          إضافة شريك جديد
-        </Button>
+        <PermissionGate action="create" module="partners">
+          <Button className="gap-2" onClick={openAddDialog}>
+            <Plus className="w-4 h-4" />
+            إضافة شريك جديد
+          </Button>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}
@@ -346,22 +349,26 @@ export default function PartnersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          onClick={() => handleEdit(partner)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(partner.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <PermissionGate action="update" module="partners">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => handleEdit(partner)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="delete" module="partners">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(partner.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
                       </div>
                     </TableCell>
                   </TableRow>

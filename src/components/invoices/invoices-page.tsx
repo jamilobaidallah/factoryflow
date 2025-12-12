@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download, Eye, Image, X } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import {
   Dialog,
   DialogContent,
@@ -138,10 +139,12 @@ export default function InvoicesPage() {
           <h1 className="text-3xl font-bold text-gray-900">الفواتير</h1>
           <p className="text-gray-500 mt-1">إنشاء وإدارة فواتير العملاء</p>
         </div>
-        <Button onClick={openAddDialog}>
-          <Plus className="w-4 h-4 ml-2" />
-          فاتورة جديدة
-        </Button>
+        <PermissionGate action="create" module="invoices">
+          <Button onClick={openAddDialog}>
+            <Plus className="w-4 h-4 ml-2" />
+            فاتورة جديدة
+          </Button>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}
@@ -255,46 +258,54 @@ export default function InvoicesPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
-                          onClick={() => exportPDF(invoice)}
-                          title="تصدير PDF"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          onClick={() => handleEdit(invoice)}
-                          title="تعديل"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {invoice.status !== "paid" && (
-                          <select
-                            className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value={invoice.status}
-                            onChange={(e) =>
-                              handleUpdateStatus(invoice.id, e.target.value as Invoice["status"])
-                            }
+                        <PermissionGate action="export" module="invoices">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                            onClick={() => exportPDF(invoice)}
+                            title="تصدير PDF"
                           >
-                            <option value="draft">مسودة</option>
-                            <option value="sent">مرسلة</option>
-                            <option value="paid">مدفوعة</option>
-                            <option value="overdue">متأخرة</option>
-                          </select>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(invoice.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="update" module="invoices">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => handleEdit(invoice)}
+                            title="تعديل"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="update" module="invoices">
+                          {invoice.status !== "paid" && (
+                            <select
+                              className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={invoice.status}
+                              onChange={(e) =>
+                                handleUpdateStatus(invoice.id, e.target.value as Invoice["status"])
+                              }
+                            >
+                              <option value="draft">مسودة</option>
+                              <option value="sent">مرسلة</option>
+                              <option value="paid">مدفوعة</option>
+                              <option value="overdue">متأخرة</option>
+                            </select>
+                          )}
+                        </PermissionGate>
+                        <PermissionGate action="delete" module="invoices">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(invoice.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
                       </div>
                     </TableCell>
                   </TableRow>

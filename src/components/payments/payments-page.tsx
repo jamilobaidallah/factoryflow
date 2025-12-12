@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, Download, Layers } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
@@ -489,21 +490,23 @@ export default function PaymentsPage() {
           <h1 className="text-3xl font-bold text-gray-900">المدفوعات</h1>
           <p className="text-gray-600 mt-2">تتبع عمليات القبض والصرف</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsMultiAllocationDialogOpen(true)}
-            aria-label="إضافة دفعة متعددة"
-          >
-            <Layers className="w-4 h-4" aria-hidden="true" />
-            دفعة متعددة
-          </Button>
-          <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            إضافة مدفوعة
-          </Button>
-        </div>
+        <PermissionGate action="create" module="payments">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setIsMultiAllocationDialogOpen(true)}
+              aria-label="إضافة دفعة متعددة"
+            >
+              <Layers className="w-4 h-4" aria-hidden="true" />
+              دفعة متعددة
+            </Button>
+            <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              إضافة مدفوعة
+            </Button>
+          </div>
+        </PermissionGate>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -542,15 +545,17 @@ export default function PaymentsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-800">سجل المدفوعات ({payments.length})</h2>
           {payments.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
-              aria-label="تصدير المدفوعات إلى ملف Excel"
-            >
-              <Download className="w-4 h-4 ml-2" aria-hidden="true" />
-              Excel
-            </Button>
+            <PermissionGate action="export" module="payments">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`)}
+                aria-label="تصدير المدفوعات إلى ملف Excel"
+              >
+                <Download className="w-4 h-4 ml-2" aria-hidden="true" />
+                Excel
+              </Button>
+            </PermissionGate>
           )}
         </div>
         {dataLoading ? (
@@ -647,24 +652,28 @@ export default function PaymentsPage() {
                     <TableCell>{payment.notes}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group" aria-label="إجراءات المدفوعة">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          onClick={() => handleEdit(payment)}
-                          aria-label={`تعديل مدفوعة ${payment.clientName}`}
-                        >
-                          <Edit className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(payment.id)}
-                          aria-label={`حذف مدفوعة ${payment.clientName}`}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </Button>
+                        <PermissionGate action="update" module="payments">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => handleEdit(payment)}
+                            aria-label={`تعديل مدفوعة ${payment.clientName}`}
+                          >
+                            <Edit className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="delete" module="payments">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(payment.id)}
+                            aria-label={`حذف مدفوعة ${payment.clientName}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </PermissionGate>
                       </div>
                     </TableCell>
                   </TableRow>

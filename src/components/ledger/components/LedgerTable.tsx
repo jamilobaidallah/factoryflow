@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Edit, Trash2, DollarSign, FolderOpen } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { cn } from "@/lib/utils";
 
@@ -118,18 +119,20 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       <TableCell>
         <div className="flex gap-1" role="group" aria-label="إجراءات الحركة المالية">
-          {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onQuickPay(entry)}
-              title="إضافة دفعة"
-              aria-label={`إضافة دفعة لـ ${entry.description}`}
-              className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-            >
-              <DollarSign className="w-4 h-4" aria-hidden="true" />
-            </Button>
-          )}
+          <PermissionGate action="create" module="payments">
+            {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onQuickPay(entry)}
+                title="إضافة دفعة"
+                aria-label={`إضافة دفعة لـ ${entry.description}`}
+                className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+              >
+                <DollarSign className="w-4 h-4" aria-hidden="true" />
+              </Button>
+            )}
+          </PermissionGate>
           <Button
             variant="ghost"
             size="sm"
@@ -140,24 +143,28 @@ const LedgerTableRow = memo(function LedgerTableRow({
           >
             <FolderOpen className="w-4 h-4" aria-hidden="true" />
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onEdit(entry)}
-            aria-label={`تعديل ${entry.description}`}
-            className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-100"
-          >
-            <Edit className="w-4 h-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(entry)}
-            aria-label={`حذف ${entry.description}`}
-            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="w-4 h-4" aria-hidden="true" />
-          </Button>
+          <PermissionGate action="update" module="ledger">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onEdit(entry)}
+              aria-label={`تعديل ${entry.description}`}
+              className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-100"
+            >
+              <Edit className="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </PermissionGate>
+          <PermissionGate action="delete" module="ledger">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(entry)}
+              aria-label={`حذف ${entry.description}`}
+              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </PermissionGate>
         </div>
       </TableCell>
     </TableRow>
@@ -241,18 +248,20 @@ const LedgerCard = memo(function LedgerCard({
         role="group"
         aria-label="إجراءات الحركة المالية"
       >
-        {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onQuickPay(entry)}
-            className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
-            aria-label={`إضافة دفعة لـ ${entry.description}`}
-          >
-            <DollarSign className="w-4 h-4 ml-1" aria-hidden="true" />
-            دفعة
-          </Button>
-        )}
+        <PermissionGate action="create" module="payments">
+          {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onQuickPay(entry)}
+              className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+              aria-label={`إضافة دفعة لـ ${entry.description}`}
+            >
+              <DollarSign className="w-4 h-4 ml-1" aria-hidden="true" />
+              دفعة
+            </Button>
+          )}
+        </PermissionGate>
         <Button
           variant="ghost"
           size="sm"
@@ -263,24 +272,28 @@ const LedgerCard = memo(function LedgerCard({
           <FolderOpen className="w-4 h-4 ml-1" aria-hidden="true" />
           مرتبط
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onEdit(entry)}
-          aria-label={`تعديل ${entry.description}`}
-          className="text-slate-600 hover:text-slate-700 hover:bg-slate-100"
-        >
-          <Edit className="w-4 h-4" aria-hidden="true" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDelete(entry)}
-          aria-label={`حذف ${entry.description}`}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-        >
-          <Trash2 className="w-4 h-4" aria-hidden="true" />
-        </Button>
+        <PermissionGate action="update" module="ledger">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onEdit(entry)}
+            aria-label={`تعديل ${entry.description}`}
+            className="text-slate-600 hover:text-slate-700 hover:bg-slate-100"
+          >
+            <Edit className="w-4 h-4" aria-hidden="true" />
+          </Button>
+        </PermissionGate>
+        <PermissionGate action="delete" module="ledger">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(entry)}
+            aria-label={`حذف ${entry.description}`}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
+          </Button>
+        </PermissionGate>
       </div>
     </div>
   );

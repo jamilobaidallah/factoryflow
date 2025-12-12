@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
@@ -290,10 +291,12 @@ export default function IncomingChequesPage() {
           <h1 className="text-3xl font-bold text-gray-900">الشيكات الواردة</h1>
           <p className="text-gray-600 mt-2">إدارة الشيكات الواردة من العملاء مع إمكانية التظهير</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
-          إضافة شيك وارد
-        </Button>
+        <PermissionGate action="create" module="cheques">
+          <Button className="gap-2" onClick={openAddDialog}>
+            <Plus className="w-4 h-4" />
+            إضافة شيك وارد
+          </Button>
+        </PermissionGate>
       </div>
 
       {/* Summary Cards */}

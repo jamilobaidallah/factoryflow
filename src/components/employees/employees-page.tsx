@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
@@ -178,10 +179,12 @@ export default function EmployeesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>قائمة الموظفين ({employees.length})</CardTitle>
-            <Button onClick={openAddEmployeeDialog} className="gap-2" aria-label="إضافة موظف جديد">
-              <Plus className="w-4 h-4" aria-hidden="true" />
-              إضافة موظف
-            </Button>
+            <PermissionGate action="create" module="employees">
+              <Button onClick={openAddEmployeeDialog} className="gap-2" aria-label="إضافة موظف جديد">
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                إضافة موظف
+              </Button>
+            </PermissionGate>
           </CardHeader>
           <CardContent>
             {dataLoading ? (

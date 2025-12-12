@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Download } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
@@ -353,10 +354,12 @@ export default function InventoryPage() {
           <h1 className="text-3xl font-bold text-gray-900">المخزون</h1>
           <p className="text-gray-600 mt-2">تتبع حركة المواد (دخول/خروج)</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
-          إضافة عنصر للمخزون
-        </Button>
+        <PermissionGate action="create" module="inventory">
+          <Button className="gap-2" onClick={openAddDialog}>
+            <Plus className="w-4 h-4" />
+            إضافة عنصر للمخزون
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -406,14 +409,16 @@ export default function InventoryPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-800">سجل المخزون ({items.length})</h2>
           {items.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
-            >
-              <Download className="w-4 h-4 ml-2" />
-              Excel
-            </Button>
+            <PermissionGate action="export" module="inventory">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
+              >
+                <Download className="w-4 h-4 ml-2" />
+                Excel
+              </Button>
+            </PermissionGate>
           )}
         </div>
         {dataLoading ? (
@@ -469,30 +474,36 @@ export default function InventoryPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
-                          onClick={() => handleMovement(item)}
-                        >
-                          <TrendingUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          onClick={() => handleEdit(item)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <PermissionGate action="update" module="inventory">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                            onClick={() => handleMovement(item)}
+                          >
+                            <TrendingUp className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="update" module="inventory">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            onClick={() => handleEdit(item)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate action="delete" module="inventory">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(item.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </PermissionGate>
                       </div>
                     </TableCell>
                   </TableRow>

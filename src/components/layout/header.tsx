@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { GlobalSearch } from "@/components/search";
+import { usePermissions } from "@/hooks/usePermissions";
+import { USER_ROLE_LABELS } from "@/lib/constants";
 
 export default function Header() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { role } = usePermissions();
 
   const handleLogout = async () => {
     try {
@@ -51,6 +54,11 @@ export default function Header() {
         >
           <User className="w-4 h-4" aria-hidden="true" />
           <span>{user?.email}</span>
+          {role && (
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+              {USER_ROLE_LABELS[role]}
+            </span>
+          )}
         </div>
         <Button
           variant="outline"

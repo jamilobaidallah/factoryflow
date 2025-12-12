@@ -1,159 +1,81 @@
-# Task: RBAC Phase 3 - Firestore Security Rules
+# Task: RBAC Phase 4 - UI Integration
 
 ## Branch
-`feature/rbac-firestore-rules`
+`feature/rbac-ui-integration`
 
 ---
 
 ## Context
-Phase 1 & 2 complete. We have frontend RBAC. Now securing backend with Firestore rules.
+Phases 1-3 complete. Integrating RBAC into UI so viewers see read-only interface.
 
 ---
 
 ## Plan
 
-### Task 3.1: Update `firestore.rules` with RBAC
-- [x] Add `getUserRole(userId)` helper function
-- [x] Add `isRoleOwner(userId)` - checks if role is 'owner'
-- [x] Add `canWrite(userId)` - owner OR accountant can write
-- [x] Add `canRead(userId)` - any role can read (owner, accountant, viewer)
-- [x] Update all collection rules to use role-based access
-- [x] Keep all existing validation logic unchanged
-- [x] Add `access_requests` collection for self-registration
+### Task 4.1: Identify Action Buttons
+- [x] Ledger page - Add button, Export buttons
+- [x] Clients page - Add/Edit/Delete buttons
+- [x] Payments page - Add/Multi-allocation/Export buttons, Edit/Delete in table
+- [x] Incoming Cheques page - Add button, Endorse/Edit/Delete in table
+- [x] Outgoing Cheques page - Add button, Edit/Delete/Link in table
+- [x] Inventory page - Add/Export buttons, Movement/Edit/Delete in table
+- [x] Employees page - Add button, Edit/Delete in table
+- [x] Partners page - Add button, Edit/Delete in table
+- [x] Fixed Assets page - Add/Depreciation buttons, Edit/Delete in table
+- [x] Invoices page - Add button, Export/Edit/Status/Delete in table
 
-### Task 3.2: Update `storage.rules` with RBAC
-- [x] Document Storage rules limitation (cannot access Firestore)
-- [x] Keep existing image validation
-- [x] Note: RBAC for storage enforced at application level
+### Task 4.2: Wrap Action Buttons with PermissionGate
+- [x] All Add/Create buttons wrapped with `action="create"`
+- [x] All Edit/Update buttons wrapped with `action="update"`
+- [x] All Delete buttons wrapped with `action="delete"`
+- [x] All Export buttons wrapped with `action="export"`
 
-### Task 3.3: Create `docs/firestore-rules.md`
-- [x] Document RBAC rules structure
-- [x] Explain role hierarchy
-- [x] Include deployment instructions
-- [x] Add testing guide
-- [x] Document performance considerations (get() calls)
+### Task 4.3: Hide Table Row Actions
+- [x] LedgerTable - Desktop & Mobile views
+- [x] EmployeesTable
+- [x] FixedAssetsTable
+- [x] IncomingChequesTable
+- [x] OutgoingChequesTable
+- [x] Clients, Payments, Partners, Inventory, Invoices tables (inline in pages)
+
+### Task 4.4: Add Role Badge to Header
+- [x] Import usePermissions and USER_ROLE_LABELS
+- [x] Display role badge next to user email
 
 ### Verification
-- [x] Rules syntax reviewed
-- [x] Backwards compatible (existing users without role = owner)
-- [x] TypeScript check - PASSED
-- [x] Lint check - PASSED
+- [x] TypeScript check passes
+- [x] Lint check passes (pre-existing warnings only)
 
 ---
 
-## Review
+## Files Modified
 
-### Files Changed
+| File | Changes |
+|------|---------|
+| `src/components/clients/clients-page.tsx` | Added PermissionGate for Add/Edit/Delete |
+| `src/components/payments/payments-page.tsx` | Added PermissionGate for Add/Multi/Export/Edit/Delete |
+| `src/components/cheques/incoming-cheques-page.tsx` | Added PermissionGate for Add |
+| `src/components/cheques/outgoing-cheques-page.tsx` | Added PermissionGate for Add |
+| `src/components/inventory/inventory-page.tsx` | Added PermissionGate for Add/Export/Movement/Edit/Delete |
+| `src/components/employees/employees-page.tsx` | Added PermissionGate for Add |
+| `src/components/partners/partners-page.tsx` | Added PermissionGate for Add/Edit/Delete |
+| `src/components/fixed-assets/fixed-assets-page.tsx` | Added PermissionGate for Add/Depreciation |
+| `src/components/invoices/invoices-page.tsx` | Added PermissionGate for Add/Export/Edit/Status/Delete |
+| `src/components/ledger/ledger-page.tsx` | Added PermissionGate for Add/Export |
+| `src/components/ledger/components/LedgerTable.tsx` | Added PermissionGate for QuickPay/Edit/Delete (desktop & mobile) |
+| `src/components/employees/components/EmployeesTable.tsx` | Added PermissionGate for Edit/Delete |
+| `src/components/fixed-assets/components/FixedAssetsTable.tsx` | Added PermissionGate for Edit/Delete |
+| `src/components/cheques/components/IncomingChequesTable.tsx` | Added PermissionGate for Endorse/Cancel/Edit/Delete |
+| `src/components/cheques/components/OutgoingChequesTable.tsx` | Added PermissionGate for Edit/Delete/Link |
+| `src/components/layout/header.tsx` | Added role badge display |
 
-| File | Action | Description |
-|------|--------|-------------|
-| `firestore.rules` | **MODIFY** | Added RBAC helper functions |
-| `storage.rules` | **MODIFY** | Added comments about RBAC limitation |
-| `docs/firestore-rules.md` | **CREATE** | Full documentation |
-
-### Summary of Changes
-
-#### `firestore.rules` (MODIFIED)
-- **New Helper Functions:**
-  - `getUserRole(userId)` - Fetches role from user doc, defaults to 'owner'
-  - `isRoleOwner(userId)` - Checks if role is 'owner'
-  - `canWrite(userId)` - Owner OR accountant
-  - `canRead(userId)` - Owner, accountant, OR viewer
-- **Updated Collections:** All subcollections now check `canRead()` for read and `canWrite()` for write
-- **New Collection:** `access_requests` for self-registration flow
-- **Preserved:** All existing validation logic (field requirements, type checks)
-
-#### `storage.rules` (MODIFIED)
-- Added comments explaining Storage rules cannot access Firestore
-- RBAC for storage is enforced at application level
-- Kept existing image validation (type and size)
-
-#### `docs/firestore-rules.md` (NEW)
-- Role hierarchy explanation
-- Permission matrix
-- How `getUserRole()` works
-- **Performance section:** Explains `get()` call costs and caching behavior
-- Data structure documentation
-- Deployment commands
-- Testing instructions
-- Troubleshooting guide
-
-### Key Design Decisions
-
-1. **Backwards Compatibility:** Users without `role` field default to `'owner'`
-2. **Storage Limitation:** Firebase Storage rules cannot use `get()` to access Firestore, so RBAC is enforced at app level
-3. **Catch-all Rule:** Added `match /{collection}/{docId}` to handle any unlisted subcollections
-
-### Verification Results
-```
-TypeScript: PASSED (no errors)
-ESLint: PASSED (pre-existing warnings only)
-Firebase CLI: Available (v14.26.0)
-```
-
-### Deployment Command
-```bash
-firebase deploy --only firestore:rules,storage:rules
-```
+## Button Count
+- **Create buttons wrapped**: 10
+- **Update buttons wrapped**: 18
+- **Delete buttons wrapped**: 14
+- **Export buttons wrapped**: 5
+- **Total buttons wrapped**: 47
 
 ---
 
-## Code Review - Security Audit
-
-### Review Checklist
-
-| Check | Status | Notes |
-|-------|--------|-------|
-| No hardcoded secrets | ✅ PASS | No API keys, tokens, or credentials |
-| No wildcard permissions | ✅ PASS | All paths explicitly defined |
-| Authentication required | ✅ PASS | `isAuthenticated()` checked everywhere |
-| Data ownership validated | ✅ PASS | `isDataOwner(userId)` on all subcollections |
-| Role checks implemented | ✅ PASS | `canRead()`/`canWrite()` on all operations |
-| Input validation present | ✅ PASS | Field types and values validated |
-| Deny-by-default | ✅ PASS | Final `match /{document=**}` denies all |
-| No privilege escalation | ✅ PASS | Users cannot modify their own role |
-
-### Issues Found & Fixed
-
-#### Issue #1: getUserRole() Null Check (FIXED)
-- **Severity:** High
-- **Problem:** `getUserRole()` would fail if user document doesn't exist
-- **Original code:**
-  ```javascript
-  return userDoc.data.role != null ? userDoc.data.role : 'owner';
-  ```
-- **Fix applied:**
-  ```javascript
-  return (userDoc != null && userDoc.data.role != null) ? userDoc.data.role : 'owner';
-  ```
-- **Commit:** `10fd11a fix: Handle missing user document in getUserRole()`
-
-### Security Analysis
-
-1. **Role Bypass Prevention:** ✅
-   - Roles are stored server-side in Firestore, not in client tokens
-   - `get()` function fetches fresh role on each request
-   - Users cannot forge their role
-
-2. **Cross-User Access:** ✅
-   - `isDataOwner(userId)` ensures users only access their own data
-   - No path allows accessing another user's subcollections
-
-3. **Write Protection:** ✅
-   - Viewers cannot create, update, or delete any data
-   - `canWrite()` only returns true for owner/accountant roles
-
-4. **Access Requests Security:** ✅
-   - Users can only create requests for themselves (`uid == request.auth.uid`)
-   - Only target owner can read/approve requests
-   - No deletion allowed (audit trail preserved)
-
-### Commits on Branch
-```
-10fd11a fix: Handle missing user document in getUserRole()
-9f37b63 feat: Add RBAC to Firestore security rules
-```
-
----
-
-## Status: CODE REVIEW COMPLETE - READY FOR MERGE
+## Status: COMPLETED - READY FOR PR

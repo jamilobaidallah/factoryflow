@@ -12,6 +12,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Plus, Download } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
@@ -230,10 +231,12 @@ export default function LedgerPage() {
           <h1 className="text-3xl font-bold text-gray-900">دفتر الأستاذ</h1>
           <p className="text-gray-600 mt-2">تسجيل جميع الحركات المالية</p>
         </div>
-        <Button className="gap-2" onClick={openAddDialog}>
-          <Plus className="w-4 h-4" />
-          إضافة حركة مالية
-        </Button>
+        <PermissionGate action="create" module="ledger">
+          <Button className="gap-2" onClick={openAddDialog}>
+            <Plus className="w-4 h-4" />
+            إضافة حركة مالية
+          </Button>
+        </PermissionGate>
       </div>
 
       {dataLoading ? (
@@ -268,33 +271,35 @@ export default function LedgerPage() {
           <div className="flex items-center justify-between">
             <CardTitle>سجل الحركات المالية ({filteredEntries.length})</CardTitle>
             {filteredEntries.length > 0 && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
-                >
-                  <Download className="w-4 h-4 ml-2" />
-                  Excel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportLedgerToHTML(filteredEntries)}
-                  title="طباعة باللغة العربية"
-                >
-                  <Download className="w-4 h-4 ml-2" />
-                  PDF عربي
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportLedgerToPDF(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
-                >
-                  <Download className="w-4 h-4 ml-2" />
-                  PDF (EN)
-                </Button>
-              </div>
+              <PermissionGate action="export" module="ledger">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportLedgerToHTML(filteredEntries)}
+                    title="طباعة باللغة العربية"
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    PDF عربي
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportLedgerToPDF(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    PDF (EN)
+                  </Button>
+                </div>
+              </PermissionGate>
             )}
           </div>
         </CardHeader>

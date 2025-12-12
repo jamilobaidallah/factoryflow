@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Edit, Trash2, History } from "lucide-react";
+import { PermissionGate } from "@/components/auth";
 import { Employee } from "../types/employees";
 
 interface EmployeesTableProps {
@@ -81,24 +82,28 @@ export function EmployeesTable({
                   >
                     <History className="h-4 w-4" aria-hidden="true" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                    onClick={() => onEdit(employee)}
-                    aria-label={`تعديل ${employee.name}`}
-                  >
-                    <Edit className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => onDelete(employee.id)}
-                    aria-label={`حذف ${employee.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                  <PermissionGate action="update" module="employees">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                      onClick={() => onEdit(employee)}
+                      aria-label={`تعديل ${employee.name}`}
+                    >
+                      <Edit className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </PermissionGate>
+                  <PermissionGate action="delete" module="employees">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => onDelete(employee.id)}
+                      aria-label={`حذف ${employee.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </PermissionGate>
                 </div>
               </TableCell>
             </TableRow>
