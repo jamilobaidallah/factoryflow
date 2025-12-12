@@ -10,8 +10,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Check if user is the data owner (legacy check - user owns this data)
     function isDataOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if user is a team member of this data owner
+    // Used for multi-tenant access: viewers/accountants accessing their owner's data
+    function isTeamMemberOf(dataOwnerId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && userDoc.data.ownerId == dataOwnerId;
+    }
+
+    // Check if user can access this owner's data (owner OR team member)
+    function canAccessOwnerData(userId) {
+      return isAuthenticated() && (
+        request.auth.uid == userId ||  // User is the owner
+        isTeamMemberOf(userId)          // User is a team member of this owner
+      );
     }
 
     // ============================================
@@ -91,7 +107,7 @@ service cloud.firestore {
 
       // Ledger collection - accounting entries
       match /ledger/{ledgerId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['transactionId', 'description', 'type', 'amount', 'category', 'date', 'createdAt'])
           && isValidString(request.resource.data.description)
@@ -109,7 +125,7 @@ service cloud.firestore {
 
       // Partners collection - business partners/owners
       match /partners/{partnerId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'ownershipPercentage', 'initialInvestment', 'joinDate', 'active'])
           && isValidString(request.resource.data.name)
@@ -126,7 +142,7 @@ service cloud.firestore {
 
       // Clients collection
       match /clients/{clientId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'createdAt'])
           && isValidString(request.resource.data.name)
@@ -138,7 +154,7 @@ service cloud.firestore {
 
       // Payments collection
       match /payments/{paymentId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['clientName', 'amount', 'type', 'date', 'createdAt'])
           && isValidString(request.resource.data.clientName)
@@ -153,7 +169,7 @@ service cloud.firestore {
 
       // Cheques collection
       match /cheques/{chequeId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['chequeNumber', 'clientName', 'amount', 'type', 'status', 'dueDate', 'createdAt'])
           && isValidString(request.resource.data.chequeNumber)
@@ -170,7 +186,7 @@ service cloud.firestore {
 
       // Inventory collection
       match /inventory/{itemId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['itemName', 'quantity', 'unit', 'createdAt'])
           && isValidString(request.resource.data.itemName)
@@ -184,7 +200,7 @@ service cloud.firestore {
 
       // Fixed Assets collection
       match /fixedAssets/{assetId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['assetName', 'purchaseAmount', 'purchaseDate', 'usefulLifeYears', 'createdAt'])
           && isValidString(request.resource.data.assetName)
@@ -199,7 +215,7 @@ service cloud.firestore {
 
       // Production collection
       match /production/{productionId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['outputItemName', 'outputQuantity', 'productionDate', 'createdAt'])
           && isValidString(request.resource.data.outputItemName)
@@ -213,7 +229,7 @@ service cloud.firestore {
 
       // Employees collection
       match /employees/{employeeId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['name', 'position', 'salary', 'hireDate', 'active', 'createdAt'])
           && isValidString(request.resource.data.name)
@@ -230,7 +246,7 @@ service cloud.firestore {
 
       // Invoices collection
       match /invoices/{invoiceId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow create: if isDataOwner(userId) && canWrite(userId)
           && hasRequiredFields(['invoiceNumber', 'clientName', 'totalAmount', 'issueDate', 'createdAt'])
           && isValidString(request.resource.data.invoiceNumber)
@@ -244,7 +260,7 @@ service cloud.firestore {
 
       // Catch-all for any other subcollections (incoming-cheques, outgoing-cheques, etc.)
       match /{collection}/{docId} {
-        allow read: if isDataOwner(userId) && canRead(userId);
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
         allow write: if isDataOwner(userId) && canWrite(userId);
       }
     }
