@@ -78,4 +78,70 @@ Phases 1-3 complete. Integrating RBAC into UI so viewers see read-only interface
 
 ---
 
+## Bug Fix: Pending Access Requests Not Showing (Dec 2025)
+
+### Problem
+Owner could not see pending access requests in User Management page (showed 0).
+
+### Root Cause
+1. Firestore security rules blocked authenticated users from reading `access_requests`
+2. Missing composite indexes for Firestore queries
+
+### Solution Applied
+1. ✅ **Firestore Rules Updated** - `access_requests` now allows read for authenticated users:
+   ```javascript
+   allow read: if isAuthenticated();
+   ```
+
+2. ✅ **Index 1 Created**: `access_requests` collection
+   - Fields: `targetOwnerId` (Asc), `status` (Asc), `requestedAt` (Desc)
+
+3. ✅ **Index 2 Created**: `members` subcollection
+   - Fields: `isActive` (Asc), `approvedAt` (Desc)
+   - Scope: Collection
+
+### Files Cleaned Up
+- `src/components/users/users-page.tsx` - Removed debug banner and console.logs
+- `src/services/userService.ts` - Removed debug console.logs
+
+### Status: ✅ FIXED
+
+---
+
+## Bug Fix: Duplicate Members on Approval (Dec 2025)
+
+### Problem
+When approving access requests:
+1. Error toast appeared: "حدث خطأ أثناء قبول الطلب"
+2. BUT the user WAS added - multiple times (duplicate entries)
+3. Could not delete or change role of duplicate members
+
+### Root Cause
+1. `approveRequest` used `updateDoc().catch(() => addDoc())` pattern
+   - `updateDoc` failed because document didn't exist
+   - `addDoc` created document with random auto-generated ID (not user's UID)
+   - Each retry created another duplicate
+2. `updateUserRole` and `removeUserAccess` only updated first matching document
+
+### Solution Applied
+1. ✅ **approveRequest**: Changed to `setDoc(..., { merge: true })` with deterministic ID (`requestData.uid`)
+2. ✅ **approveRequest**: Added idempotency check (`if (requestData.status !== 'pending')`)
+3. ✅ **updateUserRole**: Now updates ALL matching documents with `Promise.all()`
+4. ✅ **removeUserAccess**: Now deactivates ALL matching documents with `Promise.all()`
+
+### Files Modified
+- `src/services/userService.ts` - Added `setDoc` import, fixed all three functions
+
+### Status: ✅ FIXED
+
+---
+
+## Quality Checks Passed
+
+- ✅ TypeScript: `npx tsc --noEmit` - No errors
+- ✅ ESLint: `npm run lint` - Only pre-existing warnings
+- ✅ Build: `npm run build` - Success
+
+---
+
 ## Status: COMPLETED - READY FOR PR

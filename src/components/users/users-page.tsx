@@ -16,22 +16,15 @@ import {
 import type { OrganizationMember, AccessRequest } from "@/types/rbac";
 
 export default function UsersPage() {
-  console.log('⚡⚡⚡ UsersPage COMPONENT RENDERED ⚡⚡⚡');
   const { user, loading: authLoading } = useUser();
   const { role } = usePermissions();
-  console.log('⚡ user:', user?.uid, 'role:', role, 'authLoading:', authLoading);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
-  const [debugError, setDebugError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;
-
-    console.log('🟢🟢🟢 UsersPage fetchData CALLED 🟢🟢🟢');
-    console.log('🟢 Current user UID:', user.uid);
-    console.log('🟢 Current user email:', user.email);
 
     setLoading(true);
     try {
@@ -39,8 +32,6 @@ export default function UsersPage() {
         getOrganizationMembers(user.uid),
         getPendingRequests(user.uid),
       ]);
-      console.log('Fetched members:', membersData.length);
-      console.log('Fetched pending requests:', requestsData.length);
 
       // Add owner to members list if not already there
       const ownerExists = membersData.some((m) => m.uid === user.uid);
@@ -61,8 +52,6 @@ export default function UsersPage() {
       setPendingRequests(requestsData);
     } catch (error) {
       console.error("Error fetching user data:", error);
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      setDebugError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -74,7 +63,6 @@ export default function UsersPage() {
 
   // Wait for auth to load before checking role
   if (authLoading) {
-    console.log('⚡ Auth still loading...');
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -84,7 +72,6 @@ export default function UsersPage() {
 
   // Only owners can access this page
   if (role !== "owner") {
-    console.log('⚡ Access denied - role is:', role);
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <div className="p-4 bg-red-100 rounded-full">
@@ -102,12 +89,6 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* DEBUG BANNER - Remove after testing */}
-      <div style={{background: 'red', color: 'white', padding: '10px', fontWeight: 'bold'}}>
-        🔴 DEBUG: UID: {user?.uid} - Role: {role} - Requests: {pendingRequests.length}
-        {debugError && <div style={{background: 'yellow', color: 'black', marginTop: '5px', padding: '5px'}}>⚠️ ERROR: {debugError}</div>}
-      </div>
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -11,6 +11,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -24,9 +25,6 @@ import type { UserRole, AccessRequest, OrganizationMember } from '@/types/rbac';
  * يبحث في مجموعة users عن مستخدم بدور owner
  */
 export async function findOwnerByEmail(email: string): Promise<{ uid: string; email: string; displayName?: string } | null> {
-  console.log('🔵🔵🔵 findOwnerByEmail CALLED 🔵🔵🔵');
-  console.log('🔵 Searching for owner with email:', email.toLowerCase().trim());
-
   try {
     const usersRef = collection(firestore, 'users');
     const q = query(
@@ -36,18 +34,13 @@ export async function findOwnerByEmail(email: string): Promise<{ uid: string; em
     );
 
     const snapshot = await getDocs(q);
-    console.log('🔵 Query completed. Found documents:', snapshot.size);
 
     if (snapshot.empty) {
-      console.log('No owner found with this email');
       return null;
     }
 
     const userDoc = snapshot.docs[0];
     const data = userDoc.data();
-    console.log('🔵 Found owner document ID:', userDoc.id);
-    console.log('🔵 Owner email from doc:', data.email);
-    console.log('🔵 Owner role from doc:', data.role);
 
     return {
       uid: userDoc.id,
@@ -55,10 +48,7 @@ export async function findOwnerByEmail(email: string): Promise<{ uid: string; em
       displayName: data.displayName,
     };
   } catch (error) {
-    console.error('=== findOwnerByEmail Error ===');
-    console.error('Error details:', error);
-    console.error('Error code:', (error as { code?: string }).code);
-    console.error('Error message:', (error as Error).message);
+    console.error('Error finding owner by email:', error);
     throw error;
   }
 }
@@ -73,11 +63,6 @@ export async function submitAccessRequest(
   targetOwnerEmail: string,
   message?: string
 ): Promise<{ success: boolean; error?: string }> {
-  console.log('🟡🟡🟡 submitAccessRequest CALLED 🟡🟡🟡');
-  console.log('🟡 Requester UID:', requesterUid);
-  console.log('🟡 Requester Email:', requesterEmail);
-  console.log('🟡 Target Owner Email:', targetOwnerEmail);
-
   try {
     // البحث عن المالك بالبريد الإلكتروني
     let owner;
@@ -98,11 +83,8 @@ export async function submitAccessRequest(
     }
 
     if (!owner) {
-      console.log('Owner not found with email:', targetOwnerEmail);
       return { success: false, error: 'لم يتم العثور على مالك بهذا البريد الإلكتروني. تأكد من أن المالك قام بتسجيل الدخول مرة واحدة على الأقل.' };
     }
-
-    console.log('Owner found:', owner.uid);
 
     // التحقق من عدم وجود طلب معلق سابق
     const existingRequestQuery = query(
@@ -113,15 +95,11 @@ export async function submitAccessRequest(
     );
     const existingSnapshot = await getDocs(existingRequestQuery);
     if (!existingSnapshot.empty) {
-      console.log('Existing pending request found');
       return { success: false, error: 'لديك طلب معلق بالفعل لهذا المصنع' };
     }
 
     // إنشاء طلب جديد
-    console.log('🟡 Creating new access request...');
-    console.log('🟡 STORING targetOwnerId:', owner.uid);
-    console.log('🟡 STORING targetOwnerEmail:', owner.email);
-    const docRef = await addDoc(collection(firestore, 'access_requests'), {
+    await addDoc(collection(firestore, 'access_requests'), {
       uid: requesterUid,
       email: requesterEmail.toLowerCase().trim(),
       displayName: requesterDisplayName || requesterEmail,
@@ -132,13 +110,9 @@ export async function submitAccessRequest(
       status: 'pending',
     });
 
-    console.log('Access request created successfully:', docRef.id);
     return { success: true };
   } catch (error) {
-    console.error('=== submitAccessRequest Error ===');
-    console.error('Error details:', error);
-    console.error('Error code:', (error as { code?: string }).code);
-    console.error('Error message:', (error as Error).message);
+    console.error('Error submitting access request:', error);
     return { success: false, error: 'حدث خطأ أثناء إرسال الطلب' };
   }
 }
@@ -147,9 +121,6 @@ export async function submitAccessRequest(
  * الحصول على طلبات الوصول المعلقة للمالك
  */
 export async function getPendingRequests(ownerId: string): Promise<AccessRequest[]> {
-  console.log('🔴🔴🔴 getPendingRequests CALLED 🔴🔴🔴');
-  console.log('🔴 Querying for owner ID:', ownerId);
-
   try {
     const requestsRef = collection(firestore, 'access_requests');
     const q = query(
@@ -160,16 +131,9 @@ export async function getPendingRequests(ownerId: string): Promise<AccessRequest
     );
 
     const snapshot = await getDocs(q);
-    console.log('🔴 Found pending requests:', snapshot.size);
 
-    const requests = snapshot.docs.map(doc => {
+    return snapshot.docs.map(doc => {
       const data = doc.data();
-      console.log('Request doc:', {
-        id: doc.id,
-        targetOwnerId: data.targetOwnerId,
-        requesterEmail: data.email,
-        status: data.status,
-      });
       return {
         id: doc.id,
         uid: data.uid,
@@ -182,12 +146,8 @@ export async function getPendingRequests(ownerId: string): Promise<AccessRequest
         status: data.status,
       } as AccessRequest;
     });
-
-    return requests;
   } catch (error) {
-    console.error('=== getPendingRequests Error ===');
-    console.error('Error details:', error);
-    console.error('Error code:', (error as { code?: string }).code);
+    console.error('Error fetching pending requests:', error);
     throw error;
   }
 }
@@ -215,6 +175,11 @@ export async function approveRequest(
       return { success: false, error: 'ليس لديك صلاحية معالجة هذا الطلب' };
     }
 
+    // التحقق من أن الطلب لم تتم معالجته مسبقاً (idempotency check)
+    if (requestData.status !== 'pending') {
+      return { success: false, error: 'تمت معالجة هذا الطلب مسبقاً' };
+    }
+
     // تحديث حالة الطلب
     await updateDoc(requestRef, {
       status: 'approved',
@@ -223,47 +188,30 @@ export async function approveRequest(
     });
 
     // إنشاء/تحديث وثيقة المستخدم في مجموعة users/{ownerId}/members
+    // استخدام setDoc مع merge لتجنب إنشاء مستندات مكررة
     const memberRef = doc(firestore, `users/${ownerId}/members`, requestData.uid);
-    await updateDoc(memberRef, {
+    await setDoc(memberRef, {
       uid: requestData.uid,
       email: requestData.email,
       displayName: requestData.displayName,
       role: role,
       orgId: ownerId,
+      requestedAt: requestData.requestedAt,
       approvedAt: Timestamp.now(),
       approvedBy: ownerId,
       isActive: true,
-    }).catch(async () => {
-      // إذا لم تكن الوثيقة موجودة، أنشئها
-      const membersRef = collection(firestore, `users/${ownerId}/members`);
-      await addDoc(membersRef, {
-        uid: requestData.uid,
-        email: requestData.email,
-        displayName: requestData.displayName,
-        role: role,
-        orgId: ownerId,
-        requestedAt: requestData.requestedAt,
-        approvedAt: Timestamp.now(),
-        approvedBy: ownerId,
-        isActive: true,
-      });
-    });
+    }, { merge: true });
 
     // تحديث دور المستخدم في وثيقته الرئيسية
+    // استخدام setDoc مع merge لتجنب إنشاء مستندات مكررة
     const userRef = doc(firestore, 'users', requestData.uid);
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
+      uid: requestData.uid,
+      email: requestData.email,
+      displayName: requestData.displayName,
       role: role,
       orgId: ownerId,
-    }).catch(async () => {
-      // إذا لم تكن الوثيقة موجودة، أنشئها
-      await addDoc(collection(firestore, 'users'), {
-        uid: requestData.uid,
-        email: requestData.email,
-        displayName: requestData.displayName,
-        role: role,
-        orgId: ownerId,
-      });
-    });
+    }, { merge: true });
 
     return { success: true };
   } catch (error) {
@@ -345,7 +293,7 @@ export async function updateUserRole(
       return { success: false, error: 'لا يمكن تغيير دور المالك' };
     }
 
-    // تحديث في مجموعة الأعضاء
+    // تحديث جميع المستندات المطابقة في مجموعة الأعضاء (للتعامل مع المكررات)
     const membersRef = collection(firestore, `users/${ownerId}/members`);
     const q = query(membersRef, where('uid', '==', memberUid));
     const snapshot = await getDocs(q);
@@ -354,8 +302,11 @@ export async function updateUserRole(
       return { success: false, error: 'المستخدم غير موجود' };
     }
 
-    const memberDoc = snapshot.docs[0];
-    await updateDoc(memberDoc.ref, { role: newRole });
+    // تحديث جميع المستندات المطابقة (وليس فقط الأول)
+    const updatePromises = snapshot.docs.map(memberDoc =>
+      updateDoc(memberDoc.ref, { role: newRole })
+    );
+    await Promise.all(updatePromises);
 
     // تحديث في وثيقة المستخدم الرئيسية
     const userRef = doc(firestore, 'users', memberUid);
@@ -381,7 +332,7 @@ export async function removeUserAccess(
       return { success: false, error: 'لا يمكن إزالة المالك' };
     }
 
-    // تعطيل في مجموعة الأعضاء
+    // تعطيل جميع المستندات المطابقة في مجموعة الأعضاء (للتعامل مع المكررات)
     const membersRef = collection(firestore, `users/${ownerId}/members`);
     const q = query(membersRef, where('uid', '==', memberUid));
     const snapshot = await getDocs(q);
@@ -390,8 +341,11 @@ export async function removeUserAccess(
       return { success: false, error: 'المستخدم غير موجود' };
     }
 
-    const memberDoc = snapshot.docs[0];
-    await updateDoc(memberDoc.ref, { isActive: false });
+    // تعطيل جميع المستندات المطابقة (وليس فقط الأول)
+    const deactivatePromises = snapshot.docs.map(memberDoc =>
+      updateDoc(memberDoc.ref, { isActive: false })
+    );
+    await Promise.all(deactivatePromises);
 
     // إزالة الدور من وثيقة المستخدم الرئيسية
     const userRef = doc(firestore, 'users', memberUid);
