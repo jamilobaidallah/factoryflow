@@ -131,7 +131,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+    const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
     const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
       setClientsCount(snapshot.size);
 
@@ -151,7 +151,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
       let revenue = 0;
       let expenses = 0;
@@ -272,7 +272,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     const unsubscribe = onSnapshot(paymentsRef, (snapshot) => {
       const monthlyMap: { [key: string]: { cashIn: number; cashOut: number } } = {};
       let totalIn = 0;
@@ -331,7 +331,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+    const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
     const unsubscribe = onSnapshot(inventoryRef, (snapshot) => {
       setInventoryCount(snapshot.size);
     });

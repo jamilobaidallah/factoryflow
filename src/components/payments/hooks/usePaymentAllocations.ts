@@ -158,7 +158,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       );
 
       // Create document reference for the payment (ID generated before transaction)
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentDocRef = doc(paymentsRef);
 
       // Use a transaction for atomic read-modify-write
@@ -167,7 +167,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         const ledgerReads: { ref: ReturnType<typeof doc>; data: Record<string, unknown>; allocation: AllocationEntry }[] = [];
 
         for (const allocation of activeAllocations) {
-          const ledgerRef = doc(firestore, `users/${user.uid}/ledger`, allocation.ledgerDocId);
+          const ledgerRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, allocation.ledgerDocId);
           const ledgerDoc = await transaction.get(ledgerRef);
 
           if (!ledgerDoc.exists()) {
@@ -203,7 +203,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           // Create allocation document
           const allocationsRef = collection(
             firestore,
-            `users/${user.uid}/payments/${paymentDocRef.id}/allocations`
+            `users/${user.dataOwnerId}/payments/${paymentDocRef.id}/allocations`
           );
           const allocationDocRef = doc(allocationsRef);
 
@@ -237,7 +237,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
       try {
         const journalResult = await createJournalEntryForPayment(
-          user.uid,
+          user.dataOwnerId,
           paymentDocRef.id,
           paymentDescription,
           totalAllocated,
@@ -290,10 +290,10 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       // First, fetch allocations outside transaction (can't query in transaction)
       const allocationsRef = collection(
         firestore,
-        `users/${user.uid}/payments/${paymentId}/allocations`
+        `users/${user.dataOwnerId}/payments/${paymentId}/allocations`
       );
       const allocationsSnapshot = await getDocs(allocationsRef);
-      const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentId);
+      const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, paymentId);
 
       // Use transaction for atomic reversal
       await runTransaction(firestore, async (transaction) => {
@@ -302,7 +302,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
         for (const allocationDoc of allocationsSnapshot.docs) {
           const allocation = allocationDoc.data();
-          const ledgerRef = doc(firestore, `users/${user.uid}/ledger`, allocation.ledgerDocId);
+          const ledgerRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, allocation.ledgerDocId);
           const ledgerDoc = await transaction.get(ledgerRef);
 
           if (ledgerDoc.exists()) {

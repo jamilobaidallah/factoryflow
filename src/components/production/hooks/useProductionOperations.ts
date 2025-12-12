@@ -68,7 +68,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         return false;
       }
 
-      const ordersRef = collection(firestore, `users/${user.uid}/production_orders`);
+      const ordersRef = collection(firestore, `users/${user.dataOwnerId}/production_orders`);
 
       if (isEditMode && editingOrderId) {
         const originalOrder = orders.find(o => o.id === editingOrderId);
@@ -82,14 +82,14 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         }
 
         const batch = writeBatch(firestore);
-        const orderRef = doc(firestore, `users/${user.uid}/production_orders`, editingOrderId);
+        const orderRef = doc(firestore, `users/${user.dataOwnerId}/production_orders`, editingOrderId);
 
         // If order is completed, reverse old inventory changes and apply new ones
         if (originalOrder.status === "مكتمل") {
           // Step 1: Reverse old inventory changes
-          const oldInputItemRef = doc(firestore, `users/${user.uid}/inventory`, originalOrder.inputItemId);
+          const oldInputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, originalOrder.inputItemId);
           const oldInputSnapshot = await getDocs(query(
-            collection(firestore, `users/${user.uid}/inventory`),
+            collection(firestore, `users/${user.dataOwnerId}/inventory`),
             where("__name__", "==", originalOrder.inputItemId)
           ));
 
@@ -102,13 +102,13 @@ export function useProductionOperations(): UseProductionOperationsReturn {
 
           // Deduct old output product
           const oldOutputQuery = query(
-            collection(firestore, `users/${user.uid}/inventory`),
+            collection(firestore, `users/${user.dataOwnerId}/inventory`),
             where("itemName", "==", originalOrder.outputItemName)
           );
           const oldOutputSnapshot = await getDocs(oldOutputQuery);
 
           if (!oldOutputSnapshot.empty) {
-            const oldOutputItemRef = doc(firestore, `users/${user.uid}/inventory`, oldOutputSnapshot.docs[0].id);
+            const oldOutputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, oldOutputSnapshot.docs[0].id);
             const currentQty = oldOutputSnapshot.docs[0].data().quantity || 0;
             const newQty = currentQty - originalOrder.outputQuantity;
 
@@ -122,9 +122,9 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           }
 
           // Step 2: Apply new inventory changes
-          const newInputItemRef = doc(firestore, `users/${user.uid}/inventory`, selectedItem.id);
+          const newInputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, selectedItem.id);
           const newInputSnapshot = await getDocs(query(
-            collection(firestore, `users/${user.uid}/inventory`),
+            collection(firestore, `users/${user.dataOwnerId}/inventory`),
             where("__name__", "==", selectedItem.id)
           ));
 
@@ -152,20 +152,20 @@ export function useProductionOperations(): UseProductionOperationsReturn {
 
           // Add new output product
           const newOutputQuery = query(
-            collection(firestore, `users/${user.uid}/inventory`),
+            collection(firestore, `users/${user.dataOwnerId}/inventory`),
             where("itemName", "==", formData.outputItemName)
           );
           const newOutputSnapshot = await getDocs(newOutputQuery);
 
           if (!newOutputSnapshot.empty) {
-            const newOutputItemRef = doc(firestore, `users/${user.uid}/inventory`, newOutputSnapshot.docs[0].id);
+            const newOutputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, newOutputSnapshot.docs[0].id);
             const currentQty = newOutputSnapshot.docs[0].data().quantity || 0;
             batch.update(newOutputItemRef, {
               quantity: currentQty + outputQty,
               unitPrice: calculatedUnitCost,
             });
           } else {
-            const newOutputRef = doc(collection(firestore, `users/${user.uid}/inventory`));
+            const newOutputRef = doc(collection(firestore, `users/${user.dataOwnerId}/inventory`));
             batch.set(newOutputRef, {
               itemName: formData.outputItemName,
               category: "منتج جاهز",
@@ -183,7 +183,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           }
 
           // Log movements
-          const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+          const movementsRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
 
           batch.set(doc(movementsRef), {
             itemId: originalOrder.inputItemId,
@@ -306,16 +306,16 @@ export function useProductionOperations(): UseProductionOperationsReturn {
       const batch = writeBatch(firestore);
 
       // Update order status
-      const orderRef = doc(firestore, `users/${user.uid}/production_orders`, order.id);
+      const orderRef = doc(firestore, `users/${user.dataOwnerId}/production_orders`, order.id);
       batch.update(orderRef, {
         status: "مكتمل",
         completedAt: new Date(),
       });
 
       // Deduct input material and get unit cost
-      const inputItemRef = doc(firestore, `users/${user.uid}/inventory`, order.inputItemId);
+      const inputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, order.inputItemId);
       const inputItemSnapshot = await getDocs(query(
-        collection(firestore, `users/${user.uid}/inventory`),
+        collection(firestore, `users/${user.dataOwnerId}/inventory`),
         where("__name__", "==", order.inputItemId)
       ));
 
@@ -333,20 +333,20 @@ export function useProductionOperations(): UseProductionOperationsReturn {
 
       // Add output product to inventory
       const outputQuery = query(
-        collection(firestore, `users/${user.uid}/inventory`),
+        collection(firestore, `users/${user.dataOwnerId}/inventory`),
         where("itemName", "==", order.outputItemName)
       );
       const outputSnapshot = await getDocs(outputQuery);
 
       if (!outputSnapshot.empty) {
-        const outputItemRef = doc(firestore, `users/${user.uid}/inventory`, outputSnapshot.docs[0].id);
+        const outputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, outputSnapshot.docs[0].id);
         const currentQty = outputSnapshot.docs[0].data().quantity || 0;
         batch.update(outputItemRef, {
           quantity: currentQty + order.outputQuantity,
           unitPrice: calculatedUnitCost,
         });
       } else {
-        const newOutputRef = doc(collection(firestore, `users/${user.uid}/inventory`));
+        const newOutputRef = doc(collection(firestore, `users/${user.dataOwnerId}/inventory`));
         batch.set(newOutputRef, {
           itemName: order.outputItemName,
           category: "منتج جاهز",
@@ -364,7 +364,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
       }
 
       // Log movements
-      const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+      const movementsRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
 
       batch.set(doc(movementsRef), {
         itemId: order.inputItemId,
@@ -413,7 +413,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
     if (!user) return false;
 
     try {
-      const orderRef = doc(firestore, `users/${user.uid}/production_orders`, orderId);
+      const orderRef = doc(firestore, `users/${user.dataOwnerId}/production_orders`, orderId);
       await updateDoc(orderRef, {
         status: "ملغي",
       });
@@ -442,9 +442,9 @@ export function useProductionOperations(): UseProductionOperationsReturn {
 
       // If order is completed, reverse inventory changes
       if (order.status === "مكتمل") {
-        const inputItemRef = doc(firestore, `users/${user.uid}/inventory`, order.inputItemId);
+        const inputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, order.inputItemId);
         const inputItemSnapshot = await getDocs(query(
-          collection(firestore, `users/${user.uid}/inventory`),
+          collection(firestore, `users/${user.dataOwnerId}/inventory`),
           where("__name__", "==", order.inputItemId)
         ));
 
@@ -456,13 +456,13 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         }
 
         const outputQuery = query(
-          collection(firestore, `users/${user.uid}/inventory`),
+          collection(firestore, `users/${user.dataOwnerId}/inventory`),
           where("itemName", "==", order.outputItemName)
         );
         const outputSnapshot = await getDocs(outputQuery);
 
         if (!outputSnapshot.empty) {
-          const outputItemRef = doc(firestore, `users/${user.uid}/inventory`, outputSnapshot.docs[0].id);
+          const outputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, outputSnapshot.docs[0].id);
           const currentQty = outputSnapshot.docs[0].data().quantity || 0;
           const newQty = currentQty - order.outputQuantity;
 
@@ -476,7 +476,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         }
 
         // Log reversal movements
-        const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+        const movementsRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
 
         batch.set(doc(movementsRef), {
           itemId: order.inputItemId,
@@ -502,7 +502,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
       }
 
       // Delete the order
-      const orderRef = doc(firestore, `users/${user.uid}/production_orders`, order.id);
+      const orderRef = doc(firestore, `users/${user.dataOwnerId}/production_orders`, order.id);
       batch.delete(orderRef);
 
       await batch.commit();

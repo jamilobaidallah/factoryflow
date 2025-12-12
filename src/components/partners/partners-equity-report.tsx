@@ -56,7 +56,7 @@ export default function PartnersEquityReport() {
     if (!user) {return;}
 
     const loadPartners = async () => {
-      const partnersRef = collection(firestore, `users/${user.uid}/partners`);
+      const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
       const snapshot = await getDocs(partnersRef);
       const partnersData: Partner[] = [];
       snapshot.forEach((doc) => {
@@ -79,7 +79,7 @@ export default function PartnersEquityReport() {
 
     setLoading(true);
     try {
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
       // Get all ledger entries for the date range
       const q = query(

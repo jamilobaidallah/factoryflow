@@ -47,7 +47,7 @@ export function useClientTransactions(clientName: string): UseClientTransactions
     setError(null);
 
     try {
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
       // Query for AR/AP entries belonging to this client
       // Note: We don't use orderBy here to avoid needing a composite index

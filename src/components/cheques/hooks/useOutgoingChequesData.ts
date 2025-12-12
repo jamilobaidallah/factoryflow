@@ -31,7 +31,7 @@ export function useOutgoingChequesData(): UseOutgoingChequesDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     // Filter for outgoing cheques only
     const q = query(
       chequesRef,

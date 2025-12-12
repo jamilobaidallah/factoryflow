@@ -71,7 +71,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
   ) => {
     if (!user || !linkedTransactionId) return;
 
-    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const ledgerQuery = query(
       ledgerRef,
       where("transactionId", "==", linkedTransactionId.trim())
@@ -95,7 +95,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           newPaymentStatus = "partial";
         }
 
-        await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+        await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
           totalPaid: newTotalPaid,
           remainingBalance: newRemainingBalance,
           paymentStatus: newPaymentStatus,
@@ -124,7 +124,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           const sanitizedName = sanitizeFileName(chequeImage.name);
           const imageRef = ref(
             storage,
-            `users/${user.uid}/cheques/${Date.now()}_${sanitizedName}`
+            `users/${user.dataOwnerId}/cheques/${Date.now()}_${sanitizedName}`
           );
           await uploadBytes(imageRef, chequeImage);
           chequeImageUrl = await getDownloadURL(imageRef);
@@ -161,7 +161,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       }
 
       if (editingCheque) {
-        const chequeRef = doc(firestore, `users/${user.uid}/cheques`, editingCheque.id);
+        const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, editingCheque.id);
         const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
@@ -192,7 +192,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           const effectivePaymentDate = paymentDate || new Date();
           updateData.clearedDate = effectivePaymentDate;
 
-          const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+          const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
           const chequeAmount = parseFloat(formData.amount);
 
           // Add payment to batch
@@ -213,7 +213,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
           // Inline ARAP update in batch (if linked)
           if (formData.linkedTransactionId) {
-            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
             const ledgerQuery = query(
               ledgerRef,
               where("transactionId", "==", formData.linkedTransactionId.trim())
@@ -232,7 +232,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                 const newPaymentStatus: "paid" | "unpaid" | "partial" =
                   newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
 
-                batch.update(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
                   remainingBalance: newRemainingBalance,
                   paymentStatus: newPaymentStatus,
@@ -256,7 +256,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         });
       } else {
         // Creating new cheque - simple add (no ARAP update needed for new incoming cheques)
-        const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+        const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
@@ -302,7 +302,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     if (!user) return false;
 
     try {
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeId);
+      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, chequeId);
       await deleteDoc(chequeRef);
       toast({
         title: "تم الحذف",
@@ -357,9 +357,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       const batch = writeBatch(firestore);
       const now = new Date();
 
-      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
-      const incomingChequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+      const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+      const incomingChequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
 
       // Pre-generate outgoing cheque document ref (for linking)
       const outgoingChequeRef = doc(chequesRef);
@@ -449,7 +449,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
     try {
       // Query payment records first (before batch)
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentsSnapshot = await getDocs(
         query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
       );
@@ -461,14 +461,14 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       if (cheque.endorsedToOutgoingId) {
         const outgoingChequeRef = doc(
           firestore,
-          `users/${user.uid}/cheques`,
+          `users/${user.dataOwnerId}/cheques`,
           cheque.endorsedToOutgoingId
         );
         batch.delete(outgoingChequeRef);
       }
 
       // 2. Revert incoming cheque to pending status
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
       batch.update(chequeRef, {
         chequeType: "عادي",
         status: CHEQUE_STATUS_AR.PENDING,

@@ -90,7 +90,7 @@ export default function SubcategoryAnalysis() {
 
     setLoading(true);
     try {
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const q = query(
         ledgerRef,
         where("category", "==", selectedCategory),

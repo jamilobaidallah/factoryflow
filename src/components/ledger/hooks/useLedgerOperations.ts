@@ -47,7 +47,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.uid);
+    const service = createLedgerService(user.dataOwnerId);
 
     try {
       if (editingEntry) {
@@ -152,7 +152,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.uid);
+    const service = createLedgerService(user.dataOwnerId);
 
     try {
       const result = await service.deleteLedgerEntry(entry);
@@ -194,7 +194,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.uid);
+    const service = createLedgerService(user.dataOwnerId);
 
     try {
       const result = await service.addPaymentToEntry(entry, formData);
@@ -235,7 +235,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.uid);
+    const service = createLedgerService(user.dataOwnerId);
 
     try {
       const result = await service.addChequeToEntry(entry, formData);
@@ -288,7 +288,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.uid);
+    const service = createLedgerService(user.dataOwnerId);
 
     try {
       const result = await service.addInventoryToEntry(entry, formData);

@@ -128,7 +128,7 @@ export function MultiAllocationDialog({
     if (!user) return;
 
     setPartiesLoading(true);
-    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     // Query for AR/AP entries that are not fully paid
     const q = query(
       ledgerRef,

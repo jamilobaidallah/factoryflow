@@ -44,7 +44,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         const newSalary = parseFloat(formData.currentSalary);
 
         // Update employee
-        const employeeRef = doc(firestore, `users/${user.uid}/employees`, editingEmployee.id);
+        const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, editingEmployee.id);
         await updateDoc(employeeRef, {
           name: formData.name,
           currentSalary: newSalary,
@@ -56,7 +56,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         // If salary changed, record history
         if (oldSalary !== newSalary) {
           const incrementPercentage = ((newSalary - oldSalary) / oldSalary) * 100;
-          const historyRef = collection(firestore, `users/${user.uid}/salary_history`);
+          const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
           await addDoc(historyRef, {
             employeeId: editingEmployee.id,
             employeeName: formData.name,
@@ -74,7 +74,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           description: "تم تحديث بيانات الموظف بنجاح",
         });
       } else {
-        const employeesRef = collection(firestore, `users/${user.uid}/employees`);
+        const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
         await addDoc(employeesRef, {
           name: formData.name,
           currentSalary: parseFloat(formData.currentSalary),
@@ -106,7 +106,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     if (!user) return false;
 
     try {
-      const employeeRef = doc(firestore, `users/${user.uid}/employees`, employeeId);
+      const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, employeeId);
       await deleteDoc(employeeRef);
       toast({
         title: "تم الحذف",
@@ -140,7 +140,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
     try {
       const batch = writeBatch(firestore);
-      const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
+      const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
 
       for (const employee of employees) {
         const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
@@ -193,7 +193,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       const transactionId = `SAL-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
 
       // Update payroll entry
-      const payrollRef = doc(firestore, `users/${user.uid}/payroll`, payrollEntry.id);
+      const payrollRef = doc(firestore, `users/${user.dataOwnerId}/payroll`, payrollEntry.id);
       batch.update(payrollRef, {
         isPaid: true,
         paidDate: new Date(),
@@ -201,7 +201,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       });
 
       // Create ledger entry
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const ledgerDocRef = doc(ledgerRef);
       batch.set(ledgerDocRef, {
         transactionId: transactionId,
@@ -218,7 +218,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       });
 
       // Create payment entry
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentDocRef = doc(paymentsRef);
       batch.set(paymentDocRef, {
         clientName: payrollEntry.employeeName,

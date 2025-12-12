@@ -104,7 +104,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   useEffect(() => {
     if (!user || !clientId) {return;}
 
-    const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
+    const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, clientId);
     getDoc(clientRef)
       .then((docSnap) => {
         if (docSnap.exists()) {
@@ -139,7 +139,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   useEffect(() => {
     if (!user || !client) {return;}
 
-    const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const q = query(
       ledgerRef,
       where("associatedParty", "==", client.name)
@@ -188,7 +188,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   useEffect(() => {
     if (!user || !client) {return;}
 
-    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     const q = query(
       paymentsRef,
       where("clientName", "==", client.name)
@@ -237,7 +237,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   useEffect(() => {
     if (!user || !client) {return;}
 
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(
       chequesRef,
       where("clientName", "==", client.name)

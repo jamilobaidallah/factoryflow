@@ -220,7 +220,7 @@ export default function IncomingChequesPage() {
 
     try {
       // Update the cheque status to 'Cashed' and link the payment + transaction IDs
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, chequeToCash.chequeId);
+      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, chequeToCash.chequeId);
       await updateDoc(chequeRef, {
         status: CHEQUE_STATUS_AR.CASHED,
         clearedDate: new Date(),

@@ -85,7 +85,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
       const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       if (editingInvoice) {
-        const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, editingInvoice.id);
+        const invoiceRef = doc(firestore, `users/${user.dataOwnerId}/invoices`, editingInvoice.id);
         const updateData: Record<string, unknown> = {
           clientName: formData.clientName,
           clientAddress: formData.clientAddress,
@@ -140,7 +140,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         if (formData.invoiceImageUrl) {
           newInvoice.invoiceImageUrl = formData.invoiceImageUrl;
         }
-        await addDoc(collection(firestore, `users/${user.uid}/invoices`), newInvoice);
+        await addDoc(collection(firestore, `users/${user.dataOwnerId}/invoices`), newInvoice);
 
         toast({
           title: "تمت الإضافة",
@@ -164,7 +164,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     if (!user) return false;
 
     try {
-      await deleteDoc(doc(firestore, `users/${user.uid}/invoices`, invoiceId));
+      await deleteDoc(doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId));
       toast({
         title: "تم الحذف",
         description: "تم حذف الفاتورة بنجاح",
@@ -199,7 +199,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     if (!user) return false;
 
     try {
-      const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, invoiceId);
+      const invoiceRef = doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId);
       await updateDoc(invoiceRef, {
         status: newStatus,
         updatedAt: new Date(),
@@ -209,7 +209,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
       if (newStatus === "paid") {
         const invoice = invoices.find((inv) => inv.id === invoiceId);
         if (invoice) {
-          const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+          const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
           await addDoc(ledgerRef, {
             transactionId: `PAY-${invoice.invoiceNumber}`,
             description: `دفعة فاتورة ${invoice.invoiceNumber} - ${invoice.clientName}`,

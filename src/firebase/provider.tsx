@@ -79,26 +79,24 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        const user: User = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-        };
-        setUser(user);
-
-        // Fetch user role from Firestore
-        // جلب دور المستخدم من قاعدة البيانات
+        // Fetch user role and ownerId from Firestore
+        // جلب دور المستخدم ومعرف المالك من قاعدة البيانات
         try {
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
+
+          let userRole: UserRole | null = null;
+          let ownerId: string | undefined = undefined;
+
           if (userDoc.exists()) {
             const userData = userDoc.data();
             // If user document exists with role field → use that role
             // If user document exists but NO role field → legacy user → default to 'owner'
             // إذا كان المستند موجود بدون حقل الدور = مستخدم قديم = مالك
             if (userData.role !== undefined) {
-              setRole(userData.role as UserRole);
+              userRole = userData.role as UserRole;
+              // Get ownerId for non-owner users (with backwards compatibility for orgId)
+              ownerId = userData.ownerId || userData.orgId;
             } else {
               // Legacy user without role field - default to owner for backwards compatibility
               // Also update the document to include the role field
@@ -108,7 +106,7 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
                 email: firebaseUser.email?.toLowerCase().trim(),
                 displayName: firebaseUser.displayName,
               }, { merge: true });
-              setRole('owner');
+              userRole = 'owner';
             }
           } else {
             // No user document - check if this is a legacy owner with existing data
@@ -130,18 +128,42 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
                 createdAt: new Date(),
                 isLegacyMigrated: true,
               });
-              setRole('owner');
+              userRole = 'owner';
             } else {
               // Definitely a NEW user → role = null (must request access)
               // مستخدم جديد بالتأكيد = يجب طلب الوصول
               console.log(`New user ${firebaseUser.email} - role set to null`);
-              setRole(null);
+              userRole = null;
             }
           }
+
+          // Calculate dataOwnerId: for owners use their uid, for non-owners use ownerId
+          // حساب معرف مالك البيانات: للمالكين نستخدم معرفهم، لغير المالكين نستخدم معرف مالكهم
+          const dataOwnerId = (userRole === 'owner' || !ownerId) ? firebaseUser.uid : ownerId;
+
+          const user: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            ownerId: ownerId,
+            dataOwnerId: dataOwnerId,
+          };
+
+          setUser(user);
+          setRole(userRole);
         } catch (error) {
           console.error('Error fetching user role:', error);
           // On error, set null to prevent unauthorized access
           // عند الخطأ، نضع null لمنع الوصول غير المصرح
+          const user: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            dataOwnerId: firebaseUser.uid, // fallback to own uid
+          };
+          setUser(user);
           setRole(null);
         }
       } else {

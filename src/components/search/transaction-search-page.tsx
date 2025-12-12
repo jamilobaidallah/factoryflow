@@ -58,7 +58,7 @@ export default function TransactionSearchPage() {
       const trimmedQuery = searchQuery.trim();
 
       // Search in Ledger
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const ledgerQuery = query(
         ledgerRef,
         where("transactionId", "==", trimmedQuery)
@@ -76,7 +76,7 @@ export default function TransactionSearchPage() {
       });
 
       // Search in Payments
-      const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentsQuery = query(
         paymentsRef,
         where("linkedTransactionId", "==", trimmedQuery)
@@ -94,7 +94,7 @@ export default function TransactionSearchPage() {
       });
 
       // Search in Cheques
-      const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+      const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
       const chequesQuery = query(
         chequesRef,
         where("linkedTransactionId", "==", trimmedQuery)
@@ -113,7 +113,7 @@ export default function TransactionSearchPage() {
       });
 
       // Search in Inventory Movements (if they have transaction IDs)
-      const inventoryRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+      const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
       const inventoryQuery = query(
         inventoryRef,
         where("transactionId", "==", trimmedQuery)

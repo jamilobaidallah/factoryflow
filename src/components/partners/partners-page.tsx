@@ -75,7 +75,7 @@ export default function PartnersPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const partnersRef = collection(firestore, `users/${user.uid}/partners`);
+    const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
     // Limit to 100 partners (reasonable for most businesses)
     const q = query(partnersRef, orderBy("name", "asc"), limit(100));
 
@@ -117,7 +117,7 @@ export default function PartnersPage() {
     try {
       if (editingPartner) {
         // Update existing partner
-        const partnerRef = doc(firestore, `users/${user.uid}/partners`, editingPartner.id);
+        const partnerRef = doc(firestore, `users/${user.dataOwnerId}/partners`, editingPartner.id);
         await updateDoc(partnerRef, {
           name: formData.name,
           ownershipPercentage: parseFloat(formData.ownershipPercentage),
@@ -132,7 +132,7 @@ export default function PartnersPage() {
         });
       } else {
         // Add new partner
-        const partnersRef = collection(firestore, `users/${user.uid}/partners`);
+        const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
         await addDoc(partnersRef, {
           name: formData.name,
           ownershipPercentage: parseFloat(formData.ownershipPercentage),
@@ -183,7 +183,7 @@ export default function PartnersPage() {
       "هل أنت متأكد من حذف هذا الشريك؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
         try {
-          const partnerRef = doc(firestore, `users/${user.uid}/partners`, partnerId);
+          const partnerRef = doc(firestore, `users/${user.dataOwnerId}/partners`, partnerId);
           await deleteDoc(partnerRef);
           toast({
             title: "تم الحذف",

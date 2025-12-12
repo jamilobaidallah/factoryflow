@@ -92,7 +92,7 @@ export default function ClientsPage() {
   useEffect(() => {
     if (!user) { return; }
 
-    const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+    const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
     // Limit to 500 most recent clients to prevent performance issues
     const q = query(clientsRef, orderBy("createdAt", "desc"), limit(500));
 
@@ -198,7 +198,7 @@ export default function ClientsPage() {
 
       if (editingClient) {
         // Update existing client
-        const clientRef = doc(firestore, `users/${user.uid}/clients`, editingClient.id);
+        const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, editingClient.id);
         await updateDoc(clientRef, validated);
 
         const successMsg = getSuccessMessage('update', 'العميل');
@@ -208,7 +208,7 @@ export default function ClientsPage() {
         });
       } else {
         // Add new client
-        const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+        const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
         await addDoc(clientsRef, {
           ...validated,
           createdAt: new Date(),
@@ -258,7 +258,7 @@ export default function ClientsPage() {
       "هل أنت متأكد من حذف هذا العميل؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
         try {
-          const clientRef = doc(firestore, `users/${user.uid}/clients`, clientId);
+          const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, clientId);
           await deleteDoc(clientRef);
 
           const successMsg = getSuccessMessage('delete', 'العميل');

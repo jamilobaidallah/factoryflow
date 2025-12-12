@@ -174,7 +174,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (!user) { return; }
 
-    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     getCountFromServer(query(paymentsRef)).then((snapshot) => {
       setTotalCount(snapshot.data().count);
     });
@@ -184,7 +184,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
 
     // Build query constraints
     const queryConstraints: QueryConstraint[] = [
@@ -238,7 +238,7 @@ export default function PaymentsPage() {
     setLoading(true);
     try {
       if (editingPayment) {
-        const paymentRef = doc(firestore, `users/${user.uid}/payments`, editingPayment.id);
+        const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, editingPayment.id);
         await updateDoc(paymentRef, {
           clientName: formData.clientName,
           amount: parseFloat(formData.amount),
@@ -254,7 +254,7 @@ export default function PaymentsPage() {
           description: "تم تحديث بيانات المدفوعة",
         });
       } else {
-        const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+        const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
         const paymentAmount = parseFloat(formData.amount);
 
         await addDoc(paymentsRef, {
@@ -274,7 +274,7 @@ export default function PaymentsPage() {
         let debugMessage = "";
 
         if (formData.linkedTransactionId) {
-          const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+          const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
           const ledgerQuery = query(
             ledgerRef,
             where("transactionId", "==", formData.linkedTransactionId.trim())
@@ -300,7 +300,7 @@ export default function PaymentsPage() {
               }
 
               // Update the ledger entry
-              await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+              await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                 totalPaid: newTotalPaid,
                 remainingBalance: newRemainingBalance,
                 paymentStatus: newStatus,
@@ -385,7 +385,7 @@ export default function PaymentsPage() {
           // Original single-transaction delete logic
           if (payment && payment.linkedTransactionId) {
             // Reverse AR/AP update before deleting
-            const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+            const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
             const ledgerQuery = query(
               ledgerRef,
               where("transactionId", "==", payment.linkedTransactionId.trim())
@@ -416,7 +416,7 @@ export default function PaymentsPage() {
                 }
 
                 // Update the ledger entry
-                await updateDoc(doc(firestore, `users/${user.uid}/ledger`, ledgerDoc.id), {
+                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
                   remainingBalance: newRemainingBalance,
                   paymentStatus: newStatus,
@@ -426,7 +426,7 @@ export default function PaymentsPage() {
           }
 
           // Now delete the payment
-          const paymentRef = doc(firestore, `users/${user.uid}/payments`, paymentId);
+          const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, paymentId);
           await deleteDoc(paymentRef);
 
           toast({

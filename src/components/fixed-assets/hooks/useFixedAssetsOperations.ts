@@ -82,10 +82,10 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       const monthlyDepreciation = safeDivide(safeSubtract(purchaseCost, salvageValue), usefulLifeMonths);
       const bookValue = purchaseCost; // Initial book value
 
-      const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
+      const assetsRef = collection(firestore, `users/${user.dataOwnerId}/fixed_assets`);
 
       if (editingAsset) {
-        const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, editingAsset.id);
+        const assetRef = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, editingAsset.id);
         await updateDoc(assetRef, {
           assetName: formData.assetName,
           category: formData.category,
@@ -145,7 +145,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
     if (!user) return false;
 
     try {
-      const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, assetId);
+      const assetRef = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, assetId);
       await deleteDoc(assetRef);
       toast({
         title: "تم الحذف",
@@ -174,7 +174,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       const periodLabel = `${period.year}-${String(period.month).padStart(2, '0')}`;
 
       // Check if depreciation already run for this period
-      const runsRef = collection(firestore, `users/${user.uid}/depreciation_runs`);
+      const runsRef = collection(firestore, `users/${user.dataOwnerId}/depreciation_runs`);
       const runQuery = query(runsRef, where("period", "==", periodLabel));
       const runSnapshot = await getDocs(runQuery);
 
@@ -220,7 +220,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         const newBookValue = safeSubtract(asset.purchaseCost, newAccumulatedDepreciation);
 
         // Create depreciation record
-        const recordsRef = collection(firestore, `users/${user.uid}/depreciation_records`);
+        const recordsRef = collection(firestore, `users/${user.dataOwnerId}/depreciation_records`);
         const recordDocRef = doc(recordsRef);
         batch.set(recordDocRef, {
           assetId: asset.id,
@@ -239,7 +239,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         });
 
         // Update asset
-        const assetRef = doc(firestore, `users/${user.uid}/fixed_assets`, asset.id);
+        const assetRef = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, asset.id);
         batch.update(assetRef, {
           accumulatedDepreciation: newAccumulatedDepreciation,
           bookValue: newBookValue,
@@ -250,7 +250,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       }
 
       // Create ledger entry for total depreciation
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const ledgerDocRef = doc(ledgerRef);
       batch.set(ledgerDocRef, {
         transactionId: transactionId,

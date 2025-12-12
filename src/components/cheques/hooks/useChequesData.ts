@@ -40,7 +40,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
   useEffect(() => {
     if (!user) return;
 
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     getCountFromServer(query(chequesRef)).then((snapshot) => {
       setTotalCount(snapshot.data().count);
     });
@@ -50,7 +50,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
   useEffect(() => {
     if (!user) return;
 
-    const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+    const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
     const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
       const phones: Record<string, string> = {};
       snapshot.forEach((doc) => {
@@ -69,7 +69,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
   useEffect(() => {
     if (!user) return;
 
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -91,7 +91,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
   const refresh = async () => {
     if (!user) return;
 
-    const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
     const snapshot = await getDocs(q);
 

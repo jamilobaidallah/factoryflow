@@ -31,7 +31,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const employeesRef = collection(firestore, `users/${user.uid}/employees`);
+    const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
     const q = query(employeesRef, orderBy("name", "asc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -54,7 +54,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const historyRef = collection(firestore, `users/${user.uid}/salary_history`);
+    const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
     const q = query(historyRef, orderBy("effectiveDate", "desc"), limit(1000));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -76,7 +76,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const payrollRef = collection(firestore, `users/${user.uid}/payroll`);
+    const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
     const q = query(payrollRef, orderBy("month", "desc"), limit(24));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

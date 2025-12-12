@@ -31,7 +31,7 @@ export function useInvoicesData(): UseInvoicesDataReturn {
       return;
     }
 
-    const invoicesRef = collection(firestore, `users/${user.uid}/invoices`);
+    const invoicesRef = collection(firestore, `users/${user.dataOwnerId}/invoices`);
     // Limit to 1000 most recent invoices
     const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(1000));
 
@@ -50,7 +50,7 @@ export function useInvoicesData(): UseInvoicesDataReturn {
       // Auto-update overdue status
       invoicesData.forEach(async (invoice) => {
         if (invoice.status === "sent" && new Date() > invoice.dueDate) {
-          const invoiceRef = doc(firestore, `users/${user.uid}/invoices`, invoice.id);
+          const invoiceRef = doc(firestore, `users/${user.dataOwnerId}/invoices`, invoice.id);
           await updateDoc(invoiceRef, { status: "overdue" });
         }
       });

@@ -29,7 +29,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        const service = createLedgerService(user.uid);
+        const service = createLedgerService(user.dataOwnerId);
         service.getTotalCount().then((count) => {
             setTotalCount(count);
         });
@@ -39,7 +39,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        const service = createLedgerService(user.uid);
+        const service = createLedgerService(user.dataOwnerId);
 
         // Get cursor for current page (from previous page)
         const startAfterDoc = currentPage > 1
@@ -73,7 +73,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        const service = createLedgerService(user.uid);
+        const service = createLedgerService(user.dataOwnerId);
 
         const unsubscribe = service.subscribeClients(
             (clientsData) => {
@@ -91,7 +91,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        const service = createLedgerService(user.uid);
+        const service = createLedgerService(user.dataOwnerId);
 
         const unsubscribe = service.subscribePartners(
             (partnersData) => {

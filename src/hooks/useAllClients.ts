@@ -67,19 +67,19 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
         return 'both';
       };
 
-      // Build queries
-      const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+      // Build queries - use dataOwnerId for data access
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const ledgerQuery = query(
         ledgerRef,
         where('isARAPEntry', '==', true),
         limit(2000) // Safety limit for scalability
       );
 
-      const partnersRef = collection(firestore, `users/${user.uid}/partners`);
+      const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
       const partnersQuery = query(partnersRef, limit(500));
 
       // Build optional clients query
-      const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+      const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
       const clientsQuery = query(clientsRef, orderBy('name'), limit(500));
 
       // Execute all queries in parallel for better performance

@@ -29,7 +29,7 @@ export function useFixedAssetsData(): UseFixedAssetsDataReturn {
       return;
     }
 
-    const assetsRef = collection(firestore, `users/${user.uid}/fixed_assets`);
+    const assetsRef = collection(firestore, `users/${user.dataOwnerId}/fixed_assets`);
     const q = query(assetsRef, orderBy("createdAt", "desc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

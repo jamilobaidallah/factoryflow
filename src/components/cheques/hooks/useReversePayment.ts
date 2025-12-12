@@ -43,7 +43,7 @@ export function useReversePayment() {
       const batch = writeBatch(firestore);
 
       // 1. Get the payment and its allocations
-      const paymentRef = doc(firestore, `users/${user.uid}/payments`, cheque.linkedPaymentId);
+      const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, cheque.linkedPaymentId);
       const paymentDoc = await getDoc(paymentRef);
 
       if (!paymentDoc.exists()) {
@@ -54,7 +54,7 @@ export function useReversePayment() {
       // 2. Get all allocations for this payment
       const allocationsRef = collection(
         firestore,
-        `users/${user.uid}/payments/${cheque.linkedPaymentId}/allocations`
+        `users/${user.dataOwnerId}/payments/${cheque.linkedPaymentId}/allocations`
       );
       const allocationsSnapshot = await getDocs(allocationsRef);
 
@@ -65,7 +65,7 @@ export function useReversePayment() {
         const allocatedAmount = allocation.allocatedAmount || 0;
 
         if (ledgerDocId) {
-          const ledgerRef = doc(firestore, `users/${user.uid}/ledger`, ledgerDocId);
+          const ledgerRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDocId);
           const ledgerDoc = await getDoc(ledgerRef);
 
           if (ledgerDoc.exists()) {
@@ -99,7 +99,7 @@ export function useReversePayment() {
       batch.delete(paymentRef);
 
       // 5. Update the cheque to clear payment link
-      const chequeRef = doc(firestore, `users/${user.uid}/cheques`, cheque.id);
+      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
       batch.update(chequeRef, {
         linkedPaymentId: null,
         paidTransactionIds: null,

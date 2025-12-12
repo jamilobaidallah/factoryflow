@@ -100,6 +100,10 @@ export interface User {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  /** Owner's UID - for non-owners, this is the UID of their data owner */
+  ownerId?: string;
+  /** The effective user ID for data queries - for owners: uid, for non-owners: ownerId */
+  dataOwnerId: string;
 }
 
 // Form Types

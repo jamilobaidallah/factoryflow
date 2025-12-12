@@ -29,7 +29,7 @@ export function useProductionData(): UseProductionDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+    const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
     const q = query(inventoryRef, orderBy("itemName", "asc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -51,7 +51,7 @@ export function useProductionData(): UseProductionDataReturn {
   useEffect(() => {
     if (!user) return;
 
-    const ordersRef = collection(firestore, `users/${user.uid}/production_orders`);
+    const ordersRef = collection(firestore, `users/${user.dataOwnerId}/production_orders`);
     const q = query(ordersRef, orderBy("date", "desc"), limit(500));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

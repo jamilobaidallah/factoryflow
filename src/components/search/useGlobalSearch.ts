@@ -67,7 +67,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         const searchTerm = query.trim().toLowerCase();
 
         // Search Ledger entries (by description and associatedParty)
-        const ledgerRef = collection(firestore, `users/${user.uid}/ledger`);
+        const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
         const ledgerSnapshot = await getDocs(
           firestoreQuery(ledgerRef, orderBy("date", "desc"), limit(50))
         );
@@ -89,7 +89,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         });
 
         // Search Clients (by name)
-        const clientsRef = collection(firestore, `users/${user.uid}/clients`);
+        const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
         const clientsSnapshot = await getDocs(
           firestoreQuery(clientsRef, limit(50))
         );
@@ -108,7 +108,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         });
 
         // Search Cheques (by chequeNumber or partyName/clientName)
-        const chequesRef = collection(firestore, `users/${user.uid}/cheques`);
+        const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
         const chequesSnapshot = await getDocs(
           firestoreQuery(chequesRef, limit(50))
         );
@@ -132,7 +132,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         });
 
         // Search Payments (by clientName or notes)
-        const paymentsRef = collection(firestore, `users/${user.uid}/payments`);
+        const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
         const paymentsSnapshot = await getDocs(
           firestoreQuery(paymentsRef, orderBy("date", "desc"), limit(50))
         );

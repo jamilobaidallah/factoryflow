@@ -35,7 +35,7 @@ export function useInventoryItems(): UseInventoryItemsResult {
     }
 
     setError(null);
-    const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+    const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
     const q = query(inventoryRef, orderBy('itemName', 'asc'));
 
     const unsubscribe = onSnapshot(

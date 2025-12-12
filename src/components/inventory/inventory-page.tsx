@@ -115,7 +115,7 @@ export default function InventoryPage() {
   useEffect(() => {
     if (!user) { return; }
 
-    const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+    const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
     getCountFromServer(query(inventoryRef)).then((snapshot) => {
       setTotalCount(snapshot.data().count);
     });
@@ -125,7 +125,7 @@ export default function InventoryPage() {
   useEffect(() => {
     if (!user) {return;}
 
-    const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+    const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
     const q = query(inventoryRef, orderBy("itemName", "asc"), limit(pageSize));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -151,7 +151,7 @@ export default function InventoryPage() {
     setLoading(true);
     try {
       if (editingItem) {
-        const itemRef = doc(firestore, `users/${user.uid}/inventory`, editingItem.id);
+        const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, editingItem.id);
         await updateDoc(itemRef, {
           itemName: formData.itemName,
           category: formData.category,
@@ -170,7 +170,7 @@ export default function InventoryPage() {
           description: "تم تحديث بيانات العنصر",
         });
       } else {
-        const inventoryRef = collection(firestore, `users/${user.uid}/inventory`);
+        const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
         await addDoc(inventoryRef, {
           itemName: formData.itemName,
           category: formData.category,
@@ -211,7 +211,7 @@ export default function InventoryPage() {
 
     setLoading(true);
     try {
-      const itemRef = doc(firestore, `users/${user.uid}/inventory`, selectedItem.id);
+      const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, selectedItem.id);
       const movementQty = parseFloat(movementData.quantity);
       const newQuantity = movementData.type === "دخول"
         ? selectedItem.quantity + movementQty
@@ -232,7 +232,7 @@ export default function InventoryPage() {
       });
 
       // Log the movement
-      const movementsRef = collection(firestore, `users/${user.uid}/inventory_movements`);
+      const movementsRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
       await addDoc(movementsRef, {
         itemId: selectedItem.id,
         itemName: selectedItem.itemName,
@@ -295,7 +295,7 @@ export default function InventoryPage() {
       "هل أنت متأكد من حذف هذا العنصر من المخزون؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
         try {
-          const itemRef = doc(firestore, `users/${user.uid}/inventory`, itemId);
+          const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, itemId);
           await deleteDoc(itemRef);
           toast({
             title: "تم الحذف",

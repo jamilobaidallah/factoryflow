@@ -61,7 +61,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
     setLoading(true);
     try {
-      const service = createLedgerService(user.uid);
+      const service = createLedgerService(user.dataOwnerId);
 
       const result = await service.addQuickPayment({
         amount: paymentAmount,
