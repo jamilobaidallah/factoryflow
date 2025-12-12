@@ -24,25 +24,41 @@ import type { UserRole, AccessRequest, OrganizationMember } from '@/types/rbac';
  * يبحث في مجموعة users عن مستخدم بدور owner
  */
 export async function findOwnerByEmail(email: string): Promise<{ uid: string; email: string; displayName?: string } | null> {
-  const usersRef = collection(firestore, 'users');
-  const q = query(
-    usersRef,
-    where('email', '==', email.toLowerCase().trim()),
-    where('role', '==', 'owner')
-  );
+  console.log('=== findOwnerByEmail ===');
+  console.log('Searching for owner with email:', email.toLowerCase().trim());
 
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) {
-    return null;
+  try {
+    const usersRef = collection(firestore, 'users');
+    const q = query(
+      usersRef,
+      where('email', '==', email.toLowerCase().trim()),
+      where('role', '==', 'owner')
+    );
+
+    const snapshot = await getDocs(q);
+    console.log('Query completed. Found documents:', snapshot.size);
+
+    if (snapshot.empty) {
+      console.log('No owner found with this email');
+      return null;
+    }
+
+    const userDoc = snapshot.docs[0];
+    const data = userDoc.data();
+    console.log('Found owner:', { uid: userDoc.id, email: data.email });
+
+    return {
+      uid: userDoc.id,
+      email: data.email,
+      displayName: data.displayName,
+    };
+  } catch (error) {
+    console.error('=== findOwnerByEmail Error ===');
+    console.error('Error details:', error);
+    console.error('Error code:', (error as { code?: string }).code);
+    console.error('Error message:', (error as Error).message);
+    throw error;
   }
-
-  const userDoc = snapshot.docs[0];
-  const data = userDoc.data();
-  return {
-    uid: userDoc.id,
-    email: data.email,
-    displayName: data.displayName,
-  };
 }
 
 /**
@@ -55,12 +71,36 @@ export async function submitAccessRequest(
   targetOwnerEmail: string,
   message?: string
 ): Promise<{ success: boolean; error?: string }> {
+  console.log('=== submitAccessRequest ===');
+  console.log('Requester UID:', requesterUid);
+  console.log('Requester Email:', requesterEmail);
+  console.log('Target Owner Email:', targetOwnerEmail);
+
   try {
     // البحث عن المالك بالبريد الإلكتروني
-    const owner = await findOwnerByEmail(targetOwnerEmail);
-    if (!owner) {
-      return { success: false, error: 'لم يتم العثور على مالك بهذا البريد الإلكتروني' };
+    let owner;
+    try {
+      owner = await findOwnerByEmail(targetOwnerEmail);
+    } catch (findError) {
+      // Permission error when querying users collection
+      const errorCode = (findError as { code?: string }).code;
+      console.error('Error finding owner - code:', errorCode);
+
+      if (errorCode === 'permission-denied') {
+        return {
+          success: false,
+          error: 'لا يمكن التحقق من المالك. يرجى التأكد من صحة البريد الإلكتروني وأن المالك قام بتسجيل الدخول مرة واحدة على الأقل.'
+        };
+      }
+      throw findError;
     }
+
+    if (!owner) {
+      console.log('Owner not found with email:', targetOwnerEmail);
+      return { success: false, error: 'لم يتم العثور على مالك بهذا البريد الإلكتروني. تأكد من أن المالك قام بتسجيل الدخول مرة واحدة على الأقل.' };
+    }
+
+    console.log('Owner found:', owner.uid);
 
     // التحقق من عدم وجود طلب معلق سابق
     const existingRequestQuery = query(
@@ -71,11 +111,13 @@ export async function submitAccessRequest(
     );
     const existingSnapshot = await getDocs(existingRequestQuery);
     if (!existingSnapshot.empty) {
+      console.log('Existing pending request found');
       return { success: false, error: 'لديك طلب معلق بالفعل لهذا المصنع' };
     }
 
     // إنشاء طلب جديد
-    await addDoc(collection(firestore, 'access_requests'), {
+    console.log('Creating new access request...');
+    const docRef = await addDoc(collection(firestore, 'access_requests'), {
       uid: requesterUid,
       email: requesterEmail.toLowerCase().trim(),
       displayName: requesterDisplayName || requesterEmail,
@@ -86,9 +128,13 @@ export async function submitAccessRequest(
       status: 'pending',
     });
 
+    console.log('Access request created successfully:', docRef.id);
     return { success: true };
   } catch (error) {
-    console.error('Error submitting access request:', error);
+    console.error('=== submitAccessRequest Error ===');
+    console.error('Error details:', error);
+    console.error('Error code:', (error as { code?: string }).code);
+    console.error('Error message:', (error as Error).message);
     return { success: false, error: 'حدث خطأ أثناء إرسال الطلب' };
   }
 }

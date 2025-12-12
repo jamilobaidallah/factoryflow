@@ -72,8 +72,14 @@ service cloud.firestore {
     // ============================================
 
     match /users/{userId} {
-      // Read own profile: any authenticated user
-      allow read: if isDataOwner(userId);
+      // Read permissions:
+      // 1. Read own profile: any authenticated user can read their own profile
+      // 2. Find owners: any authenticated user can read profiles where role == 'owner'
+      //    This allows new users to find factory owners when submitting access requests
+      allow read: if isAuthenticated() && (
+        isDataOwner(userId) ||
+        resource.data.role == 'owner'
+      );
 
       // Write own profile: only data owner
       // Note: Role changes should be controlled by owner only in future
@@ -253,9 +259,13 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // Only the target organization owner can read requests for their org
-      allow read: if isAuthenticated()
-        && resource.data.targetOwnerId == request.auth.uid;
+      // Read permissions:
+      // 1. Target owner can read requests for their org
+      // 2. Requester can read their own requests (to check pending status)
+      allow read: if isAuthenticated() && (
+        resource.data.targetOwnerId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      );
 
       // Only the target org owner can approve/reject (update status)
       allow update: if isAuthenticated()
