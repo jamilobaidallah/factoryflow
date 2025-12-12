@@ -1,49 +1,59 @@
-# Task: RBAC Foundation (Phase 1)
+# Task: RBAC Phase 2 - Auth Context & Permissions Hook
 
 ## Branch
-`feature/rbac-foundation`
+`feature/rbac-auth-context`
 
 ---
 
 ## Context
-Adding Role-Based Access Control to FactoryFlow. This is Phase 1 - creating type definitions and constants only. No changes to existing functionality.
+Phase 1 complete. We have types, constants, and permission matrix. Now integrating RBAC into the auth system.
 
-### Design Decisions
-- One user = one organization (simple model)
-- Existing users auto-become "owner"
-- New users self-register and request access
+### Existing Auth Structure
+- `src/firebase/provider.tsx` - FirebaseClientProvider with user state
+- `useUser()` hook returns `{ user, loading, signOut }`
+- `User` interface: `{ uid, email, displayName, photoURL }`
 
 ---
 
 ## Plan
 
-### Task 1.1: Create `src/types/rbac.ts`
-- [x] Create new file `src/types/rbac.ts`
-- [x] Define `UserRole` union type: `'owner' | 'accountant' | 'viewer'`
-- [x] Define `PermissionAction` union type: `'create' | 'read' | 'update' | 'delete' | 'export'`
-- [x] Define `PermissionModule` union type for all 13 modules
-- [x] Define `OrganizationMember` interface with required fields
-- [x] Define `AccessRequest` interface for pending requests
-- [x] Define `RolePermissions` Record type
-- [x] Add JSDoc comments in Arabic
+### Task 2.1: Extend Auth Context (`src/firebase/provider.tsx`)
+- [x] Import `UserRole` from `@/types/rbac`
+- [x] Import `doc, getDoc` from `firebase/firestore`
+- [x] Add `role: UserRole | null` to `FirebaseContextType`
+- [x] Add `role` state to provider
+- [x] Fetch role from Firestore on auth state change (`users/{uid}` document)
+- [x] Default to `'owner'` if no role field exists (backwards compatible)
+- [x] Clear role on logout
+- [x] Export role in context value
 
-### Task 1.2: Update `src/lib/constants.ts`
-- [x] Add `USER_ROLES` constant object
-- [x] Add `USER_ROLE_LABELS` constant with Arabic labels
-- [x] Add `UserRoleKey` type export
+### Task 2.2: Create `src/hooks/usePermissions.ts`
+- [x] Create new file
+- [x] Import `useUser` from `@/firebase/provider`
+- [x] Import `hasPermission` from `@/lib/permissions`
+- [x] Import types from `@/types/rbac`
+- [x] Implement `usePermissions()` hook with:
+  - `can(action, module)` function
+  - `role` - current user role
+  - `isOwner`, `isAccountant`, `isViewer` - boolean helpers
+  - `canWrite` - true if role can write (not viewer)
+- [x] Add JSDoc comments
 
-### Task 1.3: Create `src/lib/permissions.ts`
-- [x] Create new file `src/lib/permissions.ts`
-- [x] Define `ROLE_PERMISSIONS` matrix for all roles × modules
-- [x] Implement `hasPermission(role, module, action)` function
-- [x] Implement `getModulePermissions(role, module)` helper
-- [x] Implement `hasAnyPermission(role, module)` helper
-- [x] Add JSDoc comments in Arabic
+### Task 2.3: Create `src/components/auth/PermissionGate.tsx`
+- [x] Create `PermissionGate` component
+- [x] Props: `action`, `module`, `children`, `fallback`
+- [x] Use `usePermissions` to check access
+- [x] Render children if allowed, fallback otherwise
+- [x] Add JSDoc comments
+
+### Task 2.4: Create barrel exports
+- [x] Create `src/hooks/index.ts` with `usePermissions` export
+- [x] Create `src/components/auth/index.ts` with `PermissionGate` export
 
 ### Verification
 - [x] Run `npx tsc --noEmit` - PASSED
 - [x] Run `npm run lint` - PASSED (pre-existing warnings only)
-- [x] No existing functionality affected
+- [x] Run `npm test` - PASSED (1150 tests, 44 suites)
 
 ---
 
@@ -53,53 +63,78 @@ Adding Role-Based Access Control to FactoryFlow. This is Phase 1 - creating type
 
 | File | Action | Description |
 |------|--------|-------------|
-| `src/types/rbac.ts` | **CREATE** | RBAC type definitions |
-| `src/lib/constants.ts` | **MODIFY** | Added USER_ROLES constants |
-| `src/lib/permissions.ts` | **CREATE** | Permission matrix and utilities |
+| `src/firebase/provider.tsx` | **MODIFY** | Added role to auth context |
+| `src/hooks/usePermissions.ts` | **CREATE** | Permissions hook |
+| `src/components/auth/PermissionGate.tsx` | **CREATE** | Permission gate component |
+| `src/hooks/index.ts` | **CREATE** | Hooks barrel export |
+| `src/components/auth/index.ts` | **CREATE** | Auth components barrel export |
 
 ### Summary of Changes
 
-#### `src/types/rbac.ts` (NEW)
-- `UserRole` - Union type: `'owner' | 'accountant' | 'viewer'`
-- `PermissionAction` - Union type: `'create' | 'read' | 'update' | 'delete' | 'export'`
-- `PermissionModule` - Union type for 13 modules
-- `OrganizationMember` - Interface for org members with `uid`, `orgId`, `email`, `displayName`, `role`, `requestedAt`, `approvedAt`, `approvedBy`, `isActive`
-- `AccessRequest` - Interface for pending requests with `id`, `uid`, `email`, `displayName`, `requestedAt`, `status`
-- `RolePermissions` - Record type mapping roles to module permissions
+#### `src/firebase/provider.tsx` (MODIFIED)
+- Added `UserRole` import from `@/types/rbac`
+- Added `doc, getDoc` imports from `firebase/firestore`
+- Extended `FirebaseContextType` with `role: UserRole | null`
+- Added `role` state with `useState<UserRole | null>(null)`
+- On auth state change:
+  - Fetches user document from `users/{uid}`
+  - Extracts role field, defaults to `'owner'` if missing
+  - Handles errors gracefully (defaults to owner)
+- Clears role on sign out
+- Exports role in context value
 
-#### `src/lib/constants.ts` (MODIFIED)
-- Added `USER_ROLES` constant: `{ OWNER: 'owner', ACCOUNTANT: 'accountant', VIEWER: 'viewer' }`
-- Added `USER_ROLE_LABELS` with Arabic labels
-- Added `UserRoleKey` type export
+#### `src/hooks/usePermissions.ts` (NEW)
+- `usePermissions()` hook with:
+  - `can(action, module)` - check specific permission
+  - `role` - current user role
+  - `isOwner` - boolean helper
+  - `isAccountant` - boolean helper
+  - `isViewer` - boolean helper
+  - `canWrite` - true if not viewer and not null
+- Full JSDoc documentation with Arabic comments
+- TypeScript interface `UsePermissionsReturn`
 
-#### `src/lib/permissions.ts` (NEW)
-- `ROLE_PERMISSIONS` - Full permission matrix for all roles × modules
-- `hasPermission(role, module, action)` - Check if role can perform action
-- `getModulePermissions(role, module)` - Get all allowed actions for a role/module
-- `hasAnyPermission(role, module)` - Check if role has any access to module
+#### `src/components/auth/PermissionGate.tsx` (NEW)
+- React component for conditional rendering
+- Props: `action`, `module`, `children`, `fallback`
+- Uses `usePermissions` hook internally
+- Returns children if permitted, fallback otherwise
+- JSDoc with usage examples
 
-### Permission Matrix
-
-| Module | Owner | Accountant | Viewer |
-|--------|-------|------------|--------|
-| dashboard | all | read | read |
-| ledger | all | CRUD | read |
-| clients | all | CRUD | read |
-| payments | all | CRUD | read |
-| cheques | all | CRUD | read |
-| inventory | all | CRUD | read |
-| employees | all | CRUD | read |
-| partners | all | CRUD | read |
-| fixed-assets | all | CRUD | read |
-| invoices | all | CRUD + export | read |
-| reports | all | read + export | read |
-| users | all | none | none |
-| settings | all | none | none |
+#### Barrel Exports (NEW)
+- `src/hooks/index.ts` - exports all hooks including `usePermissions`
+- `src/components/auth/index.ts` - exports `PermissionGate`
 
 ### Test Results
 ```
 TypeScript: PASSED (no errors)
 ESLint: PASSED (pre-existing warnings only)
+Tests: PASSED (1150 tests, 44 suites)
+```
+
+### Usage Examples
+
+```tsx
+// Check permission in component
+const { can, isOwner, canWrite } = usePermissions();
+
+if (can('delete', 'ledger')) {
+  // Show delete button
+}
+
+// Conditional rendering
+<PermissionGate action="create" module="clients">
+  <CreateClientButton />
+</PermissionGate>
+
+// With fallback
+<PermissionGate
+  action="update"
+  module="settings"
+  fallback={<p>ليس لديك صلاحية</p>}
+>
+  <SettingsForm />
+</PermissionGate>
 ```
 
 ---
