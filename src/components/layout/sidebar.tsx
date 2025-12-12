@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,9 @@ import {
   Factory,
   ChevronLeft,
   FileText,
+  UserCog,
 } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 /** Navigation item within a group */
 interface NavItem {
@@ -108,6 +110,17 @@ const navigationGroups: NavGroup[] = [
     ],
   },
 ];
+
+/** Admin navigation group (owner only) */
+const adminGroup: NavGroup = {
+  id: "admin",
+  label: "الإدارة",
+  icon: UserCog,
+  defaultOpen: false,
+  items: [
+    { label: "إدارة المستخدمين", href: "/users", icon: UserCog },
+  ],
+};
 
 const STORAGE_KEY = "sidebar-groups-state";
 
@@ -228,8 +241,16 @@ function SidebarGroup({ group, isOpen, onToggle, pathname }: SidebarGroupProps) 
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { role } = usePermissions();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [isHydrated, setIsHydrated] = useState(false);
+
+  // Include admin group only for owners
+  const allGroups = useMemo(() => {
+    return role === "owner"
+      ? [...navigationGroups, adminGroup]
+      : navigationGroups;
+  }, [role]);
 
   // Initialize state after hydration to avoid SSR mismatch
   useEffect(() => {
@@ -243,7 +264,7 @@ export default function Sidebar() {
       return;
     }
 
-    for (const group of navigationGroups) {
+    for (const group of allGroups) {
       const hasActiveItem = group.items.some((item) => pathname === item.href);
       if (hasActiveItem && !openGroups[group.id]) {
         setOpenGroups((prev) => {
@@ -254,7 +275,7 @@ export default function Sidebar() {
         break;
       }
     }
-  }, [pathname, isHydrated, openGroups]);
+  }, [pathname, isHydrated, openGroups, allGroups]);
 
   const handleToggle = useCallback((id: string) => {
     setOpenGroups((prev) => {
@@ -311,7 +332,7 @@ export default function Sidebar() {
 
         {/* Collapsible groups */}
         <div className="space-y-2">
-          {navigationGroups.map((group) => (
+          {allGroups.map((group) => (
             <SidebarGroup
               key={group.id}
               group={group}

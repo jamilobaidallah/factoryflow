@@ -66,14 +66,24 @@ export interface AccessRequest {
   id: string;
   /** معرف المستخدم المتقدم */
   uid: string;
-  /** البريد الإلكتروني */
+  /** البريد الإلكتروني للمستخدم المتقدم */
   email: string;
   /** اسم العرض */
   displayName: string;
+  /** معرف المالك المستهدف (uid) */
+  targetOwnerId: string;
+  /** البريد الإلكتروني للمالك المستهدف */
+  targetOwnerEmail: string;
+  /** رسالة الطلب (اختياري) */
+  message?: string;
   /** تاريخ الطلب */
   requestedAt: Date;
   /** حالة الطلب */
   status: 'pending' | 'approved' | 'rejected';
+  /** تاريخ المعالجة */
+  processedAt?: Date;
+  /** الدور المعين (عند القبول) */
+  assignedRole?: UserRole;
 }
 
 /**

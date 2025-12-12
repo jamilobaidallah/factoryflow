@@ -4,3 +4,4 @@
  */
 
 export { PermissionGate } from './PermissionGate';
+export { AccessRequestForm } from './AccessRequestForm';
