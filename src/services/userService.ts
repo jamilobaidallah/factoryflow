@@ -24,8 +24,8 @@ import type { UserRole, AccessRequest, OrganizationMember } from '@/types/rbac';
  * يبحث في مجموعة users عن مستخدم بدور owner
  */
 export async function findOwnerByEmail(email: string): Promise<{ uid: string; email: string; displayName?: string } | null> {
-  console.log('=== findOwnerByEmail ===');
-  console.log('Searching for owner with email:', email.toLowerCase().trim());
+  console.log('🔵🔵🔵 findOwnerByEmail CALLED 🔵🔵🔵');
+  console.log('🔵 Searching for owner with email:', email.toLowerCase().trim());
 
   try {
     const usersRef = collection(firestore, 'users');
@@ -36,7 +36,7 @@ export async function findOwnerByEmail(email: string): Promise<{ uid: string; em
     );
 
     const snapshot = await getDocs(q);
-    console.log('Query completed. Found documents:', snapshot.size);
+    console.log('🔵 Query completed. Found documents:', snapshot.size);
 
     if (snapshot.empty) {
       console.log('No owner found with this email');
@@ -71,10 +71,10 @@ export async function submitAccessRequest(
   targetOwnerEmail: string,
   message?: string
 ): Promise<{ success: boolean; error?: string }> {
-  console.log('=== submitAccessRequest ===');
-  console.log('Requester UID:', requesterUid);
-  console.log('Requester Email:', requesterEmail);
-  console.log('Target Owner Email:', targetOwnerEmail);
+  console.log('🟡🟡🟡 submitAccessRequest CALLED 🟡🟡🟡');
+  console.log('🟡 Requester UID:', requesterUid);
+  console.log('🟡 Requester Email:', requesterEmail);
+  console.log('🟡 Target Owner Email:', targetOwnerEmail);
 
   try {
     // البحث عن المالك بالبريد الإلكتروني
@@ -143,8 +143,8 @@ export async function submitAccessRequest(
  * الحصول على طلبات الوصول المعلقة للمالك
  */
 export async function getPendingRequests(ownerId: string): Promise<AccessRequest[]> {
-  console.log('=== getPendingRequests ===');
-  console.log('Querying for owner ID:', ownerId);
+  console.log('🔴🔴🔴 getPendingRequests CALLED 🔴🔴🔴');
+  console.log('🔴 Querying for owner ID:', ownerId);
 
   try {
     const requestsRef = collection(firestore, 'access_requests');
@@ -156,7 +156,7 @@ export async function getPendingRequests(ownerId: string): Promise<AccessRequest
     );
 
     const snapshot = await getDocs(q);
-    console.log('Found pending requests:', snapshot.size);
+    console.log('🔴 Found pending requests:', snapshot.size);
 
     const requests = snapshot.docs.map(doc => {
       const data = doc.data();

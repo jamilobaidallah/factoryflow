@@ -26,9 +26,9 @@ export default function UsersPage() {
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;
 
-    console.log('=== UsersPage fetchData ===');
-    console.log('Current user UID:', user.uid);
-    console.log('Current user email:', user.email);
+    console.log('🟢🟢🟢 UsersPage fetchData CALLED 🟢🟢🟢');
+    console.log('🟢 Current user UID:', user.uid);
+    console.log('🟢 Current user email:', user.email);
 
     setLoading(true);
     try {
