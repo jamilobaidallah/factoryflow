@@ -260,3 +260,18 @@ export type ChequeType = typeof CHEQUE_TYPES[keyof typeof CHEQUE_TYPES];
 export type ChequeStatusAr = typeof CHEQUE_STATUS_AR[keyof typeof CHEQUE_STATUS_AR];
 export type MovementType = typeof MOVEMENT_TYPES[keyof typeof MOVEMENT_TYPES];
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
+
+// User Roles (RBAC)
+export const USER_ROLES = {
+  OWNER: 'owner',
+  ACCOUNTANT: 'accountant',
+  VIEWER: 'viewer',
+} as const;
+
+export const USER_ROLE_LABELS = {
+  owner: 'مالك',
+  accountant: 'محاسب',
+  viewer: 'مشاهد',
+} as const;
+
+export type UserRoleKey = typeof USER_ROLES[keyof typeof USER_ROLES];
