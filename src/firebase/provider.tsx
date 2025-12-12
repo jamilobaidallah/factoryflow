@@ -150,6 +150,15 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
             dataOwnerId: dataOwnerId,
           };
 
+          // Debug logging to verify dataOwnerId computation
+          console.log('🔵 AUTH DEBUG:', {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: userRole,
+            ownerId: ownerId,
+            dataOwnerId: dataOwnerId,
+          });
+
           setUser(user);
           setRole(userRole);
         } catch (error) {

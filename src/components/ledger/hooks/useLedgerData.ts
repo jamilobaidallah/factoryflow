@@ -29,6 +29,9 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
+        // Debug logging to verify which userId is being queried
+        console.log('🟢 QUERY DEBUG: useLedgerData - Fetching from userId:', user.dataOwnerId, '(user.uid:', user.uid, ')');
+
         const service = createLedgerService(user.dataOwnerId);
         service.getTotalCount().then((count) => {
             setTotalCount(count);
