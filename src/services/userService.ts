@@ -45,7 +45,9 @@ export async function findOwnerByEmail(email: string): Promise<{ uid: string; em
 
     const userDoc = snapshot.docs[0];
     const data = userDoc.data();
-    console.log('Found owner:', { uid: userDoc.id, email: data.email });
+    console.log('🔵 Found owner document ID:', userDoc.id);
+    console.log('🔵 Owner email from doc:', data.email);
+    console.log('🔵 Owner role from doc:', data.role);
 
     return {
       uid: userDoc.id,
@@ -116,7 +118,9 @@ export async function submitAccessRequest(
     }
 
     // إنشاء طلب جديد
-    console.log('Creating new access request...');
+    console.log('🟡 Creating new access request...');
+    console.log('🟡 STORING targetOwnerId:', owner.uid);
+    console.log('🟡 STORING targetOwnerEmail:', owner.email);
     const docRef = await addDoc(collection(firestore, 'access_requests'), {
       uid: requesterUid,
       email: requesterEmail.toLowerCase().trim(),
