@@ -8,6 +8,28 @@ import '@testing-library/jest-dom';
 import { LedgerTable } from '../LedgerTable';
 import { LedgerEntry } from '../../utils/ledger-constants';
 
+// Mock firebase/provider (needed by AccessRequestForm imported through auth/index)
+jest.mock('@/firebase/provider', () => ({
+  useUser: () => ({ user: { uid: 'test-user-123' }, loading: false }),
+}));
+
+// Mock userService (needed by AccessRequestForm)
+jest.mock('@/services/userService', () => ({
+  submitAccessRequest: jest.fn(),
+  hasPendingRequest: jest.fn().mockResolvedValue(false),
+}));
+
+// Mock usePermissions hook
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    role: 'owner',
+    permissions: [],
+    loading: false,
+    isOwner: true,
+    can: jest.fn().mockReturnValue(true),
+  }),
+}));
+
 // Helper to get desktop table container (hidden md:block)
 const getDesktopTable = (container: HTMLElement) => {
   return container.querySelector('.hidden.md\\:block') as HTMLElement;

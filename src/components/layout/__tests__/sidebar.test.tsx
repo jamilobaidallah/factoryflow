@@ -8,6 +8,18 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname(),
 }));
 
+// Mock usePermissions hook
+const mockRole = jest.fn().mockReturnValue('viewer');
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    role: mockRole(),
+    permissions: [],
+    loading: false,
+    isOwner: mockRole() === 'owner',
+    can: jest.fn().mockReturnValue(true),
+  }),
+}));
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -26,6 +38,7 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 describe('Sidebar', () => {
   beforeEach(() => {
     mockPathname.mockReturnValue('/dashboard');
+    mockRole.mockReturnValue('viewer');
     localStorageMock.clear();
   });
 
@@ -230,6 +243,51 @@ describe('Sidebar', () => {
 
       const accountsGroup = screen.getByText('الحسابات').closest('button');
       expect(accountsGroup).toHaveAttribute('aria-expanded');
+    });
+  });
+
+  describe('Admin Navigation (Owner Only)', () => {
+    it('does not show admin group for non-owners', () => {
+      mockRole.mockReturnValue('viewer');
+      render(<Sidebar />);
+
+      expect(screen.queryByText('الإدارة')).not.toBeInTheDocument();
+    });
+
+    it('does not show admin group for accountants', () => {
+      mockRole.mockReturnValue('accountant');
+      render(<Sidebar />);
+
+      expect(screen.queryByText('الإدارة')).not.toBeInTheDocument();
+    });
+
+    it('shows admin group for owners', () => {
+      mockRole.mockReturnValue('owner');
+      render(<Sidebar />);
+
+      expect(screen.getByText('الإدارة')).toBeInTheDocument();
+    });
+
+    it('shows user management link for owners when admin group is expanded', () => {
+      mockRole.mockReturnValue('owner');
+      render(<Sidebar />);
+
+      // Click the admin group trigger
+      const adminGroup = screen.getByText('الإدارة');
+      fireEvent.click(adminGroup);
+
+      expect(screen.getByRole('link', { name: /إدارة المستخدمين/ })).toBeInTheDocument();
+    });
+
+    it('user management links to /users', () => {
+      mockRole.mockReturnValue('owner');
+      render(<Sidebar />);
+
+      // Click the admin group trigger
+      const adminGroup = screen.getByText('الإدارة');
+      fireEvent.click(adminGroup);
+
+      expect(screen.getByRole('link', { name: /إدارة المستخدمين/ })).toHaveAttribute('href', '/users');
     });
   });
 });

@@ -42,6 +42,17 @@ jest.mock('@/firebase/provider', () => ({
   FirebaseClientProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Mock usePermissions hook
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    role: 'owner',
+    permissions: [],
+    loading: false,
+    isOwner: true,
+    can: jest.fn().mockReturnValue(true),
+  }),
+}));
+
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn((db, path) => ({ _path: path.split('/').pop() })),
   addDoc: jest.fn((ref, data) => mockAddDoc(ref, data)),

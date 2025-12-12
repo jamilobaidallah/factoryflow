@@ -38,6 +38,17 @@ jest.mock('@/firebase/provider', () => ({
   useUser: jest.fn(() => ({ user: mockUser })),
 }));
 
+// Mock usePermissions hook
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    role: 'owner',
+    permissions: [],
+    loading: false,
+    isOwner: true,
+    can: jest.fn().mockReturnValue(true),
+  }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   useToast: jest.fn(() => ({ toast: mockToast })),
 }));
