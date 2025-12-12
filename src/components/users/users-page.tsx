@@ -99,6 +99,11 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      {/* DEBUG BANNER - Remove after testing */}
+      <div style={{background: 'red', color: 'white', padding: '10px', fontWeight: 'bold'}}>
+        🔴 DEBUG: UsersPage Rendered - UID: {user?.uid} - Role: {role} - Requests: {pendingRequests.length}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
