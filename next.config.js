@@ -37,8 +37,9 @@ const nextConfig = {
 
   // Compiler options for production optimization
   compiler: {
-    // Remove console.log in production
-    removeConsole: process.env.NODE_ENV === 'production',
+    // Remove console.log in production (temporarily disabled for debugging)
+    // removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole: false,
   },
 
   // Headers for caching static assets
