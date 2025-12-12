@@ -143,29 +143,49 @@ export async function submitAccessRequest(
  * الحصول على طلبات الوصول المعلقة للمالك
  */
 export async function getPendingRequests(ownerId: string): Promise<AccessRequest[]> {
-  const requestsRef = collection(firestore, 'access_requests');
-  const q = query(
-    requestsRef,
-    where('targetOwnerId', '==', ownerId),
-    where('status', '==', 'pending'),
-    orderBy('requestedAt', 'desc')
-  );
+  console.log('=== getPendingRequests ===');
+  console.log('Querying for owner ID:', ownerId);
 
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      uid: data.uid,
-      email: data.email,
-      displayName: data.displayName,
-      targetOwnerId: data.targetOwnerId,
-      targetOwnerEmail: data.targetOwnerEmail,
-      message: data.message,
-      requestedAt: data.requestedAt?.toDate() || new Date(),
-      status: data.status,
-    } as AccessRequest;
-  });
+  try {
+    const requestsRef = collection(firestore, 'access_requests');
+    const q = query(
+      requestsRef,
+      where('targetOwnerId', '==', ownerId),
+      where('status', '==', 'pending'),
+      orderBy('requestedAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    console.log('Found pending requests:', snapshot.size);
+
+    const requests = snapshot.docs.map(doc => {
+      const data = doc.data();
+      console.log('Request doc:', {
+        id: doc.id,
+        targetOwnerId: data.targetOwnerId,
+        requesterEmail: data.email,
+        status: data.status,
+      });
+      return {
+        id: doc.id,
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        targetOwnerId: data.targetOwnerId,
+        targetOwnerEmail: data.targetOwnerEmail,
+        message: data.message,
+        requestedAt: data.requestedAt?.toDate() || new Date(),
+        status: data.status,
+      } as AccessRequest;
+    });
+
+    return requests;
+  } catch (error) {
+    console.error('=== getPendingRequests Error ===');
+    console.error('Error details:', error);
+    console.error('Error code:', (error as { code?: string }).code);
+    throw error;
+  }
 }
 
 /**

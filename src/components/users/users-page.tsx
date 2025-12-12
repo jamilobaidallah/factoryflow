@@ -26,12 +26,18 @@ export default function UsersPage() {
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;
 
+    console.log('=== UsersPage fetchData ===');
+    console.log('Current user UID:', user.uid);
+    console.log('Current user email:', user.email);
+
     setLoading(true);
     try {
       const [membersData, requestsData] = await Promise.all([
         getOrganizationMembers(user.uid),
         getPendingRequests(user.uid),
       ]);
+      console.log('Fetched members:', membersData.length);
+      console.log('Fetched pending requests:', requestsData.length);
 
       // Add owner to members list if not already there
       const ownerExists = membersData.some((m) => m.uid === user.uid);
