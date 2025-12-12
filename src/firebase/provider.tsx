@@ -78,12 +78,16 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      console.log('🔴 AUTH STATE CHANGED:', firebaseUser ? firebaseUser.email : 'null');
+
       if (firebaseUser) {
         // Fetch user role and ownerId from Firestore
         // جلب دور المستخدم ومعرف المالك من قاعدة البيانات
         try {
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
+
+          console.log('🟡 FIRESTORE USER DOC:', userDoc.exists() ? userDoc.data() : 'NOT FOUND');
 
           let userRole: UserRole | null = null;
           let ownerId: string | undefined = undefined;
