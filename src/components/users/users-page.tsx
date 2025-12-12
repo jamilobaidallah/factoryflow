@@ -16,8 +16,10 @@ import {
 import type { OrganizationMember, AccessRequest } from "@/types/rbac";
 
 export default function UsersPage() {
-  const { user } = useUser();
+  console.log('⚡⚡⚡ UsersPage COMPONENT RENDERED ⚡⚡⚡');
+  const { user, loading: authLoading } = useUser();
   const { role } = usePermissions();
+  console.log('⚡ user:', user?.uid, 'role:', role, 'authLoading:', authLoading);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +69,19 @@ export default function UsersPage() {
     fetchData();
   }, [fetchData]);
 
+  // Wait for auth to load before checking role
+  if (authLoading) {
+    console.log('⚡ Auth still loading...');
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   // Only owners can access this page
   if (role !== "owner") {
+    console.log('⚡ Access denied - role is:', role);
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <div className="p-4 bg-red-100 rounded-full">
