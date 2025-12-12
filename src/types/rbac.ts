@@ -40,8 +40,8 @@ export type PermissionModule =
 export interface OrganizationMember {
   /** معرف المستخدم في Firebase Auth */
   uid: string;
-  /** معرف المؤسسة (المصنع) */
-  orgId: string;
+  /** معرف المالك (المصنع) */
+  ownerId: string;
   /** البريد الإلكتروني */
   email: string;
   /** اسم العرض */

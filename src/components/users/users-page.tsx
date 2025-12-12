@@ -38,7 +38,7 @@ export default function UsersPage() {
       if (!ownerExists) {
         membersData.unshift({
           uid: user.uid,
-          orgId: user.uid,
+          ownerId: user.uid,
           email: user.email || "",
           displayName: user.displayName || user.email || "",
           role: "owner",

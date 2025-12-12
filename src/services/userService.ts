@@ -193,24 +193,25 @@ export async function approveRequest(
     await setDoc(memberRef, {
       uid: requestData.uid,
       email: requestData.email,
-      displayName: requestData.displayName,
+      displayName: requestData.displayName || requestData.email,
       role: role,
-      orgId: ownerId,
+      ownerId: ownerId,
       requestedAt: requestData.requestedAt,
       approvedAt: Timestamp.now(),
       approvedBy: ownerId,
       isActive: true,
     }, { merge: true });
 
-    // تحديث دور المستخدم في وثيقته الرئيسية
-    // استخدام setDoc مع merge لتجنب إنشاء مستندات مكررة
+    // إنشاء/تحديث وثيقة المستخدم في مجموعة users الرئيسية
+    // هذا ضروري حتى يتمكن المستخدم من تسجيل الدخول والوصول للنظام
     const userRef = doc(firestore, 'users', requestData.uid);
     await setDoc(userRef, {
       uid: requestData.uid,
       email: requestData.email,
-      displayName: requestData.displayName,
+      displayName: requestData.displayName || requestData.email,
       role: role,
-      orgId: ownerId,
+      ownerId: ownerId,
+      createdAt: Timestamp.now(),
     }, { merge: true });
 
     return { success: true };
@@ -267,7 +268,7 @@ export async function getOrganizationMembers(ownerId: string): Promise<Organizat
     const data = doc.data();
     return {
       uid: data.uid,
-      orgId: data.orgId,
+      ownerId: data.ownerId || data.orgId || ownerId, // backwards compatibility
       email: data.email,
       displayName: data.displayName,
       role: data.role,
@@ -351,7 +352,7 @@ export async function removeUserAccess(
     const userRef = doc(firestore, 'users', memberUid);
     await updateDoc(userRef, {
       role: null,
-      orgId: null,
+      ownerId: null,
     });
 
     return { success: true };
@@ -383,7 +384,7 @@ export async function getUserAccessStatus(userUid: string): Promise<{
   hasAccess: boolean;
   hasPendingRequest: boolean;
   role?: UserRole;
-  orgId?: string;
+  ownerId?: string;
 }> {
   // التحقق من وثيقة المستخدم
   const userRef = doc(firestore, 'users', userUid);
@@ -391,12 +392,13 @@ export async function getUserAccessStatus(userUid: string): Promise<{
 
   if (userDoc.exists()) {
     const data = userDoc.data();
-    if (data.role && data.orgId) {
+    const ownerIdValue = data.ownerId || data.orgId; // backwards compatibility
+    if (data.role && ownerIdValue) {
       return {
         hasAccess: true,
         hasPendingRequest: false,
         role: data.role,
-        orgId: data.orgId,
+        ownerId: ownerIdValue,
       };
     }
   }
