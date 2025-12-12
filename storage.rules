@@ -2,32 +2,52 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Helper function to check if user is authenticated
+    // ============================================
+    // HELPER FUNCTIONS - Authentication
+    // ============================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Helper function to check if user owns the resource
-    function isOwner(userId) {
+    function isDataOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Helper function to validate image file
+    // ============================================
+    // HELPER FUNCTIONS - RBAC (Role-Based Access)
+    // Note: Storage rules cannot use get() to fetch Firestore docs
+    // Role checking is done via Custom Claims or trusted client
+    // For now, we rely on data ownership + authentication
+    // ============================================
+
+    // ============================================
+    // HELPER FUNCTIONS - Validation
+    // ============================================
+
     function isValidImage() {
       return request.resource.contentType.matches('image/.*')
         && request.resource.size < 10 * 1024 * 1024; // Max 10MB
     }
 
-    // User-specific storage paths
-    match /users/{userId}/{allPaths=**} {
-      // Allow read access only to authenticated owner
-      allow read: if isOwner(userId);
+    // ============================================
+    // USER STORAGE PATHS
+    // ============================================
 
-      // Allow write access only to authenticated owner with valid image
-      allow write: if isOwner(userId) && isValidImage();
+    match /users/{userId}/{allPaths=**} {
+      // Read: Any authenticated data owner can read their files
+      allow read: if isDataOwner(userId);
+
+      // Write: Only authenticated data owner can upload valid images
+      // Note: RBAC write restrictions are enforced at the application level
+      // since Storage rules cannot access Firestore for role lookup
+      allow write: if isDataOwner(userId) && isValidImage();
     }
 
-    // Deny all other access by default
+    // ============================================
+    // DENY ALL OTHER ACCESS
+    // ============================================
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
