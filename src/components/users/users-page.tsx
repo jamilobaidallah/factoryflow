@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;
@@ -60,6 +61,8 @@ export default function UsersPage() {
       setPendingRequests(requestsData);
     } catch (error) {
       console.error("Error fetching user data:", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setDebugError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -101,7 +104,8 @@ export default function UsersPage() {
     <div className="space-y-6">
       {/* DEBUG BANNER - Remove after testing */}
       <div style={{background: 'red', color: 'white', padding: '10px', fontWeight: 'bold'}}>
-        🔴 DEBUG: UsersPage Rendered - UID: {user?.uid} - Role: {role} - Requests: {pendingRequests.length}
+        🔴 DEBUG: UID: {user?.uid} - Role: {role} - Requests: {pendingRequests.length}
+        {debugError && <div style={{background: 'yellow', color: 'black', marginTop: '5px', padding: '5px'}}>⚠️ ERROR: {debugError}</div>}
       </div>
 
       {/* Header */}
