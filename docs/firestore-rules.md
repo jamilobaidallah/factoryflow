@@ -32,14 +32,15 @@ The rules use a `getUserRole()` helper function to fetch the user's role:
 ```javascript
 function getUserRole(userId) {
   let userDoc = get(/databases/$(database)/documents/users/$(userId));
-  return userDoc.data.role != null ? userDoc.data.role : 'owner';
+  return (userDoc != null && userDoc.data.role != null) ? userDoc.data.role : 'owner';
 }
 ```
 
 This function:
 1. Fetches the user document from `users/{userId}`
-2. Returns the `role` field if it exists
-3. Defaults to `'owner'` for backwards compatibility
+2. Checks if the document exists (`userDoc != null`)
+3. Returns the `role` field if it exists
+4. Defaults to `'owner'` for backwards compatibility (missing doc, missing field, or null value)
 
 ### Permission Helpers
 

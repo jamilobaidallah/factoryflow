@@ -20,9 +20,10 @@ service cloud.firestore {
 
     // Get user's role from their profile document
     // Returns 'owner' as default for backwards compatibility
+    // Handles: missing document, missing role field, null role value
     function getUserRole(userId) {
       let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return userDoc.data.role != null ? userDoc.data.role : 'owner';
+      return (userDoc != null && userDoc.data.role != null) ? userDoc.data.role : 'owner';
     }
 
     // Check if user has 'owner' role
