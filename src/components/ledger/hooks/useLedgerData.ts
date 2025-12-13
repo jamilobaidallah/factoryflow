@@ -29,9 +29,6 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
     useEffect(() => {
         if (!user) { return; }
 
-        // Debug logging to verify which userId is being queried
-        console.log('🟢 QUERY DEBUG: useLedgerData - Fetching from userId:', user.dataOwnerId, '(user.uid:', user.uid, ')');
-
         const service = createLedgerService(user.dataOwnerId);
         service.getTotalCount().then((count) => {
             setTotalCount(count);
@@ -49,16 +46,9 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
             ? pageCursorsRef.current.get(currentPage - 1) || null
             : null;
 
-        console.log('🟣 SUBSCRIBE DEBUG: Setting up ledger entries listener for userId:', user.dataOwnerId);
-
         const unsubscribe = service.subscribeLedgerEntries(
             pageSize,
             (entriesData, lastVisible) => {
-                console.log('🟣 SNAPSHOT RECEIVED:', {
-                    entriesCount: entriesData.length,
-                    hasLastVisible: !!lastVisible,
-                    firstEntry: entriesData[0]?.description || 'N/A',
-                });
                 setEntries(entriesData);
                 setLastDoc(lastVisible);
 
@@ -70,7 +60,7 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
                 setLoading(false);
             },
             (error) => {
-                console.error("🔴 SNAPSHOT ERROR:", error);
+                console.error("Error fetching ledger entries:", error);
                 setLoading(false);
             },
             startAfterDoc
