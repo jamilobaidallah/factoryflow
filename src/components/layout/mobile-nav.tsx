@@ -10,12 +10,6 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import type { UserRole } from "@/types/rbac";
-
-const ROLE_BADGE_STYLES: Record<UserRole, string> = {
-  owner: "bg-primary/10 text-primary",
-  accountant: "bg-blue-100 text-blue-700",
-  viewer: "bg-slate-100 text-slate-600",
-};
 import {
   Sheet,
   SheetContent,
@@ -23,6 +17,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,6 +44,12 @@ import {
   Database,
   ChevronLeft,
 } from "lucide-react";
+
+const ROLE_BADGE_STYLES: Record<UserRole, string> = {
+  owner: "bg-primary/10 text-primary",
+  accountant: "bg-blue-100 text-blue-700",
+  viewer: "bg-slate-100 text-slate-600",
+};
 
 /** Navigation item */
 interface NavItem {
