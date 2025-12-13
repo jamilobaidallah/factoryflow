@@ -562,7 +562,7 @@ export default function DashboardPage() {
 
             {/* Unpaid Receivables */}
             {unpaidReceivables.count > 0 ? (
-              <Link href="/ledger?paymentStatus=unpaid" className="block">
+              <Link href="/ledger?paymentStatus=outstanding" className="block">
                 <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100 transition-all duration-200 hover:shadow-md cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-2.5 h-2.5 bg-amber-500 rounded-full"></div>

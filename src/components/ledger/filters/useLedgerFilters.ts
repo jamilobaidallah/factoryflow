@@ -15,7 +15,7 @@ export type DatePreset = "today" | "week" | "month" | "all" | "custom";
 export type EntryType = "all" | "دخل" | "مصروف";
 
 /** Payment status filter options */
-export type PaymentStatus = "all" | "paid" | "unpaid" | "partial";
+export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
 
 /** Current state of all ledger filters */
 export interface LedgerFiltersState {
@@ -171,9 +171,16 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           if (!entry.paymentStatus) {
             return false;
           }
-          // Only filter entries that have payment status (AR/AP entries)
-          if (entry.paymentStatus !== filters.paymentStatus) {
-            return false;
+          // "outstanding" matches both "unpaid" and "partial"
+          if (filters.paymentStatus === "outstanding") {
+            if (entry.paymentStatus !== "unpaid" && entry.paymentStatus !== "partial") {
+              return false;
+            }
+          } else {
+            // Only filter entries that have payment status (AR/AP entries)
+            if (entry.paymentStatus !== filters.paymentStatus) {
+              return false;
+            }
           }
         }
 
