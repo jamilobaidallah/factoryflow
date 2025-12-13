@@ -10,7 +10,6 @@ import {
   getDocs,
   addDoc,
   updateDoc,
-  deleteDoc,
   setDoc,
   query,
   where,
@@ -19,6 +18,15 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import type { UserRole, AccessRequest, OrganizationMember } from '@/types/rbac';
+import { logActivity } from './activityLogService';
+import { USER_ROLE_LABELS } from '@/lib/constants';
+
+/** معلومات المستخدم الذي يقوم بالعملية */
+export interface CallerInfo {
+  uid: string;
+  email: string;
+  displayName?: string;
+}
 
 /**
  * البحث عن مالك بواسطة البريد الإلكتروني
@@ -158,7 +166,8 @@ export async function getPendingRequests(ownerId: string): Promise<AccessRequest
 export async function approveRequest(
   requestId: string,
   ownerId: string,
-  role: UserRole
+  role: UserRole,
+  caller?: CallerInfo
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const requestRef = doc(firestore, 'access_requests', requestId);
@@ -214,6 +223,20 @@ export async function approveRequest(
       createdAt: Timestamp.now(),
     }, { merge: true });
 
+    // تسجيل النشاط
+    if (caller) {
+      logActivity(ownerId, {
+        userId: caller.uid,
+        userEmail: caller.email,
+        userDisplayName: caller.displayName,
+        action: 'approve',
+        module: 'users',
+        targetId: requestData.uid,
+        description: `قبول طلب ${requestData.displayName || requestData.email} بدور ${USER_ROLE_LABELS[role]}`,
+        metadata: { assignedRole: role },
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error approving request:', error);
@@ -226,7 +249,8 @@ export async function approveRequest(
  */
 export async function rejectRequest(
   requestId: string,
-  ownerId: string
+  ownerId: string,
+  caller?: CallerInfo
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const requestRef = doc(firestore, 'access_requests', requestId);
@@ -248,6 +272,19 @@ export async function rejectRequest(
       status: 'rejected',
       processedAt: Timestamp.now(),
     });
+
+    // تسجيل النشاط
+    if (caller) {
+      logActivity(ownerId, {
+        userId: caller.uid,
+        userEmail: caller.email,
+        userDisplayName: caller.displayName,
+        action: 'reject',
+        module: 'users',
+        targetId: requestData.uid,
+        description: `رفض طلب ${requestData.displayName || requestData.email}`,
+      });
+    }
 
     return { success: true };
   } catch (error) {
@@ -286,7 +323,8 @@ export async function getOrganizationMembers(ownerId: string): Promise<Organizat
 export async function updateUserRole(
   ownerId: string,
   memberUid: string,
-  newRole: UserRole
+  newRole: UserRole,
+  caller?: CallerInfo
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // لا يمكن تغيير دور المالك
@@ -303,6 +341,10 @@ export async function updateUserRole(
       return { success: false, error: 'المستخدم غير موجود' };
     }
 
+    // الحصول على بيانات العضو للتسجيل
+    const memberData = snapshot.docs[0].data();
+    const oldRole = memberData.role as UserRole | undefined;
+
     // تحديث جميع المستندات المطابقة (وليس فقط الأول)
     const updatePromises = snapshot.docs.map(memberDoc =>
       updateDoc(memberDoc.ref, { role: newRole })
@@ -312,6 +354,21 @@ export async function updateUserRole(
     // تحديث في وثيقة المستخدم الرئيسية
     const userRef = doc(firestore, 'users', memberUid);
     await updateDoc(userRef, { role: newRole });
+
+    // تسجيل النشاط
+    if (caller) {
+      const oldRoleLabel = oldRole ? USER_ROLE_LABELS[oldRole] : 'غير محدد';
+      logActivity(ownerId, {
+        userId: caller.uid,
+        userEmail: caller.email,
+        userDisplayName: caller.displayName,
+        action: 'role_change',
+        module: 'users',
+        targetId: memberUid,
+        description: `تغيير دور ${memberData.displayName || memberData.email} من ${oldRoleLabel} إلى ${USER_ROLE_LABELS[newRole]}`,
+        metadata: { oldRole, newRole },
+      });
+    }
 
     return { success: true };
   } catch (error) {
@@ -325,7 +382,8 @@ export async function updateUserRole(
  */
 export async function removeUserAccess(
   ownerId: string,
-  memberUid: string
+  memberUid: string,
+  caller?: CallerInfo
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // لا يمكن إزالة المالك
@@ -342,6 +400,9 @@ export async function removeUserAccess(
       return { success: false, error: 'المستخدم غير موجود' };
     }
 
+    // الحصول على بيانات العضو للتسجيل
+    const memberData = snapshot.docs[0].data();
+
     // تعطيل جميع المستندات المطابقة (وليس فقط الأول)
     const deactivatePromises = snapshot.docs.map(memberDoc =>
       updateDoc(memberDoc.ref, { isActive: false })
@@ -354,6 +415,19 @@ export async function removeUserAccess(
       role: null,
       ownerId: null,
     });
+
+    // تسجيل النشاط
+    if (caller) {
+      logActivity(ownerId, {
+        userId: caller.uid,
+        userEmail: caller.email,
+        userDisplayName: caller.displayName,
+        action: 'remove_access',
+        module: 'users',
+        targetId: memberUid,
+        description: `إزالة وصول ${memberData.displayName || memberData.email}`,
+      });
+    }
 
     return { success: true };
   } catch (error) {

@@ -13,6 +13,7 @@ import {
 import { Trash2 } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/firebase/provider";
 import { RoleSelector } from "./RoleSelector";
 import { updateUserRole, removeUserAccess } from "@/services/userService";
 import { USER_ROLE_LABELS } from "@/lib/constants";
@@ -26,13 +27,21 @@ interface UserListProps {
 
 export function UserList({ members, ownerId, onMemberUpdated }: UserListProps) {
   const { toast } = useToast();
+  const { user } = useUser();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+
+  // معلومات المستخدم الحالي للتسجيل
+  const callerInfo = user ? {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || undefined,
+  } : undefined;
 
   const handleRoleChange = async (memberUid: string, newRole: UserRole) => {
     setUpdatingUserId(memberUid);
 
-    const result = await updateUserRole(ownerId, memberUid, newRole);
+    const result = await updateUserRole(ownerId, memberUid, newRole, callerInfo);
 
     if (result.success) {
       toast({
@@ -56,7 +65,7 @@ export function UserList({ members, ownerId, onMemberUpdated }: UserListProps) {
       "إزالة المستخدم",
       `هل أنت متأكد من إزالة وصول ${member.displayName || member.email}؟ سيفقد المستخدم جميع صلاحياته.`,
       async () => {
-        const result = await removeUserAccess(ownerId, member.uid);
+        const result = await removeUserAccess(ownerId, member.uid, callerInfo);
 
         if (result.success) {
           toast({

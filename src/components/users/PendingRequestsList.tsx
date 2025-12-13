@@ -21,6 +21,7 @@ import {
 import { Check, X, MessageSquare } from "lucide-react";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/firebase/provider";
 import { RoleSelector } from "./RoleSelector";
 import { approveRequest, rejectRequest } from "@/services/userService";
 import { USER_ROLE_LABELS } from "@/lib/constants";
@@ -38,6 +39,7 @@ export function PendingRequestsList({
   onRequestProcessed,
 }: PendingRequestsListProps) {
   const { toast } = useToast();
+  const { user } = useUser();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
@@ -45,6 +47,13 @@ export function PendingRequestsList({
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRole>("accountant");
+
+  // معلومات المستخدم الحالي للتسجيل
+  const callerInfo = user ? {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || undefined,
+  } : undefined;
 
   const openApprovalDialog = (request: AccessRequest) => {
     setSelectedRequest(request);
@@ -58,7 +67,7 @@ export function PendingRequestsList({
     setProcessingRequestId(selectedRequest.id);
     setApprovalDialogOpen(false);
 
-    const result = await approveRequest(selectedRequest.id, ownerId, selectedRole);
+    const result = await approveRequest(selectedRequest.id, ownerId, selectedRole, callerInfo);
 
     if (result.success) {
       toast({
@@ -85,7 +94,7 @@ export function PendingRequestsList({
       async () => {
         setProcessingRequestId(request.id);
 
-        const result = await rejectRequest(request.id, ownerId);
+        const result = await rejectRequest(request.id, ownerId, callerInfo);
 
         if (result.success) {
           toast({

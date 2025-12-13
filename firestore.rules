@@ -263,6 +263,22 @@ service cloud.firestore {
         allow delete: if isDataOwner(userId) && canWrite(userId);
       }
 
+      // Activity Logs collection - سجل النشاطات (immutable audit trail)
+      match /activity_logs/{logId} {
+        // Read: anyone with data access
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
+        // Create: owner and accountants only
+        allow create: if isDataOwner(userId) && canWrite(userId)
+          && hasRequiredFields(['userId', 'userEmail', 'action', 'module', 'description', 'createdAt'])
+          && isValidString(request.resource.data.action)
+          && isValidString(request.resource.data.module)
+          && isValidString(request.resource.data.description)
+          && request.resource.data.createdAt is timestamp;
+        // Update/Delete: denied (immutable audit trail)
+        allow update: if false;
+        allow delete: if false;
+      }
+
       // Catch-all for any other subcollections (incoming-cheques, outgoing-cheques, etc.)
       match /{collection}/{docId} {
         allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
