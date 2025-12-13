@@ -1,246 +1,135 @@
-# Task: Add Activity Logging to All Data Modules
+# Task: Redesign Dashboard Page
 
 ## Branch
-`feature/full-activity-logging`
+`feature/dashboard-redesign`
 
 ---
 
 ## Context
-Currently, only the Ledger module has activity logging. This task extends activity logging to all data modules (Payments, Clients, Cheques, Inventory, Invoices, Employees, Partners, Fixed Assets) to provide a complete audit trail.
+Redesign the FactoryFlow dashboard to a cleaner, more professional design. The current dashboard is cluttered with too many elements. The new design focuses on:
+- Hero cash balance display with animation
+- Financial summary with month/total toggle
+- Alerts section for items needing attention
+- Simplified charts (one bar chart, one donut chart)
+- Last 5 transactions list
 
 ---
 
-## Plan
+## Completed Tasks
 
-### Phase 1: Payments Module (HIGH PRIORITY) ✅
-**File:** `src/components/payments/payments-page.tsx`
+### Sections REMOVED:
+- [x] Client count stat card
+- [x] Top 5 Clients bar chart
+- [x] New Clients section
+- [x] Separate Cash Flow composed chart
+- [x] Line chart (replaced with bar chart)
+- [x] Recharts library dependency (using pure CSS/SVG)
 
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging after successful CREATE in `handleSubmit()` (around line 261)
-- [x] Add logging after successful UPDATE in `handleSubmit()` (around line 304)
-- [x] Add logging after successful DELETE in `handleDelete()` (around line 431)
+### Phase 1: Setup & Data Layer ✅
+- [x] Add state for new toggles (summaryView, expenseView, chartPeriod, selectedMonth)
+- [x] Add state for animations (isLoaded, cashDisplay, hoveredSegment, hoveredBar)
+- [x] Add query for cheques due within 7 days
+- [x] Add query for unpaid receivables from ledger
+- [x] Update monthly data calculation to support month filtering
 
-**Arabic descriptions:**
-- Create: `إنشاء مدفوعة: {clientName} - {amount} دينار`
-- Update: `تعديل مدفوعة: {clientName}`
-- Delete: `حذف مدفوعة: {clientName} - {amount} دينار`
+### Phase 2: Hero Cash Balance Section ✅
+- [x] Create hero section with slate-800 background
+- [x] Display "الرصيد النقدي" label
+- [x] Show animated cash balance (counting up effect)
+- [x] Add "دينار" suffix
+- [x] Handle negative balance display (rose color)
 
-**Metadata:** `{ amount, type, clientName }`
+### Phase 3: Financial Summary Section ✅
+- [x] Create header with "الملخص المالي" title
+- [x] Add شهري/الإجمالي toggle component
+- [x] Add month selector dropdown (visible only in monthly mode)
+- [x] Create 3 summary cards (الإيرادات, المصروفات, صافي الربح)
+- [x] Add hover effects (lift + shadow)
+- [x] Dynamic color based on profit/loss
 
----
+### Phase 4: Alerts + Bar Chart Row ✅
+- [x] Create two-column layout
+- [x] LEFT: "يحتاج انتباهك" alerts section
+  - [x] Cheques due soon (rose background, pulsing red dot)
+  - [x] Unpaid receivables (amber background)
+  - [x] "All good" indicator when nothing urgent
+- [x] RIGHT: Revenue/Expense bar chart
+  - [x] Add شهر/3 أشهر/6 أشهر tabs
+  - [x] Animate bars growing from bottom
+  - [x] Add hover tooltips with actual amounts
+  - [x] Add legend
 
-### Phase 2: Clients Module (HIGH PRIORITY) ✅
-**File:** `src/components/clients/clients-page.tsx`
+### Phase 5: Expense Donut Chart ✅
+- [x] Create full-width section
+- [x] Add شهري/الإجمالي toggle
+- [x] Create 3D-effect donut chart using SVG
+- [x] Animate segments appearing in sequence
+- [x] Show hovered segment amount in center
+- [x] Add interactive legend
 
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging after successful CREATE in `handleSubmit()` (around line 213)
-- [x] Add logging after successful UPDATE in `handleSubmit()` (around line 203)
-- [x] Add logging after successful DELETE in `handleDelete()` (around line 263)
+### Phase 6: Last 5 Transactions ✅
+- [x] Create transactions list section
+- [x] Add "عرض الكل" link (navigates to ledger page)
+- [x] Display transaction name, category, date, amount
+- [x] Color-code income (emerald) vs expense (slate)
+- [x] Add hover effects and stagger animation
 
-**Arabic descriptions:**
-- Create: `إضافة عميل: {name}`
-- Update: `تعديل بيانات عميل: {name}`
-- Delete: `حذف عميل: {name}`
+### Phase 7: Styling & Polish ✅
+- [x] Apply color palette (slate-800, emerald-500/600, slate-400/500, rose-600/700)
+- [x] RTL layout maintained (dir="rtl")
+- [x] CSS animations for smooth effects
+- [x] Responsive design (grid cols adjust)
 
-**Metadata:** `{ phone, email, balance }`
-
----
-
-### Phase 3: Cheques Module (CRITICAL - 3 files) ✅
-
-#### 3A: useChequesOperations.ts (Core operations) ✅
-**File:** `src/components/cheques/hooks/useChequesOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitCheque()` for CREATE (around line 270)
-- [x] Add logging in `submitCheque()` for UPDATE (around line 203)
-- [x] Add logging in `deleteCheque()` for DELETE
-- [x] Add logging in `endorseCheque()` for status change
-- [x] Add logging in `clearCheque()` for status change
-- [x] Add logging in `bounceCheque()` for status change
-- [x] Add logging in `reverseChequeCashing()` for reversal
-
-#### 3B: useIncomingChequesOperations.ts ✅
-**File:** `src/components/cheques/hooks/useIncomingChequesOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitCheque()` for CREATE (around line 260)
-- [x] Add logging in `submitCheque()` for UPDATE (around line 248)
-- [x] Add logging in `deleteCheque()` for DELETE (around line 306)
-- [x] Add logging in `endorseCheque()` for endorsement
-- [x] Add logging in `cancelEndorsement()` for cancellation
-
-#### 3C: useOutgoingChequesOperations.ts ✅
-**File:** `src/components/cheques/hooks/useOutgoingChequesOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitCheque()` for CREATE (around line 405)
-- [x] Add logging in `submitCheque()` for UPDATE (around line 396)
-- [x] Add logging in `deleteCheque()` for DELETE (around line 456)
-
-**Arabic descriptions (all cheque files):**
-- Create: `إنشاء شيك: {chequeNumber} - {amount} دينار`
-- Update: `تعديل شيك: {chequeNumber}`
-- Delete: `حذف شيك: {chequeNumber} - {amount} دينار`
-- Status Change: `تغيير حالة شيك: {chequeNumber} → {newStatus}`
-- Endorsement: `تظهير شيك: {chequeNumber} → {endorsedTo}`
-- Bounce: `ارتجاع شيك: {chequeNumber}`
-- Reversal: `إلغاء تحصيل شيك: {chequeNumber}`
-
-**Metadata:** `{ amount, chequeNumber, status, dueDate, type }`
-
----
-
-### Phase 4: Inventory Module (HIGH PRIORITY) ✅
-**File:** `src/components/inventory/inventory-page.tsx`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging after successful CREATE in `handleSubmit()` (around line 175)
-- [x] Add logging after successful UPDATE in `handleSubmit()` (around line 156)
-- [x] Add logging after successful DELETE in `handleDelete()` (around line 300)
-- [x] Add logging in `handleMovementSubmit()` for stock in/out (around line 237)
-
-**Arabic descriptions:**
-- Create: `إضافة صنف: {itemName}`
-- Update: `تعديل صنف: {itemName}`
-- Delete: `حذف صنف: {itemName}`
-- Stock In: `إدخال مخزون: {itemName} - {quantity} {unit}`
-- Stock Out: `إخراج مخزون: {itemName} - {quantity} {unit}`
-
-**Metadata:** `{ quantity, unit, itemName }`
-
----
-
-### Phase 5: Invoices Module (HIGH PRIORITY) ✅
-**File:** `src/components/invoices/hooks/useInvoicesOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitInvoice()` for CREATE (around line 144)
-- [x] Add logging in `submitInvoice()` for UPDATE (around line 111)
-- [x] Add logging in `deleteInvoice()` for DELETE (around line 168)
-- [x] Add logging in `updateStatus()` for status changes
-
-**Arabic descriptions:**
-- Create: `إنشاء فاتورة: {invoiceNumber} - {amount} دينار`
-- Update: `تعديل فاتورة: {invoiceNumber}`
-- Delete: `حذف فاتورة: {invoiceNumber}`
-- Status: `تغيير حالة فاتورة: {invoiceNumber} → {status}`
-
-**Metadata:** `{ amount, invoiceNumber, clientName, status }`
-
----
-
-### Phase 6: Employees Module (HIGH PRIORITY) ✅
-**File:** `src/components/employees/hooks/useEmployeesOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitEmployee()` for CREATE (around line 78)
-- [x] Add logging in `submitEmployee()` for UPDATE (around line 48)
-- [x] Add logging in `deleteEmployee()` for DELETE (around line 110)
-- [x] Add logging for salary history changes (around line 60)
-- [x] Add logging in `processPayroll()` for payroll processing
-- [x] Add logging in `markAsPaid()` for payment marking
-
-**Arabic descriptions:**
-- Create: `إضافة موظف: {name}`
-- Update: `تعديل بيانات موظف: {name}`
-- Delete: `حذف موظف: {name}`
-- Salary Change: `تعديل راتب: {name} → {newSalary} دينار`
-- Payroll: `معالجة رواتب شهر {month}`
-- Paid: `تسجيل دفع راتب: {name}`
-
-**Metadata:** `{ salary, position, name }`
-
----
-
-### Phase 7: Partners Module (MEDIUM PRIORITY) ✅
-**File:** `src/components/partners/partners-page.tsx`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging after successful CREATE in `handleSubmit()` (around line 137)
-- [x] Add logging after successful UPDATE in `handleSubmit()` (around line 122)
-- [x] Add logging after successful DELETE in `handleDelete()` (around line 188)
-
-**Arabic descriptions:**
-- Create: `إضافة شريك: {name}`
-- Update: `تعديل بيانات شريك: {name}`
-- Delete: `حذف شريك: {name}`
-
-**Metadata:** `{ ownershipPercentage, investment, name }`
-
----
-
-### Phase 8: Fixed Assets Module (HIGH PRIORITY) ✅
-**File:** `src/components/fixed-assets/hooks/useFixedAssetsOperations.ts`
-
-- [x] Import `logActivity` from `@/services/activityLogService`
-- [x] Add logging in `submitAsset()` for CREATE (around line 108)
-- [x] Add logging in `submitAsset()` for UPDATE (around line 89)
-- [x] Add logging in `deleteAsset()` for DELETE (around line 149)
-- [x] Add logging in `runDepreciation()` for depreciation (around line 166)
-
-**Arabic descriptions:**
-- Create: `إضافة أصل ثابت: {assetName} - {amount} دينار`
-- Update: `تعديل أصل ثابت: {assetName}`
-- Delete: `حذف أصل ثابت: {assetName}`
-- Depreciation: `تسجيل إهلاك: {assetName}`
-
-**Metadata:** `{ purchaseAmount, depreciationRate, assetName, category }`
-
----
-
-### Phase 9: Verification ✅
+### Phase 8: Cleanup & Verification ✅
+- [x] Remove unused imports (recharts removed)
 - [x] TypeScript check passes (`npx tsc --noEmit`)
 - [x] Build succeeds (`npm run build`)
-- [ ] Test each module manually (create/update/delete)
-- [ ] Verify activity log shows all new entries
 
 ---
 
-## Files to Modify
+## Review
 
-| File | Module | Operations |
-|------|--------|------------|
-| `src/components/payments/payments-page.tsx` | Payments | C/U/D |
-| `src/components/clients/clients-page.tsx` | Clients | C/U/D |
-| `src/components/cheques/hooks/useChequesOperations.ts` | Cheques | C/U/D + status |
-| `src/components/cheques/hooks/useIncomingChequesOperations.ts` | Cheques | C/U/D + endorse |
-| `src/components/cheques/hooks/useOutgoingChequesOperations.ts` | Cheques | C/U/D |
-| `src/components/inventory/inventory-page.tsx` | Inventory | C/U/D + movements |
-| `src/components/invoices/hooks/useInvoicesOperations.ts` | Invoices | C/U/D + status |
-| `src/components/employees/hooks/useEmployeesOperations.ts` | Employees | C/U/D + payroll |
-| `src/components/partners/partners-page.tsx` | Partners | C/U/D |
-| `src/components/fixed-assets/hooks/useFixedAssetsOperations.ts` | Fixed Assets | C/U/D + depreciation |
+### Summary of Changes
+
+**File Modified:** `src/components/dashboard/dashboard-page.tsx`
+
+### Key Changes:
+1. **Complete UI Redesign** - Replaced cluttered 5-card stats + multiple charts layout with a cleaner, focused design
+2. **Hero Cash Balance** - Large slate-800 hero section with animated counting effect
+3. **Financial Summary Cards** - 3 cards (Revenue, Expenses, Profit) with شهري/الإجمالي toggle and month selector
+4. **Alerts Section** - "يحتاج انتباهك" showing cheques due within 7 days and unpaid receivables
+5. **Custom Bar Chart** - Pure CSS/SVG bar chart (no recharts) with hover tooltips and period tabs
+6. **3D Donut Chart** - SVG-based donut with perspective transform, interactive segments, and center display
+7. **Transactions List** - Last 5 transactions with stagger animation and "عرض الكل" link
+
+### Removed Dependencies:
+- Removed usage of `recharts` library (LineChart, BarChart, PieChart, ComposedChart)
+- Removed lazy-loaded chart components
+- Removed client count, top customers, new clients sections
+
+### New Features:
+- **Animated Cash Counter** - Numbers count up on page load
+- **Month/Total Toggle** - Switch between monthly and all-time views
+- **Period Selector** - Choose 1, 3, or 6 months for bar chart
+- **Interactive Donut** - Hover to see category amounts in center
+- **Pulsing Alert Dot** - Visual indicator for urgent items
+- **Hover Effects** - Cards lift with shadow on hover
+
+### Color Palette:
+- Cash Balance: `slate-800` background
+- Revenue: `emerald-500/600`
+- Expenses: `slate-400/500` (gray, not red)
+- Loss/Urgent: `rose-600/700`
+- Warning: `amber-500`
+- Success: `emerald-500`
+
+### Data Queries:
+- Ledger: Revenue, expenses, categories, recent transactions, unpaid receivables
+- Payments: Cash balance (in - out)
+- Cheques: Due within 7 days with pending status
 
 ---
 
-## Implementation Pattern
+## Status: COMPLETE ✅
 
-```typescript
-// After successful operation:
-logActivity(user.dataOwnerId, {
-  action: 'create', // or 'update' or 'delete'
-  module: 'payments',
-  targetId: docId,
-  userId: user.uid,
-  userEmail: user.email || '',
-  description: `إنشاء مدفوعة: ${clientName} - ${amount} دينار`,
-  metadata: {
-    amount,
-    type,
-    clientName,
-  },
-});
-```
-
----
-
-## Status: IMPLEMENTATION COMPLETE ✅
-
-**All modules have been updated with activity logging. Ready for PR creation.**
-
-### Summary of changes:
-- ✅ 10 files modified with activity logging
-- ✅ TypeScript check passes
-- ✅ Build succeeds
-- ⏳ Manual testing pending (to be done via Vercel preview)
+**Ready for PR creation.**
