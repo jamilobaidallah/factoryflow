@@ -48,13 +48,19 @@ export interface UseLedgerFiltersReturn {
   filterEntries: (entries: LedgerEntry[]) => LedgerEntry[];
 }
 
-const initialFilters: LedgerFiltersState = {
+const defaultFilters: LedgerFiltersState = {
   datePreset: "all",
   dateRange: { from: null, to: null },
   entryType: "all",
   category: "all",
   paymentStatus: "all",
 };
+
+/** Options for initializing useLedgerFilters hook */
+export interface UseLedgerFiltersOptions {
+  /** Initial payment status filter */
+  initialPaymentStatus?: PaymentStatus;
+}
 
 /**
  * Hook for managing ledger entry filters.
@@ -67,7 +73,11 @@ const initialFilters: LedgerFiltersState = {
  * const filtered = filterEntries(entries);
  * ```
  */
-export function useLedgerFilters(): UseLedgerFiltersReturn {
+export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFiltersReturn {
+  const initialFilters: LedgerFiltersState = {
+    ...defaultFilters,
+    paymentStatus: options?.initialPaymentStatus || "all",
+  };
   const [filters, setFilters] = useState<LedgerFiltersState>(initialFilters);
 
   const setDatePreset = useCallback((preset: DatePreset) => {
@@ -123,7 +133,7 @@ export function useLedgerFilters(): UseLedgerFiltersReturn {
   }, []);
 
   const clearFilters = useCallback(() => {
-    setFilters(initialFilters);
+    setFilters(defaultFilters);
   }, []);
 
   const hasActiveFilters = useMemo(() => {

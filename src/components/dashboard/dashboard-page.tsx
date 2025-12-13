@@ -541,7 +541,7 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {/* Cheques Due Soon */}
             {chequesDueSoon.count > 0 ? (
-              <Link href="/cheques" className="block">
+              <Link href="/cheques?dueSoon=7" className="block">
                 <div className="flex items-center justify-between p-3 bg-rose-50 rounded-lg border border-rose-100 transition-all duration-200 hover:shadow-md cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -562,7 +562,7 @@ export default function DashboardPage() {
 
             {/* Unpaid Receivables */}
             {unpaidReceivables.count > 0 ? (
-              <Link href="/ledger" className="block">
+              <Link href="/ledger?paymentStatus=unpaid" className="block">
                 <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100 transition-all duration-200 hover:shadow-md cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-2.5 h-2.5 bg-amber-500 rounded-full"></div>

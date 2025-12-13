@@ -1,6 +1,8 @@
 "use client";
 
 import { useReducer, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,11 +47,15 @@ import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
 
 // Filters
-import { useLedgerFilters, LedgerFilters } from "./filters";
+import { useLedgerFilters, LedgerFilters, PaymentStatus } from "./filters";
 
 export default function LedgerPage() {
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
+  const searchParams = useSearchParams();
+
+  // Read URL params for initial filter state
+  const urlPaymentStatus = searchParams.get("paymentStatus") as PaymentStatus | null;
 
   // Consolidated state management
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
@@ -62,7 +68,7 @@ export default function LedgerPage() {
   const { submitLedgerEntry, deleteLedgerEntry, addPaymentToEntry, addChequeToEntry, addInventoryToEntry } = useLedgerOperations();
   const formHook = useLedgerForm();
 
-  // Filters
+  // Filters - initialize from URL params if present
   const {
     filters,
     setDatePreset,
@@ -72,7 +78,9 @@ export default function LedgerPage() {
     clearFilters,
     hasActiveFilters,
     filterEntries,
-  } = useLedgerFilters();
+  } = useLedgerFilters({
+    initialPaymentStatus: urlPaymentStatus || undefined,
+  });
 
   // Apply filters to entries
   const filteredEntries = useMemo(() => filterEntries(entries), [filterEntries, entries]);
@@ -248,6 +256,23 @@ export default function LedgerPage() {
         </div>
       ) : (
         <LedgerStats entries={entries} />
+      )}
+
+      {/* Filter indicator when URL param filter is active */}
+      {urlPaymentStatus && (
+        <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span className="text-sm text-amber-800">
+              عرض الذمم غير المحصلة ({filteredEntries.length} حركة)
+            </span>
+          </div>
+          <Link href="/ledger">
+            <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-900">
+              عرض الكل
+            </Button>
+          </Link>
+        </div>
       )}
 
       {/* Filters */}

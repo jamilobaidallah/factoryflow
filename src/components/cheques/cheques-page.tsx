@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Download } from "lucide-react";
@@ -43,6 +45,10 @@ export default function ChequesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const { user } = useUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+
+  // Read URL params for filtering
+  const dueSoonDays = searchParams.get("dueSoon");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,6 +61,26 @@ export default function ChequesPage() {
   });
   const { submitCheque, deleteCheque, endorseCheque, clearCheque, bounceCheque } = useChequesOperations();
   const { clients, loading: clientsLoading } = useAllClients();
+
+  // Filter cheques based on URL params
+  const filteredCheques = useMemo(() => {
+    if (!dueSoonDays) return cheques;
+
+    const days = parseInt(dueSoonDays);
+    if (isNaN(days)) return cheques;
+
+    const now = new Date();
+    const futureDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    return cheques.filter((cheque) => {
+      // Only pending cheques
+      if (cheque.status !== CHEQUE_STATUS_AR.PENDING) return false;
+
+      // Due within X days
+      const dueDate = cheque.dueDate instanceof Date ? cheque.dueDate : new Date(cheque.dueDate);
+      return dueDate >= now && dueDate <= futureDate;
+    });
+  }, [cheques, dueSoonDays]);
 
   // UI state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -252,8 +278,8 @@ export default function ChequesPage() {
     setLoading(false);
   };
 
-  // Prepare cheques with phone numbers
-  const chequesWithPhones: ChequeType[] = cheques.map((cheque) => ({
+  // Prepare cheques with phone numbers (use filtered if URL param is set)
+  const chequesWithPhones: ChequeType[] = filteredCheques.map((cheque) => ({
     ...cheque,
     clientPhone: clientPhones[cheque.clientName] || undefined,
   }));
@@ -271,15 +297,32 @@ export default function ChequesPage() {
         </Button>
       </div>
 
+      {/* Filter indicator when dueSoon is active */}
+      {dueSoonDays && (
+        <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span className="text-sm text-amber-800">
+              عرض الشيكات المستحقة خلال {dueSoonDays} أيام ({filteredCheques.length} شيك)
+            </span>
+          </div>
+          <Link href="/cheques">
+            <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-900">
+              عرض الكل
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>سجل الشيكات ({cheques.length})</CardTitle>
+            <CardTitle>سجل الشيكات ({dueSoonDays ? filteredCheques.length : cheques.length})</CardTitle>
             {cheques.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportChequesToExcel(cheques, `الشيكات_${new Date().toISOString().split('T')[0]}`)}
+                onClick={() => exportChequesToExcel(dueSoonDays ? filteredCheques : cheques, `الشيكات_${new Date().toISOString().split('T')[0]}`)}
               >
                 <Download className="w-4 h-4 ml-2" />
                 Excel

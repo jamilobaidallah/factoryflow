@@ -5,6 +5,7 @@ export type {
   PaymentStatus,
   LedgerFiltersState,
   UseLedgerFiltersReturn,
+  UseLedgerFiltersOptions,
 } from "./useLedgerFilters";
 export { DatePresetButtons } from "./DatePresetButtons";
 export { FilterDropdown } from "./FilterDropdown";
