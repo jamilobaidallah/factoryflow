@@ -12,6 +12,7 @@ import {
 import { Edit, Trash2 } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { FixedAsset } from "../types/fixed-assets";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface FixedAssetsTableProps {
   assets: FixedAsset[];
@@ -55,7 +56,7 @@ export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableP
               </TableCell>
               <TableCell>{asset.category}</TableCell>
               <TableCell>
-                {new Date(asset.purchaseDate).toLocaleDateString("ar-EG")}
+                {formatShortDate(asset.purchaseDate)}
               </TableCell>
               <TableCell>
                 <span className="font-semibold text-slate-900">

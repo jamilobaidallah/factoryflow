@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Download } from "lucide-react";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface Payment {
   id: string;
@@ -107,7 +108,7 @@ export function CashFlowTab({ cashFlow, payments, onExportCSV }: CashFlowTabProp
               {payments.slice(0, 20).map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell>
-                    {payment.date.toLocaleDateString("ar-JO")}
+                    {formatShortDate(payment.date)}
                   </TableCell>
                   <TableCell>
                     <span

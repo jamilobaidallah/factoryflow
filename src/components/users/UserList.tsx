@@ -18,6 +18,7 @@ import { RoleSelector } from "./RoleSelector";
 import { updateUserRole, removeUserAccess } from "@/services/userService";
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import type { OrganizationMember, UserRole } from "@/types/rbac";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface UserListProps {
   members: OrganizationMember[];
@@ -137,7 +138,7 @@ export function UserList({ members, ownerId, onMemberUpdated }: UserListProps) {
                   </TableCell>
                   <TableCell>
                     {member.approvedAt
-                      ? new Date(member.approvedAt).toLocaleDateString("ar-EG")
+                      ? formatShortDate(member.approvedAt)
                       : "-"}
                   </TableCell>
                   <TableCell>

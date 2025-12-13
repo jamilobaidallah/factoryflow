@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Activity, Shield, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDateTime, formatCurrency } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -191,13 +192,7 @@ export default function ActivityLogPage() {
                   {activities.map((activity) => (
                     <TableRow key={activity.id} className="table-row-hover">
                       <TableCell className="text-slate-600 whitespace-nowrap">
-                        {activity.createdAt.toLocaleDateString("ar-EG", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {formatDateTime(activity.createdAt)}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -226,7 +221,7 @@ export default function ActivityLogPage() {
                               activity.metadata?.type === "مصروف" && "text-red-600"
                             )}
                           >
-                            {Number(activity.metadata.amount).toLocaleString("ar-EG")} دينار
+                            {formatCurrency(Number(activity.metadata.amount))}
                           </span>
                         ) : (
                           <span className="text-slate-400">-</span>

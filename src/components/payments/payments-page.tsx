@@ -28,6 +28,7 @@ import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleto
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
@@ -583,7 +584,7 @@ export default function PaymentsPage() {
                 {payments.map((payment) => (
                   <TableRow key={payment.id} className="table-row-hover">
                     <TableCell>
-                      {new Date(payment.date).toLocaleDateString("ar-EG")}
+                      {formatShortDate(payment.date)}
                     </TableCell>
                     <TableCell className="font-medium">
                       {payment.clientName}
@@ -619,7 +620,7 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell>
                       <span className={`font-semibold ${payment.type === "قبض" ? 'text-green-600' : 'text-red-600'}`}>
-                        {(payment.amount || 0).toLocaleString()} دينار
+                        {formatNumber(payment.amount || 0)} دينار
                       </span>
                     </TableCell>
                     <TableCell>

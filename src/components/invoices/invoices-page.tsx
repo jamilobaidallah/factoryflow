@@ -29,6 +29,7 @@ import { useInvoicesOperations } from "./hooks/useInvoicesOperations";
 // Components
 import { InvoicesFormDialog } from "./components/InvoicesFormDialog";
 import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 export default function InvoicesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -221,10 +222,10 @@ export default function InvoicesPage() {
                       {invoice.manualInvoiceNumber || "-"}
                     </TableCell>
                     <TableCell>{invoice.clientName}</TableCell>
-                    <TableCell>{invoice.invoiceDate.toLocaleDateString("ar-JO")}</TableCell>
+                    <TableCell>{formatShortDate(invoice.invoiceDate)}</TableCell>
                     <TableCell>
                       <span className="font-semibold text-slate-900">
-                        {invoice.total.toLocaleString()} د.أ
+                        {formatNumber(invoice.total)} د.أ
                       </span>
                     </TableCell>
                     <TableCell>

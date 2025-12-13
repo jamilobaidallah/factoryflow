@@ -15,6 +15,7 @@ import { Edit, Trash2, DollarSign, FolderOpen } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { cn } from "@/lib/utils";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface LedgerTableProps {
   entries: LedgerEntry[];
@@ -52,7 +53,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
       </TableCell>
 
       <TableCell>
-        {new Date(entry.date).toLocaleDateString("ar-EG")}
+        {formatShortDate(entry.date)}
       </TableCell>
 
       <TableCell className="font-medium">{entry.description}</TableCell>
@@ -203,7 +204,7 @@ const LedgerCard = memo(function LedgerCard({
       {/* Meta: Date, Party, Category */}
       <div className="space-y-1 text-xs text-slate-600">
         <div className="flex justify-between">
-          <span>{new Date(entry.date).toLocaleDateString("ar-EG")}</span>
+          <span>{formatShortDate(entry.date)}</span>
           <span>{entry.associatedParty || "-"}</span>
         </div>
         <div className="text-slate-500">

@@ -29,6 +29,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcel } from "@/lib/export-utils";
+import { formatNumber } from "@/lib/date-utils";
 import {
   collection,
   addDoc,
@@ -457,7 +458,7 @@ export default function InventoryPage() {
                     <TableCell>{item.length ? `${item.length} سم` : '-'}</TableCell>
                     <TableCell>
                       <span className="font-semibold text-slate-900">
-                        {(item.unitPrice || 0).toLocaleString()} دينار
+                        {formatNumber(item.unitPrice || 0)} دينار
                       </span>
                     </TableCell>
                     <TableCell>{item.location}</TableCell>

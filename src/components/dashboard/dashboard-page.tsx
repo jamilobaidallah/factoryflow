@@ -24,6 +24,7 @@ import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
 import { toDate } from "@/lib/firestore-utils";
 import { CASH_FLOW_LABELS } from "@/lib/constants";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 // Modern chart color palette
 const CHART_COLORS = {
@@ -464,7 +465,7 @@ export default function DashboardPage() {
                   contentStyle={tooltipStyle.contentStyle}
                   labelStyle={tooltipStyle.labelStyle}
                   formatter={(value: number, name: string) => [
-                    `${value.toLocaleString()} دينار`,
+                    `${formatNumber(value)} دينار`,
                     name
                   ]}
                 />
@@ -530,7 +531,7 @@ export default function DashboardPage() {
                   labelStyle={tooltipStyle.labelStyle}
                   cursor={{ fill: "rgba(148, 163, 184, 0.1)" }}
                   formatter={(value: number, name: string) => [
-                    `${value.toLocaleString()} دينار`,
+                    `${formatNumber(value)} دينار`,
                     name
                   ]}
                 />
@@ -602,7 +603,7 @@ export default function DashboardPage() {
                   <Tooltip
                     contentStyle={tooltipStyle.contentStyle}
                     labelStyle={tooltipStyle.labelStyle}
-                    formatter={(value: number) => [`${value.toLocaleString()} دينار`, "الإيرادات"]}
+                    formatter={(value: number) => [`${formatNumber(value)} دينار`, "الإيرادات"]}
                   />
                   <Bar
                     dataKey="amount"
@@ -657,7 +658,7 @@ export default function DashboardPage() {
                   <Tooltip
                     contentStyle={tooltipStyle.contentStyle}
                     labelStyle={tooltipStyle.labelStyle}
-                    formatter={(value: number) => [`${value.toLocaleString()} دينار`]}
+                    formatter={(value: number) => [`${formatNumber(value)} دينار`]}
                   />
                   <Legend
                     layout="vertical"
@@ -707,7 +708,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-medium text-slate-800">{transaction.description || transaction.category}</div>
                       <div className="text-xs text-slate-500">
-                        {transaction.date.toLocaleDateString("ar-EG")}
+                        {formatShortDate(transaction.date)}
                       </div>
                     </div>
                     <div

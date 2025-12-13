@@ -34,6 +34,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface Client {
   id: string;
@@ -300,7 +301,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     const statementData = allTransactions.map((t) => {
       runningBalance += t.debit - t.credit;
       return {
-        التاريخ: t.date.toLocaleDateString("ar-JO"),
+        التاريخ: formatShortDate(t.date),
         النوع: t.type,
         الوصف: t.description,
         مدين: t.debit.toFixed(2),
@@ -451,7 +452,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             </div>
             <div>
               <p className="text-sm text-gray-500">تاريخ التسجيل</p>
-              <p className="font-medium">{client.createdAt.toLocaleDateString("ar-JO")}</p>
+              <p className="font-medium">{formatShortDate(client.createdAt)}</p>
             </div>
           </div>
         </CardContent>
@@ -493,7 +494,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   ) : (
                     ledgerEntries.map((entry) => (
                       <TableRow key={entry.id}>
-                        <TableCell>{entry.date.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>{formatShortDate(entry.date)}</TableCell>
                         <TableCell>
                           <span
                             className={`px-2 py-1 rounded text-xs ${
@@ -546,7 +547,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   ) : (
                     payments.map((payment) => (
                       <TableRow key={payment.id}>
-                        <TableCell>{payment.date.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>{formatShortDate(payment.date)}</TableCell>
                         <TableCell>
                           <span
                             className={`px-2 py-1 rounded text-xs ${
@@ -601,7 +602,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     cheques.map((cheque) => (
                       <TableRow key={cheque.id}>
                         <TableCell>{cheque.chequeNumber}</TableCell>
-                        <TableCell>{cheque.chequeDate.toLocaleDateString("ar-JO")}</TableCell>
+                        <TableCell>{formatShortDate(cheque.chequeDate)}</TableCell>
                         <TableCell>{cheque.bank}</TableCell>
                         <TableCell>{cheque.type}</TableCell>
                         <TableCell>
@@ -683,7 +684,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       return (
                         <TableRow key={index}>
                           <TableCell>
-                            {transaction.date.toLocaleDateString("ar-JO")}
+                            {formatShortDate(transaction.date)}
                           </TableCell>
                           <TableCell>{transaction.type}</TableCell>
                           <TableCell>{transaction.description}</TableCell>

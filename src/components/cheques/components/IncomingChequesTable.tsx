@@ -13,6 +13,7 @@ import { Edit, Trash2, Image as ImageIcon, RefreshCw, X, Copy } from "lucide-rea
 import { PermissionGate } from "@/components/auth";
 import { Cheque } from "../types/cheques";
 import { useToast } from "@/hooks/use-toast";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 interface IncomingChequesTableProps {
   cheques: Cheque[];
@@ -110,7 +111,7 @@ export function IncomingChequesTable({
               <TableCell>{cheque.bankName}</TableCell>
               <TableCell>
                 <span className="font-semibold text-slate-900">
-                  {(cheque.amount || 0).toLocaleString()} دينار
+                  {formatNumber(cheque.amount || 0)} دينار
                 </span>
               </TableCell>
               <TableCell>
@@ -124,7 +125,7 @@ export function IncomingChequesTable({
                 </span>
               </TableCell>
               <TableCell>
-                {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
+                {formatShortDate(cheque.dueDate)}
               </TableCell>
               <TableCell className="font-mono text-xs">
                 <div className="space-y-1">

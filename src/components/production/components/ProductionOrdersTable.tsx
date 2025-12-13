@@ -12,6 +12,7 @@ import {
 import { CheckCircle, XCircle, Eye, Pencil, Trash2 } from "lucide-react";
 import { ProductionOrder } from "../types/production";
 import { getStatusBadgeClass, formatDimensions } from "../utils/production-helpers";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface ProductionOrdersTableProps {
   orders: ProductionOrder[];
@@ -61,7 +62,7 @@ export function ProductionOrdersTable({
               {order.orderNumber}
             </TableCell>
             <TableCell>
-              {new Date(order.date).toLocaleDateString("ar-EG")}
+              {formatShortDate(order.date)}
             </TableCell>
             <TableCell>
               <div className="font-medium">{order.inputItemName}</div>

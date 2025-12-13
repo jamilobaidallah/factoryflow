@@ -6,6 +6,7 @@
 
 import { FirebaseError } from 'firebase/app';
 import { z } from 'zod';
+import { formatShortDate } from './date-utils';
 
 // ======================
 // Error Types
@@ -373,14 +374,14 @@ export function validateDateRange(
   if (minDate && date < minDate) {
     return {
       type: ErrorType.VALIDATION,
-      message: `${fieldName} لا يمكن أن يكون قبل ${minDate.toLocaleDateString('ar-EG')}`,
+      message: `${fieldName} لا يمكن أن يكون قبل ${formatShortDate(minDate)}`,
     };
   }
 
   if (maxDate && date > maxDate) {
     return {
       type: ErrorType.VALIDATION,
-      message: `${fieldName} لا يمكن أن يكون بعد ${maxDate.toLocaleDateString('ar-EG')}`,
+      message: `${fieldName} لا يمكن أن يكون بعد ${formatShortDate(maxDate)}`,
     };
   }
 

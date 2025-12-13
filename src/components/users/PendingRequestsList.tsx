@@ -26,6 +26,7 @@ import { RoleSelector } from "./RoleSelector";
 import { approveRequest, rejectRequest } from "@/services/userService";
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import type { AccessRequest, UserRole } from "@/types/rbac";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface PendingRequestsListProps {
   requests: AccessRequest[];
@@ -165,7 +166,7 @@ export function PendingRequestsList({
                     )}
                   </TableCell>
                   <TableCell>
-                    {new Date(request.requestedAt).toLocaleDateString("ar-EG")}
+                    {formatShortDate(request.requestedAt)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

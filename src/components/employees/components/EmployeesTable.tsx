@@ -12,6 +12,7 @@ import {
 import { Edit, Trash2, History } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { Employee } from "../types/employees";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 interface EmployeesTableProps {
   employees: Employee[];
@@ -54,7 +55,7 @@ export function EmployeesTable({
               <TableCell>{employee.position || "-"}</TableCell>
               <TableCell>
                 <span className="font-semibold text-slate-900">
-                  {employee.currentSalary.toLocaleString()} دينار
+                  {formatNumber(employee.currentSalary)} دينار
                 </span>
               </TableCell>
               <TableCell>
@@ -69,7 +70,7 @@ export function EmployeesTable({
                 )}
               </TableCell>
               <TableCell>
-                {new Date(employee.hireDate).toLocaleDateString("ar-EG")}
+                {formatShortDate(employee.hireDate)}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1" role="group" aria-label="إجراءات الموظف">

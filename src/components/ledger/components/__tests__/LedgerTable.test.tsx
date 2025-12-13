@@ -7,6 +7,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { LedgerTable } from '../LedgerTable';
 import { LedgerEntry } from '../../utils/ledger-constants';
+import { formatShortDate } from '@/lib/date-utils';
 
 // Mock firebase/provider (needed by AccessRequestForm imported through auth/index)
 jest.mock('@/firebase/provider', () => ({
@@ -466,8 +467,8 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      // Date should be formatted using toLocaleDateString("ar-EG")
-      const formattedDate = new Date('2025-01-15').toLocaleDateString("ar-EG");
+      // Date should be formatted using formatShortDate from date-utils
+      const formattedDate = formatShortDate(new Date('2025-01-15'));
       expect(within(desktopTable).getByText(formattedDate)).toBeInTheDocument();
     });
   });

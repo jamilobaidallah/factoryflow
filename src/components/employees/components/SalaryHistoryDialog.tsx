@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SalaryHistory } from "../types/employees";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface SalaryHistoryDialogProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export function SalaryHistoryDialog({
                         {item.oldSalary} ← {item.newSalary} دينار
                       </div>
                       <div className="text-sm text-gray-500">
-                        {new Date(item.effectiveDate).toLocaleDateString("ar-EG")}
+                        {formatShortDate(item.effectiveDate)}
                       </div>
                     </div>
                     <div

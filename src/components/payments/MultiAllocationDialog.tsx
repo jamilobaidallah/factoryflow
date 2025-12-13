@@ -40,6 +40,7 @@ import { firestore } from "@/firebase/config";
 import { useClientTransactions } from "./hooks/useClientTransactions";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
 import { AllocationEntry, initialMultiAllocationFormData } from "./types";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface PartyWithDebt {
   name: string;
@@ -573,9 +574,7 @@ export function MultiAllocationDialog({
                     {allocations.map((allocation, index) => (
                       <TableRow key={allocation.transactionId}>
                         <TableCell className="text-sm">
-                          {new Date(allocation.transactionDate).toLocaleDateString(
-                            "ar-EG"
-                          )}
+                          {formatShortDate(allocation.transactionDate)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {allocation.description || "-"}

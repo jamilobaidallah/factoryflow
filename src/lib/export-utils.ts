@@ -3,6 +3,7 @@
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatShortDate, formatNumber } from './date-utils';
 
 /**
  * Extended jsPDF interface with autoTable support
@@ -119,7 +120,7 @@ export async function exportToExcel(
 export async function exportLedgerToExcel(entries: any[], filename: string = 'ledger-entries'): Promise<void> {
   const exportData = entries.map((entry) => ({
     'رقم المعاملة': entry.transactionId || '',
-    'التاريخ': entry.date instanceof Date ? entry.date.toLocaleDateString('ar-EG') : '',
+    'التاريخ': entry.date instanceof Date ? formatShortDate(entry.date) : '',
     'الوصف': entry.description || '',
     'النوع': entry.type || '',
     'الفئة': entry.category || '',
@@ -142,7 +143,7 @@ export async function exportLedgerToExcel(entries: any[], filename: string = 'le
 export async function exportPaymentsToExcel(payments: any[], filename: string = 'payments'): Promise<void> {
   const exportData = payments.map((payment) => ({
     'اسم العميل': payment.clientName || '',
-    'التاريخ': payment.date instanceof Date ? payment.date.toLocaleDateString('ar-EG') : '',
+    'التاريخ': payment.date instanceof Date ? formatShortDate(payment.date) : '',
     'النوع': payment.type || '',
     'المبلغ': payment.amount || 0,
     'طريقة الدفع': payment.paymentMethod || '',
@@ -165,7 +166,7 @@ export async function exportChequesToExcel(cheques: any[], filename: string = 'c
     'النوع': cheque.type || '',
     'المبلغ': cheque.amount || 0,
     'البنك': cheque.bankName || '',
-    'تاريخ الاستحقاق': cheque.dueDate instanceof Date ? cheque.dueDate.toLocaleDateString('ar-EG') : '',
+    'تاريخ الاستحقاق': cheque.dueDate instanceof Date ? formatShortDate(cheque.dueDate) : '',
     'الحالة': cheque.status || '',
     'نوع الشيك': cheque.chequeType || '',
     'الملاحظات': cheque.notes || '',
@@ -318,7 +319,7 @@ export function exportLedgerToHTML(entries: any[], title: string = 'الحركا
   <button class="print-button" onclick="window.print()">🖨️ طباعة / حفظ كـ PDF</button>
   <div class="header">
     <h1>${title}</h1>
-    <p class="date">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</p>
+    <p class="date">تاريخ الطباعة: ${formatShortDate(new Date())}</p>
   </div>
   <table>
     <thead>
@@ -327,11 +328,11 @@ export function exportLedgerToHTML(entries: any[], title: string = 'الحركا
     <tbody>
       ${entries.map(entry => `<tr>
         <td>${entry.transactionId || ''}</td>
-        <td>${entry.date instanceof Date ? entry.date.toLocaleDateString('ar-EG') : ''}</td>
+        <td>${entry.date instanceof Date ? formatShortDate(entry.date) : ''}</td>
         <td>${entry.description || ''}</td>
         <td>${entry.type || ''}</td>
         <td>${entry.category || ''}</td>
-        <td class="amount ${entry.type === 'مصروف' ? 'expense' : ''}">${entry.amount?.toLocaleString('ar-EG', { minimumFractionDigits: 2 }) || '0'} دينار</td>
+        <td class="amount ${entry.type === 'مصروف' ? 'expense' : ''}">${formatNumber(entry.amount || 0, 2)} دينار</td>
       </tr>`).join('')}
     </tbody>
   </table>
@@ -389,15 +390,15 @@ export function exportIncomeStatementToHTML(
   <div class="header">
     <h1>قائمة الدخل</h1>
     <p class="period">من ${startDate} إلى ${endDate}</p>
-    <p class="date">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</p>
+    <p class="date">تاريخ الطباعة: ${formatShortDate(new Date())}</p>
   </div>
   <div class="section">
     <h2>الإيرادات</h2>
     <table>
       <thead><tr><th>الفئة</th><th>المبلغ</th></tr></thead>
       <tbody>
-        ${data.revenues.map(item => `<tr><td>${item.category}</td><td class="revenue-amount">${item.amount.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} دينار</td></tr>`).join('')}
-        <tr class="total-row"><td>إجمالي الإيرادات</td><td class="revenue-amount">${data.totalRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} دينار</td></tr>
+        ${data.revenues.map(item => `<tr><td>${item.category}</td><td class="revenue-amount">${formatNumber(item.amount, 2)} دينار</td></tr>`).join('')}
+        <tr class="total-row"><td>إجمالي الإيرادات</td><td class="revenue-amount">${formatNumber(data.totalRevenue, 2)} دينار</td></tr>
       </tbody>
     </table>
   </div>
@@ -406,14 +407,14 @@ export function exportIncomeStatementToHTML(
     <table>
       <thead><tr><th>الفئة</th><th>المبلغ</th></tr></thead>
       <tbody>
-        ${data.expenses.map(item => `<tr><td>${item.category}</td><td class="expense-amount">${item.amount.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} دينار</td></tr>`).join('')}
-        <tr class="total-row"><td>إجمالي المصروفات</td><td class="expense-amount">${data.totalExpenses.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} دينار</td></tr>
+        ${data.expenses.map(item => `<tr><td>${item.category}</td><td class="expense-amount">${formatNumber(item.amount, 2)} دينار</td></tr>`).join('')}
+        <tr class="total-row"><td>إجمالي المصروفات</td><td class="expense-amount">${formatNumber(data.totalExpenses, 2)} دينار</td></tr>
       </tbody>
     </table>
   </div>
   <div class="net-income">
     <h3>صافي الدخل</h3>
-    <p class="amount">${data.netIncome.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} دينار</p>
+    <p class="amount">${formatNumber(data.netIncome, 2)} دينار</p>
   </div>
 </body>
 </html>`;

@@ -15,6 +15,7 @@ import { PermissionGate } from "@/components/auth";
 import { Cheque } from "../types/cheques";
 import { CHEQUE_STATUS_AR } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 interface OutgoingChequesTableProps {
   cheques: Cheque[];
@@ -86,7 +87,7 @@ export function OutgoingChequesTable({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{pendingCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{totalPendingValue.toLocaleString()} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalPendingValue)} دينار</p>
           </CardContent>
         </Card>
         <Card className="card-modern">
@@ -95,7 +96,7 @@ export function OutgoingChequesTable({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{cashedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{totalCashedValue.toLocaleString()} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalCashedValue)} دينار</p>
           </CardContent>
         </Card>
         <Card className="card-modern">
@@ -104,7 +105,7 @@ export function OutgoingChequesTable({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{bouncedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{totalBouncedValue.toLocaleString()} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalBouncedValue)} دينار</p>
           </CardContent>
         </Card>
         <Card className="card-modern">
@@ -113,7 +114,7 @@ export function OutgoingChequesTable({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">{endorsedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{totalEndorsedValue.toLocaleString()} دينار</p>
+            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalEndorsedValue)} دينار</p>
           </CardContent>
         </Card>
         <Card className="card-modern">
@@ -174,7 +175,7 @@ export function OutgoingChequesTable({
                     <TableCell>{cheque.bankName}</TableCell>
                     <TableCell>
                       <span className="font-semibold text-slate-900">
-                        {(cheque.amount || 0).toLocaleString()} دينار
+                        {formatNumber(cheque.amount || 0)} دينار
                       </span>
                     </TableCell>
                     <TableCell>
@@ -183,7 +184,7 @@ export function OutgoingChequesTable({
                       </span>
                     </TableCell>
                     <TableCell>
-                      {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
+                      {formatShortDate(cheque.dueDate)}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       <div className="space-y-1">

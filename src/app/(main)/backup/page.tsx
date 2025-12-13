@@ -18,6 +18,7 @@ import {
   createAutoBackupBeforeRestore,
   BackupData,
 } from '@/lib/backup-utils';
+import { formatDateTime } from '@/lib/date-utils';
 
 export default function BackupPage() {
   const { user } = useUser();
@@ -250,7 +251,7 @@ export default function BackupPage() {
                   <div>
                     <span className="text-gray-600">التاريخ:</span>{' '}
                     <span className="font-medium">
-                      {new Date(backupPreview.metadata.createdAt).toLocaleString('ar-EG')}
+                      {formatDateTime(backupPreview.metadata.createdAt)}
                     </span>
                   </div>
                   <div>

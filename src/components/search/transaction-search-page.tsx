@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { toDate, toDateOptional } from "@/lib/firestore-utils";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface SearchResult {
   type: "ledger" | "payment" | "cheque" | "inventory";
@@ -345,7 +346,7 @@ export default function TransactionSearchPage() {
                           </TableCell>
                           <TableCell>
                             {result.data.date
-                              ? new Date(result.data.date).toLocaleDateString("ar-JO")
+                              ? formatShortDate(result.data.date)
                               : "-"}
                           </TableCell>
                           <TableCell>
@@ -423,7 +424,7 @@ export default function TransactionSearchPage() {
                                 <div>
                                   <span className="font-medium">تاريخ الاستحقاق: </span>
                                   {result.data.dueDate
-                                    ? new Date(result.data.dueDate).toLocaleDateString("ar-JO")
+                                    ? formatShortDate(result.data.dueDate)
                                     : "-"}
                                 </div>
                                 <div>

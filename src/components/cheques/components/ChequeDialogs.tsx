@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Cheque } from "../types/cheques";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface ImageViewerDialogProps {
   isOpen: boolean;
@@ -143,7 +144,7 @@ export function ClearChequeDialog({
                 <p><strong>رقم الشيك:</strong> {cheque.chequeNumber}</p>
                 <p><strong>العميل:</strong> {cheque.clientName}</p>
                 <p><strong>المبلغ:</strong> {cheque.amount} دينار</p>
-                <p><strong>تاريخ الاستحقاق:</strong> {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}</p>
+                <p><strong>تاريخ الاستحقاق:</strong> {formatShortDate(cheque.dueDate)}</p>
                 <p className="text-green-600 mt-2">
                   سيتم تحديث حالة الشيك إلى &quot;تم الصرف&quot; وتسجيل دفعة وتحديث رصيد العميل
                 </p>
@@ -195,7 +196,7 @@ export function BounceChequeDialog({
                 <p><strong>رقم الشيك:</strong> {cheque.chequeNumber}</p>
                 <p><strong>العميل:</strong> {cheque.clientName}</p>
                 <p><strong>المبلغ:</strong> {cheque.amount} دينار</p>
-                <p><strong>تاريخ الاستحقاق:</strong> {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}</p>
+                <p><strong>تاريخ الاستحقاق:</strong> {formatShortDate(cheque.dueDate)}</p>
                 <p className="text-red-600 mt-2">
                   سيتم تسجيل الشيك كمرتجع. رصيد العميل لن يتغير - لا يزال مديناً بالمبلغ.
                 </p>

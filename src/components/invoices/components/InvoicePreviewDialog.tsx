@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Download } from "lucide-react";
 import { Invoice } from "../types/invoices";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface InvoicePreviewDialogProps {
   isOpen: boolean;
@@ -92,8 +93,8 @@ export function InvoicePreviewDialog({
             <div className="space-y-2">
               <h3 className="font-semibold text-gray-700">معلومات الفاتورة</h3>
               <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
-                <p><span className="text-gray-500">التاريخ:</span> {invoice.invoiceDate.toLocaleDateString("ar-JO")}</p>
-                <p><span className="text-gray-500">الاستحقاق:</span> {invoice.dueDate.toLocaleDateString("ar-JO")}</p>
+                <p><span className="text-gray-500">التاريخ:</span> {formatShortDate(invoice.invoiceDate)}</p>
+                <p><span className="text-gray-500">الاستحقاق:</span> {formatShortDate(invoice.dueDate)}</p>
                 <p>
                   <span className="text-gray-500">الحالة:</span>{" "}
                   <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(invoice.status)}`}>

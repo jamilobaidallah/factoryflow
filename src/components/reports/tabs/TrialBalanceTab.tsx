@@ -17,6 +17,7 @@ import {
 import { Download, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useTrialBalance } from "../hooks/useTrialBalance";
 import { AccountBalance } from "@/types/accounting";
+import { formatNumber } from "@/lib/date-utils";
 
 interface TrialBalanceTabProps {
   ledgerEntries?: unknown[];
@@ -50,7 +51,7 @@ export function TrialBalanceTab({
 
   const formatAmount = (amount: number): string => {
     if (amount === 0) return "-";
-    return `${amount.toLocaleString('ar-JO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} د.أ`;
+    return `${formatNumber(amount, 2)} د.أ`;
   };
 
   const getAccountTypeLabel = (type: string): string => {

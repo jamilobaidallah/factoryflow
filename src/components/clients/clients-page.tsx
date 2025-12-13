@@ -41,6 +41,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { formatNumber } from "@/lib/date-utils";
 
 // Import validation utilities
 import {
@@ -343,7 +344,7 @@ export default function ClientsPage() {
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
                       <span className={`font-semibold ${(client.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {(client.balance || 0).toLocaleString()} دينار
+                        {formatNumber(client.balance || 0)} دينار
                       </span>
                     </TableCell>
                     <TableCell>

@@ -15,6 +15,7 @@ import {
 import { useSwipe } from "@/hooks/use-swipe";
 import { useState } from "react";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { formatDate as formatDateUtil, formatNumber as formatNumberUtil } from "@/lib/date-utils";
 
 /**
  * واجهة بيانات الشيك - Cheque data interface
@@ -91,22 +92,14 @@ function isOverdue(cheque: Cheque): boolean {
  * تنسيق التاريخ - Format date for display
  */
 function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString("ar-EG", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateUtil(date);
 }
 
 /**
  * تنسيق المبلغ - Format amount for display
  */
 function formatAmount(amount: number): string {
-  return new Intl.NumberFormat("ar-EG", {
-    style: "decimal",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return formatNumberUtil(amount, 2);
 }
 
 export function ChequeCard({

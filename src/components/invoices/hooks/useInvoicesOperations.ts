@@ -13,6 +13,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { Invoice, InvoiceFormData, InvoiceItem, CleanInvoiceItem } from "../types/invoices";
 import { sumAmounts, safeMultiply, safeDivide, safeAdd, parseAmount } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date-utils";
 
 interface UseInvoicesOperationsReturn {
   submitInvoice: (
@@ -298,8 +299,8 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           </div>
           <div class="info-block">
             <h3>معلومات الفاتورة:</h3>
-            <p><strong>تاريخ الفاتورة:</strong> ${invoice.invoiceDate.toLocaleDateString("ar-JO")}</p>
-            <p><strong>تاريخ الاستحقاق:</strong> ${invoice.dueDate.toLocaleDateString("ar-JO")}</p>
+            <p><strong>تاريخ الفاتورة:</strong> ${formatShortDate(invoice.invoiceDate)}</p>
+            <p><strong>تاريخ الاستحقاق:</strong> ${formatShortDate(invoice.dueDate)}</p>
             <p><strong>الحالة:</strong> ${getStatusLabel(invoice.status)}</p>
           </div>
         </div>

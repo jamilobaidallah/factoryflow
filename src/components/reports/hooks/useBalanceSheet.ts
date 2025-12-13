@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase/provider';
+import { formatNumber } from '@/lib/date-utils';
 import {
   getBalanceSheet,
   getTrialBalance,
@@ -94,10 +95,7 @@ export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
  * Format currency for display
  */
 export function formatBalanceSheetAmount(amount: number): string {
-  const formatted = Math.abs(amount).toLocaleString('ar-JO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const formatted = formatNumber(Math.abs(amount), 2);
   return `${formatted} دينار`;
 }
 

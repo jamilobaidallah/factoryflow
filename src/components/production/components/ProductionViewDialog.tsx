@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProductionOrder } from "../types/production";
 import { getStatusBadgeClass, formatDimensions } from "../utils/production-helpers";
+import { formatShortDate, formatDateTime } from "@/lib/date-utils";
 
 interface ProductionViewDialogProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export function ProductionViewDialog({
               <strong>رقم الأمر:</strong> {order.orderNumber}
             </div>
             <div>
-              <strong>التاريخ:</strong> {new Date(order.date).toLocaleDateString("ar-EG")}
+              <strong>التاريخ:</strong> {formatShortDate(order.date)}
             </div>
             <div>
               <strong>الحالة:</strong>{" "}
@@ -88,7 +89,7 @@ export function ProductionViewDialog({
               <div className="border-t pt-3">
                 <strong>تاريخ الإكمال:</strong>
                 <div className="ml-4 mt-1">
-                  {new Date(order.completedAt).toLocaleString("ar-EG")}
+                  {formatDateTime(order.completedAt)}
                 </div>
               </div>
             )}

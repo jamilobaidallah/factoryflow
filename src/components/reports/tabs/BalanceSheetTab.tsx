@@ -25,6 +25,7 @@ import {
   useBalanceSheet,
   formatBalanceSheetAmount,
 } from "../hooks/useBalanceSheet";
+import { formatDate } from "@/lib/date-utils";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -73,14 +74,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
     );
   }
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('ar-JO', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
+  
   return (
     <div className="space-y-4">
       <Card>

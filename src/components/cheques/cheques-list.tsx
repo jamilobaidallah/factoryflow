@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { formatShortDate } from "@/lib/date-utils";
 
 /**
  * خصائص مكون قائمة الشيكات - ChequesList props
@@ -316,7 +317,7 @@ export function ChequesList({
                     </span>
                   </TableCell>
                   <TableCell>
-                    {new Date(cheque.dueDate).toLocaleDateString("ar-EG")}
+                    {formatShortDate(cheque.dueDate)}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
                     {cheque.linkedTransactionId || "-"}

@@ -41,6 +41,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import PartnersEquityReport from "./partners-equity-report";
+import { formatNumber } from "@/lib/date-utils";
 
 interface Partner {
   id: string;
@@ -337,7 +338,7 @@ export default function PartnersPage() {
                     </TableCell>
                     <TableCell>
                       <span className="font-semibold text-slate-900">
-                        {partner.initialInvestment.toLocaleString()} د.أ
+                        {formatNumber(partner.initialInvestment)} د.أ
                       </span>
                     </TableCell>
                     <TableCell>{partner.phone}</TableCell>
