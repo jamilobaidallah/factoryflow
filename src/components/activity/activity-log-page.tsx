@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Activity, Shield, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useUser } from "@/firebase/provider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -182,6 +183,7 @@ export default function ActivityLogPage() {
                     <TableHead className="text-right font-semibold text-slate-700">المستخدم</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700">الإجراء</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700">القسم</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700">الوصف</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -214,6 +216,21 @@ export default function ActivityLogPage() {
                         <span className="text-slate-600">
                           {MODULE_LABELS[activity.module]}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {activity.metadata?.amount !== undefined && activity.metadata?.amount !== null ? (
+                          <span
+                            className={cn(
+                              "font-medium",
+                              activity.metadata?.type === "دخل" && "text-green-600",
+                              activity.metadata?.type === "مصروف" && "text-red-600"
+                            )}
+                          >
+                            {Number(activity.metadata.amount).toLocaleString("ar-EG")} دينار
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-[300px] truncate" title={activity.description}>
                         {activity.description}

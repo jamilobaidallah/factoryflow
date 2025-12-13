@@ -1,126 +1,66 @@
-# Task: Add Activity Logging to Ledger Operations
+# Task: Add Amount Column to Activity Log Table
 
 ## Branch
-`feature/ledger-activity-logging`
+`feature/ledger-activity-logging` (continuing on same branch)
 
 ---
 
 ## Context
-Extend the activity log system (Phase 8) to track ledger operations. When ledger entries are created, updated, or deleted, we log the action with user info and metadata.
+The activity log currently shows description but not the amount for financial transactions. Adding an "Amount" column will make it easier to track financial changes.
 
 ---
 
 ## Plan
 
-### Task 1: Update LedgerService Constructor
-- [x] Add `userEmail` and `userRole` private properties to `LedgerService` class
-- [x] Update constructor to accept optional `userEmail` and `userRole` parameters
-- [x] Update `createLedgerService` factory function to accept and pass these parameters
+### Task 1: Add Amount Column Header
+- [x] Add `<TableHead>المبلغ</TableHead>` between "القسم" and "الوصف"
 
-**File:** `src/services/ledger/LedgerService.ts`
+**File:** `src/components/activity/activity-log-page.tsx`
 
-### Task 2: Add logActivity Import
-- [x] Import `logActivity` from `@/services/activityLogService`
+### Task 2: Add Amount Column Cell
+- [x] Add a `<TableCell>` to display `activity.metadata?.amount`
+- [x] Format using `toLocaleString('ar-EG')` for Arabic numerals
+- [x] Show "دينار" suffix
+- [x] Show "-" for non-financial activities
+- [x] Color code: green for income (دخل), red for expense (مصروف)
 
-**File:** `src/services/ledger/LedgerService.ts`
+**File:** `src/components/activity/activity-log-page.tsx`
 
-### Task 3: Add Activity Logging to createSimpleLedgerEntry
-- [x] After successful `batch.commit()`, call `logActivity()` (fire and forget)
-- [x] Log action: 'create', module: 'ledger'
-- [x] Include metadata: amount, type, category
+### Task 3: Import cn utility
+- [x] Import `cn` from `@/lib/utils` for conditional classes
 
-**File:** `src/services/ledger/LedgerService.ts`
-
-### Task 4: Add Activity Logging to createLedgerEntryWithRelated
-- [x] After successful `batch.commit()`, call `logActivity()` (fire and forget)
-- [x] Same pattern as createSimpleLedgerEntry
-
-**File:** `src/services/ledger/LedgerService.ts`
-
-### Task 5: Add Activity Logging to updateLedgerEntry
-- [x] After successful `updateDoc()`, call `logActivity()` (fire and forget)
-- [x] Log action: 'update', module: 'ledger'
-- [x] Include metadata: amount, type
-
-**File:** `src/services/ledger/LedgerService.ts`
-
-### Task 6: Add Activity Logging to deleteLedgerEntry
-- [x] After successful `batch.commit()`, call `logActivity()` (fire and forget)
-- [x] Log action: 'delete', module: 'ledger'
-- [x] Include metadata: amount, transactionId
-
-**File:** `src/services/ledger/LedgerService.ts`
-
-### Task 7: Update useLedgerOperations Hook
-- [x] Pass `user.email` and `role` to `createLedgerService()` calls (5 locations)
-
-**File:** `src/components/ledger/hooks/useLedgerOperations.ts`
-
-### Task 8: Update useLedgerData Hook (Read operations - skip logging)
-- [x] Skipped - Read operations don't need activity logging
-- [x] Not updating for consistent API (would add unnecessary changes)
-
-**File:** `src/components/ledger/hooks/useLedgerData.ts`
-
-### Task 9: Update QuickPayDialog and QuickInvoiceDialog
-- [x] Pass `user.email` and `role` to `createLedgerService()` calls
-
-**Files:**
-- `src/components/ledger/components/QuickPayDialog.tsx`
-- `src/components/ledger/components/QuickInvoiceDialog.tsx`
-
-### Task 10: Verify Changes
-- [x] TypeScript check passes (`npx tsc --noEmit`)
-- [x] Build succeeds (`npm run build`)
+### Task 4: Verify Changes
+- [x] TypeScript check passes
+- [x] Build succeeds
 
 ---
 
 ## Files Modified
 | File | Changes |
 |------|---------|
-| `src/services/ledger/LedgerService.ts` | Added userEmail/userRole props, imported logActivity, added logging to create/update/delete |
-| `src/components/ledger/hooks/useLedgerOperations.ts` | Pass user.email and role to createLedgerService (5 locations) |
-| `src/components/ledger/components/QuickPayDialog.tsx` | Pass user.email and role to createLedgerService |
-| `src/components/ledger/components/QuickInvoiceDialog.tsx` | Pass user.email and role to createLedgerService |
+| `src/components/activity/activity-log-page.tsx` | Added cn import, amount column header, amount cell with formatting |
 
 ---
 
 ## Review
 
-### Summary of Changes
-Added activity logging to the ledger module to track when users create, update, or delete ledger entries.
+### Summary
+Added an "Amount" (المبلغ) column to the activity log table to display financial transaction amounts.
 
-### Key Implementation Details:
+### Implementation Details:
 
-1. **LedgerService Constructor Updated**
-   - Added `userEmail` and `userRole` private properties
-   - Constructor now accepts optional `userEmail` and `userRole` parameters
-   - Factory function `createLedgerService` updated to pass these parameters
+1. **Column Header**: Added "المبلغ" between "القسم" and "الوصف"
 
-2. **Activity Logging Added to 4 Methods:**
-   - `createSimpleLedgerEntry` - logs 'create' action
-   - `createLedgerEntryWithRelated` - logs 'create' action
-   - `updateLedgerEntry` - logs 'update' action
-   - `deleteLedgerEntry` - logs 'delete' action
+2. **Amount Cell**:
+   - Shows formatted amount with Arabic numerals + "دينار" suffix
+   - Color coded: green for income (دخل), red for expense (مصروف)
+   - Shows "-" for non-financial activities
 
-3. **Fire and Forget Pattern**
-   - All `logActivity()` calls are non-blocking
-   - Activity logging failures don't affect main operations
-   - Uses the existing `activityLogService` which handles error logging internally
-
-4. **Metadata Captured:**
-   - Create: amount, type, category
-   - Update: amount, type
-   - Delete: amount, transactionId
-
-5. **Arabic Descriptions:**
-   - Create: `إنشاء حركة مالية: {description}`
-   - Update: `تعديل حركة مالية: {description}`
-   - Delete: `حذف حركة مالية: {description}`
+3. **Formatting**: Uses `toLocaleString('ar-EG')` for proper Arabic number formatting
 
 ### Verification:
 - TypeScript check: PASSED
-- Production build: PASSED (with only pre-existing linting warnings)
+- Production build: PASSED
 
 ---
 
