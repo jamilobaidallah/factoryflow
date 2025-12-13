@@ -9,6 +9,14 @@ import { useToast } from "@/hooks/use-toast";
 import { GlobalSearch } from "@/components/search";
 import { usePermissions } from "@/hooks/usePermissions";
 import { USER_ROLE_LABELS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import type { UserRole } from "@/types/rbac";
+
+const ROLE_BADGE_STYLES: Record<UserRole, string> = {
+  owner: "bg-primary/10 text-primary",
+  accountant: "bg-blue-100 text-blue-700",
+  viewer: "bg-slate-100 text-slate-600",
+};
 
 export default function Header() {
   const { user } = useUser();
@@ -55,7 +63,10 @@ export default function Header() {
           <User className="w-4 h-4" aria-hidden="true" />
           <span>{user?.email}</span>
           {role && (
-            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+            <span className={cn(
+              "text-xs px-2 py-0.5 rounded-full font-medium",
+              ROLE_BADGE_STYLES[role]
+            )}>
               {USER_ROLE_LABELS[role]}
             </span>
           )}

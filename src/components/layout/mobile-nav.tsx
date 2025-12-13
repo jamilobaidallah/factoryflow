@@ -7,6 +7,15 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/firebase/config";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
+import { USER_ROLE_LABELS } from "@/lib/constants";
+import type { UserRole } from "@/types/rbac";
+
+const ROLE_BADGE_STYLES: Record<UserRole, string> = {
+  owner: "bg-primary/10 text-primary",
+  accountant: "bg-blue-100 text-blue-700",
+  viewer: "bg-slate-100 text-slate-600",
+};
 import {
   Sheet,
   SheetContent,
@@ -187,6 +196,7 @@ function MobileNavGroup({ group, pathname, onNavigate }: MobileNavGroupProps) {
 export default function MobileNav() {
   const pathname = usePathname();
   const { toast } = useToast();
+  const { role } = usePermissions();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href;
@@ -285,7 +295,17 @@ export default function MobileNav() {
       <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader className="text-right">
-            <SheetTitle>القائمة</SheetTitle>
+            <div className="flex items-center justify-between">
+              <SheetTitle>القائمة</SheetTitle>
+              {role && (
+                <span className={cn(
+                  "text-xs px-2 py-0.5 rounded-full font-medium",
+                  ROLE_BADGE_STYLES[role]
+                )}>
+                  {USER_ROLE_LABELS[role]}
+                </span>
+              )}
+            </div>
             <SheetDescription>الوصول السريع لجميع الأقسام</SheetDescription>
           </SheetHeader>
 
