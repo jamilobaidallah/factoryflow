@@ -25,6 +25,7 @@ import {
   InvalidChequeTransitionError,
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
+import { logActivity } from "@/services/activityLogService";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -283,6 +284,23 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             title: "تم التحديث بنجاح",
             description: `تم صرف الشيك رقم ${formData.chequeNumber} وإنشاء سند صرف`,
           });
+
+          // Log activity for cashing
+          logActivity(user.dataOwnerId, {
+            action: 'update',
+            module: 'cheques',
+            targetId: editingCheque.id,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `صرف شيك صادر: ${formData.chequeNumber} - ${chequeAmount} دينار`,
+            metadata: {
+              amount: chequeAmount,
+              chequeNumber: formData.chequeNumber,
+              status: formData.status,
+              type: CHEQUE_TYPES.OUTGOING,
+              clientName: formData.clientName,
+            },
+          });
         } else if (wasCleared && isNowBouncedOrReverted) {
           // Validate state transition before proceeding
           try {
@@ -391,12 +409,49 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             title: "تم التحديث بنجاح",
             description: toastDescription,
           });
+
+          // Log activity for reversal/bounce
+          logActivity(user.dataOwnerId, {
+            action: 'update',
+            module: 'cheques',
+            targetId: editingCheque.id,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced"
+              ? `ارتجاع شيك صادر: ${formData.chequeNumber} - ${chequeAmount} دينار`
+              : `إلغاء صرف شيك: ${formData.chequeNumber}`,
+            metadata: {
+              amount: chequeAmount,
+              chequeNumber: formData.chequeNumber,
+              previousStatus: oldStatus,
+              newStatus: formData.status,
+              type: CHEQUE_TYPES.OUTGOING,
+              clientName: formData.clientName,
+            },
+          });
         } else {
           // Simple update - no status change affecting payments
           await updateDoc(chequeRef, updateData);
           toast({
             title: "تم التحديث بنجاح",
             description: "تم تحديث بيانات الشيك الصادر",
+          });
+
+          // Log activity for simple update
+          logActivity(user.dataOwnerId, {
+            action: 'update',
+            module: 'cheques',
+            targetId: editingCheque.id,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `تعديل شيك صادر: ${formData.chequeNumber}`,
+            metadata: {
+              amount: parseFloat(formData.amount),
+              chequeNumber: formData.chequeNumber,
+              status: formData.status,
+              type: CHEQUE_TYPES.OUTGOING,
+              clientName: formData.clientName,
+            },
           });
         }
       } else {
@@ -419,6 +474,23 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         toast({
           title: "تمت الإضافة بنجاح",
           description: "تم إضافة شيك صادر جديد",
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'cheques',
+          targetId: formData.chequeNumber,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إنشاء شيك صادر: ${formData.chequeNumber} - ${parseFloat(formData.amount)} دينار`,
+          metadata: {
+            amount: parseFloat(formData.amount),
+            chequeNumber: formData.chequeNumber,
+            status: formData.status,
+            type: CHEQUE_TYPES.OUTGOING,
+            clientName: formData.clientName,
+          },
         });
       }
 
@@ -458,6 +530,20 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         title: "تم الحذف",
         description: "تم حذف الشيك بنجاح",
       });
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'cheques',
+        targetId: chequeId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف شيك صادر`,
+        metadata: {
+          type: CHEQUE_TYPES.OUTGOING,
+        },
+      });
+
       return true;
     } catch (error) {
       toast({
@@ -484,6 +570,24 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           ? `تم ربط الشيك بالمعاملة ${transactionId}`
           : "تم إلغاء ربط الشيك بالمعاملة",
       });
+
+      // Log activity for linking
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: transactionId.trim()
+          ? `ربط شيك صادر: ${cheque.chequeNumber} بالمعاملة ${transactionId}`
+          : `إلغاء ربط شيك: ${cheque.chequeNumber}`,
+        metadata: {
+          chequeNumber: cheque.chequeNumber,
+          linkedTransactionId: transactionId.trim() || null,
+          type: CHEQUE_TYPES.OUTGOING,
+        },
+      });
+
       return true;
     } catch (error) {
       toast({

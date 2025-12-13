@@ -42,6 +42,7 @@ import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import PartnersEquityReport from "./partners-equity-report";
 import { formatNumber } from "@/lib/date-utils";
+import { logActivity } from "@/services/activityLogService";
 
 interface Partner {
   id: string;
@@ -127,6 +128,22 @@ export default function PartnersPage() {
           initialInvestment: parseFloat(formData.initialInvestment),
           active: formData.active,
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'partners',
+          targetId: editingPartner.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل بيانات شريك: ${formData.name}`,
+          metadata: {
+            ownershipPercentage: parseFloat(formData.ownershipPercentage),
+            investment: parseFloat(formData.initialInvestment),
+            name: formData.name,
+          },
+        });
+
         toast({
           title: "تم التحديث بنجاح",
           description: "تم تحديث بيانات الشريك",
@@ -134,7 +151,7 @@ export default function PartnersPage() {
       } else {
         // Add new partner
         const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
-        await addDoc(partnersRef, {
+        const docRef = await addDoc(partnersRef, {
           name: formData.name,
           ownershipPercentage: parseFloat(formData.ownershipPercentage),
           phone: formData.phone,
@@ -143,6 +160,22 @@ export default function PartnersPage() {
           joinDate: new Date(),
           active: true,
         });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'partners',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إضافة شريك: ${formData.name}`,
+          metadata: {
+            ownershipPercentage: parseFloat(formData.ownershipPercentage),
+            investment: parseFloat(formData.initialInvestment),
+            name: formData.name,
+          },
+        });
+
         toast({
           title: "تمت الإضافة بنجاح",
           description: "تم إضافة شريك جديد",
@@ -179,6 +212,8 @@ export default function PartnersPage() {
   const handleDelete = (partnerId: string) => {
     if (!user) {return;}
 
+    const partner = partners.find((p) => p.id === partnerId);
+
     confirm(
       "حذف الشريك",
       "هل أنت متأكد من حذف هذا الشريك؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -186,6 +221,22 @@ export default function PartnersPage() {
         try {
           const partnerRef = doc(firestore, `users/${user.dataOwnerId}/partners`, partnerId);
           await deleteDoc(partnerRef);
+
+          // Log activity for delete
+          logActivity(user.dataOwnerId, {
+            action: 'delete',
+            module: 'partners',
+            targetId: partnerId,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `حذف شريك: ${partner?.name || ''}`,
+            metadata: {
+              ownershipPercentage: partner?.ownershipPercentage,
+              investment: partner?.initialInvestment,
+              name: partner?.name,
+            },
+          });
+
           toast({
             title: "تم الحذف",
             description: "تم حذف الشريك بنجاح",

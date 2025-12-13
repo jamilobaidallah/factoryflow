@@ -24,6 +24,7 @@ import {
   InvalidChequeTransitionError,
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
+import { logActivity } from "@/services/activityLogService";
 
 interface UseIncomingChequesOperationsReturn {
   submitCheque: (
@@ -254,6 +255,25 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             ? `تم تحصيل الشيك رقم ${formData.chequeNumber} وإنشاء سند قبض`
             : "تم تحديث بيانات الشيك الوارد",
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'cheques',
+          targetId: editingCheque.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: wasPending && isNowCleared
+            ? `تحصيل شيك وارد: ${formData.chequeNumber} - ${parseFloat(formData.amount)} دينار`
+            : `تعديل شيك وارد: ${formData.chequeNumber}`,
+          metadata: {
+            amount: parseFloat(formData.amount),
+            chequeNumber: formData.chequeNumber,
+            status: formData.status,
+            type: CHEQUE_TYPES.INCOMING,
+            clientName: formData.clientName,
+          },
+        });
       } else {
         // Creating new cheque - simple add (no ARAP update needed for new incoming cheques)
         const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
@@ -274,6 +294,23 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         toast({
           title: "تمت الإضافة بنجاح",
           description: "تم إضافة شيك وارد جديد",
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'cheques',
+          targetId: formData.chequeNumber,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إنشاء شيك وارد: ${formData.chequeNumber} - ${parseFloat(formData.amount)} دينار`,
+          metadata: {
+            amount: parseFloat(formData.amount),
+            chequeNumber: formData.chequeNumber,
+            status: formData.status,
+            type: CHEQUE_TYPES.INCOMING,
+            clientName: formData.clientName,
+          },
         });
       }
 
@@ -308,6 +345,20 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         title: "تم الحذف",
         description: "تم حذف الشيك بنجاح",
       });
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'cheques',
+        targetId: chequeId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف شيك وارد`,
+        metadata: {
+          type: CHEQUE_TYPES.INCOMING,
+        },
+      });
+
       return true;
     } catch (error) {
       toast({
@@ -428,6 +479,24 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         title: "تم التظهير بنجاح",
         description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
       });
+
+      // Log activity for endorsement
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName}`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: CHEQUE_STATUS_AR.ENDORSED,
+          endorsedTo: supplierName,
+          type: CHEQUE_TYPES.INCOMING,
+        },
+      });
+
       return true;
     } catch (error) {
       console.error("Error endorsing cheque:", error);
@@ -489,6 +558,24 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         title: "تم إلغاء التظهير",
         description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} بنجاح`,
       });
+
+      // Log activity for cancellation
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `إلغاء تظهير شيك: ${cheque.chequeNumber}`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          previousStatus: CHEQUE_STATUS_AR.ENDORSED,
+          newStatus: CHEQUE_STATUS_AR.PENDING,
+          type: CHEQUE_TYPES.INCOMING,
+        },
+      });
+
       return true;
     } catch (error) {
       console.error("Error canceling endorsement:", error);
