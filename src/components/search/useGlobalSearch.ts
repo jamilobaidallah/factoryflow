@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useUser } from "@/firebase/provider";
 import { collection, orderBy, limit, getDocs, query as firestoreQuery } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { formatNumber } from "@/lib/date-utils";
 
 /** Represents a single search result item */
 export interface SearchResult {
@@ -81,7 +82,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
               id: doc.id,
               type: "ledger",
               title: data.description || "بدون وصف",
-              subtitle: `${data.amount?.toLocaleString() || 0} د.أ - ${data.category || "غير مصنف"}`,
+              subtitle: `${formatNumber(data.amount ?? 0)} د.أ - ${data.category || "غير مصنف"}`,
               href: `/ledger?highlight=${doc.id}`,
               icon: typeIcons.ledger,
             });
@@ -124,7 +125,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
               id: doc.id,
               type: "cheque",
               title: `شيك #${data.chequeNumber || "---"}`,
-              subtitle: `${data.amount?.toLocaleString() || 0} د.أ - ${partyName || "غير معروف"}`,
+              subtitle: `${formatNumber(data.amount ?? 0)} د.أ - ${partyName || "غير معروف"}`,
               href: `/${chequeType}?highlight=${doc.id}`,
               icon: typeIcons.cheque,
             });
@@ -146,7 +147,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
               id: doc.id,
               type: "payment",
               title: data.clientName || "مدفوعات",
-              subtitle: `${data.amount?.toLocaleString() || 0} د.أ - ${data.type || ""}`,
+              subtitle: `${formatNumber(data.amount ?? 0)} د.أ - ${data.type || ""}`,
               href: `/payments?highlight=${doc.id}`,
               icon: typeIcons.payment,
             });

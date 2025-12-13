@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Download, Calendar, TrendingUp, DollarSign, Package, Building2 } from "lucide-react";
+import { formatShortDate } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import SubcategoryAnalysis from "./subcategory-analysis";
 import {
@@ -297,7 +298,7 @@ export default function ReportsPage() {
             onExportCSV={() =>
               exportToCSV(
                 payments.map((p) => ({
-                  التاريخ: p.date.toLocaleDateString("ar"),
+                  التاريخ: formatShortDate(p.date),
                   النوع: p.type,
                   المبلغ: p.amount,
                 })),
@@ -320,7 +321,7 @@ export default function ReportsPage() {
                   المبلغ: r.amount,
                   المدفوع: r.totalPaid || 0,
                   المتبقي: r.remainingBalance || 0,
-                  التاريخ: r.date.toLocaleDateString("ar"),
+                  التاريخ: formatShortDate(r.date),
                   العمر: arapAging.getAgingBucket(r.date),
                 })),
                 "accounts_receivable"
@@ -335,7 +336,7 @@ export default function ReportsPage() {
                   المبلغ: p.amount,
                   المدفوع: p.totalPaid || 0,
                   المتبقي: p.remainingBalance || 0,
-                  التاريخ: p.date.toLocaleDateString("ar"),
+                  التاريخ: formatShortDate(p.date),
                   العمر: arapAging.getAgingBucket(p.date),
                 })),
                 "accounts_payable"

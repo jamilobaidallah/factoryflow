@@ -12,7 +12,7 @@ import {
 import { Edit, Trash2 } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { FixedAsset } from "../types/fixed-assets";
-import { formatShortDate } from "@/lib/date-utils";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 interface FixedAssetsTableProps {
   assets: FixedAsset[];
@@ -60,17 +60,17 @@ export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableP
               </TableCell>
               <TableCell>
                 <span className="font-semibold text-slate-900">
-                  {(asset.purchaseCost ?? 0).toLocaleString()} د
+                  {formatNumber(asset.purchaseCost ?? 0)} د
                 </span>
               </TableCell>
               <TableCell>
                 <span className="font-semibold text-red-600">
-                  {(asset.accumulatedDepreciation ?? 0).toLocaleString()} د
+                  {formatNumber(asset.accumulatedDepreciation ?? 0)} د
                 </span>
               </TableCell>
               <TableCell>
                 <span className="font-semibold text-green-600">
-                  {(asset.bookValue ?? 0).toLocaleString()} د
+                  {formatNumber(asset.bookValue ?? 0)} د
                 </span>
               </TableCell>
               <TableCell>
