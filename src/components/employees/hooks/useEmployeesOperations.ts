@@ -13,13 +13,14 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Employee, EmployeeFormData, PayrollEntry } from "../types/employees";
+import { logActivity } from "@/services/activityLogService";
 
 interface UseEmployeesOperationsReturn {
   submitEmployee: (
     formData: EmployeeFormData,
     editingEmployee: Employee | null
   ) => Promise<boolean>;
-  deleteEmployee: (employeeId: string) => Promise<boolean>;
+  deleteEmployee: (employeeId: string, employee?: Employee) => Promise<boolean>;
   processPayroll: (
     selectedMonth: string,
     employees: Employee[],
@@ -53,7 +54,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           hireDate: new Date(formData.hireDate),
         });
 
-        // If salary changed, record history
+        // If salary changed, record history and log activity
         if (oldSalary !== newSalary) {
           const incrementPercentage = ((newSalary - oldSalary) / oldSalary) * 100;
           const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
@@ -67,6 +68,38 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
             notes: incrementPercentage > 0 ? "زيادة راتب" : "تخفيض راتب",
             createdAt: new Date(),
           });
+
+          // Log salary change activity
+          logActivity(user.dataOwnerId, {
+            action: 'update',
+            module: 'employees',
+            targetId: editingEmployee.id,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `تعديل راتب: ${formData.name} → ${newSalary} دينار`,
+            metadata: {
+              salary: newSalary,
+              position: formData.position,
+              name: formData.name,
+              oldSalary,
+              incrementPercentage,
+            },
+          });
+        } else {
+          // Log regular update activity
+          logActivity(user.dataOwnerId, {
+            action: 'update',
+            module: 'employees',
+            targetId: editingEmployee.id,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `تعديل بيانات موظف: ${formData.name}`,
+            metadata: {
+              salary: newSalary,
+              position: formData.position,
+              name: formData.name,
+            },
+          });
         }
 
         toast({
@@ -75,13 +108,28 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         });
       } else {
         const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
-        await addDoc(employeesRef, {
+        const docRef = await addDoc(employeesRef, {
           name: formData.name,
           currentSalary: parseFloat(formData.currentSalary),
           overtimeEligible: formData.overtimeEligible,
           position: formData.position,
           hireDate: new Date(formData.hireDate),
           createdAt: new Date(),
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'employees',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إضافة موظف: ${formData.name}`,
+          metadata: {
+            salary: parseFloat(formData.currentSalary),
+            position: formData.position,
+            name: formData.name,
+          },
         });
 
         toast({
@@ -102,12 +150,28 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
   };
 
-  const deleteEmployee = async (employeeId: string): Promise<boolean> => {
+  const deleteEmployee = async (employeeId: string, employee?: Employee): Promise<boolean> => {
     if (!user) return false;
 
     try {
       const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, employeeId);
       await deleteDoc(employeeRef);
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'employees',
+        targetId: employeeId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف موظف: ${employee?.name || ''}`,
+        metadata: {
+          salary: employee?.currentSalary,
+          position: employee?.position,
+          name: employee?.name,
+        },
+      });
+
       toast({
         title: "تم الحذف",
         description: "تم حذف الموظف بنجاح",
@@ -165,6 +229,20 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       }
 
       await batch.commit();
+
+      // Log activity for payroll processing
+      logActivity(user.dataOwnerId, {
+        action: 'create',
+        module: 'employees',
+        targetId: selectedMonth,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `معالجة رواتب شهر ${selectedMonth}`,
+        metadata: {
+          month: selectedMonth,
+          employeeCount: employees.length,
+        },
+      });
 
       toast({
         title: "تمت المعالجة",
@@ -231,6 +309,21 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       });
 
       await batch.commit();
+
+      // Log activity for payment
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'employees',
+        targetId: payrollEntry.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تسجيل دفع راتب: ${payrollEntry.employeeName}`,
+        metadata: {
+          salary: payrollEntry.totalSalary,
+          name: payrollEntry.employeeName,
+          month: payrollEntry.month,
+        },
+      });
 
       toast({
         title: "تم الدفع",

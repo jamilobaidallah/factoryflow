@@ -14,6 +14,7 @@ import { firestore } from "@/firebase/config";
 import { Invoice, InvoiceFormData, InvoiceItem, CleanInvoiceItem } from "../types/invoices";
 import { sumAmounts, safeMultiply, safeDivide, safeAdd, parseAmount } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date-utils";
+import { logActivity } from "@/services/activityLogService";
 
 interface UseInvoicesOperationsReturn {
   submitInvoice: (
@@ -21,7 +22,7 @@ interface UseInvoicesOperationsReturn {
     items: InvoiceItem[],
     editingInvoice: Invoice | null
   ) => Promise<boolean>;
-  deleteInvoice: (invoiceId: string) => Promise<boolean>;
+  deleteInvoice: (invoiceId: string, invoice?: Invoice) => Promise<boolean>;
   updateStatus: (invoiceId: string, newStatus: Invoice["status"], invoices: Invoice[]) => Promise<boolean>;
   exportPDF: (invoice: Invoice) => void;
 }
@@ -110,6 +111,22 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         }
         await updateDoc(invoiceRef, updateData);
 
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'invoices',
+          targetId: editingInvoice.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل فاتورة: ${editingInvoice.invoiceNumber}`,
+          metadata: {
+            amount: total,
+            invoiceNumber: editingInvoice.invoiceNumber,
+            clientName: formData.clientName,
+            status: editingInvoice.status,
+          },
+        });
+
         toast({
           title: "تم التحديث",
           description: "تم تحديث الفاتورة بنجاح",
@@ -141,7 +158,23 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         if (formData.invoiceImageUrl) {
           newInvoice.invoiceImageUrl = formData.invoiceImageUrl;
         }
-        await addDoc(collection(firestore, `users/${user.dataOwnerId}/invoices`), newInvoice);
+        const docRef = await addDoc(collection(firestore, `users/${user.dataOwnerId}/invoices`), newInvoice);
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'invoices',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إنشاء فاتورة: ${invoiceNumber} - ${total} دينار`,
+          metadata: {
+            amount: total,
+            invoiceNumber,
+            clientName: formData.clientName,
+            status: 'draft',
+          },
+        });
 
         toast({
           title: "تمت الإضافة",
@@ -161,11 +194,27 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     }
   };
 
-  const deleteInvoice = async (invoiceId: string): Promise<boolean> => {
+  const deleteInvoice = async (invoiceId: string, invoice?: Invoice): Promise<boolean> => {
     if (!user) return false;
 
     try {
       await deleteDoc(doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId));
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'invoices',
+        targetId: invoiceId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف فاتورة: ${invoice?.invoiceNumber || invoiceId}`,
+        metadata: {
+          amount: invoice?.total,
+          invoiceNumber: invoice?.invoiceNumber,
+          clientName: invoice?.clientName,
+        },
+      });
+
       toast({
         title: "تم الحذف",
         description: "تم حذف الفاتورة بنجاح",
@@ -206,9 +255,26 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         updatedAt: new Date(),
       });
 
+      const invoice = invoices.find((inv) => inv.id === invoiceId);
+
+      // Log activity for status change
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'invoices',
+        targetId: invoiceId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تغيير حالة فاتورة: ${invoice?.invoiceNumber || invoiceId} → ${getStatusLabel(newStatus)}`,
+        metadata: {
+          amount: invoice?.total,
+          invoiceNumber: invoice?.invoiceNumber,
+          clientName: invoice?.clientName,
+          status: newStatus,
+        },
+      });
+
       // If marked as paid, create ledger entry
       if (newStatus === "paid") {
-        const invoice = invoices.find((inv) => inv.id === invoiceId);
         if (invoice) {
           const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
           await addDoc(ledgerRef, {

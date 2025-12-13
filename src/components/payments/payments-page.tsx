@@ -29,6 +29,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
+import { logActivity } from "@/services/activityLogService";
 import { exportPaymentsToExcel } from "@/lib/export-utils";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
@@ -250,6 +251,22 @@ export default function PaymentsPage() {
           category: formData.category || null,
           subCategory: formData.subCategory || null,
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'payments',
+          targetId: editingPayment.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل مدفوعة: ${formData.clientName}`,
+          metadata: {
+            amount: parseFloat(formData.amount),
+            type: formData.type,
+            clientName: formData.clientName,
+          },
+        });
+
         toast({
           title: "تم التحديث بنجاح",
           description: "تم تحديث بيانات المدفوعة",
@@ -258,7 +275,7 @@ export default function PaymentsPage() {
         const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
         const paymentAmount = parseFloat(formData.amount);
 
-        await addDoc(paymentsRef, {
+        const docRef = await addDoc(paymentsRef, {
           clientName: formData.clientName,
           amount: paymentAmount,
           type: formData.type,
@@ -268,6 +285,21 @@ export default function PaymentsPage() {
           category: formData.category || null,
           subCategory: formData.subCategory || null,
           createdAt: new Date(),
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'payments',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إنشاء مدفوعة: ${formData.clientName} - ${paymentAmount} دينار`,
+          metadata: {
+            amount: paymentAmount,
+            type: formData.type,
+            clientName: formData.clientName,
+          },
         });
 
         // Update AR/AP tracking if linkedTransactionId is provided
@@ -369,6 +401,22 @@ export default function PaymentsPage() {
             // Use multi-allocation reversal logic
             const success = await reversePaymentAllocations(paymentId);
             if (success) {
+              // Log activity for multi-allocation delete
+              logActivity(user.dataOwnerId, {
+                action: 'delete',
+                module: 'payments',
+                targetId: paymentId,
+                userId: user.uid,
+                userEmail: user.email || '',
+                description: `حذف مدفوعة موزعة: ${payment.clientName} - ${payment.amount} دينار`,
+                metadata: {
+                  amount: payment.amount,
+                  type: payment.type,
+                  clientName: payment.clientName,
+                  allocationCount: payment.allocationCount,
+                },
+              });
+
               toast({
                 title: "تم الحذف",
                 description: `تم حذف المدفوعة وإلغاء ${payment.allocationCount} تخصيص`,
@@ -429,6 +477,21 @@ export default function PaymentsPage() {
           // Now delete the payment
           const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, paymentId);
           await deleteDoc(paymentRef);
+
+          // Log activity for delete
+          logActivity(user.dataOwnerId, {
+            action: 'delete',
+            module: 'payments',
+            targetId: paymentId,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `حذف مدفوعة: ${payment?.clientName || ''} - ${payment?.amount || 0} دينار`,
+            metadata: {
+              amount: payment?.amount,
+              type: payment?.type,
+              clientName: payment?.clientName,
+            },
+          });
 
           toast({
             title: "تم الحذف",

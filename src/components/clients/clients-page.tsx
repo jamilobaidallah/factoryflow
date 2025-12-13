@@ -42,6 +42,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { formatNumber } from "@/lib/date-utils";
+import { logActivity } from "@/services/activityLogService";
 
 // Import validation utilities
 import {
@@ -202,6 +203,21 @@ export default function ClientsPage() {
         const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, editingClient.id);
         await updateDoc(clientRef, validated);
 
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'clients',
+          targetId: editingClient.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل بيانات عميل: ${validated.name}`,
+          metadata: {
+            phone: validated.phone,
+            email: validated.email,
+            balance: validated.balance,
+          },
+        });
+
         const successMsg = getSuccessMessage('update', 'العميل');
         toast({
           title: successMsg.title,
@@ -210,9 +226,24 @@ export default function ClientsPage() {
       } else {
         // Add new client
         const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
-        await addDoc(clientsRef, {
+        const docRef = await addDoc(clientsRef, {
           ...validated,
           createdAt: new Date(),
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'clients',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إضافة عميل: ${validated.name}`,
+          metadata: {
+            phone: validated.phone,
+            email: validated.email,
+            balance: validated.balance,
+          },
         });
 
         const successMsg = getSuccessMessage('create', 'العميل');
@@ -254,6 +285,8 @@ export default function ClientsPage() {
   const handleDelete = (clientId: string) => {
     if (!user) { return; }
 
+    const client = clients.find((c) => c.id === clientId);
+
     confirm(
       "حذف العميل",
       "هل أنت متأكد من حذف هذا العميل؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -261,6 +294,21 @@ export default function ClientsPage() {
         try {
           const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, clientId);
           await deleteDoc(clientRef);
+
+          // Log activity for delete
+          logActivity(user.dataOwnerId, {
+            action: 'delete',
+            module: 'clients',
+            targetId: clientId,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `حذف عميل: ${client?.name || ''}`,
+            metadata: {
+              phone: client?.phone,
+              email: client?.email,
+              balance: client?.balance,
+            },
+          });
 
           const successMsg = getSuccessMessage('delete', 'العميل');
           toast({

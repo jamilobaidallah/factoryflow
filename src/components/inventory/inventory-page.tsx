@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcel } from "@/lib/export-utils";
 import { formatNumber } from "@/lib/date-utils";
+import { logActivity } from "@/services/activityLogService";
 import {
   collection,
   addDoc,
@@ -166,13 +167,29 @@ export default function InventoryPage() {
           width: formData.width ? parseFloat(formData.width) : null,
           length: formData.length ? parseFloat(formData.length) : null,
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'inventory',
+          targetId: editingItem.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل صنف: ${formData.itemName}`,
+          metadata: {
+            quantity: parseFloat(formData.quantity),
+            unit: formData.unit,
+            itemName: formData.itemName,
+          },
+        });
+
         toast({
           title: "تم التحديث بنجاح",
           description: "تم تحديث بيانات العنصر",
         });
       } else {
         const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
-        await addDoc(inventoryRef, {
+        const docRef = await addDoc(inventoryRef, {
           itemName: formData.itemName,
           category: formData.category,
           quantity: parseFloat(formData.quantity),
@@ -186,6 +203,22 @@ export default function InventoryPage() {
           length: formData.length ? parseFloat(formData.length) : null,
           createdAt: new Date(),
         });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'inventory',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إضافة صنف: ${formData.itemName}`,
+          metadata: {
+            quantity: parseFloat(formData.quantity),
+            unit: formData.unit,
+            itemName: formData.itemName,
+          },
+        });
+
         toast({
           title: "تمت الإضافة بنجاح",
           description: "تم إضافة عنصر جديد للمخزون",
@@ -244,6 +277,26 @@ export default function InventoryPage() {
         createdAt: new Date(),
       });
 
+      // Log activity for stock movement
+      const movementDescription = movementData.type === "دخول"
+        ? `إدخال مخزون: ${selectedItem.itemName} - ${movementQty} ${selectedItem.unit}`
+        : `إخراج مخزون: ${selectedItem.itemName} - ${movementQty} ${selectedItem.unit}`;
+
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'inventory',
+        targetId: selectedItem.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: movementDescription,
+        metadata: {
+          quantity: movementQty,
+          unit: selectedItem.unit,
+          itemName: selectedItem.itemName,
+          movementType: movementData.type,
+        },
+      });
+
       toast({
         title: "تمت العملية بنجاح",
         description: `تم تسجيل ${movementData.type} ${movementQty} ${selectedItem.unit}`,
@@ -291,6 +344,8 @@ export default function InventoryPage() {
   const handleDelete = (itemId: string) => {
     if (!user) {return;}
 
+    const item = items.find((i) => i.id === itemId);
+
     confirm(
       "حذف العنصر",
       "هل أنت متأكد من حذف هذا العنصر من المخزون؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -298,6 +353,22 @@ export default function InventoryPage() {
         try {
           const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, itemId);
           await deleteDoc(itemRef);
+
+          // Log activity for delete
+          logActivity(user.dataOwnerId, {
+            action: 'delete',
+            module: 'inventory',
+            targetId: itemId,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `حذف صنف: ${item?.itemName || ''}`,
+            metadata: {
+              quantity: item?.quantity,
+              unit: item?.unit,
+              itemName: item?.itemName,
+            },
+          });
+
           toast({
             title: "تم الحذف",
             description: "تم حذف العنصر من المخزون بنجاح",

@@ -28,6 +28,7 @@ import {
   InvalidChequeTransitionError,
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
+import { logActivity } from "@/services/activityLogService";
 
 interface UseChequesOperationsReturn {
   submitCheque: (
@@ -209,6 +210,25 @@ export function useChequesOperations(): UseChequesOperationsReturn {
             ? `تم تحصيل الشيك رقم ${formData.chequeNumber} وإنشاء سند قبض/صرف`
             : "تم تحديث بيانات الشيك",
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: wasPending && isNowCleared ? 'update' : 'update',
+          module: 'cheques',
+          targetId: editingCheque.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: wasPending && isNowCleared
+            ? `تحصيل شيك: ${formData.chequeNumber} - ${parseAmount(formData.amount)} دينار`
+            : `تعديل شيك: ${formData.chequeNumber}`,
+          metadata: {
+            amount: parseAmount(formData.amount),
+            chequeNumber: formData.chequeNumber,
+            status: formData.status,
+            type: formData.type,
+            clientName: formData.clientName,
+          },
+        });
       } else {
         // Creating new cheque
         const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
@@ -288,6 +308,23 @@ export function useChequesOperations(): UseChequesOperationsReturn {
           description: formData.linkedTransactionId
             ? "تم إضافة الشيك وتحديث الرصيد المتبقي في دفتر الأستاذ"
             : "تم إضافة شيك جديد",
+        });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'cheques',
+          targetId: formData.chequeNumber,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إنشاء شيك: ${formData.chequeNumber} - ${chequeAmount} دينار`,
+          metadata: {
+            amount: chequeAmount,
+            chequeNumber: formData.chequeNumber,
+            status: formData.status,
+            type: formData.type,
+            clientName: formData.clientName,
+          },
         });
       }
 
@@ -421,6 +458,24 @@ export function useChequesOperations(): UseChequesOperationsReturn {
           ? `تم حذف الشيك و ${deletedItemsCount} سند مرتبط وتحديث الرصيد في دفتر الأستاذ`
           : "تم حذف الشيك بنجاح",
       });
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'cheques',
+        targetId: chequeId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف شيك: ${cheque.chequeNumber} - ${cheque.amount} دينار`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: cheque.status,
+          type: cheque.type,
+          clientName: cheque.clientName,
+        },
+      });
+
       return true;
     } catch (error) {
       const appError = handleError(error);
@@ -512,6 +567,24 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         title: "تم التظهير بنجاح",
         description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
       });
+
+      // Log activity for endorsement
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تظهير شيك: ${cheque.chequeNumber} → ${supplierName}`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: CHEQUE_STATUS_AR.ENDORSED,
+          endorsedTo: supplierName,
+          type: cheque.type,
+        },
+      });
+
       return true;
     } catch (error) {
       const appError = handleError(error);
@@ -610,6 +683,24 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         title: "تم التحصيل بنجاح",
         description: `تم تحصيل الشيك رقم ${cheque.chequeNumber} وتحديث الرصيد`,
       });
+
+      // Log activity for cashing
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تحصيل شيك: ${cheque.chequeNumber} - ${cheque.amount} دينار`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: CHEQUE_STATUS_AR.CASHED,
+          type: cheque.type,
+          clientName: cheque.clientName,
+        },
+      });
+
       return true;
     } catch (error) {
       const appError = handleError(error);
@@ -651,6 +742,24 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         title: "تم تسجيل الشيك كمرتجع",
         description: `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع. رصيد العميل لم يتغير.`,
       });
+
+      // Log activity for bounce
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `ارتجاع شيك: ${cheque.chequeNumber} - ${cheque.amount} دينار`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: CHEQUE_STATUS_AR.BOUNCED,
+          type: cheque.type,
+          clientName: cheque.clientName,
+        },
+      });
+
       return true;
     } catch (error) {
       const appError = handleError(error);
@@ -738,6 +847,23 @@ export function useChequesOperations(): UseChequesOperationsReturn {
       toast({
         title: "تم إلغاء التحصيل",
         description: `تم إلغاء تحصيل الشيك رقم ${cheque.chequeNumber} وعكس جميع التوزيعات`,
+      });
+
+      // Log activity for reversal
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `إلغاء تحصيل شيك: ${cheque.chequeNumber}`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          previousStatus: cheque.status,
+          newStatus: CHEQUE_STATUS_AR.PENDING,
+          type: cheque.type,
+        },
       });
 
       return true;

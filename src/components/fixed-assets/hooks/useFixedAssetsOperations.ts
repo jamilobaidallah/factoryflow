@@ -18,6 +18,7 @@ import { firestore } from "@/firebase/config";
 import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
 import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
 import { createJournalEntryForDepreciation } from "@/services/journalService";
+import { logActivity } from "@/services/activityLogService";
 
 // Helper function to generate unique asset number
 const generateAssetNumber = (): string => {
@@ -45,7 +46,7 @@ interface UseFixedAssetsOperationsReturn {
     formData: FixedAssetFormData,
     editingAsset: FixedAsset | null
   ) => Promise<boolean>;
-  deleteAsset: (assetId: string) => Promise<boolean>;
+  deleteAsset: (assetId: string, asset?: FixedAsset) => Promise<boolean>;
   runDepreciation: (
     period: DepreciationPeriod,
     assets: FixedAsset[]
@@ -99,13 +100,30 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           supplier: formData.supplier,
           notes: formData.notes,
         });
+
+        // Log activity for update
+        logActivity(user.dataOwnerId, {
+          action: 'update',
+          module: 'fixed_assets',
+          targetId: editingAsset.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `تعديل أصل ثابت: ${formData.assetName}`,
+          metadata: {
+            purchaseAmount: purchaseCost,
+            depreciationRate: monthlyDepreciation,
+            assetName: formData.assetName,
+            category: formData.category,
+          },
+        });
+
         toast({
           title: "تم التحديث بنجاح",
           description: "تم تحديث بيانات الأصل الثابت",
         });
       } else {
         const assetNumber = generateAssetNumber();
-        await addDoc(assetsRef, {
+        const docRef = await addDoc(assetsRef, {
           assetNumber: assetNumber,
           assetName: formData.assetName,
           category: formData.category,
@@ -123,6 +141,23 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           notes: formData.notes,
           createdAt: new Date(),
         });
+
+        // Log activity for create
+        logActivity(user.dataOwnerId, {
+          action: 'create',
+          module: 'fixed_assets',
+          targetId: docRef.id,
+          userId: user.uid,
+          userEmail: user.email || '',
+          description: `إضافة أصل ثابت: ${formData.assetName} - ${purchaseCost} دينار`,
+          metadata: {
+            purchaseAmount: purchaseCost,
+            depreciationRate: monthlyDepreciation,
+            assetName: formData.assetName,
+            category: formData.category,
+          },
+        });
+
         toast({
           title: "تمت الإضافة بنجاح",
           description: `تم إضافة الأصل الثابت - ${assetNumber}`,
@@ -141,12 +176,28 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
     }
   };
 
-  const deleteAsset = async (assetId: string): Promise<boolean> => {
+  const deleteAsset = async (assetId: string, asset?: FixedAsset): Promise<boolean> => {
     if (!user) return false;
 
     try {
       const assetRef = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, assetId);
       await deleteDoc(assetRef);
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'fixed_assets',
+        targetId: assetId,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف أصل ثابت: ${asset?.assetName || ''}`,
+        metadata: {
+          purchaseAmount: asset?.purchaseCost,
+          assetName: asset?.assetName,
+          category: asset?.category,
+        },
+      });
+
       toast({
         title: "تم الحذف",
         description: "تم حذف الأصل الثابت بنجاح",
@@ -279,6 +330,21 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       });
 
       await batch.commit();
+
+      // Log activity for depreciation
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'fixed_assets',
+        targetId: periodLabel,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تسجيل إهلاك: ${periodLabel}`,
+        metadata: {
+          amount: totalDepreciation,
+          period: periodLabel,
+          assetsCount: activeAssets.length,
+        },
+      });
 
       // Create journal entry for depreciation (DR Depreciation Expense, CR Accumulated Depreciation)
       let journalCreated = true;
