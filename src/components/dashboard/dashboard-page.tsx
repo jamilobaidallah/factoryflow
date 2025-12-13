@@ -99,7 +99,7 @@ export default function DashboardPage() {
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const label = d.toLocaleDateString("ar-IQ", { month: "long", year: "numeric" });
+      const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
       months.push({ value, label });
     }
     return months;
@@ -318,7 +318,7 @@ export default function DashboardPage() {
       const data = monthlyDataMap.get(monthKey) || { revenue: 0, expenses: 0 };
 
       result.push({
-        month: d.toLocaleDateString("ar-IQ", { month: "short" }),
+        month: d.toLocaleDateString("en-US", { month: "short" }),
         monthKey,
         revenue: data.revenue,
         expenses: data.expenses,
