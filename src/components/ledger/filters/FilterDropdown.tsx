@@ -32,7 +32,7 @@ export function FilterDropdown({
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-[140px] sm:w-[160px] h-9 text-sm">
+        <SelectTrigger className="w-[140px] sm:w-[160px] h-9 text-sm" aria-label={label}>
           <SelectValue placeholder={placeholder || label} />
         </SelectTrigger>
         <SelectContent>

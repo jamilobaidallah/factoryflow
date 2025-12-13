@@ -1,25 +1,22 @@
-# Task: Fix Console Warnings (Autocomplete & Favicon)
+# Task: Fix Accessibility - Buttons Without Discernible Text
 
 ## Branch
-`fix/console-warnings-autocomplete-favicon`
+`fix/accessibility-aria-labels`
 
 ---
 
 ## Context
-Minor console warnings need to be addressed:
-1. Password input missing `autocomplete` attribute
-2. Missing favicon causing 404 errors
+Select/dropdown buttons are missing `aria-label` attributes, causing accessibility issues for screen readers.
 
 ---
 
 ## Plan
 
-### Task 1: Add Autocomplete Attributes to Login Form
-- [x] Add `autoComplete="email"` to email input
-- [x] Add `autoComplete="current-password"` to password input
+### Task 1: Add aria-label to FilterDropdown
+- [x] Add `aria-label={label}` to SelectTrigger
 
-### Task 2: Add Favicon
-- [x] Add factory-themed SVG icon using Next.js App Router convention (`src/app/icon.svg`)
+### Task 2: Add aria-label to RoleSelector
+- [x] Add `aria-label="اختر الدور"` to SelectTrigger
 
 ### Task 3: Verify Changes
 - [x] TypeScript check passes
@@ -33,17 +30,13 @@ Minor console warnings need to be addressed:
 
 | File | Change |
 |------|--------|
-| `src/components/auth/login-page.tsx` | Added `autoComplete="email"` (line 212) and `autoComplete="current-password"` (line 226) |
-| `src/app/icon.svg` | Created new factory-themed SVG favicon (indigo background with factory silhouette) |
+| `src/components/ledger/filters/FilterDropdown.tsx` | Added `aria-label={label}` to SelectTrigger (line 35) |
+| `src/components/users/RoleSelector.tsx` | Added `aria-label="اختر الدور"` to SelectTrigger (line 36) |
 
 ### Summary
-- **2 files changed**: 1 modified, 1 created
-- **Autocomplete**: Browser will now properly autofill email and password fields
-- **Favicon**: Simple factory icon in brand color (#4F46E5 indigo) - automatically served by Next.js App Router
-
-### Verification
-- TypeScript: No errors
-- Build: Success (only pre-existing warnings)
+- **2 files modified**
+- Screen readers can now announce the purpose of dropdown buttons
+- No new warnings introduced
 
 ---
 

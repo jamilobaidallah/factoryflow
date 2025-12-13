@@ -33,7 +33,7 @@ export function RoleSelector({
       onValueChange={(val) => onChange(val as UserRole)}
       disabled={disabled}
     >
-      <SelectTrigger className="w-[140px]">
+      <SelectTrigger className="w-[140px]" aria-label="اختر الدور">
         <SelectValue placeholder="اختر الدور" />
       </SelectTrigger>
       <SelectContent>
