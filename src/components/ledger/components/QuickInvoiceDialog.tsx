@@ -69,7 +69,7 @@ export function QuickInvoiceDialog({
   onClose,
   pendingData,
 }: QuickInvoiceDialogProps) {
-  const { user } = useUser();
+  const { user, role } = useUser();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -209,7 +209,7 @@ export function QuickInvoiceDialog({
       const invoiceDate = new Date(formData.invoiceDate);
       const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      const service = createLedgerService(user.dataOwnerId);
+      const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
       const result = await service.createInvoice({
         clientName: pendingData.clientName,
         clientAddress: formData.clientAddress,

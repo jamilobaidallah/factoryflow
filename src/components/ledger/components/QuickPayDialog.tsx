@@ -29,7 +29,7 @@ function getTodayDateString(): string {
 }
 
 export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDialogProps) {
-  const { user } = useUser();
+  const { user, role } = useUser();
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(getTodayDateString);
@@ -61,7 +61,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
     setLoading(true);
     try {
-      const service = createLedgerService(user.dataOwnerId);
+      const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
       const result = await service.addQuickPayment({
         amount: paymentAmount,

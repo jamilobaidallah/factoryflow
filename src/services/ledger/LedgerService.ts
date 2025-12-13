@@ -53,6 +53,7 @@ import {
   addCOGSJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
+import { logActivity } from "@/services/activityLogService";
 
 // Import types
 import type {
@@ -116,9 +117,13 @@ function sanitizeFileName(filename: string): string {
  */
 export class LedgerService {
   private userId: string;
+  private userEmail: string;
+  private userRole: string;
 
-  constructor(userId: string) {
+  constructor(userId: string, userEmail?: string, userRole?: string) {
     this.userId = userId;
+    this.userEmail = userEmail || '';
+    this.userRole = userRole || 'owner';
   }
 
   // ============================================
@@ -359,6 +364,21 @@ export class LedgerService {
         };
       }
 
+      // Log activity (fire and forget - don't block the main operation)
+      logActivity(this.userId, {
+        action: 'create',
+        module: 'ledger',
+        targetId: ledgerDocRef.id,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إنشاء حركة مالية: ${formData.description}`,
+        metadata: {
+          amount: amount,
+          type: entryType,
+          category: formData.category,
+        },
+      });
+
       return { success: true, data: ledgerDocRef.id };
     } catch (error) {
       const { message, type } = handleError(error);
@@ -547,6 +567,21 @@ export class LedgerService {
         };
       }
 
+      // Log activity (fire and forget - don't block the main operation)
+      logActivity(this.userId, {
+        action: 'create',
+        module: 'ledger',
+        targetId: ledgerDocRef.id,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إنشاء حركة مالية: ${formData.description}`,
+        metadata: {
+          amount: totalAmount,
+          type: entryType,
+          category: formData.category,
+        },
+      });
+
       return { success: true, data: ledgerDocRef.id };
     } catch (error) {
       const { message, type } = handleError(error);
@@ -585,6 +620,20 @@ export class LedgerService {
         date: new Date(formData.date),
         reference: formData.reference,
         notes: formData.notes,
+      });
+
+      // Log activity (fire and forget - don't block the main operation)
+      logActivity(this.userId, {
+        action: 'update',
+        module: 'ledger',
+        targetId: entryId,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `تعديل حركة مالية: ${formData.description}`,
+        metadata: {
+          amount: parseFloat(formData.amount),
+          type: entryType,
+        },
       });
 
       return { success: true };
@@ -732,6 +781,20 @@ export class LedgerService {
         await rollbackInventoryChanges(this.userId, inventoryChanges);
         throw batchError;
       }
+
+      // Log activity (fire and forget - don't block the main operation)
+      logActivity(this.userId, {
+        action: 'delete',
+        module: 'ledger',
+        targetId: entry.id,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `حذف حركة مالية: ${entry.description}`,
+        metadata: {
+          amount: entry.amount,
+          transactionId: entry.transactionId,
+        },
+      });
 
       return { success: true, deletedRelatedCount };
     } catch (error) {
@@ -1212,6 +1275,10 @@ export class LedgerService {
 /**
  * Factory function to create a LedgerService instance
  */
-export function createLedgerService(userId: string): LedgerService {
-  return new LedgerService(userId);
+export function createLedgerService(
+  userId: string,
+  userEmail?: string,
+  userRole?: string
+): LedgerService {
+  return new LedgerService(userId, userEmail, userRole);
 }

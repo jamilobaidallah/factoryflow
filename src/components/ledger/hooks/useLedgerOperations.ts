@@ -20,7 +20,7 @@ import type {
 } from "../types/ledger";
 
 export function useLedgerOperations() {
-  const { user } = useUser();
+  const { user, role } = useUser();
   const { toast } = useToast();
 
   /**
@@ -47,7 +47,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.dataOwnerId);
+    const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
     try {
       if (editingEntry) {
@@ -152,7 +152,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.dataOwnerId);
+    const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
     try {
       const result = await service.deleteLedgerEntry(entry);
@@ -194,7 +194,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.dataOwnerId);
+    const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
     try {
       const result = await service.addPaymentToEntry(entry, formData);
@@ -235,7 +235,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.dataOwnerId);
+    const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
     try {
       const result = await service.addChequeToEntry(entry, formData);
@@ -288,7 +288,7 @@ export function useLedgerOperations() {
   ): Promise<boolean> => {
     if (!user) { return false; }
 
-    const service = createLedgerService(user.dataOwnerId);
+    const service = createLedgerService(user.dataOwnerId, user.email || '', role || 'owner');
 
     try {
       const result = await service.addInventoryToEntry(entry, formData);
