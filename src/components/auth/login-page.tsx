@@ -209,6 +209,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading || rateLimitStatus?.isLocked}
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -222,6 +223,7 @@ export default function LoginPage() {
                 required
                 disabled={loading || rateLimitStatus?.isLocked}
                 minLength={6}
+                autoComplete="current-password"
               />
             </div>
             {isLogin && (
