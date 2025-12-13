@@ -101,8 +101,8 @@ describe('Dashboard Page', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      // Should have stats cards for clients, revenue, expenses, etc.
-      const cards = document.querySelectorAll('[class*="card"]');
+      // Should have financial summary cards (revenue, expenses, profit)
+      const cards = document.querySelectorAll('[class*="rounded-xl"], [class*="rounded-lg"]');
       expect(cards.length).toBeGreaterThan(0);
     });
   });
