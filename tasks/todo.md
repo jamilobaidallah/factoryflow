@@ -1,54 +1,44 @@
-# Task: RBAC Phase 6 - UI Polish for Roles
+# Task: Fix Role Change Error
 
 ## Branch
-`feature/rbac-ui-polish`
+`fix/role-change-error`
 
 ---
 
-## Context
-Most RBAC UI is already implemented. Need to polish role badge styling and add mobile visibility.
+## Problem
+When owner changes a member's role on /users page:
+1. Error toast appears: "حدث خطأ أثناء تحديث الدور"
+2. But after refresh, role IS changed correctly
 
-**Already Done:**
-- `usePermissions` hook exists with `can`, `role`, `isOwner`, `canWrite`
-- `PermissionGate` component wraps all Add/Edit/Delete buttons across all pages
-- Role badge exists in header (desktop only)
-- Admin nav group hidden for non-owners in sidebar
+## Root Cause
+In `userService.ts`, `updateUserRole` updates two locations:
+1. `/users/{ownerId}/members/{memberUid}` - **succeeds** (owner can write to own subcollections)
+2. `/users/{memberUid}` - **fails** (security rules block owner from updating another user's document)
+
+**Firestore rule (line 102):**
+```javascript
+allow write: if isDataOwner(userId);
+```
+This only allows users to update their OWN document.
+
+## Solution
+Add a new rule to allow owners to update their team members' documents:
+```javascript
+allow update: if isAuthenticated()
+  && resource.data.ownerId == request.auth.uid
+  && isRoleOwner(request.auth.uid);
+```
+
+This allows:
+- Owner to update user docs where `ownerId` matches the owner's uid
+- Only if the current user has `owner` role
 
 ---
 
-## Plan
-
-### Task 1: Add Role-Specific Badge Colors
-- [x] Update header.tsx with role-specific colors
-
-### Task 2: Add Role Badge to Mobile Nav
-- [x] Import usePermissions and USER_ROLE_LABELS
-- [x] Add role badge in the Sheet header
-
-### Task 3: Verify Changes
-- [x] TypeScript check passes
-- [x] Build succeeds
-
----
-
-## Review
-
-### Changes Made
-
+## Files Modified
 | File | Change |
 |------|--------|
-| `src/components/layout/header.tsx` | Added `ROLE_BADGE_STYLES` constant with role-specific colors, updated badge to use `cn()` with dynamic styles |
-| `src/components/layout/mobile-nav.tsx` | Added imports for usePermissions, USER_ROLE_LABELS, UserRole. Added ROLE_BADGE_STYLES. Added role badge to mobile menu Sheet header |
-
-### Role Badge Styles
-- **owner (مالك)**: `bg-primary/10 text-primary` (indigo)
-- **accountant (محاسب)**: `bg-blue-100 text-blue-700` (blue)
-- **viewer (مشاهد)**: `bg-slate-100 text-slate-600` (gray)
-
-### Summary
-- **2 files modified**
-- Role badges now show on both desktop header and mobile menu
-- Role-specific colors provide visual distinction between roles
+| `firestore.rules` | Added rule for owners to update team member documents |
 
 ---
 

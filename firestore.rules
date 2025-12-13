@@ -97,9 +97,14 @@ service cloud.firestore {
         resource.data.role == 'owner'
       );
 
-      // Write own profile: only data owner
-      // Note: Role changes should be controlled by owner only in future
+      // Write own profile: data owner can write their own profile
       allow write: if isDataOwner(userId);
+
+      // Allow owner to update team member's role
+      // Owner can update users where ownerId matches the owner's uid
+      allow update: if isAuthenticated()
+        && resource.data.ownerId == request.auth.uid
+        && isRoleOwner(request.auth.uid);
 
       // ============================================
       // SUBCOLLECTIONS - Data Collections
