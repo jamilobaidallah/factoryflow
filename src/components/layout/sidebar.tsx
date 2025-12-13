@@ -29,6 +29,7 @@ import {
   ChevronLeft,
   FileText,
   UserCog,
+  Activity,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -119,6 +120,7 @@ const adminGroup: NavGroup = {
   defaultOpen: false,
   items: [
     { label: "إدارة المستخدمين", href: "/users", icon: UserCog },
+    { label: "سجل النشاطات", href: "/activity", icon: Activity },
   ],
 };
 
