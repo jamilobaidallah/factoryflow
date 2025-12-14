@@ -5,46 +5,55 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
 import type { AlertData, UseReceivablesAlertsReturn } from "../types/dashboard.types";
-import { INCOME_TYPES } from "../constants/dashboard.constants";
+import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
 
 /** Outstanding payment statuses */
 const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
 
 /**
- * Hook for fetching unpaid receivables alerts
- * Queries AR entries with unpaid or partial payment status
+ * Hook for fetching unpaid receivables and payables alerts
+ * Queries AR/AP entries with unpaid or partial payment status
  */
 export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
   const { user } = useUser();
   const [unpaidReceivables, setUnpaidReceivables] = useState<AlertData>({ count: 0, total: 0 });
+  const [unpaidPayables, setUnpaidPayables] = useState<AlertData>({ count: 0, total: 0 });
 
   useEffect(() => {
     if (!user) return;
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
-      let count = 0;
-      let total = 0;
+      let receivablesCount = 0;
+      let receivablesTotal = 0;
+      let payablesCount = 0;
+      let payablesTotal = 0;
 
       snapshot.forEach((doc) => {
         const data = doc.data();
+        const outstanding = getOutstandingAmount(data);
 
-        // Only count AR entries (income type) with outstanding balances
+        // Count AR entries (income type) with outstanding balances
         if (isOutstandingReceivable(data)) {
-          count++;
-          // Use remainingBalance if available, otherwise use amount for unpaid entries
-          const outstanding = getOutstandingAmount(data);
-          total += outstanding;
+          receivablesCount++;
+          receivablesTotal += outstanding;
+        }
+
+        // Count AP entries (expense type) with outstanding balances
+        if (isOutstandingPayable(data)) {
+          payablesCount++;
+          payablesTotal += outstanding;
         }
       });
 
-      setUnpaidReceivables({ count, total });
+      setUnpaidReceivables({ count: receivablesCount, total: receivablesTotal });
+      setUnpaidPayables({ count: payablesCount, total: payablesTotal });
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  return { unpaidReceivables };
+  return { unpaidReceivables, unpaidPayables };
 }
 
 /** Check if entry is an outstanding receivable */
@@ -65,6 +74,26 @@ function isOutstandingReceivable(data: Record<string, unknown>): boolean {
   const hasPaymentTracking = data.paymentStatus !== undefined;
 
   return (isARAPEntry || hasPaymentTracking) && isIncomeType && hasOutstandingStatus;
+}
+
+/** Check if entry is an outstanding payable */
+function isOutstandingPayable(data: Record<string, unknown>): boolean {
+  // Check if it's an AR/AP entry - use truthy check for compatibility
+  const isARAPEntry = Boolean(data.isARAPEntry);
+
+  // Check if it's an expense type (payable)
+  const isExpenseType = data.type === EXPENSE_TYPE;
+
+  // Check if payment status indicates outstanding balance
+  const hasOutstandingStatus = OUTSTANDING_STATUSES.includes(
+    data.paymentStatus as typeof OUTSTANDING_STATUSES[number]
+  );
+
+  // If entry has paymentStatus, it's definitely an AR/AP entry
+  // This handles legacy entries that might not have isARAPEntry flag
+  const hasPaymentTracking = data.paymentStatus !== undefined;
+
+  return (isARAPEntry || hasPaymentTracking) && isExpenseType && hasOutstandingStatus;
 }
 
 /** Get the outstanding amount for an entry */

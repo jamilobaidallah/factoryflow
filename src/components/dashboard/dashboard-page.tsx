@@ -49,7 +49,7 @@ export default function DashboardPage() {
   } = useDashboardData();
 
   const { chequesDueSoon } = useChequesAlerts();
-  const { unpaidReceivables } = useReceivablesAlerts();
+  const { unpaidReceivables, unpaidPayables } = useReceivablesAlerts();
 
   // Generate available months for dropdown
   const availableMonths = useMemo<MonthOption[]>(() => {
@@ -207,6 +207,7 @@ export default function DashboardPage() {
         <DashboardAlerts
           chequesDueSoon={chequesDueSoon}
           unpaidReceivables={unpaidReceivables}
+          unpaidPayables={unpaidPayables}
         />
 
         <DashboardBarChart
