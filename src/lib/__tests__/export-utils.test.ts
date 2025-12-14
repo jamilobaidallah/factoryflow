@@ -1,10 +1,9 @@
 /**
  * Unit Tests for Export Utilities
- * Tests Excel, PDF, and HTML export functions
+ * Tests Excel and HTML export functions
  */
 
 import ExcelJS from 'exceljs';
-import jsPDF from 'jspdf';
 
 // Mock external dependencies
 jest.mock('exceljs', () => {
@@ -28,18 +27,6 @@ jest.mock('exceljs', () => {
     Workbook: jest.fn(() => mockWorkbook),
   };
 });
-
-jest.mock('jspdf', () => {
-  return jest.fn().mockImplementation(() => ({
-    setFont: jest.fn(),
-    setFontSize: jest.fn(),
-    text: jest.fn(),
-    save: jest.fn(),
-    lastAutoTable: { finalY: 100 },
-  }));
-});
-
-jest.mock('jspdf-autotable', () => jest.fn());
 
 // Mock browser APIs
 const mockCreateObjectURL = jest.fn(() => 'blob:test-url');
@@ -87,11 +74,8 @@ import {
   exportPaymentsToExcel,
   exportChequesToExcel,
   exportInventoryToExcel,
-  exportIncomeStatementToPDF,
   exportLedgerToHTML,
   exportIncomeStatementToHTML,
-  exportLedgerToPDF,
-  exportBalanceSheetToPDF,
 } from '../export-utils';
 
 describe('Export Utilities', () => {
@@ -277,136 +261,6 @@ describe('Export Utilities', () => {
     });
   });
 
-  describe('exportIncomeStatementToPDF', () => {
-    it('should create income statement PDF', () => {
-      const data = {
-        revenues: [
-          { category: 'بيع', amount: 10000 },
-          { category: 'خدمات', amount: 5000 },
-        ],
-        expenses: [
-          { category: 'رواتب', amount: 3000 },
-          { category: 'إيجار', amount: 1000 },
-        ],
-        totalRevenue: 15000,
-        totalExpenses: 4000,
-        netIncome: 11000,
-      };
-
-      exportIncomeStatementToPDF(data, '2024-01-01', '2024-01-31', 'income-statement');
-
-      expect(jsPDF).toHaveBeenCalled();
-    });
-
-    it('should use default filename', () => {
-      const data = {
-        revenues: [],
-        expenses: [],
-        totalRevenue: 0,
-        totalExpenses: 0,
-        netIncome: 0,
-      };
-
-      exportIncomeStatementToPDF(data, '2024-01-01', '2024-01-31');
-      expect(jsPDF).toHaveBeenCalled();
-    });
-
-    it('should translate Arabic categories to English', () => {
-      const data = {
-        revenues: [{ category: 'بيع', amount: 1000 }],
-        expenses: [{ category: 'راتب عمل', amount: 500 }],
-        totalRevenue: 1000,
-        totalExpenses: 500,
-        netIncome: 500,
-      };
-
-      exportIncomeStatementToPDF(data, '2024-01-01', '2024-01-31');
-      expect(jsPDF).toHaveBeenCalled();
-    });
-  });
-
-  describe('exportLedgerToPDF', () => {
-    it('should create ledger PDF', () => {
-      const entries = [
-        {
-          transactionId: 'TX-001',
-          date: new Date('2024-01-15'),
-          type: 'دخل',
-          category: 'بيع',
-          amount: 1000,
-        },
-      ];
-
-      exportLedgerToPDF(entries, 'ledger');
-      expect(jsPDF).toHaveBeenCalled();
-    });
-
-    it('should limit entries to 50 for PDF', () => {
-      const entries = Array.from({ length: 100 }, (_, i) => ({
-        transactionId: `TX-${i}`,
-        date: new Date(),
-        type: 'دخل',
-        category: 'بيع',
-        amount: 100,
-      }));
-
-      exportLedgerToPDF(entries);
-      expect(jsPDF).toHaveBeenCalled();
-    });
-
-    it('should handle entries with non-Date dates', () => {
-      const entries = [
-        {
-          transactionId: 'TX-001',
-          date: '2024-01-15',
-          type: 'دخل',
-          category: 'بيع',
-          amount: 1000,
-        },
-      ];
-
-      exportLedgerToPDF(entries);
-      expect(jsPDF).toHaveBeenCalled();
-    });
-  });
-
-  describe('exportBalanceSheetToPDF', () => {
-    it('should create balance sheet PDF', () => {
-      const data = {
-        assets: [
-          { category: 'نقد', amount: 50000 },
-          { category: 'مخزون', amount: 30000 },
-        ],
-        liabilities: [
-          { category: 'ذمم دائنة', amount: 10000 },
-        ],
-        equity: [
-          { category: 'رأس المال', amount: 70000 },
-        ],
-        totalAssets: 80000,
-        totalLiabilities: 10000,
-        totalEquity: 70000,
-      };
-
-      exportBalanceSheetToPDF(data, '2024-01-31', 'balance-sheet');
-      expect(jsPDF).toHaveBeenCalled();
-    });
-
-    it('should use default filename', () => {
-      const data = {
-        assets: [],
-        liabilities: [],
-        equity: [],
-        totalAssets: 0,
-        totalLiabilities: 0,
-        totalEquity: 0,
-      };
-
-      exportBalanceSheetToPDF(data, '2024-01-31');
-      expect(jsPDF).toHaveBeenCalled();
-    });
-  });
-
   describe('exportLedgerToHTML', () => {
     it('should open new window with HTML content', () => {
       const entries = [
@@ -496,43 +350,5 @@ describe('Export Utilities', () => {
 
       expect(() => exportIncomeStatementToHTML(data, '2024-01-01', '2024-01-31')).not.toThrow();
     });
-  });
-});
-
-describe('Translation Function', () => {
-  // Test translation functionality through exported functions
-  it('should translate known Arabic terms to English in PDF exports', () => {
-    const data = {
-      revenues: [
-        { category: 'بيع', amount: 1000 },
-        { category: 'شراء', amount: 500 },
-      ],
-      expenses: [
-        { category: 'راتب عمل', amount: 300 },
-        { category: 'مصاريف تشغيلية', amount: 200 },
-      ],
-      totalRevenue: 1500,
-      totalExpenses: 500,
-      netIncome: 1000,
-    };
-
-    // This should not throw and should translate categories
-    expect(() => {
-      exportIncomeStatementToPDF(data, '2024-01-01', '2024-12-31');
-    }).not.toThrow();
-  });
-
-  it('should keep untranslated terms as-is', () => {
-    const data = {
-      revenues: [{ category: 'فئة غير معروفة', amount: 1000 }],
-      expenses: [],
-      totalRevenue: 1000,
-      totalExpenses: 0,
-      netIncome: 1000,
-    };
-
-    expect(() => {
-      exportIncomeStatementToPDF(data, '2024-01-01', '2024-12-31');
-    }).not.toThrow();
   });
 });

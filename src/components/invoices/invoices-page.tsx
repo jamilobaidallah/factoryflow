@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +51,14 @@ export default function InvoicesPage() {
   // Form state
   const [formData, setFormData] = useState<InvoiceFormData>(initialFormData);
   const [items, setItems] = useState<InvoiceItem[]>([initialInvoiceItem]);
+
+  // Memoized calculations for statistics cards
+  const invoiceStats = useMemo(() => ({
+    total: invoices.length,
+    paidCount: invoices.filter((inv) => inv.status === "paid").length,
+    overdueCount: invoices.filter((inv) => inv.status === "overdue").length,
+    totalValue: invoices.reduce((sum, inv) => sum + inv.total, 0),
+  }), [invoices]);
 
   const resetForm = () => {
     setFormData(initialFormData);
@@ -155,7 +163,7 @@ export default function InvoicesPage() {
             <CardTitle className="text-sm font-medium text-gray-600">إجمالي الفواتير</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{invoices.length}</div>
+            <div className="text-2xl font-bold">{invoiceStats.total}</div>
           </CardContent>
         </Card>
         <Card>
@@ -164,7 +172,7 @@ export default function InvoicesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {invoices.filter((inv) => inv.status === "paid").length}
+              {invoiceStats.paidCount}
             </div>
           </CardContent>
         </Card>
@@ -174,7 +182,7 @@ export default function InvoicesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {invoices.filter((inv) => inv.status === "overdue").length}
+              {invoiceStats.overdueCount}
             </div>
           </CardContent>
         </Card>
@@ -184,7 +192,7 @@ export default function InvoicesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {invoices.reduce((sum, inv) => sum + inv.total, 0).toFixed(2)} د.أ
+              {invoiceStats.totalValue.toFixed(2)} د.أ
             </div>
           </CardContent>
         </Card>
@@ -359,6 +367,8 @@ export default function InvoicesPage() {
                 src={selectedImageUrl}
                 alt="صورة الفاتورة"
                 className="max-w-full max-h-full object-contain"
+                loading="lazy"
+                decoding="async"
               />
             </div>
           </DialogContent>

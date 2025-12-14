@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useUser } from "@/firebase/provider";
 import { formatNumber } from "@/lib/date-utils";
 import {
@@ -242,8 +242,18 @@ export default function ReportsPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Helper function for CSV conversion
+  const convertToCSV = useCallback((data: Record<string, unknown>[]): string => {
+    if (data.length === 0) {
+      return "";
+    }
+    const headers = Object.keys(data[0]).join(",");
+    const rows = data.map((row) => Object.values(row).join(","));
+    return [headers, ...rows].join("\n");
+  }, []);
+
   // Export handlers (using filteredData for period-filtered exports)
-  const handleExportPDF = () => {
+  const handleExportPDF = useCallback(() => {
     // Use HTML export for proper Arabic font support
     // Opens in new tab with print dialog for saving as PDF
     exportIncomeStatementToHTML(
@@ -263,9 +273,9 @@ export default function ReportsPage() {
       dateRange.start.toISOString().split("T")[0],
       dateRange.end.toISOString().split("T")[0]
     );
-  };
+  }, [filteredData, dateRange]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = useCallback(() => {
     const revenueData = Object.entries(filteredData.revenueByCategory).map(
       ([category, amount]) => ({
         الفئة: category,
@@ -294,9 +304,9 @@ export default function ReportsPage() {
     ];
 
     exportToExcel(allData, `تقرير_مالي_${periodStart}_${periodEnd}`, "التقرير المالي");
-  };
+  }, [filteredData, dateRange]);
 
-  const handleExportCSV = () => {
+  const handleExportCSV = useCallback(() => {
     const data = [
       ...Object.entries(filteredData.revenueByCategory).map(([cat, amt]) => ({
         النوع: "إيراد",
@@ -316,35 +326,26 @@ export default function ReportsPage() {
     link.href = URL.createObjectURL(blob);
     link.download = `تقرير_مالي_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
-  };
+  }, [filteredData, convertToCSV]);
 
-  const convertToCSV = (data: Record<string, unknown>[]): string => {
-    if (data.length === 0) {
-      return "";
-    }
-    const headers = Object.keys(data[0]).join(",");
-    const rows = data.map((row) => Object.values(row).join(","));
-    return [headers, ...rows].join("\n");
-  };
-
-  const handleReportClick = (reportId: string) => {
+  const handleReportClick = useCallback((reportId: string) => {
     // Toggle: click same card to close, different card to switch
     setActiveReport((prev) => (prev === reportId ? null : reportId));
-  };
+  }, []);
 
-  const handleCustomDateClick = () => {
+  const handleCustomDateClick = useCallback(() => {
     setShowDatePickerModal(true);
-  };
+  }, []);
 
-  const handleCustomDateConfirm = (range: CustomDateRange) => {
+  const handleCustomDateConfirm = useCallback((range: CustomDateRange) => {
     setCustomDateRange(range);
     setSelectedPeriod("custom");
     setShowDatePickerModal(false);
-  };
+  }, []);
 
-  const handleDonutDetailsClick = () => {
+  const handleDonutDetailsClick = useCallback(() => {
     detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  }, []);
 
   return (
     <div dir="rtl" className="space-y-6 pb-8">

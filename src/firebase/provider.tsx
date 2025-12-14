@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { Firestore, doc, getDoc, setDoc, collection, getDocs, limit, query } from 'firebase/firestore';
 import { auth, firestore, storage } from './config';
@@ -176,7 +176,7 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
     return () => unsubscribe();
   }, []);
 
-  const signOutUser = async () => {
+  const signOutUser = useCallback(async () => {
     try {
       await firebaseSignOut(auth);
       setUser(null);
@@ -185,10 +185,18 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
       console.error('Error signing out:', error);
       throw error;
     }
-  };
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    user,
+    role,
+    loading,
+    signOut: signOutUser,
+  }), [user, role, loading, signOutUser]);
 
   return (
-    <FirebaseContext.Provider value={{ user, role, loading, signOut: signOutUser }}>
+    <FirebaseContext.Provider value={contextValue}>
       {children}
     </FirebaseContext.Provider>
   );

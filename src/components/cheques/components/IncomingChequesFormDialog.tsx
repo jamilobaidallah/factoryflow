@@ -263,6 +263,8 @@ export function IncomingChequesFormDialog({
                       src={imagePreview}
                       alt="معاينة صورة الشيك"
                       className="max-h-32 rounded-md border object-contain"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <Button
                       type="button"

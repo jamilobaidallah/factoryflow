@@ -663,6 +663,8 @@ export function QuickInvoiceDialog({
               src={formData.invoiceImageUrl}
               alt="صورة الفاتورة"
               className="max-w-full max-h-full object-contain"
+              loading="lazy"
+              decoding="async"
             />
           </div>
         </DialogContent>

@@ -117,24 +117,6 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-// Mock recharts
-jest.mock('recharts', () => ({
-  LineChart: ({ children }: any) => <div>{children}</div>,
-  Line: () => null,
-  BarChart: ({ children }: any) => <div>{children}</div>,
-  Bar: () => null,
-  PieChart: ({ children }: any) => <div>{children}</div>,
-  Pie: () => null,
-  Cell: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  CartesianGrid: () => null,
-  Tooltip: () => null,
-  Legend: () => null,
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
-  ComposedChart: ({ children }: any) => <div>{children}</div>,
-}));
-
 describe('Integration: Complete Business Workflow', () => {
   beforeEach(() => {
     // Reset mock data

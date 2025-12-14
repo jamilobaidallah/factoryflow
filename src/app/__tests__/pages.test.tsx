@@ -53,24 +53,6 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: jest.fn(() => Promise.resolve({ data: () => ({ count: 0 }) })),
 }));
 
-// Mock recharts to avoid rendering issues
-jest.mock('recharts', () => ({
-  LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
-  Line: () => null,
-  BarChart: ({ children }: any) => <div data-testid="bar-chart">{children}</div>,
-  Bar: () => null,
-  PieChart: ({ children }: any) => <div data-testid="pie-chart">{children}</div>,
-  Pie: () => null,
-  Cell: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  CartesianGrid: () => null,
-  Tooltip: () => null,
-  Legend: () => null,
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
-  ComposedChart: ({ children }: any) => <div data-testid="composed-chart">{children}</div>,
-}));
-
 // Mock toast
 jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: jest.fn() }),
