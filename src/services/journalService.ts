@@ -19,6 +19,7 @@ import {
   writeBatch,
   Timestamp,
   WriteBatch,
+  limit,
 } from 'firebase/firestore';
 import {
   Account,
@@ -122,7 +123,8 @@ async function deleteJournalEntriesByField(
 export async function hasChartOfAccounts(userId: string): Promise<boolean> {
   validateUserId(userId);
   const accountsRef = collection(firestore, getAccountsPath(userId));
-  const snapshot = await getDocs(query(accountsRef));
+  // Only need to check if ANY accounts exist, so limit to 1
+  const snapshot = await getDocs(query(accountsRef, limit(1)));
   return !snapshot.empty;
 }
 
@@ -621,7 +623,8 @@ export async function getJournalEntries(
 ): Promise<ServiceResult<JournalEntry[]>> {
   try {
     const journalRef = collection(firestore, getJournalEntriesPath(userId));
-    const q = query(journalRef, orderBy('date', 'desc'));
+    // Safety limit to prevent fetching unbounded data
+    const q = query(journalRef, orderBy('date', 'desc'), limit(5000));
 
     const snapshot = await getDocs(q);
     let entries: JournalEntry[] = snapshot.docs.map((doc) => ({

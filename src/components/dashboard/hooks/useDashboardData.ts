@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, limit, orderBy } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
 import { toDate } from "@/lib/firestore-utils";
@@ -50,11 +50,15 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [isLoading, setIsLoading] = useState(true);
 
   // Load ledger data
+  // NOTE: Ideal solution would be pre-computed counters via Cloud Functions.
+  // This uses a safety limit to prevent excessive reads while maintaining functionality.
   useEffect(() => {
     if (!user) return;
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
+    // Safety limit to prevent excessive Firestore reads - aggregations will be based on most recent 5000 entries
+    const ledgerQuery = query(ledgerRef, orderBy("date", "desc"), limit(5000));
+    const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
       let revenue = 0;
       let expenses = 0;
       const transactions: DashboardLedgerEntry[] = [];
@@ -115,7 +119,9 @@ export function useDashboardData(): UseDashboardDataReturn {
     if (!user) return;
 
     const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-    const unsubscribe = onSnapshot(paymentsRef, (snapshot) => {
+    // Safety limit to prevent excessive Firestore reads
+    const paymentsQuery = query(paymentsRef, limit(5000));
+    const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
       let cashIn = 0;
       let cashOut = 0;
 

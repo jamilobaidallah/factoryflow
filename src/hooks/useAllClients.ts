@@ -7,6 +7,9 @@
  * 3. Clients collection (optional - for ledger page)
  *
  * Returns a deduplicated, sorted list for use in client dropdown components.
+ *
+ * Performance: Includes a 5-minute in-memory cache to prevent redundant queries
+ * when multiple components use this hook simultaneously.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,6 +19,14 @@ import { useUser } from '@/firebase/provider';
 import { safeAdd } from '@/lib/currency';
 
 type ClientSource = 'ledger' | 'partner' | 'client' | 'both' | 'multiple';
+
+// Module-level cache for client data (shared across all hook instances)
+interface CacheEntry {
+  data: ClientInfo[];
+  timestamp: number;
+}
+const clientsCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 interface ClientInfo {
   name: string;
@@ -45,10 +56,23 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClients = useCallback(async () => {
+  const fetchClients = useCallback(async (bypassCache = false) => {
     if (!user) {
       setLoading(false);
       return;
+    }
+
+    // Generate cache key based on user and options
+    const cacheKey = `${user.dataOwnerId}-${includeClientsCollection}`;
+
+    // Check cache first (unless bypassing)
+    if (!bypassCache) {
+      const cached = clientsCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        setClients(cached.data);
+        setLoading(false);
+        return;
+      }
     }
 
     setLoading(true);
@@ -169,6 +193,12 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
         a.name.localeCompare(b.name, 'ar')
       );
 
+      // Store in cache
+      clientsCache.set(cacheKey, {
+        data: clientsArray,
+        timestamp: Date.now(),
+      });
+
       setClients(clientsArray);
     } catch (err) {
       console.error('Error fetching clients:', err);
@@ -185,11 +215,16 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
   // Simple array of names for easy filtering
   const clientNames = clients.map((c) => c.name);
 
+  // Refetch bypasses cache to get fresh data
+  const refetch = useCallback(() => {
+    fetchClients(true);
+  }, [fetchClients]);
+
   return {
     clients,
     clientNames,
     loading,
     error,
-    refetch: fetchClients,
+    refetch,
   };
 }

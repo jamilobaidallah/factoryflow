@@ -7,7 +7,8 @@ import {
   doc,
   query,
   Timestamp,
-  deleteDoc
+  deleteDoc,
+  limit
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 
@@ -66,7 +67,8 @@ export async function createBackup(userId: string): Promise<BackupData> {
     try {
       // Use correct user-specific path
       const collectionRef = collection(firestore, `users/${userId}/${collectionName}`);
-      const q = query(collectionRef);
+      // Safety limit to prevent browser crashes with very large datasets
+      const q = query(collectionRef, limit(10000));
       const snapshot = await getDocs(q);
 
       const documents = snapshot.docs.map((doc) => {

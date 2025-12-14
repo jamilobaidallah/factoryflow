@@ -162,7 +162,8 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
       } finally {
         setIsLoading(false);
       }
-    }, 300); // Debounce 300ms
+    }, 400); // Debounce 400ms - balances responsiveness with query reduction
+    // NOTE: For production scale, consider Algolia or ElasticSearch for server-side search
 
     return () => clearTimeout(searchTimeout);
   }, [query, user]);

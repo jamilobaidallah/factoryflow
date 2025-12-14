@@ -1,7 +1,8 @@
 'use client';
 
-import ExcelJS from 'exceljs';
 import { formatShortDate, formatNumber } from './date-utils';
+
+// ExcelJS is dynamically imported only when needed to reduce bundle size (~23MB)
 
 /**
  * Export data to Excel file
@@ -14,6 +15,9 @@ export async function exportToExcel(
   filename: string,
   sheetName: string = 'Sheet1'
 ): Promise<void> {
+  // Dynamically import ExcelJS only when exporting
+  const ExcelJS = (await import('exceljs')).default;
+
   // Create a new workbook
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
@@ -44,7 +48,7 @@ export async function exportToExcel(
   });
 
   // Auto-fit columns
-  worksheet.columns.forEach((column: Partial<ExcelJS.Column>) => {
+  worksheet.columns.forEach((column) => {
     if (column) {
       column.width = 15;
     }
