@@ -1,7 +1,7 @@
-# Task: Add Payables Alert to Dashboard
+# Task: Redesign Reports Page
 
 ## Branch
-`feature/payables-alert`
+`feature/reports-redesign`
 
 ---
 
@@ -12,66 +12,87 @@
 ## Plan
 
 ### Problem
-The dashboard "يحتاج انتباهك" section currently only shows:
-- ✅ شيكات تستحق قريباً (cheques due soon)
-- ✅ ذمم غير محصلة (receivables - money owed TO us)
-- ❌ Missing: ذمم مستحقة علينا (payables - money WE owe to suppliers)
+The current reports page uses an outdated 8-tab design that doesn't match the modern dashboard-style design used in the dashboard and ledger pages. It lacks:
+- Period comparison functionality
+- Visual charts (bar/donut)
+- Auto-generated insights
+- Quick access report cards
+- Modern styling with animations
 
 ### Solution
-Add a third alert for **payables** - unpaid expense entries where we owe money to suppliers/vendors.
-
-### Alert Priority Order (top to bottom)
-| Alert | Type | Color | Priority |
-|-------|------|-------|----------|
-| شيكات تستحق قريباً | Cheques | rose (pulsing) | Highest |
-| ذمم مستحقة علينا | Payables | orange | High |
-| ذمم غير محصلة | Receivables | amber | Medium |
+Redesign the reports page to match the dashboard/ledger pages with:
+1. Modern header with export dropdown
+2. Period selection bar with quick buttons + comparison dropdown
+3. Summary cards WITH comparison % change
+4. Charts row (bar chart + donut chart)
+5. Quick reports cards (replaces 8 tabs)
+6. Auto-generated insights section
+7. Detailed tables with drill-down capability
 
 ---
 
 ## Todo Items
 
-### 1. Update Constants
-- [x] Add new labels to `DASHBOARD_LABELS` in `dashboard.constants.ts`:
-  - `unpaidPayables: "ذمم مستحقة علينا"`
-  - `dueInvoices: "فاتورة مستحقة"`
+### Phase 1: Setup Types & Constants
+- [x] Create `reports.types.ts` with interfaces
+- [x] Create `reports.constants.ts` with labels and options
 
-### 2. Update Types
-- [x] Update `DashboardAlertsProps` in `dashboard.types.ts` to include `unpaidPayables: AlertData`
-- [x] Update `UseReceivablesAlertsReturn` to include `unpaidPayables: AlertData`
+### Phase 2: Comparison & Insights Hooks
+- [x] Create `useReportsComparison.ts`
+- [x] Create `useReportsInsights.ts`
 
-### 3. Update Hook
-- [x] Modify `useReceivablesAlerts.ts` to:
-  - Add state for payables: `unpaidPayables`
-  - Query expense entries (`type === 'مصروف'`) with `paymentStatus` in `['unpaid', 'partial']`
-  - Add helper function `isOutstandingPayable()` similar to `isOutstandingReceivable()`
-  - Return both `unpaidReceivables` and `unpaidPayables`
+### Phase 3: Header & Period Selection
+- [x] Create `ReportsHeader.tsx`
+- [x] Create `ReportsPeriodSelector.tsx`
 
-### 4. Update DashboardAlerts Component
-- [x] Create `PayablesAlert` component (similar to `ReceivablesAlert`) with:
-  - Orange color scheme (`bg-orange-50`, `border-orange-100`, `text-orange-700`)
-  - Link to `/ledger?paymentStatus=outstanding&type=expense`
-  - Use new labels
-- [x] Update `hasAnyAlert` logic to include payables
-- [x] Render alerts in priority order: cheques → payables → receivables
-- [x] Update "All good" indicator logic to check all 3 alert types
+### Phase 4: Summary Cards with Comparison
+- [x] Create `ReportsSummaryCards.tsx`
 
-### 5. Update Dashboard Page
-- [x] Destructure `unpaidPayables` from `useReceivablesAlerts()` hook
-- [x] Pass `unpaidPayables` to `DashboardAlerts` component
+### Phase 5: Charts Section
+- [x] Create `ReportsBarChart.tsx`
+- [x] Create `ReportsDonutChart.tsx`
 
-### 6. Verification
-- [x] Run `npm run build` to verify no TypeScript errors
+### Phase 6: Quick Reports Section
+- [x] Create `ReportsQuickAccess.tsx`
+
+### Phase 7: Insights Section
+- [x] Create `ReportsInsights.tsx`
+
+### Phase 8: Detailed Tables
+- [x] Create `ReportsDetailedTables.tsx`
+
+### Phase 9: Main Page Integration
+- [x] Update `reports-page.tsx`
+- [x] Create `components/index.ts` barrel export
+
+### Phase 10: Verification & Polish
+- [x] Run `npm run build` - verify no TypeScript errors
 
 ---
 
-## Files Modified
+## Files Created
 
-1. `src/components/dashboard/constants/dashboard.constants.ts` - Add new labels
-2. `src/components/dashboard/types/dashboard.types.ts` - Update interfaces
-3. `src/components/dashboard/hooks/useReceivablesAlerts.ts` - Add payables query
-4. `src/components/dashboard/components/DashboardAlerts.tsx` - Add payables alert UI
-5. `src/components/dashboard/dashboard-page.tsx` - Pass payables data to component
+### New Components (8 files)
+1. `src/components/reports/components/ReportsHeader.tsx` - Header with export dropdown
+2. `src/components/reports/components/ReportsPeriodSelector.tsx` - Period buttons + comparison dropdown
+3. `src/components/reports/components/ReportsSummaryCards.tsx` - 4 summary cards with comparison
+4. `src/components/reports/components/ReportsBarChart.tsx` - Revenue/Expenses bar chart
+5. `src/components/reports/components/ReportsDonutChart.tsx` - Expenses by category donut
+6. `src/components/reports/components/ReportsQuickAccess.tsx` - 4 quick report cards
+7. `src/components/reports/components/ReportsInsights.tsx` - Auto-generated insights
+8. `src/components/reports/components/ReportsDetailedTables.tsx` - Revenue/Expense tables with drill-down
+9. `src/components/reports/components/index.ts` - Barrel export
+
+### New Hooks (2 files)
+10. `src/components/reports/hooks/useReportsComparison.ts` - Period comparison calculations
+11. `src/components/reports/hooks/useReportsInsights.ts` - Auto-generate insights from data
+
+### New Types/Constants (2 files)
+12. `src/components/reports/types/reports.types.ts` - TypeScript interfaces
+13. `src/components/reports/constants/reports.constants.ts` - Labels, colors, periods
+
+### Modified
+14. `src/components/reports/reports-page.tsx` - Complete rewrite to use new components
 
 ---
 
@@ -79,47 +100,48 @@ Add a third alert for **payables** - unpaid expense entries where we owe money t
 
 ### Summary of Changes
 
-Added a new "Payables" alert to the dashboard's "يحتاج انتباهك" (Needs Attention) section. This alert shows unpaid expense entries where the business owes money to suppliers/vendors.
+Completely redesigned the Reports page from an 8-tab layout to a modern dashboard-style design that matches the dashboard and ledger pages. The new design features:
 
-### Files Modified
+1. **Header with Export Dropdown** - Clean title with PDF/Excel/CSV export options
+2. **Period Selection Bar** - Quick period buttons (اليوم, الأسبوع, الشهر, الربع, السنة) + comparison dropdown
+3. **Summary Cards with Comparison** - 4 cards showing revenue, expenses, profit, and margin with % change vs previous period
+4. **Charts Row** - Bar chart (revenue/expenses trend) + Donut chart (expenses by category) side by side
+5. **Quick Reports Cards** - 4 clickable cards replacing the 8 tabs
+6. **Auto-generated Insights** - Smart observations based on data patterns (warnings, info, tips)
+7. **Detailed Tables** - Revenue and expenses breakdown with expandable subcategories
 
-1. **`src/components/dashboard/constants/dashboard.constants.ts`**
-   - Added `unpaidPayables: "ذمم مستحقة علينا"` label
-   - Added `dueInvoices: "فاتورة مستحقة"` label for count text
+### Key Features Implemented
 
-2. **`src/components/dashboard/types/dashboard.types.ts`**
-   - Added `unpaidPayables: AlertData` to `DashboardAlertsProps` interface
-   - Added `unpaidPayables: AlertData` to `UseReceivablesAlertsReturn` interface
+| Feature | Description |
+|---------|-------------|
+| Period comparison | Compare current period to last month, last quarter, or same period last year |
+| % change indicators | Shows ↑/↓ with green/red colors based on whether change is good or bad |
+| Expense logic | Expense increase shows red ↑ (bad), decrease shows green ↓ (good) |
+| Auto insights | Generates warnings for expense increases, loss situations, top categories |
+| Animated charts | Bars grow from bottom, donut segments animate in sequence |
+| Interactive donut | Hover shows segment details in center |
+| RTL layout | Fully RTL with Arabic labels throughout |
+| Loading skeletons | Shows placeholder cards while data loads |
 
-3. **`src/components/dashboard/hooks/useReceivablesAlerts.ts`**
-   - Imported `EXPENSE_TYPE` constant
-   - Added `unpaidPayables` state
-   - Updated snapshot listener to count both receivables and payables
-   - Added `isOutstandingPayable()` helper function (mirrors `isOutstandingReceivable()` but checks for expense type)
-   - Hook now returns both `unpaidReceivables` and `unpaidPayables`
+### Technical Implementation
 
-4. **`src/components/dashboard/components/DashboardAlerts.tsx`**
-   - Added `hasPayablesAlert` boolean check
-   - Updated `hasAnyAlert` to include payables
-   - Added `PayablesAlert` component with orange color scheme
-   - Updated `ReceivablesAlert` link to include `&type=income` for precise filtering
-   - Removed unused `NoOverdueIndicator` component (simplified logic)
-   - Alert render order: Cheques (rose) → Payables (orange) → Receivables (amber)
-
-5. **`src/components/dashboard/dashboard-page.tsx`**
-   - Destructure `unpaidPayables` from `useReceivablesAlerts()` hook
-   - Pass `unpaidPayables` prop to `DashboardAlerts` component
-
-### New Feature Behavior
-
-- **Payables Alert**: Shows when there are unpaid/partial expense entries
-- **Color**: Orange (`bg-orange-50`, `border-orange-100`, `text-orange-700`)
-- **Link**: Navigates to `/ledger?paymentStatus=outstanding&type=expense`
-- **Label**: "ذمم مستحقة علينا" with count "X فاتورة مستحقة"
-- **Priority**: Displayed between cheques (highest) and receivables (lowest)
+- **No `any` types** - All components use proper TypeScript interfaces
+- **useMemo optimizations** - All calculations are memoized to prevent unnecessary re-renders
+- **Modular architecture** - 8 separate components with barrel export for clean imports
+- **Reuses existing hooks** - Builds on `useReportsData` and `useReportsCalculations`
+- **Consistent styling** - Uses same color palette as dashboard (slate, emerald, rose, amber)
 
 ### Build Status
-- ✅ TypeScript compilation passes
-- ✅ No breaking changes
-- ✅ Dashboard bundle size: 10.8kB (unchanged)
+- TypeScript compilation passes
+- No breaking changes
+- Reports page bundle size: 11.9 kB (previously 11.9 kB - unchanged)
 
+### What Was Removed
+- 8-tab structure (replaced with quick access cards)
+- SubcategoryAnalysis component from main page (integrated into tables)
+- Note: InventoryTab, FixedAssetsTab, and other tab components still exist for deep-link access
+
+### Future Enhancements (TODO)
+- Custom date range picker modal
+- Quick report card navigation to detailed views
+- Subcategory drill-down in tables (expandable rows implemented, needs data)
