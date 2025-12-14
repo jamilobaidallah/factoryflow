@@ -3,12 +3,14 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { LedgerStats } from '../LedgerStats';
 import { LedgerEntry } from '../../utils/ledger-constants';
 
 describe('LedgerStats', () => {
+  const mockOnUnpaidClick = jest.fn();
+
   const mockIncomeEntry: LedgerEntry = {
     id: '1',
     transactionId: 'TXN-001',
@@ -39,20 +41,44 @@ describe('LedgerStats', () => {
     createdAt: new Date('2025-01-16'),
   };
 
-  it('should render all three stat cards', () => {
+  const mockUnpaidEntry: LedgerEntry = {
+    id: '3',
+    transactionId: 'TXN-003',
+    description: 'فاتورة مبيعات',
+    type: 'دخل',
+    amount: 2000,
+    category: 'مبيعات',
+    subCategory: 'خدمات',
+    associatedParty: 'عميل ب',
+    reference: 'REF-003',
+    notes: '',
+    date: new Date('2025-01-17'),
+    createdAt: new Date('2025-01-17'),
+    isARAPEntry: true,
+    paymentStatus: 'unpaid',
+    remainingBalance: 2000,
+    totalPaid: 0,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should render all four stat cards', () => {
     render(<LedgerStats entries={[]} />);
 
     expect(screen.getByText('إجمالي الدخل')).toBeInTheDocument();
     expect(screen.getByText('إجمالي المصروفات')).toBeInTheDocument();
     expect(screen.getByText('الرصيد الصافي')).toBeInTheDocument();
+    expect(screen.getByText('ذمم غير محصلة')).toBeInTheDocument();
   });
 
   it('should show zero values for empty entries', () => {
     render(<LedgerStats entries={[]} />);
 
-    // Check for "0.00 دينار" appearing 3 times (income, expenses, balance)
-    const zeroValues = screen.getAllByText('0.00 دينار');
-    expect(zeroValues).toHaveLength(3);
+    // Check for "0" appearing in the stats
+    const zeroValues = screen.getAllByText('0');
+    expect(zeroValues.length).toBeGreaterThanOrEqual(4);
   });
 
   it('should calculate total income correctly', () => {
@@ -63,9 +89,9 @@ describe('LedgerStats', () => {
 
     const { container } = render(<LedgerStats entries={entries} />);
 
-    // Check the income card specifically
-    const incomeCard = container.querySelector('.text-green-600');
-    expect(incomeCard).toHaveTextContent('1500.00 دينار');
+    // Total income: 1000 + 500 = 1,500 (specifically in the p.text-emerald-600 value)
+    const incomeValue = container.querySelector('p.text-emerald-600');
+    expect(incomeValue).toHaveTextContent('1,500');
   });
 
   it('should calculate total expenses correctly', () => {
@@ -74,9 +100,11 @@ describe('LedgerStats', () => {
       { ...mockExpenseEntry, id: '3', amount: 200 },
     ];
 
-    render(<LedgerStats entries={entries} />);
+    const { container } = render(<LedgerStats entries={entries} />);
 
-    expect(screen.getByText('500.00 دينار')).toBeInTheDocument();
+    // Total expenses: 300 + 200 = 500 (specifically in the p.text-rose-600 value)
+    const expenseValue = container.querySelector('p.text-rose-600');
+    expect(expenseValue).toHaveTextContent('500');
   });
 
   it('should calculate net balance correctly', () => {
@@ -88,35 +116,29 @@ describe('LedgerStats', () => {
     render(<LedgerStats entries={entries} />);
 
     // Net balance should be 1000 - 400 = 600
-    expect(screen.getByText('600.00 دينار')).toBeInTheDocument();
+    expect(screen.getByText('600')).toBeInTheDocument();
   });
 
-  it('should show positive balance in blue', () => {
+  it('should show profit label for positive balance', () => {
     const entries = [
       { ...mockIncomeEntry, amount: 1000 },
       { ...mockExpenseEntry, amount: 400 },
     ];
 
-    const { container } = render(<LedgerStats entries={entries} />);
+    render(<LedgerStats entries={entries} />);
 
-    // Find the net balance element
-    const balanceElement = container.querySelector('.text-blue-600');
-    expect(balanceElement).toBeInTheDocument();
-    expect(balanceElement).toHaveTextContent('600.00 دينار');
+    expect(screen.getByText('ربح')).toBeInTheDocument();
   });
 
-  it('should show negative balance in orange', () => {
+  it('should show loss label for negative balance', () => {
     const entries = [
       { ...mockIncomeEntry, amount: 400 },
       { ...mockExpenseEntry, amount: 1000 },
     ];
 
-    const { container } = render(<LedgerStats entries={entries} />);
+    render(<LedgerStats entries={entries} />);
 
-    // Find the net balance element
-    const balanceElement = container.querySelector('.text-orange-600');
-    expect(balanceElement).toBeInTheDocument();
-    expect(balanceElement).toHaveTextContent('-600.00 دينار');
+    expect(screen.getByText('خسارة')).toBeInTheDocument();
   });
 
   it('should handle mixed income and expense entries', () => {
@@ -127,29 +149,92 @@ describe('LedgerStats', () => {
       { ...mockExpenseEntry, id: '4', amount: 200 },
     ];
 
-    const { container } = render(<LedgerStats entries={entries} />);
+    render(<LedgerStats entries={entries} />);
 
-    // Total income: 1000 + 500 = 1500
+    // Total income: 1000 + 500 = 1,500
+    expect(screen.getByText('1,500')).toBeInTheDocument();
     // Total expenses: 300 + 200 = 500
-    // Net balance: 1500 - 500 = 1000
-    expect(screen.getByText('1500.00 دينار')).toBeInTheDocument();
-    expect(screen.getByText('500.00 دينار')).toBeInTheDocument();
-
-    // Check net balance specifically
-    const balanceCard = container.querySelector('.text-blue-600');
-    expect(balanceCard).toHaveTextContent('1000.00 دينار');
+    expect(screen.getByText('500')).toBeInTheDocument();
+    // Net balance: 1,500 - 500 = 1,000
+    expect(screen.getByText('1,000')).toBeInTheDocument();
   });
 
   it('should ignore entries with missing amount', () => {
     const entries = [
       { ...mockIncomeEntry, amount: 800 },
-      { ...mockIncomeEntry, id: '3', amount: undefined as any },
+      { ...mockIncomeEntry, id: '3', amount: undefined as unknown as number },
     ];
 
     const { container } = render(<LedgerStats entries={entries} />);
 
-    // Should only count the 800 (income section)
-    const incomeCards = container.querySelectorAll('.text-green-600');
-    expect(incomeCards[0]).toHaveTextContent('800.00 دينار');
+    // Should only count the 800 (specifically in the p.text-emerald-600 income value)
+    const incomeValue = container.querySelector('p.text-emerald-600');
+    expect(incomeValue).toHaveTextContent('800');
+  });
+
+  it('should count unpaid AR/AP entries', () => {
+    const entries = [
+      mockUnpaidEntry,
+      { ...mockUnpaidEntry, id: '4', paymentStatus: 'partial' as const, remainingBalance: 500 },
+    ];
+
+    render(<LedgerStats entries={entries} />);
+
+    // Unpaid amount: 2000 + 500 = 2,500
+    expect(screen.getByText('2,500')).toBeInTheDocument();
+  });
+
+  it('should call onUnpaidClick when unpaid card is clicked', () => {
+    render(<LedgerStats entries={[mockUnpaidEntry]} onUnpaidClick={mockOnUnpaidClick} />);
+
+    // Find and click the unpaid card
+    const unpaidCard = screen.getByText('ذمم غير محصلة').closest('article');
+    if (unpaidCard) {
+      fireEvent.click(unpaidCard);
+    }
+
+    expect(mockOnUnpaidClick).toHaveBeenCalled();
+  });
+
+  it('should show click hint when there are unpaid entries', () => {
+    render(<LedgerStats entries={[mockUnpaidEntry]} />);
+
+    expect(screen.getByText('اضغط للعرض ←')).toBeInTheDocument();
+  });
+
+  it('should show "no receivables" when no unpaid entries', () => {
+    render(<LedgerStats entries={[mockIncomeEntry]} />);
+
+    expect(screen.getByText('لا توجد ذمم')).toBeInTheDocument();
+  });
+
+  it('should use emerald theme for income card', () => {
+    const { container } = render(<LedgerStats entries={[mockIncomeEntry]} />);
+
+    // Income value should be emerald colored
+    const incomeValue = container.querySelector('.text-emerald-600');
+    expect(incomeValue).toBeInTheDocument();
+  });
+
+  it('should use rose theme for expense card', () => {
+    const { container } = render(<LedgerStats entries={[mockExpenseEntry]} />);
+
+    // Expense value should be rose colored
+    const expenseValue = container.querySelector('.text-rose-600');
+    expect(expenseValue).toBeInTheDocument();
+  });
+
+  it('should show unpaid count badge when there are unpaid entries', () => {
+    const entries = [
+      mockUnpaidEntry,
+      { ...mockUnpaidEntry, id: '4', paymentStatus: 'partial' as const },
+    ];
+
+    const { container } = render(<LedgerStats entries={entries} />);
+
+    // Count badge should show 2
+    const countBadge = container.querySelector('.bg-amber-500');
+    expect(countBadge).toBeInTheDocument();
+    expect(countBadge).toHaveTextContent('2');
   });
 });

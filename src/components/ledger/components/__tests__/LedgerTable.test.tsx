@@ -242,7 +242,7 @@ describe('LedgerTable', () => {
     });
 
     it('should show dash for missing associatedParty', () => {
-      const entryWithoutParty = { ...mockIncomeEntry, associatedParty: undefined };
+      const entryWithoutParty = { ...mockIncomeEntry, associatedParty: '' };
       const { container } = render(
         <LedgerTable
           entries={[entryWithoutParty]}
