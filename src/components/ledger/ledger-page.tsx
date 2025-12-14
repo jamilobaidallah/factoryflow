@@ -2,8 +2,7 @@
 
 import { useReducer, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Pagination,
@@ -13,12 +12,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Plus, Download } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
-import { exportLedgerToExcel, exportLedgerToPDF, exportLedgerToHTML } from "@/lib/export-utils";
+import { exportLedgerToExcel, exportLedgerToHTML } from "@/lib/export-utils";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Types and hooks
@@ -47,7 +45,13 @@ import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
 
 // Filters
-import { useLedgerFilters, LedgerFilters, PaymentStatus } from "./filters";
+import {
+  useLedgerFilters,
+  LedgerFilters,
+  PaymentStatus,
+  EntryType,
+  ViewMode,
+} from "./filters";
 
 export default function LedgerPage() {
   const { toast } = useToast();
@@ -56,6 +60,22 @@ export default function LedgerPage() {
 
   // Read URL params for initial filter state
   const urlPaymentStatus = searchParams.get("paymentStatus") as PaymentStatus | null;
+  const urlType = searchParams.get("type");
+  const urlCategory = searchParams.get("category");
+  const urlSubcategory = searchParams.get("subcategory");
+
+  // Map URL type param to EntryType
+  const initialEntryType: EntryType | undefined = urlType === "income" ? "دخل" : urlType === "expense" ? "مصروف" : undefined;
+
+  // Map URL paymentStatus to ViewMode
+  const initialViewMode: ViewMode | undefined =
+    urlPaymentStatus === "unpaid" || urlPaymentStatus === "partial" || urlPaymentStatus === "outstanding"
+      ? "unpaid"
+      : urlType === "income"
+      ? "income"
+      : urlType === "expense"
+      ? "expense"
+      : undefined;
 
   // Consolidated state management
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
@@ -74,16 +94,34 @@ export default function LedgerPage() {
     setDatePreset,
     setEntryType,
     setCategory,
+    setSubCategory,
     setPaymentStatus,
+    setSearch,
+    setViewMode,
     clearFilters,
     hasActiveFilters,
     filterEntries,
+    calculateTotals,
   } = useLedgerFilters({
     initialPaymentStatus: urlPaymentStatus || undefined,
+    initialEntryType: initialEntryType,
+    initialCategory: urlCategory || undefined,
+    initialSubCategory: urlSubcategory || undefined,
+    initialViewMode: initialViewMode,
   });
 
   // Apply filters to entries
   const filteredEntries = useMemo(() => filterEntries(entries), [filterEntries, entries]);
+
+  // Calculate totals for filtered entries
+  const filteredTotals = useMemo(() => calculateTotals(filteredEntries), [calculateTotals, filteredEntries]);
+
+  // Calculate unpaid count for stats and filter tabs
+  const unpaidCount = useMemo(() => {
+    return entries.filter(
+      (e) => e.isARAPEntry && e.paymentStatus !== "paid"
+    ).length;
+  }, [entries]);
 
   // Related records forms (from original hook)
   const {
@@ -94,6 +132,20 @@ export default function LedgerPage() {
     inventoryRelatedFormData: inventoryFormData,
     setInventoryRelatedFormData: setInventoryFormData,
   } = formHook;
+
+  // Export handlers
+  const handleExportExcel = () => {
+    exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`);
+  };
+
+  const handleExportPDF = () => {
+    exportLedgerToHTML(filteredEntries);
+  };
+
+  // Handle unpaid card click - set view mode to unpaid
+  const handleUnpaidClick = () => {
+    setViewMode("unpaid");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,46 +285,34 @@ export default function LedgerPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div dir="rtl" className="min-h-screen bg-slate-50 space-y-6 pb-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">دفتر الأستاذ</h1>
-          <p className="text-gray-600 mt-2">تسجيل جميع الحركات المالية</p>
+          <h1 className="text-2xl font-bold text-slate-800">دفتر الأستاذ</h1>
+          <p className="text-slate-500 text-sm mt-1">تسجيل وإدارة جميع الحركات المالية</p>
         </div>
         <PermissionGate action="create" module="ledger">
-          <Button className="gap-2" onClick={openAddDialog}>
-            <Plus className="w-4 h-4" />
+          <Button
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
+            onClick={openAddDialog}
+          >
+            <Plus className="w-5 h-5" />
             إضافة حركة مالية
           </Button>
         </PermissionGate>
       </div>
 
+      {/* Summary Cards */}
       {dataLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
         </div>
       ) : (
-        <LedgerStats entries={entries} />
-      )}
-
-      {/* Filter indicator when URL param filter is active */}
-      {urlPaymentStatus && (
-        <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-            <span className="text-sm text-amber-800">
-              عرض الذمم غير المحصلة ({filteredEntries.length} حركة)
-            </span>
-          </div>
-          <Link href="/ledger">
-            <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-900">
-              عرض الكل
-            </Button>
-          </Link>
-        </div>
+        <LedgerStats entries={entries} onUnpaidClick={handleUnpaidClick} />
       )}
 
       {/* Filters */}
@@ -282,115 +322,92 @@ export default function LedgerPage() {
           onDatePresetChange={setDatePreset}
           onEntryTypeChange={setEntryType}
           onCategoryChange={setCategory}
-          onPaymentStatusChange={setPaymentStatus}
+          onSubCategoryChange={setSubCategory}
+          onSearchChange={setSearch}
+          onViewModeChange={setViewMode}
           onClearFilters={clearFilters}
           hasActiveFilters={hasActiveFilters}
           entries={entries}
-          filteredCount={filteredEntries.length}
-          totalCount={entries.length}
+          filteredEntries={filteredEntries}
+          filteredTotals={filteredTotals}
+          unpaidCount={unpaidCount}
+          onExportExcel={handleExportExcel}
+          onExportPDF={handleExportPDF}
         />
       )}
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>سجل الحركات المالية ({filteredEntries.length})</CardTitle>
-            {filteredEntries.length > 0 && (
-              <PermissionGate action="export" module="ledger">
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
-                  >
-                    <Download className="w-4 h-4 ml-2" />
-                    Excel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportLedgerToHTML(filteredEntries)}
-                    title="طباعة باللغة العربية"
-                  >
-                    <Download className="w-4 h-4 ml-2" />
-                    PDF عربي
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportLedgerToPDF(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`)}
-                  >
-                    <Download className="w-4 h-4 ml-2" />
-                    PDF (EN)
-                  </Button>
-                </div>
-              </PermissionGate>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {dataLoading ? (
+      {/* Table Card */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        {dataLoading ? (
+          <div className="p-6">
             <TableSkeleton rows={10} />
-          ) : (
+          </div>
+        ) : (
+          <>
             <LedgerTable
               entries={filteredEntries}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onQuickPay={openQuickPayDialog}
               onViewRelated={openRelatedDialog}
+              highlightedSubcategory={filters.subCategory}
+              onClearFilters={clearFilters}
+              isFiltered={hasActiveFilters}
             />
-          )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">عرض {filteredEntries.length} من {totalCount} حركة</div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (state.pagination.currentPage < totalPages) {
-                          dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage + 1 });
-                        }
-                      }}
-                      className={state.pagination.currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-                  {[...Array(Math.min(5, totalPages))].map((_, i) => (
-                    <PaginationItem key={i + 1}>
-                      <PaginationLink
+            {/* Pagination */}
+            {totalPages > 1 && filteredEntries.length > 0 && (
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <p className="text-sm text-slate-500">
+                  عرض {filteredEntries.length} من {totalCount} حركة
+                </p>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
                         href="#"
                         onClick={(e) => {
                           e.preventDefault();
-                          dispatch({ type: "SET_CURRENT_PAGE", payload: i + 1 });
+                          if (state.pagination.currentPage < totalPages) {
+                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage + 1 });
+                          }
                         }}
-                        isActive={state.pagination.currentPage === i + 1}
-                      >
-                        {i + 1}
-                      </PaginationLink>
+                        className={state.pagination.currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                      />
                     </PaginationItem>
-                  ))}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (state.pagination.currentPage > 1) {
-                          dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage - 1 });
-                        }
-                      }}
-                      className={state.pagination.currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    {[...Array(Math.min(5, totalPages))].map((_, i) => (
+                      <PaginationItem key={i + 1}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            dispatch({ type: "SET_CURRENT_PAGE", payload: i + 1 });
+                          }}
+                          isActive={state.pagination.currentPage === i + 1}
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (state.pagination.currentPage > 1) {
+                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage - 1 });
+                          }
+                        }}
+                        className={state.pagination.currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* LedgerFormDialog wrapped with context provider - no prop drilling! */}
       <LedgerFormProvider value={ledgerFormContextValue}>

@@ -17,13 +17,26 @@ export type EntryType = "all" | "دخل" | "مصروف";
 /** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
 
+/** View mode for main filter tabs */
+export type ViewMode = "all" | "income" | "expense" | "unpaid";
+
 /** Current state of all ledger filters */
 export interface LedgerFiltersState {
   datePreset: DatePreset;
   dateRange: { from: Date | null; to: Date | null };
   entryType: EntryType;
   category: string;
+  subCategory: string;
   paymentStatus: PaymentStatus;
+  search: string;
+  viewMode: ViewMode;
+}
+
+/** Filtered totals for display */
+export interface FilteredTotals {
+  count: number;
+  income: number;
+  expenses: number;
 }
 
 /** Return type for the useLedgerFilters hook */
@@ -38,14 +51,22 @@ export interface UseLedgerFiltersReturn {
   setEntryType: (type: EntryType) => void;
   /** Set category filter */
   setCategory: (category: string) => void;
+  /** Set subcategory filter */
+  setSubCategory: (subCategory: string) => void;
   /** Set payment status filter */
   setPaymentStatus: (status: PaymentStatus) => void;
+  /** Set search query */
+  setSearch: (search: string) => void;
+  /** Set view mode */
+  setViewMode: (mode: ViewMode) => void;
   /** Reset all filters to default */
   clearFilters: () => void;
   /** Whether any filter is active */
   hasActiveFilters: boolean;
   /** Filter entries based on current filter state */
   filterEntries: (entries: LedgerEntry[]) => LedgerEntry[];
+  /** Calculate totals for filtered entries */
+  calculateTotals: (entries: LedgerEntry[]) => FilteredTotals;
 }
 
 const defaultFilters: LedgerFiltersState = {
@@ -53,30 +74,46 @@ const defaultFilters: LedgerFiltersState = {
   dateRange: { from: null, to: null },
   entryType: "all",
   category: "all",
+  subCategory: "all",
   paymentStatus: "all",
+  search: "",
+  viewMode: "all",
 };
 
 /** Options for initializing useLedgerFilters hook */
 export interface UseLedgerFiltersOptions {
   /** Initial payment status filter */
   initialPaymentStatus?: PaymentStatus;
+  /** Initial entry type filter */
+  initialEntryType?: EntryType;
+  /** Initial category filter */
+  initialCategory?: string;
+  /** Initial subcategory filter */
+  initialSubCategory?: string;
+  /** Initial view mode */
+  initialViewMode?: ViewMode;
 }
 
 /**
  * Hook for managing ledger entry filters.
- * Provides state and handlers for filtering by date, type, category, and payment status.
+ * Provides state and handlers for filtering by date, type, category, subcategory, payment status, and search.
  * All filtering is performed client-side for fast performance.
  *
  * @example
  * ```tsx
- * const { filters, setDatePreset, filterEntries } = useLedgerFilters();
+ * const { filters, setDatePreset, filterEntries, calculateTotals } = useLedgerFilters();
  * const filtered = filterEntries(entries);
+ * const totals = calculateTotals(filtered);
  * ```
  */
 export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFiltersReturn {
   const initialFilters: LedgerFiltersState = {
     ...defaultFilters,
     paymentStatus: options?.initialPaymentStatus || "all",
+    entryType: options?.initialEntryType || "all",
+    category: options?.initialCategory || "all",
+    subCategory: options?.initialSubCategory || "all",
+    viewMode: options?.initialViewMode || "all",
   };
   const [filters, setFilters] = useState<LedgerFiltersState>(initialFilters);
 
@@ -121,15 +158,38 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
   }, []);
 
   const setEntryType = useCallback((type: EntryType) => {
-    setFilters((prev) => ({ ...prev, entryType: type }));
+    setFilters((prev) => ({
+      ...prev,
+      entryType: type,
+      // Reset category and subcategory when type changes
+      category: "all",
+      subCategory: "all",
+    }));
   }, []);
 
   const setCategory = useCallback((category: string) => {
-    setFilters((prev) => ({ ...prev, category }));
+    setFilters((prev) => ({
+      ...prev,
+      category,
+      // Reset subcategory when category changes
+      subCategory: "all",
+    }));
+  }, []);
+
+  const setSubCategory = useCallback((subCategory: string) => {
+    setFilters((prev) => ({ ...prev, subCategory }));
   }, []);
 
   const setPaymentStatus = useCallback((status: PaymentStatus) => {
     setFilters((prev) => ({ ...prev, paymentStatus: status }));
+  }, []);
+
+  const setSearch = useCallback((search: string) => {
+    setFilters((prev) => ({ ...prev, search }));
+  }, []);
+
+  const setViewMode = useCallback((mode: ViewMode) => {
+    setFilters((prev) => ({ ...prev, viewMode: mode }));
   }, []);
 
   const clearFilters = useCallback(() => {
@@ -141,7 +201,10 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
       filters.datePreset !== "all" ||
       filters.entryType !== "all" ||
       filters.category !== "all" ||
-      filters.paymentStatus !== "all"
+      filters.subCategory !== "all" ||
+      filters.paymentStatus !== "all" ||
+      filters.search !== "" ||
+      filters.viewMode !== "all"
     );
   }, [filters]);
 
@@ -155,13 +218,28 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           if (filters.dateRange.to && entryDate > filters.dateRange.to) return false;
         }
 
-        // Type filter
+        // View mode filter (main tabs)
+        if (filters.viewMode !== "all") {
+          if (filters.viewMode === "income" && entry.type !== "دخل") return false;
+          if (filters.viewMode === "expense" && entry.type !== "مصروف") return false;
+          if (filters.viewMode === "unpaid") {
+            if (!entry.paymentStatus) return false;
+            if (entry.paymentStatus !== "unpaid" && entry.paymentStatus !== "partial") return false;
+          }
+        }
+
+        // Type filter (advanced filter)
         if (filters.entryType !== "all" && entry.type !== filters.entryType) {
           return false;
         }
 
         // Category filter
         if (filters.category !== "all" && entry.category !== filters.category) {
+          return false;
+        }
+
+        // Subcategory filter
+        if (filters.subCategory !== "all" && entry.subCategory !== filters.subCategory) {
           return false;
         }
 
@@ -184,11 +262,40 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           }
         }
 
+        // Search filter
+        if (filters.search) {
+          const searchLower = filters.search.toLowerCase();
+          const matchesDescription = entry.description?.toLowerCase().includes(searchLower);
+          const matchesParty = entry.associatedParty?.toLowerCase().includes(searchLower);
+          const matchesCategory = entry.category?.toLowerCase().includes(searchLower);
+          const matchesSubCategory = entry.subCategory?.toLowerCase().includes(searchLower);
+          const matchesTransactionId = entry.transactionId?.toLowerCase().includes(searchLower);
+
+          if (!matchesDescription && !matchesParty && !matchesCategory && !matchesSubCategory && !matchesTransactionId) {
+            return false;
+          }
+        }
+
         return true;
       });
     },
     [filters]
   );
+
+  const calculateTotals = useCallback((entries: LedgerEntry[]): FilteredTotals => {
+    return entries.reduce(
+      (acc, entry) => {
+        if (entry.type === "دخل") {
+          acc.income += entry.amount || 0;
+        } else {
+          acc.expenses += entry.amount || 0;
+        }
+        acc.count++;
+        return acc;
+      },
+      { count: 0, income: 0, expenses: 0 }
+    );
+  }, []);
 
   return {
     filters,
@@ -196,9 +303,13 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
     setCustomDateRange,
     setEntryType,
     setCategory,
+    setSubCategory,
     setPaymentStatus,
+    setSearch,
+    setViewMode,
     clearFilters,
     hasActiveFilters,
     filterEntries,
+    calculateTotals,
   };
 }
