@@ -24,6 +24,7 @@ import {
   ReportsInsights,
   ReportsDetailedTables,
   ReportsDatePickerModal,
+  ReportsInlineReport,
 } from "./components";
 
 // Types & Constants
@@ -340,28 +341,8 @@ export default function ReportsPage() {
   };
 
   const handleReportClick = (reportId: string) => {
-    setActiveReport(reportId);
-    // Scroll to relevant section and highlight it
-    switch (reportId) {
-      case "income":
-        // Income statement - scroll to summary cards
-        scrollAndHighlight(summaryCardsRef, "summary");
-        break;
-      case "expenses":
-        // Expense analysis - scroll to donut chart and tables
-        scrollAndHighlight(chartsRef, "charts");
-        break;
-      case "aging":
-        // Aging report - scroll to detailed tables (receivables data)
-        scrollAndHighlight(detailedTablesRef, "tables");
-        break;
-      case "cashflow":
-        // Cash flow - scroll to bar chart (revenue/expense trends)
-        scrollAndHighlight(chartsRef, "charts");
-        break;
-      default:
-        scrollAndHighlight(detailedTablesRef, "tables");
-    }
+    // Toggle: click same card to close, different card to switch
+    setActiveReport((prev) => (prev === reportId ? null : reportId));
   };
 
   const handleCustomDateClick = () => {
@@ -442,6 +423,17 @@ export default function ReportsPage() {
         activeReport={activeReport}
         isLoaded={isLoaded}
       />
+
+      {/* Inline Report Content (expands below cards when clicked) */}
+      {activeReport && (
+        <ReportsInlineReport
+          reportId={activeReport}
+          onClose={() => setActiveReport(null)}
+          ledgerEntries={ledgerEntries}
+          filteredData={filteredData}
+          dateRange={dateRange}
+        />
+      )}
 
       {/* Auto-generated Insights */}
       <ReportsInsights insights={insights} isLoaded={isLoaded} />

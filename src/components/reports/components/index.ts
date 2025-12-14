@@ -11,3 +11,4 @@ export { ReportsQuickAccess } from './ReportsQuickAccess';
 export { ReportsInsights } from './ReportsInsights';
 export { ReportsDetailedTables } from './ReportsDetailedTables';
 export { ReportsDatePickerModal } from './ReportsDatePickerModal';
+export { ReportsInlineReport } from './ReportsInlineReport';
