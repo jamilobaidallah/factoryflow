@@ -52,6 +52,7 @@ export default function ReportsPage() {
 
   // Animation state
   const [isLoaded, setIsLoaded] = useState(false);
+  const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
 
   // Refs for scroll navigation
   const summaryCardsRef = useRef<HTMLDivElement>(null);
@@ -328,29 +329,38 @@ export default function ReportsPage() {
     return [headers, ...rows].join("\n");
   };
 
+  // Helper to scroll and highlight a section
+  const scrollAndHighlight = (ref: React.RefObject<HTMLDivElement | null>, sectionId: string) => {
+    // Scroll to section
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Highlight the section
+    setHighlightedSection(sectionId);
+    // Remove highlight after animation completes
+    setTimeout(() => setHighlightedSection(null), 2000);
+  };
+
   const handleReportClick = (reportId: string) => {
     setActiveReport(reportId);
-    // Scroll to relevant section based on report type
-    // Instead of navigating to 404 pages, show content inline
+    // Scroll to relevant section and highlight it
     switch (reportId) {
       case "income":
         // Income statement - scroll to summary cards
-        summaryCardsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollAndHighlight(summaryCardsRef, "summary");
         break;
       case "expenses":
         // Expense analysis - scroll to donut chart and tables
-        chartsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollAndHighlight(chartsRef, "charts");
         break;
       case "aging":
         // Aging report - scroll to detailed tables (receivables data)
-        detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollAndHighlight(detailedTablesRef, "tables");
         break;
       case "cashflow":
         // Cash flow - scroll to bar chart (revenue/expense trends)
-        chartsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollAndHighlight(chartsRef, "charts");
         break;
       default:
-        detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollAndHighlight(detailedTablesRef, "tables");
     }
   };
 
@@ -396,12 +406,22 @@ export default function ReportsPage() {
       />
 
       {/* Summary Cards with Comparison */}
-      <div ref={summaryCardsRef}>
+      <div
+        ref={summaryCardsRef}
+        className={`transition-all duration-500 rounded-xl ${
+          highlightedSection === "summary" ? "ring-2 ring-blue-500 ring-offset-2" : ""
+        }`}
+      >
         <ReportsSummaryCards comparison={comparison} isLoading={loading} />
       </div>
 
       {/* Charts Row */}
-      <div ref={chartsRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div
+        ref={chartsRef}
+        className={`grid grid-cols-1 lg:grid-cols-2 gap-4 transition-all duration-500 rounded-xl ${
+          highlightedSection === "charts" ? "ring-2 ring-blue-500 ring-offset-2 p-1" : ""
+        }`}
+      >
         <ReportsBarChart
           chartData={chartData}
           chartPeriod={chartPeriod}
@@ -427,7 +447,12 @@ export default function ReportsPage() {
       <ReportsInsights insights={insights} isLoaded={isLoaded} />
 
       {/* Detailed Tables (using period-filtered data) */}
-      <div ref={detailedTablesRef}>
+      <div
+        ref={detailedTablesRef}
+        className={`transition-all duration-500 rounded-xl ${
+          highlightedSection === "tables" ? "ring-2 ring-blue-500 ring-offset-2" : ""
+        }`}
+      >
         <ReportsDetailedTables
           revenueByCategory={filteredData.revenueByCategory}
           expensesByCategory={filteredData.expensesByCategory}
