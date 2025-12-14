@@ -41,6 +41,7 @@ describe('LedgerTable', () => {
   const mockOnDelete = jest.fn();
   const mockOnQuickPay = jest.fn();
   const mockOnViewRelated = jest.fn();
+  const mockOnClearFilters = jest.fn();
 
   const mockIncomeEntry: LedgerEntry = {
     id: '1',
@@ -128,6 +129,40 @@ describe('LedgerTable', () => {
       expect(screen.getByText(/لا توجد حركات مالية مسجلة/)).toBeInTheDocument();
     });
 
+    it('should show filtered empty state with clear button when filtered', () => {
+      render(
+        <LedgerTable
+          entries={[]}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onQuickPay={mockOnQuickPay}
+          onViewRelated={mockOnViewRelated}
+          isFiltered={true}
+          onClearFilters={mockOnClearFilters}
+        />
+      );
+
+      expect(screen.getByText(/لا توجد حركات مطابقة للفلاتر/)).toBeInTheDocument();
+      expect(screen.getByText(/مسح جميع الفلاتر/)).toBeInTheDocument();
+    });
+
+    it('should call onClearFilters when clear button is clicked', () => {
+      render(
+        <LedgerTable
+          entries={[]}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onQuickPay={mockOnQuickPay}
+          onViewRelated={mockOnViewRelated}
+          isFiltered={true}
+          onClearFilters={mockOnClearFilters}
+        />
+      );
+
+      fireEvent.click(screen.getByText(/مسح جميع الفلاتر/));
+      expect(mockOnClearFilters).toHaveBeenCalled();
+    });
+
     it('should not show table headers when empty', () => {
       render(
         <LedgerTable
@@ -139,7 +174,7 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.queryByText('رقم المعاملة')).not.toBeInTheDocument();
+      expect(screen.queryByText('التاريخ')).not.toBeInTheDocument();
     });
   });
 
@@ -155,16 +190,15 @@ describe('LedgerTable', () => {
         />
       );
 
-      expect(screen.getByText('رقم المعاملة')).toBeInTheDocument();
       expect(screen.getByText('التاريخ')).toBeInTheDocument();
       expect(screen.getByText('الوصف')).toBeInTheDocument();
       expect(screen.getByText('النوع')).toBeInTheDocument();
       expect(screen.getByText('التصنيف')).toBeInTheDocument();
-      expect(screen.getByText('الفئة الفرعية')).toBeInTheDocument();
-      expect(screen.getByText('الطرف المعني')).toBeInTheDocument();
+      expect(screen.getByText('التصنيف الفرعي')).toBeInTheDocument();
+      expect(screen.getByText('الطرف')).toBeInTheDocument();
       expect(screen.getByText('المبلغ')).toBeInTheDocument();
-      expect(screen.getByText('حالة الدفع')).toBeInTheDocument();
-      expect(screen.getByText('الإجراءات')).toBeInTheDocument();
+      expect(screen.getByText('الحالة')).toBeInTheDocument();
+      expect(screen.getByText('إجراءات')).toBeInTheDocument();
     });
 
     it('should render entry data correctly', () => {
@@ -179,12 +213,14 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
+      // Transaction ID is shown truncated (last 12 chars)
       expect(within(desktopTable).getByText('TXN-001')).toBeInTheDocument();
       expect(within(desktopTable).getByText('مبيعات منتجات')).toBeInTheDocument();
       expect(within(desktopTable).getByText('مبيعات')).toBeInTheDocument();
       expect(within(desktopTable).getByText('منتجات')).toBeInTheDocument();
       expect(within(desktopTable).getByText('عميل أ')).toBeInTheDocument();
-      expect(within(desktopTable).getByText('1000 دينار')).toBeInTheDocument();
+      // Amount is now formatted with + prefix for income
+      expect(within(desktopTable).getByText(/\+1,000/)).toBeInTheDocument();
     });
 
     it('should render multiple entries', () => {
@@ -206,9 +242,10 @@ describe('LedgerTable', () => {
     });
 
     it('should show dash for missing associatedParty', () => {
+      const entryWithoutParty = { ...mockIncomeEntry, associatedParty: undefined };
       const { container } = render(
         <LedgerTable
-          entries={[mockExpenseEntry]}
+          entries={[entryWithoutParty]}
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
@@ -218,7 +255,7 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       // Check that the entry renders in the table
-      expect(within(desktopTable).getByText('رواتب موظفين')).toBeInTheDocument();
+      expect(within(desktopTable).getByText('مبيعات منتجات')).toBeInTheDocument();
       // The dash is in the row, verify it exists
       const cells = desktopTable.querySelectorAll('td');
       expect(cells.length).toBeGreaterThan(0);
@@ -226,7 +263,7 @@ describe('LedgerTable', () => {
   });
 
   describe('Entry Type Badges', () => {
-    it('should show green badge for income entries', () => {
+    it('should show emerald badge for income entries', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockIncomeEntry]}
@@ -238,12 +275,13 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      const badge = desktopTable.querySelector('.badge-success');
+      // New badge uses tailwind classes
+      const badge = desktopTable.querySelector('.bg-emerald-50.text-emerald-700');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('دخل');
     });
 
-    it('should show red badge for expense entries', () => {
+    it('should show slate badge for expense entries', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockExpenseEntry]}
@@ -255,7 +293,8 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      const badge = desktopTable.querySelector('.badge-danger');
+      // Expense badge uses slate colors
+      const badge = desktopTable.querySelector('.bg-slate-100.text-slate-600');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveTextContent('مصروف');
     });
@@ -275,7 +314,8 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       expect(within(desktopTable).getByText('غير مدفوع')).toBeInTheDocument();
-      expect(within(desktopTable).getByText(/متبقي: 2000/)).toBeInTheDocument();
+      // Remaining is shown with formatNumber
+      expect(within(desktopTable).getByText(/المبلغ: 2,000/)).toBeInTheDocument();
     });
 
     it('should show partial payment status', () => {
@@ -290,9 +330,9 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      expect(within(desktopTable).getByText('دفعة جزئية')).toBeInTheDocument();
-      expect(within(desktopTable).getByText(/متبقي: 1200/)).toBeInTheDocument();
-      expect(within(desktopTable).getByText(/مدفوع: 800/)).toBeInTheDocument();
+      // Status text changed to "جزئي"
+      expect(within(desktopTable).getByText('جزئي')).toBeInTheDocument();
+      expect(within(desktopTable).getByText(/متبقي: 1,200/)).toBeInTheDocument();
     });
 
     it('should show paid status', () => {
@@ -341,10 +381,8 @@ describe('LedgerTable', () => {
         />
       );
 
-      // Find all buttons and identify the edit button (3rd button: view related, edit, delete)
-      const buttons = screen.getAllByRole('button');
-      const editButton = buttons[buttons.length - 2]; // Second to last button is edit
-
+      // Find edit button by title
+      const editButton = screen.getByTitle('تعديل');
       fireEvent.click(editButton);
       expect(mockOnEdit).toHaveBeenCalledWith(mockIncomeEntry);
     });
@@ -360,9 +398,7 @@ describe('LedgerTable', () => {
         />
       );
 
-      const buttons = screen.getAllByRole('button');
-      const deleteButton = buttons[buttons.length - 1]; // Last button is delete
-
+      const deleteButton = screen.getByTitle('حذف');
       fireEvent.click(deleteButton);
       expect(mockOnDelete).toHaveBeenCalledWith(mockIncomeEntry);
     });
@@ -378,8 +414,8 @@ describe('LedgerTable', () => {
         />
       );
 
-      // Find the view related button by its title
-      const viewRelatedButton = screen.getByTitle('إدارة السجلات المرتبطة');
+      // Title changed to "السجلات المرتبطة"
+      const viewRelatedButton = screen.getByTitle('السجلات المرتبطة');
       fireEvent.click(viewRelatedButton);
       expect(mockOnViewRelated).toHaveBeenCalledWith(mockIncomeEntry);
     });
@@ -450,7 +486,7 @@ describe('LedgerTable', () => {
   });
 
   describe('Date Formatting', () => {
-    it('should format dates in Arabic locale', () => {
+    it('should format dates correctly', () => {
       const entry = {
         ...mockIncomeEntry,
         date: new Date('2025-01-15'),
@@ -474,7 +510,7 @@ describe('LedgerTable', () => {
   });
 
   describe('Payment Status Badge Colors', () => {
-    it('should use success badge for paid status', () => {
+    it('should use emerald badge for paid status', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockPaidEntry]}
@@ -487,10 +523,12 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       const paidBadge = within(desktopTable).getByText('مدفوع');
-      expect(paidBadge).toHaveClass('badge-success');
+      // New styling uses tailwind classes
+      expect(paidBadge).toHaveClass('bg-emerald-50');
+      expect(paidBadge).toHaveClass('text-emerald-700');
     });
 
-    it('should use warning badge for partial payment', () => {
+    it('should use amber badge for partial payment', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockPartiallyPaidEntry]}
@@ -502,11 +540,12 @@ describe('LedgerTable', () => {
       );
 
       const desktopTable = getDesktopTable(container);
-      const partialBadge = within(desktopTable).getByText('دفعة جزئية');
-      expect(partialBadge).toHaveClass('badge-warning');
+      const partialBadge = within(desktopTable).getByText('جزئي');
+      expect(partialBadge).toHaveClass('bg-amber-50');
+      expect(partialBadge).toHaveClass('text-amber-700');
     });
 
-    it('should use danger badge for unpaid status', () => {
+    it('should use rose badge for unpaid status', () => {
       const { container } = render(
         <LedgerTable
           entries={[mockARAPEntry]}
@@ -519,7 +558,46 @@ describe('LedgerTable', () => {
 
       const desktopTable = getDesktopTable(container);
       const unpaidBadge = within(desktopTable).getByText('غير مدفوع');
-      expect(unpaidBadge).toHaveClass('badge-danger');
+      expect(unpaidBadge).toHaveClass('bg-rose-50');
+      expect(unpaidBadge).toHaveClass('text-rose-700');
+    });
+  });
+
+  describe('Subcategory Highlighting', () => {
+    it('should highlight subcategory when filtered', () => {
+      const { container } = render(
+        <LedgerTable
+          entries={[mockIncomeEntry]}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onQuickPay={mockOnQuickPay}
+          onViewRelated={mockOnViewRelated}
+          highlightedSubcategory="منتجات"
+        />
+      );
+
+      const desktopTable = getDesktopTable(container);
+      // The subcategory cell should have purple highlight when filtered
+      const highlightedCell = desktopTable.querySelector('.bg-purple-100.text-purple-700');
+      expect(highlightedCell).toBeInTheDocument();
+      expect(highlightedCell).toHaveTextContent('منتجات');
+    });
+
+    it('should not highlight subcategory when not filtered', () => {
+      const { container } = render(
+        <LedgerTable
+          entries={[mockIncomeEntry]}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onQuickPay={mockOnQuickPay}
+          onViewRelated={mockOnViewRelated}
+        />
+      );
+
+      const desktopTable = getDesktopTable(container);
+      // No purple highlight when not filtered
+      const highlightedCell = desktopTable.querySelector('.bg-purple-100');
+      expect(highlightedCell).not.toBeInTheDocument();
     });
   });
 });
