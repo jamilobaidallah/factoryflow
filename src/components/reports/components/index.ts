@@ -10,3 +10,4 @@ export { ReportsDonutChart } from './ReportsDonutChart';
 export { ReportsQuickAccess } from './ReportsQuickAccess';
 export { ReportsInsights } from './ReportsInsights';
 export { ReportsDetailedTables } from './ReportsDetailedTables';
+export { ReportsDatePickerModal } from './ReportsDatePickerModal';

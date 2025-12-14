@@ -8,6 +8,12 @@ export type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'cust
 export type ComparisonType = 'lastMonth' | 'lastQuarter' | 'lastYear' | 'none';
 export type ChartPeriodType = '1' | '3' | '6';
 
+// Custom date range
+export interface CustomDateRange {
+  startDate: string; // YYYY-MM-DD format
+  endDate: string;   // YYYY-MM-DD format
+}
+
 // Period data structure
 export interface PeriodData {
   revenue: number;
@@ -101,6 +107,7 @@ export interface ReportsHeaderProps {
 export interface ReportsPeriodSelectorProps {
   selectedPeriod: PeriodType;
   comparisonType: ComparisonType;
+  customDateRange?: CustomDateRange | null;
   onPeriodChange: (period: PeriodType) => void;
   onComparisonChange: (comparison: ComparisonType) => void;
   onCustomDateClick?: () => void;

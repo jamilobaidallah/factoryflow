@@ -1,12 +1,25 @@
 "use client";
 
 import { memo } from 'react';
+import { Calendar } from 'lucide-react';
 import {
   REPORTS_LABELS,
   PERIOD_OPTIONS,
   COMPARISON_OPTIONS,
 } from '../constants/reports.constants';
-import type { ReportsPeriodSelectorProps, PeriodType, ComparisonType } from '../types/reports.types';
+import type { ReportsPeriodSelectorProps, ComparisonType } from '../types/reports.types';
+
+/**
+ * Format date string to Arabic readable format
+ */
+function formatDateArabic(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('ar-JO', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
 
 /**
  * Period selection bar with quick buttons and comparison dropdown
@@ -14,6 +27,7 @@ import type { ReportsPeriodSelectorProps, PeriodType, ComparisonType } from '../
 function ReportsPeriodSelectorComponent({
   selectedPeriod,
   comparisonType,
+  customDateRange,
   onPeriodChange,
   onComparisonChange,
   onCustomDateClick,
@@ -40,16 +54,23 @@ function ReportsPeriodSelectorComponent({
             ))}
           </div>
 
-          {/* Custom date link */}
+          {/* Custom date button */}
           <button
             onClick={onCustomDateClick}
-            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
               selectedPeriod === 'custom'
-                ? 'text-blue-700'
-                : 'text-blue-600 hover:text-blue-700'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
             }`}
           >
-            {REPORTS_LABELS.custom}
+            <Calendar className="w-4 h-4" />
+            {selectedPeriod === 'custom' && customDateRange ? (
+              <span>
+                {formatDateArabic(customDateRange.startDate)} - {formatDateArabic(customDateRange.endDate)}
+              </span>
+            ) : (
+              REPORTS_LABELS.custom
+            )}
           </button>
         </div>
 

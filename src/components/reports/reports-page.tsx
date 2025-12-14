@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useUser } from "@/firebase/provider";
 import { formatNumber } from "@/lib/date-utils";
 import {
   exportToExcel,
-  exportIncomeStatementToPDF,
+  exportIncomeStatementToHTML,
 } from "@/lib/export-utils";
 
 // Hooks
 import { useReportsData } from "./hooks/useReportsData";
-import { useReportsCalculations } from "./hooks/useReportsCalculations";
 import { useReportsComparison } from "./hooks/useReportsComparison";
 import { useReportsInsights } from "./hooks/useReportsInsights";
 
@@ -24,6 +24,7 @@ import {
   ReportsQuickAccess,
   ReportsInsights,
   ReportsDetailedTables,
+  ReportsDatePickerModal,
 } from "./components";
 
 // Types & Constants
@@ -33,11 +34,13 @@ import type {
   ChartPeriodType,
   ReportsChartDataPoint,
   CategoryData,
+  CustomDateRange,
 } from "./types/reports.types";
-import { CATEGORY_COLORS, ANIMATION_CONFIG } from "./constants/reports.constants";
+import { CATEGORY_COLORS, ANIMATION_CONFIG, QUICK_REPORTS } from "./constants/reports.constants";
 
 export default function ReportsPage() {
   const { user } = useUser();
+  const router = useRouter();
 
   // Period & comparison state
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("month");
@@ -45,8 +48,15 @@ export default function ReportsPage() {
   const [chartPeriod, setChartPeriod] = useState<ChartPeriodType>("6");
   const [activeReport, setActiveReport] = useState<string | null>(null);
 
+  // Custom date range state
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange | null>(null);
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+
   // Animation state
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Refs for scroll navigation
+  const detailedTablesRef = useRef<HTMLDivElement>(null);
 
   // Calculate date range based on selected period (for data fetching)
   const { startDate, endDate } = useMemo(() => {
@@ -84,35 +94,72 @@ export default function ReportsPage() {
   }, [selectedPeriod]);
 
   // Fetch data
-  const { loading, ledgerEntries, payments } = useReportsData({
+  const { loading, ledgerEntries } = useReportsData({
     userId: user?.uid || null,
     startDate,
     endDate,
   });
 
-  // Calculate reports data
-  const { incomeStatement } = useReportsCalculations({
-    ledgerEntries,
-    payments,
-    inventory: [],
-    fixedAssets: [],
-  });
+  // Note: useReportsCalculations is available for detailed reports if needed
+  // For the main page, we use filteredData which respects the selected period
 
   // Calculate comparison data
-  const { comparison } = useReportsComparison({
+  const { comparison, dateRange } = useReportsComparison({
     selectedPeriod,
     comparisonType,
     ledgerEntries,
+    customStartDate: customDateRange ? new Date(customDateRange.startDate) : undefined,
+    customEndDate: customDateRange ? new Date(customDateRange.endDate) : undefined,
   });
 
-  // Build expense categories for donut chart
+  // Filter ledger entries by selected period for tables/donut (Bug Fix #4 & #6)
+  const filteredData = useMemo(() => {
+    const { start, end } = dateRange;
+
+    // Filter entries by period
+    const filtered = ledgerEntries.filter((entry) => {
+      const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+      return entryDate >= start && entryDate <= end;
+    });
+
+    // Calculate revenue by category
+    const revenueByCategory: Record<string, number> = {};
+    const expensesByCategory: Record<string, number> = {};
+    let totalRevenue = 0;
+    let totalExpenses = 0;
+
+    filtered.forEach((entry) => {
+      // Exclude owner equity
+      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+        return;
+      }
+
+      if (entry.type === "دخل") {
+        totalRevenue += entry.amount;
+        revenueByCategory[entry.category] = (revenueByCategory[entry.category] || 0) + entry.amount;
+      } else if (entry.type === "مصروف") {
+        totalExpenses += entry.amount;
+        expensesByCategory[entry.category] = (expensesByCategory[entry.category] || 0) + entry.amount;
+      }
+    });
+
+    return {
+      revenueByCategory,
+      expensesByCategory,
+      totalRevenue,
+      totalExpenses,
+      netProfit: totalRevenue - totalExpenses,
+    };
+  }, [ledgerEntries, dateRange]);
+
+  // Build expense categories for donut chart (using filtered data)
   const expenseCategories = useMemo<CategoryData[]>(() => {
     const categories: CategoryData[] = [];
-    const totalExpenses = incomeStatement.totalExpenses;
+    const totalExpenses = filteredData.totalExpenses;
 
     if (totalExpenses === 0) return [];
 
-    Object.entries(incomeStatement.expensesByCategory)
+    Object.entries(filteredData.expensesByCategory)
       .sort(([, a], [, b]) => b - a)
       .forEach(([name, amount], index) => {
         const percent = (amount / totalExpenses) * 100;
@@ -126,7 +173,7 @@ export default function ReportsPage() {
       });
 
     return categories;
-  }, [incomeStatement.expensesByCategory, incomeStatement.totalExpenses]);
+  }, [filteredData.expensesByCategory, filteredData.totalExpenses]);
 
   // Generate insights
   const { insights } = useReportsInsights({
@@ -197,30 +244,31 @@ export default function ReportsPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Export handlers
+  // Export handlers (using filteredData for period-filtered exports)
   const handleExportPDF = () => {
-    exportIncomeStatementToPDF(
+    // Use HTML export for proper Arabic font support
+    // Opens in new tab with print dialog for saving as PDF
+    exportIncomeStatementToHTML(
       {
-        revenues: Object.entries(incomeStatement.revenueByCategory).map(([category, amount]) => ({
+        revenues: Object.entries(filteredData.revenueByCategory).map(([category, amount]) => ({
           category,
           amount: typeof amount === "number" ? amount : 0,
         })),
-        expenses: Object.entries(incomeStatement.expensesByCategory).map(([category, amount]) => ({
+        expenses: Object.entries(filteredData.expensesByCategory).map(([category, amount]) => ({
           category,
           amount: typeof amount === "number" ? amount : 0,
         })),
-        totalRevenue: incomeStatement.totalRevenue,
-        totalExpenses: incomeStatement.totalExpenses,
-        netIncome: incomeStatement.netProfit,
+        totalRevenue: filteredData.totalRevenue,
+        totalExpenses: filteredData.totalExpenses,
+        netIncome: filteredData.netProfit,
       },
-      startDate,
-      endDate,
-      `قائمة_الدخل_${startDate}_${endDate}`
+      dateRange.start.toISOString().split("T")[0],
+      dateRange.end.toISOString().split("T")[0]
     );
   };
 
   const handleExportExcel = () => {
-    const revenueData = Object.entries(incomeStatement.revenueByCategory).map(
+    const revenueData = Object.entries(filteredData.revenueByCategory).map(
       ([category, amount]) => ({
         الفئة: category,
         النوع: "إيراد",
@@ -228,7 +276,7 @@ export default function ReportsPage() {
       })
     );
 
-    const expenseData = Object.entries(incomeStatement.expensesByCategory).map(
+    const expenseData = Object.entries(filteredData.expensesByCategory).map(
       ([category, amount]) => ({
         الفئة: category,
         النوع: "مصروف",
@@ -236,25 +284,28 @@ export default function ReportsPage() {
       })
     );
 
+    const periodStart = dateRange.start.toISOString().split("T")[0];
+    const periodEnd = dateRange.end.toISOString().split("T")[0];
+
     const allData = [
       ...revenueData,
-      { الفئة: "إجمالي الإيرادات", النوع: "", المبلغ: incomeStatement.totalRevenue },
+      { الفئة: "إجمالي الإيرادات", النوع: "", المبلغ: filteredData.totalRevenue },
       ...expenseData,
-      { الفئة: "إجمالي المصروفات", النوع: "", المبلغ: incomeStatement.totalExpenses },
-      { الفئة: "صافي الدخل", النوع: "", المبلغ: incomeStatement.netProfit },
+      { الفئة: "إجمالي المصروفات", النوع: "", المبلغ: filteredData.totalExpenses },
+      { الفئة: "صافي الدخل", النوع: "", المبلغ: filteredData.netProfit },
     ];
 
-    exportToExcel(allData, `تقرير_مالي_${startDate}_${endDate}`, "التقرير المالي");
+    exportToExcel(allData, `تقرير_مالي_${periodStart}_${periodEnd}`, "التقرير المالي");
   };
 
   const handleExportCSV = () => {
     const data = [
-      ...Object.entries(incomeStatement.revenueByCategory).map(([cat, amt]) => ({
+      ...Object.entries(filteredData.revenueByCategory).map(([cat, amt]) => ({
         النوع: "إيراد",
         الفئة: cat,
         المبلغ: amt,
       })),
-      ...Object.entries(incomeStatement.expensesByCategory).map(([cat, amt]) => ({
+      ...Object.entries(filteredData.expensesByCategory).map(([cat, amt]) => ({
         النوع: "مصروف",
         الفئة: cat,
         المبلغ: amt,
@@ -278,12 +329,25 @@ export default function ReportsPage() {
 
   const handleReportClick = (reportId: string) => {
     setActiveReport(reportId);
-    // TODO: Navigate to specific report or open modal
+    // Navigate to the specific report page
+    const report = QUICK_REPORTS.find((r) => r.id === reportId);
+    if (report?.link) {
+      router.push(report.link);
+    }
   };
 
   const handleCustomDateClick = () => {
-    // TODO: Open date picker modal
+    setShowDatePickerModal(true);
+  };
+
+  const handleCustomDateConfirm = (range: CustomDateRange) => {
+    setCustomDateRange(range);
     setSelectedPeriod("custom");
+    setShowDatePickerModal(false);
+  };
+
+  const handleDonutDetailsClick = () => {
+    detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
@@ -299,9 +363,18 @@ export default function ReportsPage() {
       <ReportsPeriodSelector
         selectedPeriod={selectedPeriod}
         comparisonType={comparisonType}
+        customDateRange={customDateRange}
         onPeriodChange={setSelectedPeriod}
         onComparisonChange={setComparisonType}
         onCustomDateClick={handleCustomDateClick}
+      />
+
+      {/* Date Picker Modal */}
+      <ReportsDatePickerModal
+        isOpen={showDatePickerModal}
+        onClose={() => setShowDatePickerModal(false)}
+        onConfirm={handleCustomDateConfirm}
+        initialRange={customDateRange}
       />
 
       {/* Summary Cards with Comparison */}
@@ -317,8 +390,9 @@ export default function ReportsPage() {
         />
         <ReportsDonutChart
           categories={expenseCategories}
-          totalAmount={incomeStatement.totalExpenses}
+          totalAmount={filteredData.totalExpenses}
           isLoaded={isLoaded}
+          onDetailsClick={handleDonutDetailsClick}
         />
       </div>
 
@@ -332,13 +406,15 @@ export default function ReportsPage() {
       {/* Auto-generated Insights */}
       <ReportsInsights insights={insights} isLoaded={isLoaded} />
 
-      {/* Detailed Tables */}
-      <ReportsDetailedTables
-        revenueByCategory={incomeStatement.revenueByCategory}
-        expensesByCategory={incomeStatement.expensesByCategory}
-        onExportExcel={handleExportExcel}
-        onExportPDF={handleExportPDF}
-      />
+      {/* Detailed Tables (using period-filtered data) */}
+      <div ref={detailedTablesRef}>
+        <ReportsDetailedTables
+          revenueByCategory={filteredData.revenueByCategory}
+          expensesByCategory={filteredData.expensesByCategory}
+          onExportExcel={handleExportExcel}
+          onExportPDF={handleExportPDF}
+        />
+      </div>
     </div>
   );
 }
