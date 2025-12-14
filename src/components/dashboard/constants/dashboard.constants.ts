@@ -118,6 +118,7 @@ export const DASHBOARD_LABELS = {
   needsAttention: "يحتاج انتباهك",
   chequesDueSoon: "شيكات تستحق قريباً",
   unpaidReceivables: "ذمم غير محصلة",
+  unpaidPayables: "ذمم مستحقة علينا",
   noAlerts: "لا توجد تنبيهات عاجلة",
   noOverduePayments: "لا توجد مدفوعات متأخرة",
   revenueAndExpenses: "الإيرادات والمصروفات",
@@ -130,6 +131,7 @@ export const DASHBOARD_LABELS = {
   noTransactions: "لا توجد حركات مالية بعد",
   chequesWithinDays: "شيكات خلال 7 أيام",
   overdueInvoices: "فاتورة متأخرة",
+  dueInvoices: "فاتورة مستحقة",
 } as const;
 
 /** Categories to exclude from P&L calculations */

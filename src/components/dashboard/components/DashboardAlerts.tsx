@@ -10,12 +10,13 @@ import type { DashboardAlertsProps, AlertData } from "../types/dashboard.types";
 
 /**
  * Alerts section showing items that need attention
- * Displays cheques due soon and unpaid receivables
+ * Displays cheques due soon, unpaid payables, and unpaid receivables
  */
-function DashboardAlertsComponent({ chequesDueSoon, unpaidReceivables }: DashboardAlertsProps) {
+function DashboardAlertsComponent({ chequesDueSoon, unpaidReceivables, unpaidPayables }: DashboardAlertsProps) {
   const hasChequesAlert = chequesDueSoon.count > 0;
+  const hasPayablesAlert = unpaidPayables.count > 0;
   const hasReceivablesAlert = unpaidReceivables.count > 0;
-  const hasAnyAlert = hasChequesAlert || hasReceivablesAlert;
+  const hasAnyAlert = hasChequesAlert || hasPayablesAlert || hasReceivablesAlert;
 
   return (
     <Card className="border-slate-200">
@@ -25,19 +26,17 @@ function DashboardAlertsComponent({ chequesDueSoon, unpaidReceivables }: Dashboa
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Cheques due soon alert */}
+        {/* Cheques due soon alert - highest priority */}
         {hasChequesAlert && <ChequesAlert data={chequesDueSoon} />}
 
-        {/* Unpaid receivables alert */}
+        {/* Unpaid payables alert - high priority (money we owe) */}
+        {hasPayablesAlert && <PayablesAlert data={unpaidPayables} />}
+
+        {/* Unpaid receivables alert - medium priority (money owed to us) */}
         {hasReceivablesAlert && <ReceivablesAlert data={unpaidReceivables} />}
 
         {/* All good indicator when no alerts */}
         {!hasAnyAlert && <AllGoodIndicator />}
-
-        {/* Secondary indicator when only one alert */}
-        {hasAnyAlert && !(hasChequesAlert && hasReceivablesAlert) && (
-          <NoOverdueIndicator />
-        )}
       </CardContent>
     </Card>
   );
@@ -69,10 +68,10 @@ function ChequesAlert({ data }: { data: AlertData }) {
   );
 }
 
-/** Alert for unpaid receivables */
+/** Alert for unpaid receivables (money owed TO us) */
 function ReceivablesAlert({ data }: { data: AlertData }) {
   return (
-    <Link href="/ledger?paymentStatus=outstanding" className="block">
+    <Link href="/ledger?paymentStatus=outstanding&type=income" className="block">
       <article className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100 transition-all duration-200 hover:shadow-md cursor-pointer">
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 bg-amber-500 rounded-full" aria-hidden="true" />
@@ -95,23 +94,38 @@ function ReceivablesAlert({ data }: { data: AlertData }) {
   );
 }
 
+/** Alert for unpaid payables (money WE owe) */
+function PayablesAlert({ data }: { data: AlertData }) {
+  return (
+    <Link href="/ledger?paymentStatus=outstanding&type=expense" className="block">
+      <article className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-100 transition-all duration-200 hover:shadow-md cursor-pointer">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full" aria-hidden="true" />
+          <div>
+            <p className="font-medium text-slate-700 text-sm">
+              {DASHBOARD_LABELS.unpaidPayables}
+            </p>
+            <p className="text-xs text-slate-500">
+              {data.count} {DASHBOARD_LABELS.dueInvoices}
+            </p>
+          </div>
+        </div>
+        <div className="text-left">
+          <p className="font-semibold text-orange-700 text-sm">
+            {formatNumber(data.total)} {DASHBOARD_LABELS.currency}
+          </p>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
 /** Indicator when all is good */
 function AllGoodIndicator() {
   return (
     <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
       <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full" aria-hidden="true" />
       <p className="text-slate-600 text-sm">{DASHBOARD_LABELS.noAlerts}</p>
-      <Check className="w-4 h-4 text-emerald-600 mr-auto" aria-hidden="true" />
-    </div>
-  );
-}
-
-/** Secondary indicator for no overdue payments */
-function NoOverdueIndicator() {
-  return (
-    <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-      <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full" aria-hidden="true" />
-      <p className="text-slate-600 text-sm">{DASHBOARD_LABELS.noOverduePayments}</p>
       <Check className="w-4 h-4 text-emerald-600 mr-auto" aria-hidden="true" />
     </div>
   );

@@ -101,6 +101,7 @@ export interface DashboardSummaryCardsProps {
 export interface DashboardAlertsProps {
   chequesDueSoon: AlertData;
   unpaidReceivables: AlertData;
+  unpaidPayables: AlertData;
 }
 
 /** Props for DashboardBarChart component */
@@ -154,7 +155,8 @@ export interface UseChequesAlertsReturn {
   isLoading: boolean;
 }
 
-/** Receivables alerts hook return type */
+/** Receivables and payables alerts hook return type */
 export interface UseReceivablesAlertsReturn {
   unpaidReceivables: AlertData;
+  unpaidPayables: AlertData;
 }
