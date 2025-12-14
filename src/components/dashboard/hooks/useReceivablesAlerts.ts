@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
-import { toDate } from "@/lib/firestore-utils";
 import type { AlertData, UseReceivablesAlertsReturn } from "../types/dashboard.types";
 import { INCOME_TYPES } from "../constants/dashboard.constants";
+
+/** Outstanding payment statuses */
+const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
 
 /**
  * Hook for fetching unpaid receivables alerts
@@ -30,7 +32,9 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
         // Only count AR entries (income type) with outstanding balances
         if (isOutstandingReceivable(data)) {
           count++;
-          total += data.remainingBalance || data.amount || 0;
+          // Use remainingBalance if available, otherwise use amount for unpaid entries
+          const outstanding = getOutstandingAmount(data);
+          total += outstanding;
         }
       });
 
@@ -45,9 +49,35 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
 
 /** Check if entry is an outstanding receivable */
 function isOutstandingReceivable(data: Record<string, unknown>): boolean {
-  const isARAPEntry = data.isARAPEntry === true;
-  const isIncomeType = INCOME_TYPES.some((type) => data.type === type);
-  const isOutstanding = data.paymentStatus === "unpaid" || data.paymentStatus === "partial";
+  // Check if it's an AR/AP entry - use truthy check for compatibility
+  const isARAPEntry = Boolean(data.isARAPEntry);
 
-  return isARAPEntry && isIncomeType && isOutstanding;
+  // Check if it's an income type (receivable vs payable)
+  const isIncomeType = INCOME_TYPES.some((type) => data.type === type);
+
+  // Check if payment status indicates outstanding balance
+  const hasOutstandingStatus = OUTSTANDING_STATUSES.includes(
+    data.paymentStatus as typeof OUTSTANDING_STATUSES[number]
+  );
+
+  // If entry has paymentStatus, it's definitely an AR/AP entry
+  // This handles legacy entries that might not have isARAPEntry flag
+  const hasPaymentTracking = data.paymentStatus !== undefined;
+
+  return (isARAPEntry || hasPaymentTracking) && isIncomeType && hasOutstandingStatus;
+}
+
+/** Get the outstanding amount for an entry */
+function getOutstandingAmount(data: Record<string, unknown>): number {
+  // For partial payments, remainingBalance is accurate
+  if (typeof data.remainingBalance === "number" && data.remainingBalance > 0) {
+    return data.remainingBalance;
+  }
+
+  // For unpaid entries without remainingBalance, use amount
+  if (data.paymentStatus === "unpaid" && typeof data.amount === "number") {
+    return data.amount;
+  }
+
+  return 0;
 }

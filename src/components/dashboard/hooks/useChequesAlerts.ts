@@ -55,12 +55,16 @@ function calculateFutureDate(from: Date, days: number): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-/** Check if cheque is pending and due within date range */
+/** Check if cheque is pending and due soon (or past due) */
 function isPendingAndDueSoon(
   status: string,
   dueDate: Date,
-  now: Date,
+  _now: Date,
   futureDate: Date
 ): boolean {
-  return status === CHEQUE_PENDING_STATUS && dueDate >= now && dueDate <= futureDate;
+  // Include both:
+  // 1. Past-due pending cheques (dueDate < now) - URGENT
+  // 2. Cheques due within configured days (dueDate <= futureDate)
+  // Simplified: any pending cheque with dueDate <= futureDate
+  return status === CHEQUE_PENDING_STATUS && dueDate <= futureDate;
 }
