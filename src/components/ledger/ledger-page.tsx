@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useMemo } from "react";
+import { useReducer, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -134,20 +134,20 @@ export default function LedgerPage() {
   } = formHook;
 
   // Export handlers
-  const handleExportExcel = () => {
+  const handleExportExcel = useCallback(() => {
     exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`);
-  };
+  }, [filteredEntries]);
 
-  const handleExportPDF = () => {
+  const handleExportPDF = useCallback(() => {
     exportLedgerToHTML(filteredEntries);
-  };
+  }, [filteredEntries]);
 
   // Handle unpaid card click - set view mode to unpaid
-  const handleUnpaidClick = () => {
+  const handleUnpaidClick = useCallback(() => {
     setViewMode("unpaid");
-  };
+  }, [setViewMode]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     dispatch({ type: "SET_LOADING", payload: true });
 
@@ -188,13 +188,13 @@ export default function LedgerPage() {
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  };
+  }, [state.ui.createInvoice, state.form, state.data.editingEntry, submitLedgerEntry, toast]);
 
-  const handleEdit = (entry: LedgerEntry) => {
+  const handleEdit = useCallback((entry: LedgerEntry) => {
     dispatch({ type: "START_EDIT", payload: entry });
-  };
+  }, []);
 
-  const handleDelete = (entry: LedgerEntry) => {
+  const handleDelete = useCallback((entry: LedgerEntry) => {
     confirm(
       "حذف الحركة المالية",
       "هل أنت متأكد من حذف هذه الحركة؟ سيتم حذف جميع السجلات المرتبطة (مدفوعات، شيكات، حركات مخزون). لا يمكن التراجع عن هذا الإجراء.",
@@ -203,13 +203,13 @@ export default function LedgerPage() {
       },
       "destructive"
     );
-  };
+  }, [confirm, deleteLedgerEntry, entries]);
 
-  const openAddDialog = () => dispatch({ type: "OPEN_ADD_DIALOG" });
-  const openRelatedDialog = (entry: LedgerEntry) => dispatch({ type: "OPEN_RELATED_DIALOG", payload: entry });
-  const openQuickPayDialog = (entry: LedgerEntry) => dispatch({ type: "OPEN_QUICK_PAY_DIALOG", payload: entry });
+  const openAddDialog = useCallback(() => dispatch({ type: "OPEN_ADD_DIALOG" }), []);
+  const openRelatedDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_RELATED_DIALOG", payload: entry }), []);
+  const openQuickPayDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_QUICK_PAY_DIALOG", payload: entry }), []);
 
-  const handleAddPayment = async (e: React.FormEvent) => {
+  const handleAddPayment = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!state.data.selectedEntry) return;
     dispatch({ type: "SET_LOADING", payload: true });
@@ -219,9 +219,9 @@ export default function LedgerPage() {
       dispatch({ type: "CLOSE_RELATED_DIALOG" });
     }
     dispatch({ type: "SET_LOADING", payload: false });
-  };
+  }, [state.data.selectedEntry, addPaymentToEntry, paymentFormData, setPaymentFormData]);
 
-  const handleAddCheque = async (e: React.FormEvent) => {
+  const handleAddCheque = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!state.data.selectedEntry) return;
     dispatch({ type: "SET_LOADING", payload: true });
@@ -231,9 +231,9 @@ export default function LedgerPage() {
       dispatch({ type: "CLOSE_RELATED_DIALOG" });
     }
     dispatch({ type: "SET_LOADING", payload: false });
-  };
+  }, [state.data.selectedEntry, addChequeToEntry, chequeFormData, setChequeFormData]);
 
-  const handleAddInventory = async (e: React.FormEvent) => {
+  const handleAddInventory = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!state.data.selectedEntry) return;
     dispatch({ type: "SET_LOADING", payload: true });
@@ -243,7 +243,7 @@ export default function LedgerPage() {
       dispatch({ type: "CLOSE_RELATED_DIALOG" });
     }
     dispatch({ type: "SET_LOADING", payload: false });
-  };
+  }, [state.data.selectedEntry, addInventoryToEntry, inventoryFormData, setInventoryFormData]);
 
   // Context value for LedgerFormDialog - eliminates prop drilling
   const ledgerFormContextValue: LedgerFormContextValue = {

@@ -36,7 +36,6 @@ export function ImageViewerDialog({ isOpen, onClose, imageUrl }: ImageViewerDial
                 alt="Cheque"
                 fill
                 className="object-contain rounded-lg shadow-lg"
-                unoptimized
               />
             </div>
           )}
