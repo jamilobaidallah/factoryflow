@@ -141,7 +141,37 @@ Completely redesigned the Reports page from an 8-tab layout to a modern dashboar
 - SubcategoryAnalysis component from main page (integrated into tables)
 - Note: InventoryTab, FixedAssetsTab, and other tab components still exist for deep-link access
 
+---
+
+## Bug Fixes (Post-Review)
+
+### Bug 4 & 6 (HIGH) - Data Filtering Mismatch
+- **Problem**: Tables showed all-time data instead of filtered by selected period
+- **Solution**: Added `filteredData` useMemo that filters ledger entries by `dateRange` from comparison hook
+- **Files**: `reports-page.tsx`
+
+### Bug 3 (HIGH) - Quick Reports Cards Not Clickable
+- **Problem**: Cards had no navigation
+- **Solution**: Added `useRouter` and navigation to report pages via `QUICK_REPORTS.link`
+- **Files**: `reports-page.tsx`
+
+### Bug 2 (MEDIUM) - Custom Date Picker Not Working
+- **Problem**: "مخصص" button did nothing
+- **Solution**: Created `ReportsDatePickerModal` with date inputs, quick presets, and validation
+- **Files**: `ReportsDatePickerModal.tsx`, `ReportsPeriodSelector.tsx`, `reports.types.ts`, `reports-page.tsx`
+
+### Bug 5 (LOW) - Donut Chart Missing Details Button
+- **Problem**: No way to navigate from donut chart to detailed breakdown
+- **Solution**: Added `onDetailsClick` prop and scroll-to-tables functionality
+- **Files**: `reports-page.tsx`
+
+### Bug 1 (HIGH) - PDF Arabic Encoding Broken
+- **Problem**: jsPDF doesn't support Arabic fonts natively
+- **Solution**: Changed to use `exportIncomeStatementToHTML` which uses Cairo font and browser print
+- **Files**: `reports-page.tsx`
+
+### Additional Files Created
+- `src/components/reports/components/ReportsDatePickerModal.tsx` - Custom date range picker modal
+
 ### Future Enhancements (TODO)
-- Custom date range picker modal
-- Quick report card navigation to detailed views
 - Subcategory drill-down in tables (expandable rows implemented, needs data)
