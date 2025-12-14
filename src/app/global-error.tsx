@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Cairo } from 'next/font/google';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
+
+const cairo = Cairo({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '600', '700'],
+  display: 'swap',
+});
 
 /**
  * Global Error Page
@@ -25,12 +32,8 @@ export default function GlobalError({
     <html lang="ar" dir="rtl">
       <head>
         <title>خطأ في التطبيق - FactoryFlow</title>
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap"
-        />
       </head>
-      <body className="font-cairo">
+      <body className={cairo.className}>
         <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
           <div className="max-w-md w-full">
             <div className="bg-white rounded-lg shadow-xl p-8">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useReducer } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,86 @@ import { doc, updateDoc } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+
+// Dialog state management with useReducer
+interface ChequeToCashData {
+  chequeId: string;
+  chequeNumber: string;
+  clientName: string;
+  amount: number;
+  dueDate: Date;
+  chequeType: "incoming" | "outgoing";
+}
+
+interface DialogState {
+  imageViewerOpen: boolean;
+  selectedImageUrl: string;
+  endorseDialogOpen: boolean;
+  chequeToEndorse: Cheque | null;
+  endorseToSupplier: string;
+  clearDialogOpen: boolean;
+  chequeToClear: Cheque | null;
+  bounceDialogOpen: boolean;
+  chequeToBounce: Cheque | null;
+  multiAllocationDialogOpen: boolean;
+  chequeToCash: ChequeToCashData | null;
+}
+
+type DialogAction =
+  | { type: 'OPEN_IMAGE_VIEWER'; imageUrl: string }
+  | { type: 'CLOSE_IMAGE_VIEWER' }
+  | { type: 'OPEN_ENDORSE_DIALOG'; cheque: Cheque }
+  | { type: 'CLOSE_ENDORSE_DIALOG' }
+  | { type: 'SET_ENDORSE_SUPPLIER'; value: string }
+  | { type: 'OPEN_CLEAR_DIALOG'; cheque: Cheque }
+  | { type: 'CLOSE_CLEAR_DIALOG' }
+  | { type: 'OPEN_BOUNCE_DIALOG'; cheque: Cheque }
+  | { type: 'CLOSE_BOUNCE_DIALOG' }
+  | { type: 'OPEN_MULTI_ALLOCATION'; data: ChequeToCashData }
+  | { type: 'CLOSE_MULTI_ALLOCATION' };
+
+const initialDialogState: DialogState = {
+  imageViewerOpen: false,
+  selectedImageUrl: "",
+  endorseDialogOpen: false,
+  chequeToEndorse: null,
+  endorseToSupplier: "",
+  clearDialogOpen: false,
+  chequeToClear: null,
+  bounceDialogOpen: false,
+  chequeToBounce: null,
+  multiAllocationDialogOpen: false,
+  chequeToCash: null,
+};
+
+function dialogReducer(state: DialogState, action: DialogAction): DialogState {
+  switch (action.type) {
+    case 'OPEN_IMAGE_VIEWER':
+      return { ...state, imageViewerOpen: true, selectedImageUrl: action.imageUrl };
+    case 'CLOSE_IMAGE_VIEWER':
+      return { ...state, imageViewerOpen: false, selectedImageUrl: "" };
+    case 'OPEN_ENDORSE_DIALOG':
+      return { ...state, endorseDialogOpen: true, chequeToEndorse: action.cheque, endorseToSupplier: "" };
+    case 'CLOSE_ENDORSE_DIALOG':
+      return { ...state, endorseDialogOpen: false, chequeToEndorse: null, endorseToSupplier: "" };
+    case 'SET_ENDORSE_SUPPLIER':
+      return { ...state, endorseToSupplier: action.value };
+    case 'OPEN_CLEAR_DIALOG':
+      return { ...state, clearDialogOpen: true, chequeToClear: action.cheque };
+    case 'CLOSE_CLEAR_DIALOG':
+      return { ...state, clearDialogOpen: false, chequeToClear: null };
+    case 'OPEN_BOUNCE_DIALOG':
+      return { ...state, bounceDialogOpen: true, chequeToBounce: action.cheque };
+    case 'CLOSE_BOUNCE_DIALOG':
+      return { ...state, bounceDialogOpen: false, chequeToBounce: null };
+    case 'OPEN_MULTI_ALLOCATION':
+      return { ...state, multiAllocationDialogOpen: true, chequeToCash: action.data };
+    case 'CLOSE_MULTI_ALLOCATION':
+      return { ...state, multiAllocationDialogOpen: false, chequeToCash: null };
+    default:
+      return state;
+  }
+}
 
 export default function ChequesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -93,30 +173,11 @@ export default function ChequesPage() {
   const [chequeImage, setChequeImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // Dialog states
-  const [imageViewerOpen, setImageViewerOpen] = useState(false);
-  const [selectedImageUrl, setSelectedImageUrl] = useState<string>("");
-  const [endorseDialogOpen, setEndorseDialogOpen] = useState(false);
-  const [chequeToEndorse, setChequeToEndorse] = useState<Cheque | null>(null);
-  const [endorseToSupplier, setEndorseToSupplier] = useState("");
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [chequeToClear, setChequeToClear] = useState<Cheque | null>(null);
-  const [bounceDialogOpen, setBounceDialogOpen] = useState(false);
-  const [chequeToBounce, setChequeToBounce] = useState<Cheque | null>(null);
+  // Dialog states - consolidated with useReducer
+  const [dialogState, dispatch] = useReducer(dialogReducer, initialDialogState);
 
   // Pending form data for cheque cashing flow
   const [pendingFormData, setPendingFormData] = useState<ChequeFormData | null>(null);
-
-  // Multi-allocation dialog state for cheque cashing
-  const [multiAllocationDialogOpen, setMultiAllocationDialogOpen] = useState(false);
-  const [chequeToCash, setChequeToCash] = useState<{
-    chequeId: string;
-    chequeNumber: string;
-    clientName: string;
-    amount: number;
-    dueDate: Date;
-    chequeType: "incoming" | "outgoing";
-  } | null>(null);
 
   const resetForm = () => {
     setFormData(initialChequeFormData);
@@ -161,16 +222,18 @@ export default function ChequesPage() {
     if (editingCheque && wasPending && isNowCleared) {
       // Go directly to MultiAllocationDialog (date picker is inside)
       setPendingFormData(formData);
-      setChequeToCash({
-        chequeId: editingCheque.id,
-        chequeNumber: formData.chequeNumber,
-        clientName: formData.clientName,
-        amount: parseFloat(formData.amount),
-        dueDate: new Date(formData.dueDate),
-        chequeType: formData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+      dispatch({
+        type: 'OPEN_MULTI_ALLOCATION',
+        data: {
+          chequeId: editingCheque.id,
+          chequeNumber: formData.chequeNumber,
+          clientName: formData.clientName,
+          amount: parseFloat(formData.amount),
+          dueDate: new Date(formData.dueDate),
+          chequeType: formData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+        }
       });
       setIsDialogOpen(false); // Close the cheque edit dialog
-      setMultiAllocationDialogOpen(true);
       return;
     }
 
@@ -206,41 +269,41 @@ export default function ChequesPage() {
   };
 
   const handleEndorse = async () => {
-    if (!chequeToEndorse) return;
+    if (!dialogState.chequeToEndorse) return;
     setLoading(true);
-    const success = await endorseCheque(chequeToEndorse, endorseToSupplier);
+    const success = await endorseCheque(dialogState.chequeToEndorse, dialogState.endorseToSupplier);
     if (success) {
-      setEndorseDialogOpen(false);
-      setChequeToEndorse(null);
-      setEndorseToSupplier("");
+      dispatch({ type: 'CLOSE_ENDORSE_DIALOG' });
     }
     setLoading(false);
   };
 
   const handleClear = async () => {
-    if (!chequeToClear) return;
+    if (!dialogState.chequeToClear) return;
 
     // Go directly to MultiAllocationDialog (date picker is inside)
-    setChequeToCash({
-      chequeId: chequeToClear.id,
-      chequeNumber: chequeToClear.chequeNumber,
-      clientName: chequeToClear.clientName,
-      amount: chequeToClear.amount,
-      dueDate: chequeToClear.dueDate instanceof Date ? chequeToClear.dueDate : new Date(chequeToClear.dueDate),
-      chequeType: chequeToClear.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+    const cheque = dialogState.chequeToClear;
+    dispatch({ type: 'CLOSE_CLEAR_DIALOG' });
+    dispatch({
+      type: 'OPEN_MULTI_ALLOCATION',
+      data: {
+        chequeId: cheque.id,
+        chequeNumber: cheque.chequeNumber,
+        clientName: cheque.clientName,
+        amount: cheque.amount,
+        dueDate: cheque.dueDate instanceof Date ? cheque.dueDate : new Date(cheque.dueDate),
+        chequeType: cheque.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
+      }
     });
-    setClearDialogOpen(false);
-    setChequeToClear(null);
-    setMultiAllocationDialogOpen(true);
   };
 
   // Handler for successful cheque cashing via MultiAllocationDialog
   const handleChequeCashingSuccess = async (paymentId: string) => {
-    if (!user || !chequeToCash) return;
+    if (!user || !dialogState.chequeToCash) return;
 
     try {
       // Update the cheque status to 'Cashed' and link the payment
-      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, chequeToCash.chequeId);
+      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, dialogState.chequeToCash.chequeId);
       await updateDoc(chequeRef, {
         status: CHEQUE_STATUS_AR.CASHED,
         clearedDate: new Date(),
@@ -249,11 +312,11 @@ export default function ChequesPage() {
 
       toast({
         title: "تم تحصيل الشيك",
-        description: `تم تحصيل الشيك رقم ${chequeToCash.chequeNumber} وتوزيع المبلغ على المعاملات المستحقة`,
+        description: `تم تحصيل الشيك رقم ${dialogState.chequeToCash.chequeNumber} وتوزيع المبلغ على المعاملات المستحقة`,
       });
 
       // Reset state
-      setChequeToCash(null);
+      dispatch({ type: 'CLOSE_MULTI_ALLOCATION' });
       setPendingFormData(null);
       resetForm();
       refresh(); // Refresh the cheques list
@@ -268,12 +331,11 @@ export default function ChequesPage() {
   };
 
   const handleBounce = async () => {
-    if (!chequeToBounce) return;
+    if (!dialogState.chequeToBounce) return;
     setLoading(true);
-    const success = await bounceCheque(chequeToBounce);
+    const success = await bounceCheque(dialogState.chequeToBounce);
     if (success) {
-      setBounceDialogOpen(false);
-      setChequeToBounce(null);
+      dispatch({ type: 'CLOSE_BOUNCE_DIALOG' });
     }
     setLoading(false);
   };
@@ -338,25 +400,12 @@ export default function ChequesPage() {
               cheques={chequesWithPhones}
               loading={loading}
               onRefresh={refresh}
-              onMarkCleared={(cheque) => {
-                setChequeToClear(cheque);
-                setClearDialogOpen(true);
-              }}
-              onMarkBounced={(cheque) => {
-                setChequeToBounce(cheque);
-                setBounceDialogOpen(true);
-              }}
+              onMarkCleared={(cheque) => dispatch({ type: 'OPEN_CLEAR_DIALOG', cheque })}
+              onMarkBounced={(cheque) => dispatch({ type: 'OPEN_BOUNCE_DIALOG', cheque })}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              onEndorse={(cheque) => {
-                setChequeToEndorse(cheque);
-                setEndorseToSupplier("");
-                setEndorseDialogOpen(true);
-              }}
-              onViewImage={(url) => {
-                setSelectedImageUrl(url);
-                setImageViewerOpen(true);
-              }}
+              onEndorse={(cheque) => dispatch({ type: 'OPEN_ENDORSE_DIALOG', cheque })}
+              onViewImage={(url) => dispatch({ type: 'OPEN_IMAGE_VIEWER', imageUrl: url })}
             />
           )}
 
@@ -429,39 +478,33 @@ export default function ChequesPage() {
       />
 
       <ImageViewerDialog
-        isOpen={imageViewerOpen}
-        onClose={() => setImageViewerOpen(false)}
-        imageUrl={selectedImageUrl}
+        isOpen={dialogState.imageViewerOpen}
+        onClose={() => dispatch({ type: 'CLOSE_IMAGE_VIEWER' })}
+        imageUrl={dialogState.selectedImageUrl}
       />
 
       <EndorseDialog
-        isOpen={endorseDialogOpen}
-        onClose={() => setEndorseDialogOpen(false)}
-        cheque={chequeToEndorse}
-        supplierName={endorseToSupplier}
-        setSupplierName={setEndorseToSupplier}
+        isOpen={dialogState.endorseDialogOpen}
+        onClose={() => dispatch({ type: 'CLOSE_ENDORSE_DIALOG' })}
+        cheque={dialogState.chequeToEndorse}
+        supplierName={dialogState.endorseToSupplier}
+        setSupplierName={(value) => dispatch({ type: 'SET_ENDORSE_SUPPLIER', value })}
         loading={loading}
         onEndorse={handleEndorse}
       />
 
       <ClearChequeDialog
-        isOpen={clearDialogOpen}
-        onClose={() => {
-          setClearDialogOpen(false);
-          setChequeToClear(null);
-        }}
-        cheque={chequeToClear}
+        isOpen={dialogState.clearDialogOpen}
+        onClose={() => dispatch({ type: 'CLOSE_CLEAR_DIALOG' })}
+        cheque={dialogState.chequeToClear}
         loading={loading}
         onClear={handleClear}
       />
 
       <BounceChequeDialog
-        isOpen={bounceDialogOpen}
-        onClose={() => {
-          setBounceDialogOpen(false);
-          setChequeToBounce(null);
-        }}
-        cheque={chequeToBounce}
+        isOpen={dialogState.bounceDialogOpen}
+        onClose={() => dispatch({ type: 'CLOSE_BOUNCE_DIALOG' })}
+        cheque={dialogState.chequeToBounce}
         loading={loading}
         onBounce={handleBounce}
       />
@@ -470,15 +513,14 @@ export default function ChequesPage() {
 
       {/* Multi-Allocation Dialog for Cheque Cashing */}
       <MultiAllocationDialog
-        open={multiAllocationDialogOpen}
+        open={dialogState.multiAllocationDialogOpen}
         onOpenChange={(open) => {
-          setMultiAllocationDialogOpen(open);
           if (!open) {
-            setChequeToCash(null);
+            dispatch({ type: 'CLOSE_MULTI_ALLOCATION' });
             setPendingFormData(null);
           }
         }}
-        chequeData={chequeToCash || undefined}
+        chequeData={dialogState.chequeToCash || undefined}
         onChequeSuccess={handleChequeCashingSuccess}
       />
     </div>

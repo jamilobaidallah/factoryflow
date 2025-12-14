@@ -19,7 +19,7 @@ const config = {
     },
     extend: {
       fontFamily: {
-        cairo: ["Cairo", "Arial", "sans-serif"],
+        cairo: ["var(--font-cairo)", "Cairo", "Arial", "sans-serif"],
       },
       colors: {
         // Existing shadcn/ui CSS variable colors (preserved for compatibility)

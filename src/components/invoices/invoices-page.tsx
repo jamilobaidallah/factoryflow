@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useReducer } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,58 @@ import { InvoicesFormDialog } from "./components/InvoicesFormDialog";
 import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
+// UI state management with useReducer
+interface UIState {
+  isDialogOpen: boolean;
+  isPreviewOpen: boolean;
+  editingInvoice: Invoice | null;
+  viewInvoice: Invoice | null;
+  loading: boolean;
+  selectedImageUrl: string | null;
+}
+
+type UIAction =
+  | { type: 'OPEN_ADD_DIALOG' }
+  | { type: 'OPEN_EDIT_DIALOG'; invoice: Invoice }
+  | { type: 'CLOSE_DIALOG' }
+  | { type: 'OPEN_PREVIEW'; invoice: Invoice }
+  | { type: 'CLOSE_PREVIEW' }
+  | { type: 'SET_LOADING'; value: boolean }
+  | { type: 'OPEN_IMAGE_VIEWER'; url: string }
+  | { type: 'CLOSE_IMAGE_VIEWER' };
+
+const initialUIState: UIState = {
+  isDialogOpen: false,
+  isPreviewOpen: false,
+  editingInvoice: null,
+  viewInvoice: null,
+  loading: false,
+  selectedImageUrl: null,
+};
+
+function uiReducer(state: UIState, action: UIAction): UIState {
+  switch (action.type) {
+    case 'OPEN_ADD_DIALOG':
+      return { ...state, isDialogOpen: true, editingInvoice: null };
+    case 'OPEN_EDIT_DIALOG':
+      return { ...state, isDialogOpen: true, editingInvoice: action.invoice };
+    case 'CLOSE_DIALOG':
+      return { ...state, isDialogOpen: false, editingInvoice: null };
+    case 'OPEN_PREVIEW':
+      return { ...state, isPreviewOpen: true, viewInvoice: action.invoice };
+    case 'CLOSE_PREVIEW':
+      return { ...state, isPreviewOpen: false, viewInvoice: null };
+    case 'SET_LOADING':
+      return { ...state, loading: action.value };
+    case 'OPEN_IMAGE_VIEWER':
+      return { ...state, selectedImageUrl: action.url };
+    case 'CLOSE_IMAGE_VIEWER':
+      return { ...state, selectedImageUrl: null };
+    default:
+      return state;
+  }
+}
+
 export default function InvoicesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
@@ -38,17 +90,10 @@ export default function InvoicesPage() {
   const { invoices, loading: dataLoading } = useInvoicesData();
   const { submitInvoice, deleteInvoice, updateStatus, exportPDF } = useInvoicesOperations();
 
-  // UI state
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
-  const [loading, setLoading] = useState(false);
+  // UI state - consolidated with useReducer
+  const [ui, dispatch] = useReducer(uiReducer, initialUIState);
 
-  // Image preview state
-  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
-
-  // Form state
+  // Form state (kept separate due to complexity)
   const [formData, setFormData] = useState<InvoiceFormData>(initialFormData);
   const [items, setItems] = useState<InvoiceItem[]>([initialInvoiceItem]);
 
@@ -63,16 +108,14 @@ export default function InvoicesPage() {
   const resetForm = () => {
     setFormData(initialFormData);
     setItems([initialInvoiceItem]);
-    setEditingInvoice(null);
   };
 
   const openAddDialog = () => {
     resetForm();
-    setIsDialogOpen(true);
+    dispatch({ type: 'OPEN_ADD_DIALOG' });
   };
 
   const handleEdit = (invoice: Invoice) => {
-    setEditingInvoice(invoice);
     setFormData({
       clientName: invoice.clientName,
       clientAddress: invoice.clientAddress || "",
@@ -84,25 +127,24 @@ export default function InvoicesPage() {
       invoiceImageUrl: invoice.invoiceImageUrl || "",
     });
     setItems(invoice.items);
-    setIsDialogOpen(true);
+    dispatch({ type: 'OPEN_EDIT_DIALOG', invoice });
   };
 
   const handlePreview = (invoice: Invoice) => {
-    setViewInvoice(invoice);
-    setIsPreviewOpen(true);
+    dispatch({ type: 'OPEN_PREVIEW', invoice });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    dispatch({ type: 'SET_LOADING', value: true });
 
-    const success = await submitInvoice(formData, items, editingInvoice);
+    const success = await submitInvoice(formData, items, ui.editingInvoice);
 
     if (success) {
       resetForm();
-      setIsDialogOpen(false);
+      dispatch({ type: 'CLOSE_DIALOG' });
     }
-    setLoading(false);
+    dispatch({ type: 'SET_LOADING', value: false });
   };
 
   const handleDelete = (invoiceId: string) => {
@@ -247,7 +289,7 @@ export default function InvoicesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                          onClick={() => setSelectedImageUrl(invoice.invoiceImageUrl || null)}
+                          onClick={() => dispatch({ type: 'OPEN_IMAGE_VIEWER', url: invoice.invoiceImageUrl! })}
                           title="عرض صورة الفاتورة"
                         >
                           <Image className="h-4 w-4" />
@@ -327,27 +369,27 @@ export default function InvoicesPage() {
 
       {/* Dialogs */}
       <InvoicesFormDialog
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        editingInvoice={editingInvoice}
+        isOpen={ui.isDialogOpen}
+        onClose={() => dispatch({ type: 'CLOSE_DIALOG' })}
+        editingInvoice={ui.editingInvoice}
         formData={formData}
         setFormData={setFormData}
         items={items}
         setItems={setItems}
-        loading={loading}
+        loading={ui.loading}
         onSubmit={handleSubmit}
       />
 
       <InvoicePreviewDialog
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        invoice={viewInvoice}
+        isOpen={ui.isPreviewOpen}
+        onClose={() => dispatch({ type: 'CLOSE_PREVIEW' })}
+        invoice={ui.viewInvoice}
         onExportPDF={exportPDF}
       />
 
       {/* Image Preview Modal */}
-      {selectedImageUrl && (
-        <Dialog open={!!selectedImageUrl} onOpenChange={() => setSelectedImageUrl(null)}>
+      {ui.selectedImageUrl && (
+        <Dialog open={!!ui.selectedImageUrl} onOpenChange={() => dispatch({ type: 'CLOSE_IMAGE_VIEWER' })}>
           <DialogContent className="max-w-3xl max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="flex items-center justify-between">
@@ -356,7 +398,7 @@ export default function InvoicesPage() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSelectedImageUrl(null)}
+                  onClick={() => dispatch({ type: 'CLOSE_IMAGE_VIEWER' })}
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -364,7 +406,7 @@ export default function InvoicesPage() {
             </DialogHeader>
             <div className="flex justify-center items-center overflow-auto max-h-[70vh]">
               <img
-                src={selectedImageUrl}
+                src={ui.selectedImageUrl}
                 alt="صورة الفاتورة"
                 className="max-w-full max-h-full object-contain"
                 loading="lazy"

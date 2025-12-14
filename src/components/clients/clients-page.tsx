@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useReducer } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,25 +70,97 @@ interface Client {
   createdAt: Date;
 }
 
+// Form data type
+interface FormData {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  balance: string;
+}
+
+const initialFormData: FormData = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  balance: "0",
+};
+
+// UI state management with useReducer
+interface UIState {
+  isDialogOpen: boolean;
+  editingClient: Client | null;
+  loading: boolean;
+  formData: FormData;
+  validationErrors: Record<string, string>;
+}
+
+type UIAction =
+  | { type: 'OPEN_ADD_DIALOG' }
+  | { type: 'OPEN_EDIT_DIALOG'; client: Client }
+  | { type: 'CLOSE_DIALOG' }
+  | { type: 'SET_LOADING'; value: boolean }
+  | { type: 'SET_FORM_DATA'; data: FormData }
+  | { type: 'UPDATE_FORM_FIELD'; field: keyof FormData; value: string }
+  | { type: 'SET_VALIDATION_ERRORS'; errors: Record<string, string> }
+  | { type: 'RESET_FORM' };
+
+const initialUIState: UIState = {
+  isDialogOpen: false,
+  editingClient: null,
+  loading: false,
+  formData: initialFormData,
+  validationErrors: {},
+};
+
+function uiReducer(state: UIState, action: UIAction): UIState {
+  switch (action.type) {
+    case 'OPEN_ADD_DIALOG':
+      return { ...state, isDialogOpen: true, editingClient: null, formData: initialFormData, validationErrors: {} };
+    case 'OPEN_EDIT_DIALOG':
+      return {
+        ...state,
+        isDialogOpen: true,
+        editingClient: action.client,
+        formData: {
+          name: action.client.name || "",
+          phone: action.client.phone || "",
+          email: action.client.email || "",
+          address: action.client.address || "",
+          balance: (action.client.balance || 0).toString(),
+        },
+        validationErrors: {},
+      };
+    case 'CLOSE_DIALOG':
+      return { ...state, isDialogOpen: false, editingClient: null, formData: initialFormData, validationErrors: {} };
+    case 'SET_LOADING':
+      return { ...state, loading: action.value };
+    case 'SET_FORM_DATA':
+      return { ...state, formData: action.data };
+    case 'UPDATE_FORM_FIELD':
+      return { ...state, formData: { ...state.formData, [action.field]: action.value } };
+    case 'SET_VALIDATION_ERRORS':
+      return { ...state, validationErrors: action.errors };
+    case 'RESET_FORM':
+      return { ...state, formData: initialFormData, validationErrors: {}, editingClient: null };
+    default:
+      return state;
+  }
+}
+
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    address: "",
-    balance: "0",
-  });
+  // Data state (kept separate as it's set by onSnapshot)
+  const [clients, setClients] = useState<Client[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  // UI state - consolidated with useReducer
+  const [ui, dispatch] = useReducer(uiReducer, initialUIState);
 
   // Real-time data fetching
   useEffect(() => {
@@ -115,7 +187,7 @@ export default function ClientsPage() {
   }, [user]);
 
   // Validate form data in real-time
-  const validateForm = (data: typeof formData): boolean => {
+  const validateForm = (data: FormData): boolean => {
     const errors: Record<string, string> = {};
 
     // Parse balance
@@ -145,7 +217,7 @@ export default function ClientsPage() {
       }
     }
 
-    setValidationErrors(errors);
+    dispatch({ type: 'SET_VALIDATION_ERRORS', errors });
     return Object.keys(errors).length === 0;
   };
 
@@ -154,7 +226,7 @@ export default function ClientsPage() {
     if (!user) { return; }
 
     // Validate form
-    if (!validateForm(formData)) {
+    if (!validateForm(ui.formData)) {
       toast({
         title: "خطأ في البيانات",
         description: "يرجى تصحيح الأخطاء والمحاولة مرة أخرى",
@@ -163,14 +235,14 @@ export default function ClientsPage() {
       return;
     }
 
-    setLoading(true);
+    dispatch({ type: 'SET_LOADING', value: true });
 
     try {
       // Check for duplicate name
       const isDuplicate = await checkDuplicateClient(
-        formData.name,
+        ui.formData.name,
         user.uid,
-        editingClient?.id
+        ui.editingClient?.id
       );
 
       if (isDuplicate) {
@@ -179,35 +251,35 @@ export default function ClientsPage() {
           description: "يوجد عميل بنفس الاسم مسبقاً",
           variant: "destructive",
         });
-        setValidationErrors({ name: "يوجد عميل بنفس الاسم مسبقاً" });
-        setLoading(false);
+        dispatch({ type: 'SET_VALIDATION_ERRORS', errors: { name: "يوجد عميل بنفس الاسم مسبقاً" } });
+        dispatch({ type: 'SET_LOADING', value: false });
         return;
       }
 
       // Parse and validate data
-      const balanceNum = parseNumericInput(formData.balance) ?? 0;
+      const balanceNum = parseNumericInput(ui.formData.balance) ?? 0;
 
       const clientData: ClientInput = {
-        name: sanitizeString(formData.name),
-        phone: formData.phone.trim(),
-        email: formData.email.trim(),
-        address: formData.address.trim(),
+        name: sanitizeString(ui.formData.name),
+        phone: ui.formData.phone.trim(),
+        email: ui.formData.email.trim(),
+        address: ui.formData.address.trim(),
         balance: balanceNum,
       };
 
       // Final validation with Zod
       const validated = clientSchema.parse(clientData);
 
-      if (editingClient) {
+      if (ui.editingClient) {
         // Update existing client
-        const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, editingClient.id);
+        const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, ui.editingClient.id);
         await updateDoc(clientRef, validated);
 
         // Log activity for update
         logActivity(user.dataOwnerId, {
           action: 'update',
           module: 'clients',
-          targetId: editingClient.id,
+          targetId: ui.editingClient.id,
           userId: user.uid,
           userEmail: user.email || '',
           description: `تعديل بيانات عميل: ${validated.name}`,
@@ -253,11 +325,10 @@ export default function ClientsPage() {
         });
       }
 
-      resetForm();
-      setIsDialogOpen(false);
+      dispatch({ type: 'CLOSE_DIALOG' });
     } catch (error) {
       const appError = handleError(error);
-      logError(appError, { operation: 'saveClient', formData }, user?.uid);
+      logError(appError, { operation: 'saveClient', formData: ui.formData }, user?.uid);
 
       toast({
         title: getErrorTitle(appError),
@@ -265,21 +336,12 @@ export default function ClientsPage() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', value: false });
     }
   };
 
   const handleEdit = (client: Client) => {
-    setEditingClient(client);
-    setFormData({
-      name: client.name || "",
-      phone: client.phone || "",
-      email: client.email || "",
-      address: client.address || "",
-      balance: (client.balance || 0).toString(),
-    });
-    setValidationErrors({});
-    setIsDialogOpen(true);
+    dispatch({ type: 'OPEN_EDIT_DIALOG', client });
   };
 
   const handleDelete = (clientId: string) => {
@@ -330,21 +392,8 @@ export default function ClientsPage() {
     );
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      phone: "",
-      email: "",
-      address: "",
-      balance: "0",
-    });
-    setValidationErrors({});
-    setEditingClient(null);
-  };
-
   const openAddDialog = () => {
-    resetForm();
-    setIsDialogOpen(true);
+    dispatch({ type: 'OPEN_ADD_DIALOG' });
   };
 
   return (
@@ -438,20 +487,20 @@ export default function ClientsPage() {
         )}
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={ui.isDialogOpen} onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_DIALOG' })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
+              {ui.editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
             </DialogTitle>
             <DialogDescription>
-              {editingClient
+              {ui.editingClient
                 ? "قم بتعديل بيانات العميل أدناه"
                 : "أدخل بيانات العميل الجديد أدناه"}
             </DialogDescription>
           </DialogHeader>
 
-          {Object.keys(validationErrors).length > 0 && (
+          {Object.keys(ui.validationErrors).length > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -465,10 +514,10 @@ export default function ClientsPage() {
               <ValidatedInput
                 label="الاسم"
                 name="name"
-                value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value })}
+                value={ui.formData.name}
+                onChange={(value) => dispatch({ type: 'UPDATE_FORM_FIELD', field: 'name', value })}
                 required
-                error={validationErrors.name}
+                error={ui.validationErrors.name}
                 hint="اسم العميل الكامل"
                 maxLength={100}
               />
@@ -476,9 +525,9 @@ export default function ClientsPage() {
               <ValidatedInput
                 label="رقم الهاتف"
                 name="phone"
-                value={formData.phone}
-                onChange={(value) => setFormData({ ...formData, phone: value })}
-                error={validationErrors.phone}
+                value={ui.formData.phone}
+                onChange={(value) => dispatch({ type: 'UPDATE_FORM_FIELD', field: 'phone', value })}
+                error={ui.validationErrors.phone}
                 hint="رقم من 7 إلى 20 خانة"
                 maxLength={20}
               />
@@ -487,18 +536,18 @@ export default function ClientsPage() {
                 label="البريد الإلكتروني"
                 name="email"
                 type="email"
-                value={formData.email}
-                onChange={(value) => setFormData({ ...formData, email: value })}
-                error={validationErrors.email}
+                value={ui.formData.email}
+                onChange={(value) => dispatch({ type: 'UPDATE_FORM_FIELD', field: 'email', value })}
+                error={ui.validationErrors.email}
                 hint="اختياري"
               />
 
               <ValidatedInput
                 label="العنوان"
                 name="address"
-                value={formData.address}
-                onChange={(value) => setFormData({ ...formData, address: value })}
-                error={validationErrors.address}
+                value={ui.formData.address}
+                onChange={(value) => dispatch({ type: 'UPDATE_FORM_FIELD', field: 'address', value })}
+                error={ui.validationErrors.address}
                 hint="اختياري"
                 maxLength={200}
               />
@@ -507,9 +556,9 @@ export default function ClientsPage() {
                 label="الرصيد الافتتاحي (دينار)"
                 name="balance"
                 type="number"
-                value={formData.balance}
-                onChange={(value) => setFormData({ ...formData, balance: value })}
-                error={validationErrors.balance}
+                value={ui.formData.balance}
+                onChange={(value) => dispatch({ type: 'UPDATE_FORM_FIELD', field: 'balance', value })}
+                error={ui.validationErrors.balance}
                 hint="الرصيد عند إنشاء الحساب (افتراضي: 0)"
                 showSuccessIndicator={false}
               />
@@ -518,15 +567,12 @@ export default function ClientsPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setIsDialogOpen(false);
-                  resetForm();
-                }}
+                onClick={() => dispatch({ type: 'CLOSE_DIALOG' })}
               >
                 إلغاء
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري الحفظ..." : editingClient ? "تحديث" : "إضافة"}
+              <Button type="submit" disabled={ui.loading}>
+                {ui.loading ? "جاري الحفظ..." : ui.editingClient ? "تحديث" : "إضافة"}
               </Button>
             </DialogFooter>
           </form>

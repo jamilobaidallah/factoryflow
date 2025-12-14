@@ -3,7 +3,7 @@
  * Uses double-entry journal entries for accurate balances
  */
 
-import React from "react";
+import React, { memo, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,13 +25,15 @@ interface TrialBalanceTabProps {
   onExportCSV: () => void;
 }
 
-export function TrialBalanceTab({
+function TrialBalanceTabComponent({
   onExportCSV,
 }: TrialBalanceTabProps) {
   const { trialBalance, loading, error, refresh, isBalanced } = useTrialBalance();
 
-  // Group accounts by type for display
-  const groupAccountsByType = (accounts: AccountBalance[]) => {
+  // Memoize grouped accounts to prevent recalculation on every render
+  const groupedAccounts = useMemo(() => {
+    if (!trialBalance?.accounts) return null;
+
     const groups: Record<string, AccountBalance[]> = {
       asset: [],
       liability: [],
@@ -40,14 +42,14 @@ export function TrialBalanceTab({
       expense: [],
     };
 
-    accounts.forEach((account) => {
+    trialBalance.accounts.forEach((account) => {
       if (groups[account.accountType]) {
         groups[account.accountType].push(account);
       }
     });
 
     return groups;
-  };
+  }, [trialBalance?.accounts]);
 
   const formatAmount = (amount: number): string => {
     if (amount === 0) return "-";
@@ -154,11 +156,11 @@ export function TrialBalanceTab({
                 </TableHeader>
                 <TableBody>
                   {(() => {
-                    const groups = groupAccountsByType(trialBalance.accounts);
+                    if (!groupedAccounts) return null;
                     const typeOrder = ['asset', 'liability', 'equity', 'revenue', 'expense'];
 
                     return typeOrder.map((type) => {
-                      const accounts = groups[type];
+                      const accounts = groupedAccounts[type];
                       if (accounts.length === 0) return null;
 
                       return (
@@ -273,3 +275,5 @@ export function TrialBalanceTab({
     </div>
   );
 }
+
+export const TrialBalanceTab = memo(TrialBalanceTabComponent);

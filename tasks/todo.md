@@ -1,7 +1,7 @@
-# Task: Performance Fixes - Phase 3: Firestore Optimizations
+# Task: Performance Fixes - Phase 4: Advanced Optimizations
 
 ## Branch
-`fix/performance-phase-3-firestore`
+`fix/performance-phase-4-advanced`
 
 ---
 
@@ -9,72 +9,72 @@
 
 ---
 
-## Review Summary
+## Implementation Summary
 
-All Firestore optimization tasks have been successfully implemented:
+### Priority 1: Font Optimization (#23)
+- [x] Replaced Google Fonts `<link>` with `next/font/google` in `layout.tsx`
+- [x] Updated `global-error.tsx` to use `next/font`
+- [x] Updated `tailwind.config.ts` to use CSS variable
 
-### Changes Made
+### Priority 2: React.memo + useMemo (#19, #30, #32)
+- [x] Wrapped `TrialBalanceTab` with `React.memo`
+- [x] Memoized `groupAccountsByType` with `useMemo`
+- [x] Wrapped `CategoryRow` in `ReportsDetailedTables.tsx` with `React.memo`
 
-| File | Change | Impact |
-|------|--------|--------|
-| `src/lib/export-utils.ts` | Converted ExcelJS to dynamic import | ~23MB saved from initial bundle |
-| `src/lib/backup-utils.ts` | Added `limit(10000)` to backup query | Prevents browser crashes on large datasets |
-| `src/services/journalService.ts` | Added `limit(1)` to hasChartOfAccounts | Reduced from N reads to 1 read |
-| `src/services/journalService.ts` | Added `limit(5000)` to getJournalEntries | Safety limit on unbounded query |
-| `src/components/dashboard/hooks/useDashboardData.ts` | Added `limit(5000)` + orderBy to ledger/payments queries | Prevents excessive Firestore reads |
-| `src/hooks/useAllClients.ts` | Added 5-minute TTL cache | Prevents redundant queries across components |
-| `src/components/search/useGlobalSearch.ts` | Increased debounce 300ms → 400ms | ~25% fewer search queries |
+### Priority 3: useReducer Consolidation (#7, #21, #22)
+- [x] Consolidated cheques-page.tsx dialog states into `useReducer` (12 useState → 1 useReducer)
+- [x] Consolidated invoices-page.tsx UI states into `useReducer` (6 useState → 1 useReducer)
+- [x] Consolidated clients-page.tsx UI states into `useReducer` (6 useState → 1 useReducer)
 
-### Build Verification
-- Lint: PASSED (pre-existing warnings only)
-- Build: PASSED
-- TypeScript: PASSED
-
-### Notes
-- **Dashboard**: Added documentation comment noting ideal solution is Cloud Functions counters
-- **useReportsData**: Already had proper limits - no changes needed
-- **Search**: Added comment suggesting Algolia/ElasticSearch for production scale
-
----
-
-## Completed Checklist
-
-### Priority 1: Dynamic Imports (export-utils.ts)
-- [x] Remove top-level ExcelJS import
-- [x] Add dynamic import inside exportToExcel()
-- [x] Run lint and build
-
-### Priority 2: Query Limits
-- [x] backup-utils.ts: Add limit(10000)
-- [x] journalService.ts line 624: Add limit(5000)
-- [x] journalService.ts line 125: Add limit(1)
-- [x] Run lint and build
-
-### Priority 3: Dashboard Optimization
-- [x] Add limit(5000) to ledger query with orderBy
-- [x] Add limit(5000) to payments query
-- [x] Add documentation comment about Cloud Functions
-- [x] Run lint and build
-
-### Priority 4: useAllClients Caching
-- [x] Add module-level cache Map with 5-min TTL
-- [x] Add cache check before fetching
-- [x] Store results in cache after fetch
-- [x] Add `refetch` function that bypasses cache
-- [x] Run lint and build
-
-### Priority 5: Search Optimization
-- [x] Increase debounce from 300ms to 400ms
-- [x] Add comment about Algolia/ElasticSearch
-- [x] Run lint and build
+### Priority 4: Split payments-page.tsx (#20)
+- [x] Created `components/PaymentsSummaryCards.tsx` (memoized)
+- [x] Created `components/PaymentsTable.tsx` (memoized with memoized row)
+- [x] Created `components/PaymentsFormDialog.tsx` (memoized)
+- [x] Created `constants/payments.constants.ts` for CATEGORIES
+- [x] Created `components/index.ts` for exports
+- [x] Refactored payments-page.tsx (954 lines → 555 lines, 42% reduction)
 
 ---
 
 ## Files Modified
 
-1. `src/lib/export-utils.ts`
-2. `src/lib/backup-utils.ts`
-3. `src/services/journalService.ts`
-4. `src/components/dashboard/hooks/useDashboardData.ts`
-5. `src/hooks/useAllClients.ts`
-6. `src/components/search/useGlobalSearch.ts`
+1. `src/app/layout.tsx` - next/font optimization
+2. `src/app/global-error.tsx` - next/font optimization
+3. `tailwind.config.ts` - CSS variable for font
+4. `src/components/reports/tabs/TrialBalanceTab.tsx` - React.memo + useMemo
+5. `src/components/reports/components/ReportsDetailedTables.tsx` - React.memo for CategoryRow
+6. `src/components/cheques/cheques-page.tsx` - useReducer for dialog states
+7. `src/components/invoices/invoices-page.tsx` - useReducer for UI states
+8. `src/components/clients/clients-page.tsx` - useReducer for UI states
+9. `src/components/payments/payments-page.tsx` - Major refactor using new components
+
+## Files Created
+
+1. `src/components/payments/constants/payments.constants.ts`
+2. `src/components/payments/components/PaymentsSummaryCards.tsx`
+3. `src/components/payments/components/PaymentsTable.tsx`
+4. `src/components/payments/components/PaymentsFormDialog.tsx`
+5. `src/components/payments/components/index.ts`
+
+---
+
+## Review
+
+### Performance Improvements
+- **Font Loading**: `next/font` provides automatic font optimization, self-hosting, and zero layout shift
+- **React.memo**: Prevents unnecessary re-renders for stable components
+- **useMemo**: Prevents expensive recalculations on every render
+- **useReducer**: Consolidates related state updates, improving debugging and reducing re-render batches
+- **Component Splitting**: Enables tree-shaking, code-splitting, and targeted memoization
+
+### Code Quality Improvements
+- Reduced payments-page.tsx from 954 to 555 lines (42% reduction)
+- Consolidated scattered useState calls into organized reducers
+- Created reusable, testable components
+- Improved maintainability with clear separation of concerns
+
+### Build Verification
+```
+✓ npm run lint - Passed (no new errors)
+✓ npm run build - Compiled successfully
+```

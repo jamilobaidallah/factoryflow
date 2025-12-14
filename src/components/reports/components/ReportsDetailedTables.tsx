@@ -113,11 +113,10 @@ function ReportsDetailedTablesComponent({
   );
 }
 
-/** Simple category row (for revenue) */
-function CategoryRow({
+/** Simple category row (for revenue) - memoized to prevent re-renders */
+const CategoryRow = memo(function CategoryRow({
   category,
   amount,
-  type,
 }: {
   category: string;
   amount: number;
@@ -129,7 +128,7 @@ function CategoryRow({
       <span className="text-sm font-semibold text-slate-800">{formatNumber(amount)} د.أ</span>
     </div>
   );
-}
+});
 
 /** Expandable category row with subcategories (for expenses) */
 function ExpandableCategoryRow({
