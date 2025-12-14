@@ -24,7 +24,8 @@ jest.mock('firebase/firestore', () => {
       commit: mockBatchCommitFn,
     })),
     doc: jest.fn(),
-    query: jest.fn(),
+    query: jest.fn((ref) => ref),
+    limit: jest.fn(() => ({})),
     deleteDoc: mockDeleteDocFn,
     Timestamp: {
       fromDate: jest.fn((date: Date) => ({
