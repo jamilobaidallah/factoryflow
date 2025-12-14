@@ -136,3 +136,12 @@ export const ANIMATION_CONFIG = {
   STAGGER_DELAY_MS: 100,
   TRANSITION_DURATION_MS: 300,
 } as const;
+
+// Owner equity categories to exclude from calculations
+export const OWNER_EQUITY_CATEGORIES = ['رأس المال', 'Owner Equity'] as const;
+
+// Arabic month names for charts
+export const ARABIC_MONTH_NAMES = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+] as const;

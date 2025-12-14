@@ -42,7 +42,9 @@ function ReportsInlineReportComponent({
   filteredData,
   dateRange,
 }: ReportsInlineReportProps) {
-  if (!reportId) return null;
+  if (!reportId) {
+    return null;
+  }
 
   const reportConfig: Record<string, { title: string; icon: React.ReactNode; color: string }> = {
     income: {
@@ -68,7 +70,9 @@ function ReportsInlineReportComponent({
   };
 
   const config = reportConfig[reportId];
-  if (!config) return null;
+  if (!config) {
+    return null;
+  }
 
   const colorClasses: Record<string, string> = {
     emerald: "border-emerald-500 bg-emerald-50",
@@ -228,21 +232,32 @@ function AgingReport({
     // Filter entries by date range and unpaid status
     ledgerEntries.forEach((entry) => {
       const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
-      if (entryDate < dateRange.start || entryDate > dateRange.end) return;
+      if (entryDate < dateRange.start || entryDate > dateRange.end) {
+        return;
+      }
 
       // Skip if fully paid
-      if (entry.paymentStatus === "مدفوع" || entry.paymentStatus === "مكتمل") return;
+      if (entry.paymentStatus === "مدفوع" || entry.paymentStatus === "مكتمل") {
+        return;
+      }
 
       const balance = entry.remainingBalance ?? entry.amount;
-      if (balance <= 0) return;
+      if (balance <= 0) {
+        return;
+      }
 
       const daysDiff = Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
 
       let bucket: "0-30" | "31-60" | "61-90" | "90+";
-      if (daysDiff <= 30) bucket = "0-30";
-      else if (daysDiff <= 60) bucket = "31-60";
-      else if (daysDiff <= 90) bucket = "61-90";
-      else bucket = "90+";
+      if (daysDiff <= 30) {
+        bucket = "0-30";
+      } else if (daysDiff <= 60) {
+        bucket = "31-60";
+      } else if (daysDiff <= 90) {
+        bucket = "61-90";
+      } else {
+        bucket = "90+";
+      }
 
       // Receivables = Income entries (money owed TO us)
       // Payables = Expense entries (money we OWE)
@@ -358,9 +373,15 @@ function ExpenseAnalysisReport({
 
     ledgerEntries.forEach((entry) => {
       const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
-      if (entryDate < dateRange.start || entryDate > dateRange.end) return;
-      if (entry.type !== "مصروف") return;
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") return;
+      if (entryDate < dateRange.start || entryDate > dateRange.end) {
+        return;
+      }
+      if (entry.type !== "مصروف") {
+        return;
+      }
+      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+        return;
+      }
 
       if (!result[entry.category]) {
         result[entry.category] = { total: 0, subcategories: {} };
@@ -476,14 +497,20 @@ function CashFlowReport({
 
     ledgerEntries.forEach((entry) => {
       const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
-      if (entryDate < dateRange.start || entryDate > dateRange.end) return;
+      if (entryDate < dateRange.start || entryDate > dateRange.end) {
+        return;
+      }
 
       // Skip owner equity
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") return;
+      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+        return;
+      }
 
       // For cash flow, we consider paid transactions as actual cash movement
       // If unpaid, it's not cash flow yet
-      if (entry.paymentStatus === "معلق" || entry.paymentStatus === "Pending") return;
+      if (entry.paymentStatus === "معلق" || entry.paymentStatus === "Pending") {
+        return;
+      }
 
       if (entry.type === "دخل") {
         cashIn += entry.amount;

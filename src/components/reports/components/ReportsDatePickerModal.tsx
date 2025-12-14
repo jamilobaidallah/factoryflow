@@ -36,7 +36,9 @@ function ReportsDatePickerModalComponent({
     }
   }, [isOpen, initialRange, lastMonthStr, today]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   const handleConfirm = () => {
     if (startDate && endDate && startDate <= endDate) {

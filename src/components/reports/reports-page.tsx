@@ -36,7 +36,7 @@ import type {
   CategoryData,
   CustomDateRange,
 } from "./types/reports.types";
-import { CATEGORY_COLORS, ANIMATION_CONFIG } from "./constants/reports.constants";
+import { CATEGORY_COLORS, ANIMATION_CONFIG, OWNER_EQUITY_CATEGORIES, ARABIC_MONTH_NAMES } from "./constants/reports.constants";
 
 export default function ReportsPage() {
   const { user } = useUser();
@@ -59,7 +59,6 @@ export default function ReportsPage() {
   const summaryCardsRef = useRef<HTMLDivElement>(null);
   const chartsRef = useRef<HTMLDivElement>(null);
   const detailedTablesRef = useRef<HTMLDivElement>(null);
-  const insightsRef = useRef<HTMLDivElement>(null);
 
   // Calculate date range based on selected period (for data fetching)
   const { startDate, endDate } = useMemo(() => {
@@ -133,7 +132,7 @@ export default function ReportsPage() {
 
     filtered.forEach((entry) => {
       // Exclude owner equity
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+      if (OWNER_EQUITY_CATEGORIES.includes(entry.category as typeof OWNER_EQUITY_CATEGORIES[number])) {
         return;
       }
 
@@ -160,7 +159,9 @@ export default function ReportsPage() {
     const categories: CategoryData[] = [];
     const totalExpenses = filteredData.totalExpenses;
 
-    if (totalExpenses === 0) return [];
+    if (totalExpenses === 0) {
+      return [];
+    }
 
     Object.entries(filteredData.expensesByCategory)
       .sort(([, a], [, b]) => b - a)
@@ -205,7 +206,7 @@ export default function ReportsPage() {
       const data = monthlyData.get(monthKey)!;
 
       // Exclude owner equity
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+      if (OWNER_EQUITY_CATEGORIES.includes(entry.category as typeof OWNER_EQUITY_CATEGORIES[number])) {
         return;
       }
 
@@ -222,14 +223,8 @@ export default function ReportsPage() {
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const data = monthlyData.get(monthKey) || { revenue: 0, expenses: 0 };
 
-      // Arabic month names
-      const arabicMonths = [
-        "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-        "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
-      ];
-
       result.push({
-        month: arabicMonths[d.getMonth()],
+        month: ARABIC_MONTH_NAMES[d.getMonth()],
         monthKey,
         revenue: data.revenue,
         expenses: data.expenses,
@@ -324,20 +319,12 @@ export default function ReportsPage() {
   };
 
   const convertToCSV = (data: Record<string, unknown>[]): string => {
-    if (data.length === 0) return "";
+    if (data.length === 0) {
+      return "";
+    }
     const headers = Object.keys(data[0]).join(",");
     const rows = data.map((row) => Object.values(row).join(","));
     return [headers, ...rows].join("\n");
-  };
-
-  // Helper to scroll and highlight a section
-  const scrollAndHighlight = (ref: React.RefObject<HTMLDivElement | null>, sectionId: string) => {
-    // Scroll to section
-    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // Highlight the section
-    setHighlightedSection(sectionId);
-    // Remove highlight after animation completes
-    setTimeout(() => setHighlightedSection(null), 2000);
   };
 
   const handleReportClick = (reportId: string) => {
