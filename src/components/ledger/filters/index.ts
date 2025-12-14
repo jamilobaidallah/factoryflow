@@ -3,7 +3,9 @@ export type {
   DatePreset,
   EntryType,
   PaymentStatus,
+  ViewMode,
   LedgerFiltersState,
+  FilteredTotals,
   UseLedgerFiltersReturn,
   UseLedgerFiltersOptions,
 } from "./useLedgerFilters";
