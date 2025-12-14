@@ -14,14 +14,11 @@ function ReportsQuickAccessComponent({
 }: ReportsQuickAccessProps) {
   return (
     <div className="bg-white rounded-xl p-5 border border-slate-200">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4">
         <h3 className="text-base font-semibold text-slate-700 flex items-center gap-2">
           <span>📋</span>
           {REPORTS_LABELS.quickReports}
         </h3>
-        <button className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-          {REPORTS_LABELS.allReports}
-        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

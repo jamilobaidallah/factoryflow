@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useUser } from "@/firebase/provider";
 import { formatNumber } from "@/lib/date-utils";
 import {
@@ -36,11 +35,10 @@ import type {
   CategoryData,
   CustomDateRange,
 } from "./types/reports.types";
-import { CATEGORY_COLORS, ANIMATION_CONFIG, QUICK_REPORTS } from "./constants/reports.constants";
+import { CATEGORY_COLORS, ANIMATION_CONFIG } from "./constants/reports.constants";
 
 export default function ReportsPage() {
   const { user } = useUser();
-  const router = useRouter();
 
   // Period & comparison state
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("month");
@@ -56,7 +54,10 @@ export default function ReportsPage() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Refs for scroll navigation
+  const summaryCardsRef = useRef<HTMLDivElement>(null);
+  const chartsRef = useRef<HTMLDivElement>(null);
   const detailedTablesRef = useRef<HTMLDivElement>(null);
+  const insightsRef = useRef<HTMLDivElement>(null);
 
   // Calculate date range based on selected period (for data fetching)
   const { startDate, endDate } = useMemo(() => {
@@ -329,10 +330,27 @@ export default function ReportsPage() {
 
   const handleReportClick = (reportId: string) => {
     setActiveReport(reportId);
-    // Navigate to the specific report page
-    const report = QUICK_REPORTS.find((r) => r.id === reportId);
-    if (report?.link) {
-      router.push(report.link);
+    // Scroll to relevant section based on report type
+    // Instead of navigating to 404 pages, show content inline
+    switch (reportId) {
+      case "income":
+        // Income statement - scroll to summary cards
+        summaryCardsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      case "expenses":
+        // Expense analysis - scroll to donut chart and tables
+        chartsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      case "aging":
+        // Aging report - scroll to detailed tables (receivables data)
+        detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      case "cashflow":
+        // Cash flow - scroll to bar chart (revenue/expense trends)
+        chartsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      default:
+        detailedTablesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -378,10 +396,12 @@ export default function ReportsPage() {
       />
 
       {/* Summary Cards with Comparison */}
-      <ReportsSummaryCards comparison={comparison} isLoading={loading} />
+      <div ref={summaryCardsRef}>
+        <ReportsSummaryCards comparison={comparison} isLoading={loading} />
+      </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div ref={chartsRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ReportsBarChart
           chartData={chartData}
           chartPeriod={chartPeriod}
