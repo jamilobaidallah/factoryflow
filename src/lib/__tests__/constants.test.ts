@@ -88,7 +88,8 @@ describe('Constants', () => {
 
     describe('Categories', () => {
         it('should have income categories', () => {
-            expect(INCOME_CATEGORIES).toHaveLength(3);
+            // Note: رأس المال was moved to EQUITY_CATEGORIES (not P&L)
+            expect(INCOME_CATEGORIES).toHaveLength(2);
             expect(INCOME_CATEGORIES[0].name).toBe('مبيعات');
         });
 
