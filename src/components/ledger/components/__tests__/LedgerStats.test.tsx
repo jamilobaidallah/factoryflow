@@ -60,6 +60,21 @@ describe('LedgerStats', () => {
     totalPaid: 0,
   };
 
+  const mockEquityEntry: LedgerEntry = {
+    id: '4',
+    transactionId: 'TXN-004',
+    description: 'رأس مال',
+    type: 'حركة رأس مال',
+    amount: 5000,
+    category: 'رأس المال',
+    subCategory: 'رأس مال مالك',
+    associatedParty: '',
+    reference: 'REF-004',
+    notes: '',
+    date: new Date('2025-01-18'),
+    createdAt: new Date('2025-01-18'),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -236,5 +251,49 @@ describe('LedgerStats', () => {
     const countBadge = container.querySelector('.bg-amber-500');
     expect(countBadge).toBeInTheDocument();
     expect(countBadge).toHaveTextContent('2');
+  });
+
+  it('should exclude equity entries from P&L calculations', () => {
+    // Equity entries (رأس المال) should NOT be counted in income, expenses, or net balance
+    const entries = [
+      { ...mockIncomeEntry, amount: 1000 },
+      { ...mockExpenseEntry, amount: 400 },
+      mockEquityEntry, // 5000 - should NOT affect totals
+    ];
+
+    const { container } = render(<LedgerStats entries={entries} />);
+
+    // Income should only be 1000 (not including equity's 5000)
+    const incomeValue = container.querySelector('p.text-emerald-600');
+    expect(incomeValue).toHaveTextContent('1,000');
+
+    // Expenses should only be 400
+    const expenseValue = container.querySelector('p.text-rose-600');
+    expect(expenseValue).toHaveTextContent('400');
+
+    // Net balance should be 600 (1000 - 400), not affected by equity
+    expect(screen.getByText('600')).toBeInTheDocument();
+  });
+
+  it('should exclude equity entries by category (backward compatibility)', () => {
+    // Old data might have equity under "رأس المال" category with type "دخل"
+    const oldEquityEntry: LedgerEntry = {
+      ...mockIncomeEntry,
+      id: '5',
+      type: 'دخل', // Old format used income type
+      category: 'رأس المال', // But category indicates equity
+      amount: 3000,
+    };
+
+    const entries = [
+      { ...mockIncomeEntry, amount: 1000 },
+      oldEquityEntry, // Should be excluded by category
+    ];
+
+    const { container } = render(<LedgerStats entries={entries} />);
+
+    // Income should only be 1000 (excluding the 3000 equity by category)
+    const incomeValue = container.querySelector('p.text-emerald-600');
+    expect(incomeValue).toHaveTextContent('1,000');
   });
 });

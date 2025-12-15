@@ -24,13 +24,23 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
     let unpaidAmount = 0;
 
     entries.forEach((entry) => {
+      // Skip equity transactions - they don't affect P&L or AR/AP
+      // Check by type (new) OR by category (backward compatibility)
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (isEquity) {
+        return; // Skip equity entries from P&L calculations
+      }
+
       if (entry.type === "دخل") {
         totalIncome += entry.amount || 0;
-      } else {
+      } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount || 0;
       }
 
-      // Count unpaid/partial entries
+      // Count unpaid/partial entries (only income/expense, not equity)
       if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
         unpaidCount++;
         unpaidAmount += entry.remainingBalance || 0;
