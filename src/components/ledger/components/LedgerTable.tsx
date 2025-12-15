@@ -216,7 +216,12 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       {/* Status */}
       <TableCell>
-        {entry.isARAPEntry ? (
+        {entry.type === "حركة رأس مال" ? (
+          // Equity transactions don't have payment status - show "completed" badge
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">
+            مكتمل
+          </span>
+        ) : entry.isARAPEntry ? (
           <StatusBadge
             status={entry.paymentStatus}
             remaining={entry.remainingBalance}
@@ -356,12 +361,17 @@ const LedgerCard = memo(function LedgerCard({
       {/* Type + Payment Status */}
       <div className="flex items-center gap-2 text-xs">
         <TypeBadge type={entry.type} />
-        {entry.isARAPEntry && (
+        {entry.type === "حركة رأس مال" ? (
+          // Equity transactions don't have payment status - show "completed" badge
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">
+            مكتمل
+          </span>
+        ) : entry.isARAPEntry ? (
           <StatusBadge
             status={entry.paymentStatus}
             remaining={entry.remainingBalance}
           />
-        )}
+        ) : null}
       </div>
 
       {/* Actions */}

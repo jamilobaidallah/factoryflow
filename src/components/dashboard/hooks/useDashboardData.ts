@@ -17,7 +17,6 @@ import {
   EXPENSE_TYPE,
   EQUITY_TYPE,
   EQUITY_SUBCATEGORIES,
-  PAYMENT_TYPES,
 } from "../constants/dashboard.constants";
 
 /**
@@ -27,13 +26,13 @@ import {
 export function useDashboardData(): UseDashboardDataReturn {
   const { user } = useUser();
 
-  // Cash balance state (from payments collection)
-  const [totalCashIn, setTotalCashIn] = useState(0);
-  const [totalCashOut, setTotalCashOut] = useState(0);
+  // Operating cash state (from ledger - paid income/expenses)
+  const [operatingCashIn, setOperatingCashIn] = useState(0);
+  const [operatingCashOut, setOperatingCashOut] = useState(0);
 
-  // Equity cash state (from ledger - capital contributions and owner drawings)
-  const [equityCashIn, setEquityCashIn] = useState(0);
-  const [equityCashOut, setEquityCashOut] = useState(0);
+  // Financing cash state (from ledger - capital contributions and owner drawings)
+  const [financingCashIn, setFinancingCashIn] = useState(0);
+  const [financingCashOut, setFinancingCashOut] = useState(0);
 
   // Revenue & Expenses state
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -67,8 +66,12 @@ export function useDashboardData(): UseDashboardDataReturn {
     const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
       let revenue = 0;
       let expenses = 0;
-      let eqCashIn = 0;
-      let eqCashOut = 0;
+      // Operating cash - from paid income/expense entries
+      let opCashIn = 0;
+      let opCashOut = 0;
+      // Financing cash - from equity entries
+      let finCashIn = 0;
+      let finCashOut = 0;
       const transactions: DashboardLedgerEntry[] = [];
       const monthlyMap = new Map<string, MonthlyFinancialData>();
       const categoryMap = new Map<string, { total: number; monthly: Map<string, number> }>();
@@ -96,18 +99,19 @@ export function useDashboardData(): UseDashboardDataReturn {
         const isExcluded = isEquity || isExcludedCategory;
 
         if (isExcluded) {
-          // This is an equity transaction - affects cash balance
+          // FINANCING ACTIVITIES: Equity transactions affect cash balance
           // Capital contribution (رأس مال مالك) = cash IN
           // Owner drawings (سحوبات المالك) = cash OUT
           if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
-            eqCashIn += entry.amount;
+            finCashIn += entry.amount;
           } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
-            eqCashOut += entry.amount;
+            finCashOut += entry.amount;
           }
         } else {
           const monthKey = formatMonthKey(entry.date);
           const isIncome = INCOME_TYPES.some((type) => entry.type === type);
 
+          // P&L: Count all income/expenses regardless of payment status
           if (isIncome) {
             revenue += entry.amount;
             updateMonthlyData(monthlyMap, monthKey, entry.amount, 0);
@@ -116,6 +120,18 @@ export function useDashboardData(): UseDashboardDataReturn {
             updateMonthlyData(monthlyMap, monthKey, 0, entry.amount);
             updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
           }
+
+          // OPERATING CASH: Only count PAID transactions as cash movement
+          // Skip unpaid/partial entries - they haven't fully moved cash yet
+          // Non-ARAP entries (instant settlement) count as paid
+          const isPaid = !entry.isARAPEntry || entry.paymentStatus === "paid";
+          if (isPaid) {
+            if (isIncome) {
+              opCashIn += entry.amount;
+            } else if (entry.type === EXPENSE_TYPE) {
+              opCashOut += entry.amount;
+            }
+          }
         }
 
         transactions.push(entry);
@@ -123,8 +139,10 @@ export function useDashboardData(): UseDashboardDataReturn {
 
       setTotalRevenue(revenue);
       setTotalExpenses(expenses);
-      setEquityCashIn(eqCashIn);
-      setEquityCashOut(eqCashOut);
+      setOperatingCashIn(opCashIn);
+      setOperatingCashOut(opCashOut);
+      setFinancingCashIn(finCashIn);
+      setFinancingCashOut(finCashOut);
       setMonthlyDataMap(monthlyMap);
       setExpensesByCategoryMap(categoryMap);
 
@@ -137,45 +155,15 @@ export function useDashboardData(): UseDashboardDataReturn {
     return () => unsubscribe();
   }, [user]);
 
-  // Load payments for cash balance
-  useEffect(() => {
-    if (!user) return;
-
-    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-    // Safety limit to prevent excessive Firestore reads
-    const paymentsQuery = query(paymentsRef, limit(5000));
-    const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-      let cashIn = 0;
-      let cashOut = 0;
-
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-
-        // Skip endorsed cheques and no-cash-movement payments
-        if (data.isEndorsement || data.noCashMovement) return;
-
-        if (data.type === PAYMENT_TYPES.INCOMING) {
-          cashIn += data.amount || 0;
-        } else if (data.type === PAYMENT_TYPES.OUTGOING) {
-          cashOut += data.amount || 0;
-        }
-      });
-
-      setTotalCashIn(cashIn);
-      setTotalCashOut(cashOut);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Total cash includes: payments (operational) + equity (financing)
-  const combinedCashIn = totalCashIn + equityCashIn;
-  const combinedCashOut = totalCashOut + equityCashOut;
+  // Total cash = Operating (paid income - paid expenses) + Financing (capital - drawings)
+  // This matches the Cash Flow Report calculation
+  const totalCashIn = operatingCashIn + financingCashIn;
+  const totalCashOut = operatingCashOut + financingCashOut;
 
   return {
-    totalCashIn: combinedCashIn,
-    totalCashOut: combinedCashOut,
-    cashBalance: combinedCashIn - combinedCashOut,
+    totalCashIn,
+    totalCashOut,
+    cashBalance: totalCashIn - totalCashOut,
     totalRevenue,
     totalExpenses,
     monthlyDataMap,

@@ -13,6 +13,7 @@ interface LedgerEntry {
   date: Date;
   paymentStatus?: string;
   remainingBalance?: number;
+  isARAPEntry?: boolean;
 }
 
 interface ReportsInlineReportProps {
@@ -522,8 +523,10 @@ function CashFlowReport({
       }
 
       // For operating cash flow, we consider paid transactions as actual cash movement
-      // If unpaid, it's not cash flow yet
-      if (entry.paymentStatus === "معلق" || entry.paymentStatus === "Pending") {
+      // Skip unpaid/partial entries - they haven't fully moved cash yet
+      // Non-ARAP entries (instant settlement) count as paid
+      const isPaid = !entry.isARAPEntry || entry.paymentStatus === "paid" || entry.paymentStatus === "مدفوع";
+      if (!isPaid) {
         return;
       }
 
