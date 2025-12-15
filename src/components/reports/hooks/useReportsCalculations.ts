@@ -74,6 +74,12 @@ export interface CashFlowData {
   netCashFlow: number;
 }
 
+export interface FinancingActivitiesData {
+  capitalIn: number;      // رأس مال مالك - Cash IN
+  capitalOut: number;     // سحوبات المالك - Cash OUT
+  netFinancing: number;   // Net financing cash flow
+}
+
 export interface ARAPAgingData {
   receivables: LedgerEntry[];
   payables: LedgerEntry[];
@@ -227,6 +233,33 @@ export function useReportsCalculations({
     return { cashIn, cashOut, netCashFlow };
   }, [payments]);
 
+  // Calculate Financing Activities (equity transactions from ledger)
+  // These are NOT included in payments collection, so we calculate from ledger
+  const financingActivities = useMemo((): FinancingActivitiesData => {
+    let capitalIn = 0;   // رأس مال مالك
+    let capitalOut = 0;  // سحوبات المالك
+
+    ledgerEntries.forEach((entry) => {
+      // Check for equity transactions (by type or category for backward compatibility)
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (isEquity) {
+        // Direction determined by subcategory
+        if (entry.subCategory === "رأس مال مالك") {
+          capitalIn = safeAdd(capitalIn, entry.amount);
+        } else if (entry.subCategory === "سحوبات المالك") {
+          capitalOut = safeAdd(capitalOut, entry.amount);
+        }
+      }
+    });
+
+    const netFinancing = safeSubtract(capitalIn, capitalOut);
+
+    return { capitalIn, capitalOut, netFinancing };
+  }, [ledgerEntries]);
+
   // Calculate AR/AP Aging
   // Excludes equity entries - they are not receivables/payables
   const arapAging = useMemo((): ARAPAgingData => {
@@ -345,6 +378,7 @@ export function useReportsCalculations({
     ownerEquity,
     incomeStatement,
     cashFlow,
+    financingActivities,
     arapAging,
     inventoryValuation,
     salesAndCOGS,

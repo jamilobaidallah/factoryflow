@@ -480,7 +480,7 @@ function ExpenseAnalysisReport({
 }
 
 /**
- * Cash Flow Report
+ * Cash Flow Report - Includes Operating and Financing Activities
  */
 function CashFlowReport({
   ledgerEntries,
@@ -490,10 +490,15 @@ function CashFlowReport({
   dateRange: { start: Date; end: Date };
 }) {
   const cashFlowData = useMemo(() => {
-    let cashIn = 0;
-    let cashOut = 0;
+    // Operating Activities (from ledger - income/expense)
+    let operatingIn = 0;
+    let operatingOut = 0;
     const inByCategory: Record<string, number> = {};
     const outByCategory: Record<string, number> = {};
+
+    // Financing Activities (equity - capital and drawings)
+    let capitalIn = 0;    // رأس مال مالك
+    let capitalOut = 0;   // سحوبات المالك
 
     ledgerEntries.forEach((entry) => {
       const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
@@ -501,56 +506,117 @@ function CashFlowReport({
         return;
       }
 
-      // Skip owner equity
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+      // Check if this is an equity transaction
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (isEquity) {
+        // Financing activities - direction by subcategory
+        if (entry.subCategory === "رأس مال مالك") {
+          capitalIn += entry.amount;
+        } else if (entry.subCategory === "سحوبات المالك") {
+          capitalOut += entry.amount;
+        }
         return;
       }
 
-      // For cash flow, we consider paid transactions as actual cash movement
+      // For operating cash flow, we consider paid transactions as actual cash movement
       // If unpaid, it's not cash flow yet
       if (entry.paymentStatus === "معلق" || entry.paymentStatus === "Pending") {
         return;
       }
 
       if (entry.type === "دخل") {
-        cashIn += entry.amount;
+        operatingIn += entry.amount;
         inByCategory[entry.category] = (inByCategory[entry.category] || 0) + entry.amount;
       } else if (entry.type === "مصروف") {
-        cashOut += entry.amount;
+        operatingOut += entry.amount;
         outByCategory[entry.category] = (outByCategory[entry.category] || 0) + entry.amount;
       }
     });
 
-    return { cashIn, cashOut, netCashFlow: cashIn - cashOut, inByCategory, outByCategory };
+    const netOperating = operatingIn - operatingOut;
+    const netFinancing = capitalIn - capitalOut;
+    const totalCashFlow = netOperating + netFinancing;
+
+    return {
+      operatingIn,
+      operatingOut,
+      netOperating,
+      capitalIn,
+      capitalOut,
+      netFinancing,
+      totalCashFlow,
+      inByCategory,
+      outByCategory,
+    };
   }, [ledgerEntries, dateRange]);
 
-  const isPositive = cashFlowData.netCashFlow >= 0;
+  const isTotalPositive = cashFlowData.totalCashFlow >= 0;
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="p-4 bg-emerald-100 rounded-xl">
-          <p className="text-xs text-emerald-600 mb-1">النقد الوارد</p>
-          <p className="text-xl font-bold text-emerald-700">{formatNumber(cashFlowData.cashIn)} د.أ</p>
+      {/* Operating Activities Section */}
+      <div className="bg-slate-50 rounded-xl p-4">
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">الأنشطة التشغيلية</h4>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-3 bg-emerald-100 rounded-lg">
+            <p className="text-xs text-emerald-600 mb-1">النقد الوارد</p>
+            <p className="text-lg font-bold text-emerald-700">{formatNumber(cashFlowData.operatingIn)} د.أ</p>
+          </div>
+          <div className="p-3 bg-rose-100 rounded-lg">
+            <p className="text-xs text-rose-600 mb-1">النقد الصادر</p>
+            <p className="text-lg font-bold text-rose-700">{formatNumber(cashFlowData.operatingOut)} د.أ</p>
+          </div>
+          <div className={`p-3 rounded-lg ${cashFlowData.netOperating >= 0 ? "bg-blue-100" : "bg-amber-100"}`}>
+            <p className={`text-xs ${cashFlowData.netOperating >= 0 ? "text-blue-600" : "text-amber-600"} mb-1`}>صافي التشغيلي</p>
+            <p className={`text-lg font-bold ${cashFlowData.netOperating >= 0 ? "text-blue-700" : "text-amber-700"}`}>
+              {formatNumber(cashFlowData.netOperating)} د.أ
+            </p>
+          </div>
         </div>
-        <div className="p-4 bg-rose-100 rounded-xl">
-          <p className="text-xs text-rose-600 mb-1">النقد الصادر</p>
-          <p className="text-xl font-bold text-rose-700">{formatNumber(cashFlowData.cashOut)} د.أ</p>
+      </div>
+
+      {/* Financing Activities Section */}
+      <div className="bg-purple-50 rounded-xl p-4">
+        <h4 className="text-sm font-semibold text-purple-700 mb-3">الأنشطة التمويلية</h4>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-3 bg-emerald-100 rounded-lg">
+            <p className="text-xs text-emerald-600 mb-1">رأس مال مالك</p>
+            <p className="text-lg font-bold text-emerald-700">{formatNumber(cashFlowData.capitalIn)} د.أ</p>
+          </div>
+          <div className="p-3 bg-rose-100 rounded-lg">
+            <p className="text-xs text-rose-600 mb-1">سحوبات المالك</p>
+            <p className="text-lg font-bold text-rose-700">{formatNumber(cashFlowData.capitalOut)} د.أ</p>
+          </div>
+          <div className={`p-3 rounded-lg ${cashFlowData.netFinancing >= 0 ? "bg-purple-100" : "bg-amber-100"}`}>
+            <p className={`text-xs ${cashFlowData.netFinancing >= 0 ? "text-purple-600" : "text-amber-600"} mb-1`}>صافي التمويلي</p>
+            <p className={`text-lg font-bold ${cashFlowData.netFinancing >= 0 ? "text-purple-700" : "text-amber-700"}`}>
+              {formatNumber(cashFlowData.netFinancing)} د.أ
+            </p>
+          </div>
         </div>
-        <div className={`p-4 rounded-xl ${isPositive ? "bg-blue-100" : "bg-amber-100"}`}>
-          <p className={`text-xs ${isPositive ? "text-blue-600" : "text-amber-600"} mb-1`}>صافي التدفق</p>
-          <p className={`text-xl font-bold ${isPositive ? "text-blue-700" : "text-amber-700"}`}>
-            {isPositive ? "+" : ""}{formatNumber(cashFlowData.netCashFlow)} د.أ
+      </div>
+
+      {/* Total Cash Balance */}
+      <div className={`p-4 rounded-xl border-2 ${isTotalPositive ? "bg-slate-100 border-slate-300" : "bg-rose-50 border-rose-300"}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-600">إجمالي الرصيد النقدي</p>
+            <p className="text-xs text-slate-400">(تشغيلي + تمويلي)</p>
+          </div>
+          <p className={`text-2xl font-bold ${isTotalPositive ? "text-slate-800" : "text-rose-700"}`}>
+            {formatNumber(cashFlowData.totalCashFlow)} د.أ
           </p>
         </div>
       </div>
 
-      {/* Cash In Details */}
+      {/* Operating Cash In Details */}
       <div>
         <h4 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
           <TrendingUp className="w-4 h-4" />
-          تفاصيل النقد الوارد
+          تفاصيل النقد التشغيلي الوارد
         </h4>
         <div className="space-y-2">
           {Object.entries(cashFlowData.inByCategory).length > 0 ? (
@@ -568,11 +634,11 @@ function CashFlowReport({
         </div>
       </div>
 
-      {/* Cash Out Details */}
+      {/* Operating Cash Out Details */}
       <div>
         <h4 className="text-sm font-semibold text-rose-700 mb-3 flex items-center gap-2">
           <TrendingDown className="w-4 h-4" />
-          تفاصيل النقد الصادر
+          تفاصيل النقد التشغيلي الصادر
         </h4>
         <div className="space-y-2">
           {Object.entries(cashFlowData.outByCategory).length > 0 ? (
@@ -591,11 +657,11 @@ function CashFlowReport({
       </div>
 
       {/* Cash Flow Status */}
-      <div className={`p-4 rounded-xl border-2 ${isPositive ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-300"}`}>
-        <p className={`text-sm ${isPositive ? "text-emerald-700" : "text-amber-700"}`}>
-          {isPositive
-            ? "تدفق نقدي إيجابي - النقد الوارد يتجاوز النقد الصادر"
-            : "تدفق نقدي سلبي - النقد الصادر يتجاوز النقد الوارد"}
+      <div className={`p-4 rounded-xl border-2 ${isTotalPositive ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-300"}`}>
+        <p className={`text-sm ${isTotalPositive ? "text-emerald-700" : "text-amber-700"}`}>
+          {isTotalPositive
+            ? "تدفق نقدي إيجابي - إجمالي الوارد يتجاوز إجمالي الصادر"
+            : "تدفق نقدي سلبي - إجمالي الصادر يتجاوز إجمالي الوارد"}
         </p>
       </div>
     </div>

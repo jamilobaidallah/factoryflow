@@ -16,6 +16,7 @@ import {
   INCOME_TYPES,
   EXPENSE_TYPE,
   EQUITY_TYPE,
+  EQUITY_SUBCATEGORIES,
   PAYMENT_TYPES,
 } from "../constants/dashboard.constants";
 
@@ -26,9 +27,13 @@ import {
 export function useDashboardData(): UseDashboardDataReturn {
   const { user } = useUser();
 
-  // Cash balance state
+  // Cash balance state (from payments collection)
   const [totalCashIn, setTotalCashIn] = useState(0);
   const [totalCashOut, setTotalCashOut] = useState(0);
+
+  // Equity cash state (from ledger - capital contributions and owner drawings)
+  const [equityCashIn, setEquityCashIn] = useState(0);
+  const [equityCashOut, setEquityCashOut] = useState(0);
 
   // Revenue & Expenses state
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -62,6 +67,8 @@ export function useDashboardData(): UseDashboardDataReturn {
     const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
       let revenue = 0;
       let expenses = 0;
+      let eqCashIn = 0;
+      let eqCashOut = 0;
       const transactions: DashboardLedgerEntry[] = [];
       const monthlyMap = new Map<string, MonthlyFinancialData>();
       const categoryMap = new Map<string, { total: number; monthly: Map<string, number> }>();
@@ -73,6 +80,7 @@ export function useDashboardData(): UseDashboardDataReturn {
           type: data.type || "",
           amount: data.amount || 0,
           category: data.category || "",
+          subCategory: data.subCategory || "",
           date: toDate(data.date),
           associatedParty: data.associatedParty,
           description: data.description,
@@ -87,7 +95,16 @@ export function useDashboardData(): UseDashboardDataReturn {
         const isExcludedCategory = EXCLUDED_CATEGORIES.some((cat) => entry.category === cat);
         const isExcluded = isEquity || isExcludedCategory;
 
-        if (!isExcluded) {
+        if (isExcluded) {
+          // This is an equity transaction - affects cash balance
+          // Capital contribution (رأس مال مالك) = cash IN
+          // Owner drawings (سحوبات المالك) = cash OUT
+          if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
+            eqCashIn += entry.amount;
+          } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
+            eqCashOut += entry.amount;
+          }
+        } else {
           const monthKey = formatMonthKey(entry.date);
           const isIncome = INCOME_TYPES.some((type) => entry.type === type);
 
@@ -106,6 +123,8 @@ export function useDashboardData(): UseDashboardDataReturn {
 
       setTotalRevenue(revenue);
       setTotalExpenses(expenses);
+      setEquityCashIn(eqCashIn);
+      setEquityCashOut(eqCashOut);
       setMonthlyDataMap(monthlyMap);
       setExpensesByCategoryMap(categoryMap);
 
@@ -149,10 +168,14 @@ export function useDashboardData(): UseDashboardDataReturn {
     return () => unsubscribe();
   }, [user]);
 
+  // Total cash includes: payments (operational) + equity (financing)
+  const combinedCashIn = totalCashIn + equityCashIn;
+  const combinedCashOut = totalCashOut + equityCashOut;
+
   return {
-    totalCashIn,
-    totalCashOut,
-    cashBalance: totalCashIn - totalCashOut,
+    totalCashIn: combinedCashIn,
+    totalCashOut: combinedCashOut,
+    cashBalance: combinedCashIn - combinedCashOut,
     totalRevenue,
     totalExpenses,
     monthlyDataMap,

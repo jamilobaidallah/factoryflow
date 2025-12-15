@@ -9,6 +9,7 @@ export interface DashboardLedgerEntry {
   type: string;
   amount: number;
   category: string;
+  subCategory?: string;
   date: Date;
   associatedParty?: string;
   description?: string;

@@ -81,16 +81,28 @@ function StatusBadge({
 /** Type badge component */
 function TypeBadge({ type }: { type: string }) {
   const isIncome = type === "دخل";
+  const isEquity = type === "حركة رأس مال";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
-        isIncome ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
+        isIncome ? "bg-emerald-50 text-emerald-700" :
+        isEquity ? "bg-purple-50 text-purple-700" :
+        "bg-slate-100 text-slate-600"
       )}
     >
       {type}
     </span>
   );
+}
+
+/** Determine if amount should be shown as positive (cash in) */
+function isPositiveAmount(type: string, subCategory: string): boolean {
+  if (type === "دخل") return true;
+  if (type === "حركة رأس مال") {
+    return subCategory === "رأس مال مالك"; // Capital contribution = cash IN
+  }
+  return false; // Expenses and owner drawings = cash OUT
 }
 
 // Memoized table row for better performance with large lists
@@ -193,10 +205,11 @@ const LedgerTableRow = memo(function LedgerTableRow({
         <p
           className={cn(
             "text-sm font-bold",
-            entry.type === "دخل" ? "text-emerald-600" : "text-slate-700"
+            isPositiveAmount(entry.type, entry.subCategory) ? "text-emerald-600" :
+            entry.type === "حركة رأس مال" ? "text-purple-600" : "text-slate-700"
           )}
         >
-          {entry.type === "دخل" ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory) ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </p>
       </TableCell>
@@ -305,10 +318,11 @@ const LedgerCard = memo(function LedgerCard({
         <span
           className={cn(
             "font-bold whitespace-nowrap",
-            entry.type === "دخل" ? "text-emerald-600" : "text-slate-700"
+            isPositiveAmount(entry.type, entry.subCategory) ? "text-emerald-600" :
+            entry.type === "حركة رأس مال" ? "text-purple-600" : "text-slate-700"
           )}
         >
-          {entry.type === "دخل" ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory) ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </span>
       </div>
