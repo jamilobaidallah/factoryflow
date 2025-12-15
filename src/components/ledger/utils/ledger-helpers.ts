@@ -1,17 +1,12 @@
 /**
  * Helper function to get category type
- * Special handling: Owner withdrawals should be treated as expense
+ * Returns: "دخل" (income), "مصروف" (expense), or "حركة رأس مال" (equity)
  */
-export function getCategoryType(categoryName: string, subCategory?: string): string {
-    // Special handling: Owner withdrawals should be treated as expense
-    if (subCategory === "سحوبات المالك") {
-        return "مصروف";
-    }
-
+export function getCategoryType(categoryName: string, _subCategory?: string): string {
     // Find category and return its type
     const categories = [
         { name: "إيرادات المبيعات", type: "دخل" },
-        { name: "رأس المال", type: "دخل" },
+        { name: "رأس المال", type: "حركة رأس مال" },  // Equity - not P&L
         { name: "إيرادات أخرى", type: "دخل" },
         { name: "تكلفة البضاعة المباعة (COGS)", type: "مصروف" },
         { name: "مصاريف تشغيلية", type: "مصروف" },
@@ -22,6 +17,22 @@ export function getCategoryType(categoryName: string, subCategory?: string): str
 
     const category = categories.find(cat => cat.name === categoryName);
     return category?.type || "دخل";
+}
+
+/**
+ * Helper function to determine if an equity subcategory is positive (cash in) or negative (cash out)
+ * Used for cash flow calculations on equity transactions
+ */
+export function isEquityCashIn(subCategory: string): boolean {
+    return subCategory === "رأس مال مالك";
+}
+
+/**
+ * Helper function to check if a transaction type is equity
+ * Handles both new type and backward compatibility with old data
+ */
+export function isEquityTransaction(type: string, category: string): boolean {
+    return type === "حركة رأس مال" || category === "رأس المال";
 }
 
 /**

@@ -9,6 +9,7 @@
 export const TRANSACTION_TYPES = {
   INCOME: 'دخل',
   EXPENSE: 'مصروف',
+  EQUITY: 'حركة رأس مال',
 } as const;
 
 export const PAYMENT_TYPES = {
@@ -106,18 +107,23 @@ export const INCOME_CATEGORIES = [
     ]
   },
   {
-    name: "رأس المال",
-    subcategories: [
-      "رأس مال مالك",
-      "سحوبات المالك",
-    ]
-  },
-  {
     name: "إيرادات أخرى",
     subcategories: [
       "فوائد بنكية",
       "بيع أصول",
       "إيرادات متنوعة",
+    ]
+  },
+] as const;
+
+// Ledger Categories - Equity (Owner's Capital movements)
+// These are NOT P&L items - they affect cash balance but not profit/loss
+export const EQUITY_CATEGORIES = [
+  {
+    name: "رأس المال",
+    subcategories: [
+      "رأس مال مالك",    // Positive: increases equity, cash IN
+      "سحوبات المالك",   // Negative: decreases equity, cash OUT
     ]
   },
 ] as const;

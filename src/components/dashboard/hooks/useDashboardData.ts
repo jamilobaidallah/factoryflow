@@ -15,6 +15,7 @@ import {
   EXCLUDED_CATEGORIES,
   INCOME_TYPES,
   EXPENSE_TYPE,
+  EQUITY_TYPE,
   PAYMENT_TYPES,
 } from "../constants/dashboard.constants";
 
@@ -80,8 +81,11 @@ export function useDashboardData(): UseDashboardDataReturn {
           isARAPEntry: data.isARAPEntry,
         };
 
-        // Check if category should be excluded from P&L
-        const isExcluded = EXCLUDED_CATEGORIES.some((cat) => entry.category === cat);
+        // Check if entry should be excluded from P&L
+        // Exclude by type (equity) OR by category (backward compatibility)
+        const isEquity = entry.type === EQUITY_TYPE;
+        const isExcludedCategory = EXCLUDED_CATEGORIES.some((cat) => entry.category === cat);
+        const isExcluded = isEquity || isExcludedCategory;
 
         if (!isExcluded) {
           const monthKey = formatMonthKey(entry.date);

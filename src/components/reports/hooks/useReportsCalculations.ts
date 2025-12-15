@@ -119,17 +119,33 @@ export function useReportsCalculations({
   fixedAssets,
 }: UseReportsCalculationsProps) {
   // Calculate Owner Equity (separate from profit/loss)
+  // Direction determined by subcategory:
+  // - "رأس مال مالك" = investment (positive, increases equity)
+  // - "سحوبات المالك" = withdrawal (negative, decreases equity)
   const ownerEquity = useMemo((): OwnerEquityData => {
     let ownerInvestments = 0;
     let ownerWithdrawals = 0;
 
     ledgerEntries.forEach((entry) => {
-      // Exclude owner equity transactions (رأس المال) from P&L
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
-        if (entry.type === "دخل") {
+      // Check for equity transactions (by type or category for backward compatibility)
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (isEquity) {
+        // Direction determined by subcategory
+        if (entry.subCategory === "رأس مال مالك") {
           ownerInvestments = safeAdd(ownerInvestments, entry.amount);
-        } else if (entry.type === "مصروف") {
+        } else if (entry.subCategory === "سحوبات المالك") {
           ownerWithdrawals = safeAdd(ownerWithdrawals, entry.amount);
+        } else {
+          // Fallback for old data without proper subcategory
+          // Old logic: type "دخل" = investment, type "مصروف" = withdrawal
+          if (entry.type === "دخل") {
+            ownerInvestments = safeAdd(ownerInvestments, entry.amount);
+          } else if (entry.type === "مصروف") {
+            ownerWithdrawals = safeAdd(ownerWithdrawals, entry.amount);
+          }
         }
       }
     });
@@ -152,7 +168,12 @@ export function useReportsCalculations({
 
     ledgerEntries.forEach((entry) => {
       // EXCLUDE owner equity transactions from profit/loss
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+      // Check by type (new data) OR by category (backward compatibility)
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (isEquity) {
         return; // Skip owner equity transactions
       }
 
@@ -207,6 +228,7 @@ export function useReportsCalculations({
   }, [payments]);
 
   // Calculate AR/AP Aging
+  // Excludes equity entries - they are not receivables/payables
   const arapAging = useMemo((): ARAPAgingData => {
     const receivables: LedgerEntry[] = [];
     const payables: LedgerEntry[] = [];
@@ -214,7 +236,12 @@ export function useReportsCalculations({
     let totalPayables = 0;
 
     ledgerEntries.forEach((entry) => {
-      if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
+      // Exclude equity entries from AR/AP
+      const isEquity = entry.type === "حركة رأس مال" ||
+                       entry.category === "رأس المال" ||
+                       entry.category === "Owner Equity";
+
+      if (entry.isARAPEntry && entry.paymentStatus !== "paid" && !isEquity) {
         if (entry.type === "دخل") {
           receivables.push(entry);
           totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);

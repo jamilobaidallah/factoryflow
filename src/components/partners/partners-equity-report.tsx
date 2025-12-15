@@ -103,8 +103,11 @@ export default function PartnersEquityReport() {
           return;
         }
 
-        // Calculate total profit (excluding all capital transactions)
-        if (data.category !== "رأس المال") {
+        // Check if this is an equity transaction (by type or category)
+        const isEquity = data.type === "حركة رأس مال" || data.category === "رأس المال";
+
+        // Calculate total profit (excluding all equity/capital transactions)
+        if (!isEquity) {
           if (data.type === "دخل" || data.type === "إيراد") {
             totalRevenue += data.amount || 0;
           } else if (data.type === "مصروف") {
@@ -134,10 +137,16 @@ export default function PartnersEquityReport() {
 
           // Track partner-specific capital transactions
           if (data.ownerName === partner.name) {
-            if (data.category === "رأس المال") {
-              if (data.subCategory === "رأس مال مالك" && data.type === "دخل") {
+            // Check if this is an equity transaction (by type or category)
+            const isEquity = data.type === "حركة رأس مال" || data.category === "رأس المال";
+
+            if (isEquity) {
+              // Direction determined by subcategory
+              if (data.subCategory === "رأس مال مالك") {
+                // Capital contribution = investment (positive)
                 investments += data.amount || 0;
               } else if (data.subCategory === "سحوبات المالك") {
+                // Owner withdrawal = withdrawal (negative)
                 withdrawals += data.amount || 0;
               }
             }

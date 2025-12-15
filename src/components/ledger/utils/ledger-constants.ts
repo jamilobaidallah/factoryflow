@@ -5,7 +5,7 @@ export interface LedgerEntry {
     id: string;
     transactionId: string;
     description: string;
-    type: string; // "دخل" or "مصروف"
+    type: string; // "دخل" (income), "مصروف" (expense), or "حركة رأس مال" (equity)
     amount: number;
     category: string;
     subCategory: string;
@@ -46,12 +46,13 @@ export const CATEGORIES: Category[] = [
             "عمولات",
         ]
     },
+    // Equity Category (NOT P&L - affects cash balance but not profit/loss)
     {
         name: "رأس المال",
-        type: "دخل",
+        type: "حركة رأس مال",
         subcategories: [
-            "رأس مال مالك",
-            "سحوبات المالك",
+            "رأس مال مالك",    // Positive: increases equity, cash IN
+            "سحوبات المالك",   // Negative: decreases equity, cash OUT
         ]
     },
     {

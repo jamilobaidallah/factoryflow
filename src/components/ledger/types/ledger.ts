@@ -5,7 +5,7 @@ export interface LedgerEntry {
   id: string;
   transactionId: string;
   description: string;
-  type: string; // "دخل" or "مصروف"
+  type: string; // "دخل" (income), "مصروف" (expense), or "حركة رأس مال" (equity)
   amount: number;
   category: string;
   subCategory: string;
