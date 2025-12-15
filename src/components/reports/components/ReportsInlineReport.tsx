@@ -13,6 +13,7 @@ interface LedgerEntry {
   date: Date;
   paymentStatus?: string;
   remainingBalance?: number;
+  totalPaid?: number;
   isARAPEntry?: boolean;
 }
 
@@ -522,20 +523,32 @@ function CashFlowReport({
         return;
       }
 
-      // For operating cash flow, we consider paid transactions as actual cash movement
-      // Skip unpaid/partial entries - they haven't fully moved cash yet
-      // Non-ARAP entries (instant settlement) count as paid
-      const isPaid = !entry.isARAPEntry || entry.paymentStatus === "paid" || entry.paymentStatus === "مدفوع";
-      if (!isPaid) {
-        return;
+      // OPERATING CASH: Calculate based on payment status
+      // - Non-ARAP entries (instant settlement) = full amount
+      // - Paid ARAP entries = full amount
+      // - Partial ARAP entries = only totalPaid portion
+      // - Unpaid ARAP entries = 0 (no cash movement yet)
+      let cashAmount = 0;
+      if (!entry.isARAPEntry) {
+        // Non-AR/AP = instant settlement, full amount
+        cashAmount = entry.amount;
+      } else if (entry.paymentStatus === "paid" || entry.paymentStatus === "مدفوع") {
+        // Fully paid = full amount
+        cashAmount = entry.amount;
+      } else if (entry.paymentStatus === "partial" || entry.paymentStatus === "جزئي") {
+        // Partial = only the paid portion
+        cashAmount = entry.totalPaid || 0;
       }
+      // unpaid = 0, already initialized
 
-      if (entry.type === "دخل") {
-        operatingIn += entry.amount;
-        inByCategory[entry.category] = (inByCategory[entry.category] || 0) + entry.amount;
-      } else if (entry.type === "مصروف") {
-        operatingOut += entry.amount;
-        outByCategory[entry.category] = (outByCategory[entry.category] || 0) + entry.amount;
+      if (cashAmount > 0) {
+        if (entry.type === "دخل") {
+          operatingIn += cashAmount;
+          inByCategory[entry.category] = (inByCategory[entry.category] || 0) + cashAmount;
+        } else if (entry.type === "مصروف") {
+          operatingOut += cashAmount;
+          outByCategory[entry.category] = (outByCategory[entry.category] || 0) + cashAmount;
+        }
       }
     });
 

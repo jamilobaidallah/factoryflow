@@ -15,6 +15,7 @@ export interface DashboardLedgerEntry {
   description?: string;
   paymentStatus?: "paid" | "unpaid" | "partial";
   remainingBalance?: number;
+  totalPaid?: number;
   isARAPEntry?: boolean;
 }
 

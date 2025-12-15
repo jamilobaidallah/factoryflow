@@ -89,6 +89,7 @@ export function useDashboardData(): UseDashboardDataReturn {
           description: data.description,
           paymentStatus: data.paymentStatus,
           remainingBalance: data.remainingBalance,
+          totalPaid: data.totalPaid,
           isARAPEntry: data.isARAPEntry,
         };
 
@@ -121,15 +122,29 @@ export function useDashboardData(): UseDashboardDataReturn {
             updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
           }
 
-          // OPERATING CASH: Only count PAID transactions as cash movement
-          // Skip unpaid/partial entries - they haven't fully moved cash yet
-          // Non-ARAP entries (instant settlement) count as paid
-          const isPaid = !entry.isARAPEntry || entry.paymentStatus === "paid";
-          if (isPaid) {
+          // OPERATING CASH: Calculate based on payment status
+          // - Non-ARAP entries (instant settlement) = full amount
+          // - Paid ARAP entries = full amount
+          // - Partial ARAP entries = only totalPaid portion
+          // - Unpaid ARAP entries = 0 (no cash movement yet)
+          let cashAmount = 0;
+          if (!entry.isARAPEntry) {
+            // Non-AR/AP = instant settlement, full amount
+            cashAmount = entry.amount;
+          } else if (entry.paymentStatus === "paid") {
+            // Fully paid = full amount
+            cashAmount = entry.amount;
+          } else if (entry.paymentStatus === "partial") {
+            // Partial = only the paid portion
+            cashAmount = entry.totalPaid || 0;
+          }
+          // unpaid = 0, already initialized
+
+          if (cashAmount > 0) {
             if (isIncome) {
-              opCashIn += entry.amount;
+              opCashIn += cashAmount;
             } else if (entry.type === EXPENSE_TYPE) {
-              opCashOut += entry.amount;
+              opCashOut += cashAmount;
             }
           }
         }
