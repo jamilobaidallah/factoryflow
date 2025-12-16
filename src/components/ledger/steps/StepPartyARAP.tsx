@@ -115,82 +115,84 @@ export function StepPartyARAP({
 
   return (
     <>
-      {/* Associated Party */}
-      <div className="space-y-2 relative">
-        <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
-        <div className="relative">
-          <Input
-            id="associatedParty"
-            value={formData.associatedParty}
-            onChange={(e) => {
-              onUpdate({ associatedParty: e.target.value });
-              setShowPartyDropdown(true);
-            }}
-            onFocus={() => setShowPartyDropdown(true)}
-            placeholder={clientsLoading ? "جاري التحميل..." : "اختر أو ابحث... (اتركه فارغاً للمصاريف اليومية)"}
-            autoComplete="off"
-          />
-          <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        </div>
-        {showPartyDropdown && !clientsLoading && (
-          <div className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
-            {/* Option to clear/leave empty */}
-            {formData.associatedParty && (
-              <button
-                type="button"
-                onClick={() => handlePartySelect("")}
-                className="w-full px-3 py-2 text-right text-sm border-b hover:bg-gray-100 text-gray-500"
-              >
-                × مسح الاختيار (بدون طرف معني)
-              </button>
-            )}
-            {filteredClients.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                {allClients.length === 0 ? "لا يوجد عملاء مسجلين في الدفتر" : "لا توجد نتائج"}
-              </div>
-            ) : (
-              filteredClients.map((client) => (
-                <button
-                  key={client.name}
-                  type="button"
-                  onClick={() => handlePartySelect(client.name)}
-                  className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 flex items-center justify-between"
-                >
-                  <span>{client.name}</span>
-                  <div className="flex items-center gap-1">
-                    {client.hasBalance && client.balance !== 0 && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        client.balance && client.balance > 0
-                          ? 'bg-red-100 text-red-700' // They owe us (receivable)
-                          : 'bg-green-100 text-green-700' // We owe them (payable)
-                      }`}>
-                        {client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
-                        {Math.abs(client.balance || 0).toFixed(2)}
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
-                    </span>
-                  </div>
-                </button>
-              ))
-            )}
-            {/* Option to add new party manually */}
-            {formData.associatedParty?.trim() && !allClients.some(c => c.name === formData.associatedParty?.trim()) && (
-              <button
-                type="button"
-                onClick={() => setShowPartyDropdown(false)}
-                className="w-full px-3 py-2 text-right text-sm border-t hover:bg-blue-50 text-blue-600"
-              >
-                + استخدام &quot;{formData.associatedParty}&quot; كاسم جديد
-              </button>
-            )}
+      {/* Associated Party - Not shown for equity transactions (they use Owner dropdown instead) */}
+      {formData.category !== "رأس المال" && (
+        <div className="space-y-2 relative">
+          <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
+          <div className="relative">
+            <Input
+              id="associatedParty"
+              value={formData.associatedParty}
+              onChange={(e) => {
+                onUpdate({ associatedParty: e.target.value });
+                setShowPartyDropdown(true);
+              }}
+              onFocus={() => setShowPartyDropdown(true)}
+              placeholder={clientsLoading ? "جاري التحميل..." : "اختر أو ابحث... (اتركه فارغاً للمصاريف اليومية)"}
+              autoComplete="off"
+            />
+            <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
           </div>
-        )}
-        <p className="text-xs text-gray-500">
-          اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني
-        </p>
-      </div>
+          {showPartyDropdown && !clientsLoading && (
+            <div className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {/* Option to clear/leave empty */}
+              {formData.associatedParty && (
+                <button
+                  type="button"
+                  onClick={() => handlePartySelect("")}
+                  className="w-full px-3 py-2 text-right text-sm border-b hover:bg-gray-100 text-gray-500"
+                >
+                  × مسح الاختيار (بدون طرف معني)
+                </button>
+              )}
+              {filteredClients.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                  {allClients.length === 0 ? "لا يوجد عملاء مسجلين في الدفتر" : "لا توجد نتائج"}
+                </div>
+              ) : (
+                filteredClients.map((client) => (
+                  <button
+                    key={client.name}
+                    type="button"
+                    onClick={() => handlePartySelect(client.name)}
+                    className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 flex items-center justify-between"
+                  >
+                    <span>{client.name}</span>
+                    <div className="flex items-center gap-1">
+                      {client.hasBalance && client.balance !== 0 && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          client.balance && client.balance > 0
+                            ? 'bg-red-100 text-red-700' // They owe us (receivable)
+                            : 'bg-green-100 text-green-700' // We owe them (payable)
+                        }`}>
+                          {client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
+                          {Math.abs(client.balance || 0).toFixed(2)}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {client.source === 'ledger' ? 'دفتر' : client.source === 'partner' ? 'شريك' : client.source === 'client' ? 'عميل' : 'متعدد'}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
+              {/* Option to add new party manually */}
+              {formData.associatedParty?.trim() && !allClients.some(c => c.name === formData.associatedParty?.trim()) && (
+                <button
+                  type="button"
+                  onClick={() => setShowPartyDropdown(false)}
+                  className="w-full px-3 py-2 text-right text-sm border-t hover:bg-blue-50 text-blue-600"
+                >
+                  + استخدام &quot;{formData.associatedParty}&quot; كاسم جديد
+                </button>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-gray-500">
+            اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني
+          </p>
+        </div>
+      )}
 
       {/* Owner dropdown for capital transactions */}
       {formData.category === "رأس المال" && (
