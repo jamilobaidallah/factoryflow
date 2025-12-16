@@ -91,6 +91,18 @@
 
 ---
 
+### Additional Fixes (from verification testing)
+
+**Bug A: Partner search not working with Arabic names**
+- Fixed: Added NFKC normalization for Arabic text comparison
+- File: `src/components/search/useGlobalSearch.ts`
+
+**Bug B: Equity entries didn't show partner name in الطرف column**
+- Fixed: Desktop table and mobile card now show `ownerName` for equity entries
+- File: `src/components/ledger/components/LedgerTable.tsx`
+
+---
+
 ## PREVIOUS TASK (COMPLETED): Fix Accounting Architecture (Equity Transaction Type)
 
 **Branch:** `feature/equity-transaction-type`

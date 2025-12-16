@@ -110,17 +110,19 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
           }
         });
 
-        // Search Partners (by name)
+        // Search Partners (by name) - same pattern as clients
         const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
         const partnersSnapshot = await getDocs(
           firestoreQuery(partnersRef, limit(50))
         );
+        // DEBUG: Log partners query results
+        console.log(`[GlobalSearch] Partners query returned ${partnersSnapshot.size} docs, searching for "${searchTerm}"`);
         partnersSnapshot.forEach((doc) => {
           const data = doc.data();
-          // Normalize Arabic text for comparison (handle diacritics and case)
-          const partnerName = (data.name || "").normalize("NFKC").trim();
-          const normalizedSearch = searchTerm.normalize("NFKC").trim();
-          if (partnerName.includes(normalizedSearch) || partnerName.toLowerCase().includes(normalizedSearch)) {
+          console.log(`[GlobalSearch] Partner doc: name="${data.name}", id=${doc.id}`);
+          // Use same pattern as clients search (line 101)
+          if (data.name?.toLowerCase().includes(searchTerm)) {
+            console.log(`[GlobalSearch] MATCH: Partner "${data.name}" matches "${searchTerm}"`);
             searchResults.push({
               id: doc.id,
               type: "partner",
