@@ -115,14 +115,9 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         const partnersSnapshot = await getDocs(
           firestoreQuery(partnersRef, limit(50))
         );
-        // DEBUG: Log partners query results
-        console.log(`[GlobalSearch] Partners query returned ${partnersSnapshot.size} docs, searching for "${searchTerm}"`);
         partnersSnapshot.forEach((doc) => {
           const data = doc.data();
-          console.log(`[GlobalSearch] Partner doc: name="${data.name}", id=${doc.id}`);
-          // Use same pattern as clients search (line 101)
           if (data.name?.toLowerCase().includes(searchTerm)) {
-            console.log(`[GlobalSearch] MATCH: Partner "${data.name}" matches "${searchTerm}"`);
             searchResults.push({
               id: doc.id,
               type: "partner",

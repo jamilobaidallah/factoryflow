@@ -10,11 +10,11 @@ interface SearchResultsProps {
 }
 
 /**
- * Displays grouped search results organized by type (ledger, client, cheque, payment).
+ * Displays grouped search results organized by type (ledger, client, partner, cheque, payment).
  * Each result shows an icon, title, subtitle, and navigation arrow.
  */
 export function SearchResults({ groupedResults, onSelect }: SearchResultsProps) {
-  const groupOrder: Array<SearchResult["type"]> = ["ledger", "client", "cheque", "payment"];
+  const groupOrder: Array<SearchResult["type"]> = ["ledger", "client", "partner", "cheque", "payment"];
 
   return (
     <>
