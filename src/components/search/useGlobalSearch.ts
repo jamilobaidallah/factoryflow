@@ -7,7 +7,7 @@ import { formatNumber } from "@/lib/date-utils";
 /** Represents a single search result item */
 export interface SearchResult {
   id: string;
-  type: "ledger" | "client" | "cheque" | "payment";
+  type: "ledger" | "client" | "cheque" | "payment" | "partner";
   title: string;
   subtitle: string;
   href: string;
@@ -29,6 +29,7 @@ export const typeLabels: Record<string, string> = {
   client: "العملاء",
   cheque: "الشيكات",
   payment: "المدفوعات",
+  partner: "الشركاء",
 };
 
 export const typeIcons: Record<string, string> = {
@@ -36,11 +37,12 @@ export const typeIcons: Record<string, string> = {
   client: "👤",
   cheque: "📝",
   payment: "💰",
+  partner: "🤝",
 };
 
 /**
- * Hook for global search across ledger, clients, cheques, and payments.
- * Implements debounced search (300ms) with grouped results.
+ * Hook for global search across ledger, clients, partners, cheques, and payments.
+ * Implements debounced search (400ms) with grouped results.
  *
  * @returns Search state and controls including query, results, loading state, and grouped results
  */
@@ -104,6 +106,25 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
               subtitle: data.phone || "لا يوجد رقم هاتف",
               href: `/clients?highlight=${doc.id}`,
               icon: typeIcons.client,
+            });
+          }
+        });
+
+        // Search Partners (by name)
+        const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
+        const partnersSnapshot = await getDocs(
+          firestoreQuery(partnersRef, limit(50))
+        );
+        partnersSnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.name?.toLowerCase().includes(searchTerm)) {
+            searchResults.push({
+              id: doc.id,
+              type: "partner",
+              title: data.name,
+              subtitle: `${data.ownershipPercentage || 0}% - ${data.phone || "لا يوجد رقم هاتف"}`,
+              href: `/partners?highlight=${doc.id}`,
+              icon: typeIcons.partner,
             });
           }
         });

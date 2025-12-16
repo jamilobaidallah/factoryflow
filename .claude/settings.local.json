@@ -20,7 +20,9 @@
       "Bash(git pull:*)",
       "Bash(cd:*)",
       "Bash(wc:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(find:*)",
+      "Bash(firebase deploy:*)"
     ],
     "deny": [],
     "ask": []

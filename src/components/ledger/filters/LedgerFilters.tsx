@@ -373,6 +373,31 @@ function LedgerFiltersComponent({
                   </span>
                 </div>
               )}
+              {/* Equity Stats - shown when equity entries are present */}
+              {filteredTotals.equityIn > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">الاستثمارات:</span>
+                  <span className="font-bold text-green-600">
+                    {formatNumber(filteredTotals.equityIn)}
+                  </span>
+                </div>
+              )}
+              {filteredTotals.equityOut > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">السحوبات:</span>
+                  <span className="font-bold text-red-600">
+                    {formatNumber(filteredTotals.equityOut)}
+                  </span>
+                </div>
+              )}
+              {(filteredTotals.equityIn > 0 || filteredTotals.equityOut > 0) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">صافي رأس المال:</span>
+                  <span className={`font-bold ${filteredTotals.equityIn - filteredTotals.equityOut >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                    {formatNumber(filteredTotals.equityIn - filteredTotals.equityOut)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

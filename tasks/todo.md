@@ -5,7 +5,93 @@
 
 ---
 
-## CURRENT TASK: Fix Accounting Architecture (Equity Transaction Type)
+## CURRENT TASK: Fix 3 Bugs (Global Search, Partners Equity, Ledger Stats)
+
+**Branch:** `fix/three-bugs-global-search-partners-ledger-stats`
+**Date:** December 16, 2025
+
+### Bug 1: Global Search doesn't find Partners ✅
+
+**Location:** `src/components/search/useGlobalSearch.ts`
+
+**Problem:**
+- Global search only queries: `ledger`, `clients`, `cheques`, `payments`
+- Partners collection is NOT included in the search
+
+**Root Cause:** Lines 92-109 search clients, but there's no equivalent search for partners.
+
+**Fix:**
+- [x] 1.1 Add "partner" to `SearchResult.type` union type
+- [x] 1.2 Add "الشركاء" to `typeLabels` object
+- [x] 1.3 Add icon for partners in `typeIcons` object (🤝)
+- [x] 1.4 Add partners collection search (query by `name`, similar to clients)
+- [x] 1.5 Result links to `/partners?highlight=${doc.id}`
+
+---
+
+### Bug 2: Partners page doesn't show equity contributions ✅
+
+**Location:** `src/components/partners/partners-page.tsx`
+
+**Problem:**
+- Partners table shows "الاستثمار الأولي" column with static `initialInvestment` field
+- This field is manually entered when creating a partner, defaults to 0
+- Actual equity transactions in ledger (capital contributions, owner drawings) are NOT shown
+
+**Fix (Enhanced UI):**
+- [x] 2.1 Added real-time ledger query for equity transactions per partner
+- [x] 2.2 New columns: الاستثمارات | السحوبات | صافي الملكية (replaces static الاستثمار الأولي)
+- [x] 2.3 Expandable rows showing last 5 equity transactions per partner
+- [x] 2.4 Link to filtered ledger view: "عرض الكل في دفتر الأستاذ"
+- [x] 2.5 Updated summary card to show total equity from ledger
+
+---
+
+### Bug 3: Ledger footer shows wrong "المصروفات" for equity entries ✅
+
+**Location:** `src/components/ledger/filters/useLedgerFilters.ts` - `calculateTotals()` function
+
+**Problem:**
+- When filtered by "رأس المال" category, footer shows "المصروفات: 7,000"
+- Actual entries: +5,000 (capital contribution) and -2,000 (owner drawings)
+- 7,000 = sum of absolute values → WRONG!
+
+**Fix:**
+- [x] 3.1 Import `isEquityTransaction` helper from ledger-helpers.ts
+- [x] 3.2 Update `calculateTotals()` to detect equity entries and handle them separately
+- [x] 3.3 Add equity totals to `FilteredTotals` interface: `{ count, income, expenses, equityIn, equityOut }`
+- [x] 3.4 Update `LedgerFilters.tsx` to display equity stats when equity entries are present
+- [x] 3.5 Shows "الاستثمارات" / "السحوبات" / "صافي رأس المال" for equity entries
+
+---
+
+### Phase 4: Testing & Verification ✅
+
+- [x] 4.1 Run TypeScript compilation: **PASSED** (0 errors)
+- [x] 4.2 Run ESLint: **PASSED** (warnings only, pre-existing)
+- [x] 4.3 Run production build: **SUCCESS**
+- [ ] 4.4 Manual test: Search for partner name in global search
+- [ ] 4.5 Manual test: Verify partners page shows equity from ledger
+- [ ] 4.6 Manual test: Filter ledger by "رأس المال" and verify footer stats
+
+---
+
+### Review Summary
+
+**Files Modified (4 files):**
+1. `src/components/search/useGlobalSearch.ts` - Added partners to global search
+2. `src/components/partners/partners-page.tsx` - Enhanced equity display with real-time ledger data
+3. `src/components/ledger/filters/useLedgerFilters.ts` - Fixed calculateTotals for equity entries
+4. `src/components/ledger/filters/LedgerFilters.tsx` - Added equity-specific stats display
+
+**Test Results:**
+- TypeScript: ✅ 0 errors
+- ESLint: ✅ Warnings only (pre-existing)
+- Build: ✅ Success
+
+---
+
+## PREVIOUS TASK (COMPLETED): Fix Accounting Architecture (Equity Transaction Type)
 
 **Branch:** `feature/equity-transaction-type`
 **Date:** December 15, 2025

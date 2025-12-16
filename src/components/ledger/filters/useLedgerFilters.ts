@@ -8,6 +8,7 @@ import {
   endOfMonth,
 } from "date-fns";
 import { LedgerEntry } from "../types/ledger";
+import { isEquityTransaction, isCapitalContribution, isOwnerDrawing } from "../utils/ledger-helpers";
 
 /** Date filter preset options */
 export type DatePreset = "today" | "week" | "month" | "all" | "custom";
@@ -37,6 +38,8 @@ export interface FilteredTotals {
   count: number;
   income: number;
   expenses: number;
+  equityIn: number;
+  equityOut: number;
 }
 
 /** Return type for the useLedgerFilters hook */
@@ -285,15 +288,23 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
   const calculateTotals = useCallback((entries: LedgerEntry[]): FilteredTotals => {
     return entries.reduce(
       (acc, entry) => {
-        if (entry.type === "دخل") {
+        // Check if this is an equity transaction
+        if (isEquityTransaction(entry.type, entry.category)) {
+          // Equity entries: track separately as investments or withdrawals
+          if (isCapitalContribution(entry.subCategory)) {
+            acc.equityIn += entry.amount || 0;
+          } else if (isOwnerDrawing(entry.subCategory)) {
+            acc.equityOut += entry.amount || 0;
+          }
+        } else if (entry.type === "دخل") {
           acc.income += entry.amount || 0;
-        } else {
+        } else if (entry.type === "مصروف") {
           acc.expenses += entry.amount || 0;
         }
         acc.count++;
         return acc;
       },
-      { count: 0, income: 0, expenses: 0 }
+      { count: 0, income: 0, expenses: 0, equityIn: 0, equityOut: 0 }
     );
   }, []);
 
