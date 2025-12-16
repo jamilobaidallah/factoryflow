@@ -117,7 +117,10 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         );
         partnersSnapshot.forEach((doc) => {
           const data = doc.data();
-          if (data.name?.toLowerCase().includes(searchTerm)) {
+          // Normalize Arabic text for comparison (handle diacritics and case)
+          const partnerName = (data.name || "").normalize("NFKC").trim();
+          const normalizedSearch = searchTerm.normalize("NFKC").trim();
+          if (partnerName.includes(normalizedSearch) || partnerName.toLowerCase().includes(normalizedSearch)) {
             searchResults.push({
               id: doc.id,
               type: "partner",

@@ -194,10 +194,12 @@ const LedgerTableRow = memo(function LedgerTableRow({
         </span>
       </TableCell>
 
-      {/* Party */}
+      {/* Party - For equity entries, show ownerName instead of associatedParty */}
       <TableCell>
         <p className="text-sm text-slate-600 truncate">
-          {entry.associatedParty || "-"}
+          {isEquityTransaction(entry.type, entry.category)
+            ? (entry.ownerName || "-")
+            : (entry.associatedParty || "-")}
         </p>
       </TableCell>
 
@@ -339,7 +341,7 @@ const LedgerCard = memo(function LedgerCard({
       <div className="space-y-1 text-xs text-slate-600">
         <div className="flex justify-between">
           <span>{formatShortDate(entry.date)}</span>
-          <span>{entry.associatedParty || "-"}</span>
+          <span>{isEquityTransaction(entry.type, entry.category) ? (entry.ownerName || "-") : (entry.associatedParty || "-")}</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="text-slate-500">{entry.category}</span>
