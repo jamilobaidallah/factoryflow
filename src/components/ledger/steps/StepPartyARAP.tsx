@@ -337,19 +337,21 @@ export function StepPartyARAP({
               </div>
             )}
 
-            {/* Inventory Update Option */}
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <input
-                type="checkbox"
-                id="enableInventoryUpdate"
-                checked={hasInventoryUpdate}
-                onChange={(e) => setHasInventoryUpdate(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="enableInventoryUpdate" className="cursor-pointer text-sm">
-                تحديث المخزون
-              </Label>
-            </div>
+            {/* Inventory Update Option - Not for equity transactions */}
+            {formData.category !== "رأس المال" && (
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <input
+                  type="checkbox"
+                  id="enableInventoryUpdate"
+                  checked={hasInventoryUpdate}
+                  onChange={(e) => setHasInventoryUpdate(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <Label htmlFor="enableInventoryUpdate" className="cursor-pointer text-sm">
+                  تحديث المخزون
+                </Label>
+              </div>
+            )}
 
             {/* Fixed Asset Option */}
             {currentEntryType === "مصروف" && formData.category === "أصول ثابتة" && (

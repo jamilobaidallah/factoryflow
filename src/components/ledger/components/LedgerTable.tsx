@@ -105,6 +105,13 @@ function isPositiveAmount(type: string, subCategory: string): boolean {
   return false; // Expenses and owner drawings = cash OUT
 }
 
+/** Check if entry is an equity transaction */
+function isEquityEntry(entry: LedgerEntry): boolean {
+  return entry.type === "حركة رأس مال" ||
+         entry.category === "رأس المال" ||
+         entry.category === "Owner Equity";
+}
+
 // Memoized table row for better performance with large lists
 const LedgerTableRow = memo(function LedgerTableRow({
   entry,
@@ -205,11 +212,10 @@ const LedgerTableRow = memo(function LedgerTableRow({
         <p
           className={cn(
             "text-sm font-bold",
-            isPositiveAmount(entry.type, entry.subCategory) ? "text-emerald-600" :
-            entry.type === "حركة رأس مال" ? "text-purple-600" : "text-slate-700"
+            isPositiveAmount(entry.type, entry.subCategory || "") ? "text-emerald-600" : "text-rose-600"
           )}
         >
-          {isPositiveAmount(entry.type, entry.subCategory) ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory || "") ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </p>
       </TableCell>
@@ -241,8 +247,9 @@ const LedgerTableRow = memo(function LedgerTableRow({
           role="group"
           aria-label="إجراءات الحركة المالية"
         >
+          {/* Quick Pay - Only for AR/AP entries that are not equity */}
           <PermissionGate action="create" module="payments">
-            {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+            {!isEquityEntry(entry) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
               <button
                 onClick={() => onQuickPay(entry)}
                 title="إضافة دفعة"
@@ -252,13 +259,16 @@ const LedgerTableRow = memo(function LedgerTableRow({
               </button>
             )}
           </PermissionGate>
-          <button
-            onClick={() => onViewRelated(entry)}
-            title="السجلات المرتبطة"
-            className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-          >
-            <FolderOpen className="w-4 h-4" />
-          </button>
+          {/* View Related Records - Not for equity transactions */}
+          {!isEquityEntry(entry) && (
+            <button
+              onClick={() => onViewRelated(entry)}
+              title="السجلات المرتبطة"
+              className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <FolderOpen className="w-4 h-4" />
+            </button>
+          )}
           <PermissionGate action="update" module="ledger">
             <button
               onClick={() => onEdit(entry)}
@@ -323,11 +333,10 @@ const LedgerCard = memo(function LedgerCard({
         <span
           className={cn(
             "font-bold whitespace-nowrap",
-            isPositiveAmount(entry.type, entry.subCategory) ? "text-emerald-600" :
-            entry.type === "حركة رأس مال" ? "text-purple-600" : "text-slate-700"
+            isPositiveAmount(entry.type, entry.subCategory || "") ? "text-emerald-600" : "text-rose-600"
           )}
         >
-          {isPositiveAmount(entry.type, entry.subCategory) ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory || "") ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </span>
       </div>
@@ -380,8 +389,9 @@ const LedgerCard = memo(function LedgerCard({
         role="group"
         aria-label="إجراءات الحركة المالية"
       >
+        {/* Quick Pay - Only for AR/AP entries that are not equity */}
         <PermissionGate action="create" module="payments">
-          {entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+          {!isEquityEntry(entry) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
             <Button
               variant="ghost"
               size="sm"
@@ -393,15 +403,18 @@ const LedgerCard = memo(function LedgerCard({
             </Button>
           )}
         </PermissionGate>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onViewRelated(entry)}
-          className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-        >
-          <FolderOpen className="w-4 h-4 ml-1" />
-          مرتبط
-        </Button>
+        {/* View Related Records - Not for equity transactions */}
+        {!isEquityEntry(entry) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onViewRelated(entry)}
+            className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+          >
+            <FolderOpen className="w-4 h-4 ml-1" />
+            مرتبط
+          </Button>
+        )}
         <PermissionGate action="update" module="ledger">
           <Button
             variant="ghost"
