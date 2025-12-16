@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react";
 import { ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import { LedgerEntry } from "../utils/ledger-constants";
+import { isEquityTransaction } from "../utils/ledger-helpers";
 import { formatNumber } from "@/lib/date-utils";
 
 interface LedgerStatsProps {
@@ -25,12 +26,7 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
 
     entries.forEach((entry) => {
       // Skip equity transactions - they don't affect P&L or AR/AP
-      // Check by type (new) OR by category (backward compatibility)
-      const isEquity = entry.type === "حركة رأس مال" ||
-                       entry.category === "رأس المال" ||
-                       entry.category === "Owner Equity";
-
-      if (isEquity) {
+      if (isEquityTransaction(entry.type, entry.category)) {
         return; // Skip equity entries from P&L calculations
       }
 

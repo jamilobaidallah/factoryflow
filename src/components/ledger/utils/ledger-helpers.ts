@@ -20,19 +20,41 @@ export function getCategoryType(categoryName: string, _subCategory?: string): st
 }
 
 /**
- * Helper function to determine if an equity subcategory is positive (cash in) or negative (cash out)
- * Used for cash flow calculations on equity transactions
+ * Helper function to check if a transaction type is equity
+ * Handles both new type and backward compatibility with old data
+ *
+ * Equity transactions (capital contributions, owner drawings) affect cash
+ * balance but NOT profit/loss calculations. They are:
+ * - NOT counted in P&L (Income Statement)
+ * - Counted in Cash Flow (Financing Activities)
+ * - NOT tracked as AR/AP (no payment status)
+ *
+ * @param type - Transaction type ("دخل", "مصروف", "حركة رأس مال")
+ * @param category - Transaction category name
+ * @returns true if this is an equity transaction
  */
-export function isEquityCashIn(subCategory: string): boolean {
+export function isEquityTransaction(type?: string, category?: string): boolean {
+    return type === "حركة رأس مال" ||
+           category === "رأس المال" ||
+           category === "Owner Equity";
+}
+
+/**
+ * Helper function to check if a subcategory represents capital contribution (cash IN)
+ * @param subCategory - The equity subcategory
+ * @returns true if this is a capital contribution (increases equity)
+ */
+export function isCapitalContribution(subCategory?: string): boolean {
     return subCategory === "رأس مال مالك";
 }
 
 /**
- * Helper function to check if a transaction type is equity
- * Handles both new type and backward compatibility with old data
+ * Helper function to check if a subcategory represents owner drawing (cash OUT)
+ * @param subCategory - The equity subcategory
+ * @returns true if this is an owner drawing (decreases equity)
  */
-export function isEquityTransaction(type: string, category: string): boolean {
-    return type === "حركة رأس مال" || category === "رأس المال";
+export function isOwnerDrawing(subCategory?: string): boolean {
+    return subCategory === "سحوبات المالك";
 }
 
 /**

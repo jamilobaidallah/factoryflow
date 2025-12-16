@@ -14,6 +14,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Edit, Trash2, DollarSign, FolderOpen, FileText, X } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { LedgerEntry } from "../utils/ledger-constants";
+import { isEquityTransaction, isCapitalContribution } from "../utils/ledger-helpers";
 import { cn } from "@/lib/utils";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
@@ -100,16 +101,9 @@ function TypeBadge({ type }: { type: string }) {
 function isPositiveAmount(type: string, subCategory: string): boolean {
   if (type === "دخل") return true;
   if (type === "حركة رأس مال") {
-    return subCategory === "رأس مال مالك"; // Capital contribution = cash IN
+    return isCapitalContribution(subCategory); // Capital contribution = cash IN
   }
   return false; // Expenses and owner drawings = cash OUT
-}
-
-/** Check if entry is an equity transaction */
-function isEquityEntry(entry: LedgerEntry): boolean {
-  return entry.type === "حركة رأس مال" ||
-         entry.category === "رأس المال" ||
-         entry.category === "Owner Equity";
 }
 
 // Memoized table row for better performance with large lists
@@ -249,7 +243,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
         >
           {/* Quick Pay - Only for AR/AP entries that are not equity */}
           <PermissionGate action="create" module="payments">
-            {!isEquityEntry(entry) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+            {!isEquityTransaction(entry.type, entry.category) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
               <button
                 onClick={() => onQuickPay(entry)}
                 title="إضافة دفعة"
@@ -260,7 +254,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
             )}
           </PermissionGate>
           {/* View Related Records - Not for equity transactions */}
-          {!isEquityEntry(entry) && (
+          {!isEquityTransaction(entry.type, entry.category) && (
             <button
               onClick={() => onViewRelated(entry)}
               title="السجلات المرتبطة"
@@ -391,7 +385,7 @@ const LedgerCard = memo(function LedgerCard({
       >
         {/* Quick Pay - Only for AR/AP entries that are not equity */}
         <PermissionGate action="create" module="payments">
-          {!isEquityEntry(entry) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
+          {!isEquityTransaction(entry.type, entry.category) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (
             <Button
               variant="ghost"
               size="sm"
@@ -404,7 +398,7 @@ const LedgerCard = memo(function LedgerCard({
           )}
         </PermissionGate>
         {/* View Related Records - Not for equity transactions */}
-        {!isEquityEntry(entry) && (
+        {!isEquityTransaction(entry.type, entry.category) && (
           <Button
             variant="ghost"
             size="sm"
