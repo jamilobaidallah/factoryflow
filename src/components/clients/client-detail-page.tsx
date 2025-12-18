@@ -762,8 +762,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                             <td className="px-4 py-3 font-medium">د.أ 0.00</td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
-                            <td className="px-4 py-3 font-medium text-gray-600">رصيد افتتاحي</td>
-                            <td className="px-4 py-3"></td>
+                            <td colSpan={2} className="px-4 py-3 text-right font-medium text-gray-600">رصيد افتتاحي</td>
                           </tr>
 
                           {/* Transaction Rows */}
