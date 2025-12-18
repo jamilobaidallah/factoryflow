@@ -763,8 +763,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 // Calculate date range (from all transactions, before filtering)
                 const dateRange = getDateRange(allTransactions);
 
-                // Calculate opening balance (sum of all transactions BEFORE the "from" date)
-                let openingBalance = 0;
+                // Calculate opening balance
+                // Start with client's initial balance (الرصيد الافتتاحي) from their record
+                const clientInitialBalance = client?.balance || 0;
+                let openingBalance = clientInitialBalance;
+
+                // If date filter is applied, add all transactions BEFORE the "from" date
                 if (dateFrom) {
                   const fromDate = new Date(dateFrom);
                   fromDate.setHours(0, 0, 0, 0);
