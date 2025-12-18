@@ -46,6 +46,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
 import { exportStatementToPDF } from "@/lib/export-statement-pdf";
+import { exportStatementToExcel } from "@/lib/export-statement-excel";
 
 // ============================================
 // Helper functions for account statement
@@ -356,67 +357,81 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     setCurrentBalance(balance);
   }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade]);
 
-  // Export statement to CSV
-  const exportStatement = () => {
+  // Export statement to Excel
+  const exportStatement = async () => {
     if (!client) {return;}
 
-    // Combine all transactions (same logic as statement tab)
-    const allTransactions = [
+    // Combine all transactions (same logic as statement tab and PDF export)
+    const allTxns = [
       ...ledgerEntries.map((e) => ({
         date: e.date,
-        type: "فاتورة",
+        type: "Invoice" as const,
         description: e.description,
-        // Income/Sales: amount goes in مدين (client owes us)
-        // Expense/Purchases from them: amount goes in دائن (we owe them)
         debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
         credit: e.type === "مصروف" ? e.amount : 0,
+        balance: 0,
       })),
       ...payments.map((p) => ({
         date: p.date,
-        type: "دفعة",
-        description: extractPaymentMethod(p.notes || p.description || ''),  // Use notes field for payment method
-        // Payment received (قبض): goes in دائن (reduces what they owe us)
-        // Payment made (صرف): goes in مدين (reduces what we owe them)
+        type: "Payment" as const,
+        description: p.notes || p.description || '',
         debit: p.type === "صرف" ? p.amount : 0,
         credit: p.type === "قبض" ? p.amount : 0,
+        balance: 0,
       })),
-    ].sort((a, b) => a.date.getTime() - b.date.getTime());
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Calculate running balance
-    let runningBalance = 0;
-    const statementData = allTransactions.map((t) => {
+    // Calculate balances
+    const clientInitialBalance = client?.balance || 0;
+    let runningBalance = clientInitialBalance;
+    let totalDebit = 0;
+    let totalCredit = 0;
+
+    const txnsWithBalance = allTxns.map((t) => {
+      totalDebit += t.debit;
+      totalCredit += t.credit;
       runningBalance += t.debit - t.credit;
-      const balanceStatus = runningBalance > 0 ? "عليه" : runningBalance < 0 ? "له" : "مسدد";
-      return {
-        التاريخ: formatDateAr(t.date),
-        البيان: t.type,
-        الوصف: t.description,
-        مدين: t.debit > 0 ? formatNumber(t.debit) : "",
-        دائن: t.credit > 0 ? formatNumber(t.credit) : "",
-        الرصيد: `${formatNumber(Math.abs(runningBalance))} ${balanceStatus}`,
-      };
+      return { ...t, balance: runningBalance };
     });
 
-    if (statementData.length === 0) {
+    // Get pending cheques
+    const pendingCheques = cheques
+      .filter((c) => c.status === "قيد الانتظار")
+      .map((c) => ({
+        chequeNumber: c.chequeNumber,
+        bankName: c.bankName,
+        dueDate: c.dueDate || c.chequeDate,
+        amount: c.amount,
+      }));
+
+    const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
+
+    try {
+      await exportStatementToExcel({
+        clientName: client.name,
+        clientPhone: client.phone,
+        clientEmail: client.email,
+        openingBalance: clientInitialBalance,
+        transactions: txnsWithBalance,
+        totalDebit,
+        totalCredit,
+        finalBalance: runningBalance,
+        pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
+        expectedBalanceAfterCheques: pendingCheques.length > 0 ? runningBalance - totalPendingCheques : undefined,
+      });
+
       toast({
-        title: "لا توجد معاملات",
-        description: "لا توجد معاملات لتصديرها",
+        title: "تم التصدير",
+        description: "تم تصدير كشف الحساب بنجاح",
+      });
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast({
+        title: "خطأ",
+        description: "فشل تصدير الملف",
         variant: "destructive",
       });
-      return;
     }
-
-    // Convert to CSV
-    const headers = Object.keys(statementData[0]).join(",");
-    const rows = statementData.map((row) => Object.values(row).join(",")).join("\n");
-    const csv = `${headers}\n${rows}`;
-
-    // Download
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `كشف_حساب_${client.name}_${formatDateAr(new Date())}.csv`;
-    link.click();
   };
 
   if (loading) {
@@ -449,7 +464,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         <div className="flex gap-2">
           <Button onClick={exportStatement} variant="outline">
             <Download className="w-4 h-4 ml-2" />
-            CSV
+            Excel
           </Button>
           <Button
             onClick={async () => {
