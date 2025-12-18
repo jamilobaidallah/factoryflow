@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowLeft,
+  Copy,
   DollarSign,
   TrendingUp,
   TrendingDown,
@@ -888,7 +889,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
           {/* Transaction Detail Modal */}
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogContent className="sm:max-w-lg" dir="rtl">
+            <DialogContent className="sm:max-w-xl" dir="rtl">
               <DialogHeader>
                 <DialogTitle className="text-right">
                   تفاصيل المعاملة
@@ -896,7 +897,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               </DialogHeader>
 
               {selectedTransaction && (
-                <div className="space-y-5 text-right">
+                <div className="px-4 py-2 space-y-5 text-right">
                   {/* Transaction Type Badge */}
                   <div className="flex justify-end mb-4">
                     <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
@@ -909,7 +910,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   </div>
 
                   {/* Details Grid */}
-                  <div className="grid gap-4 text-sm">
+                  <div className="grid gap-4 text-sm px-2">
                     <div className="flex justify-between items-start border-b pb-3">
                       <span className="font-medium">
                         {new Date(selectedTransaction.date).toLocaleDateString('en-GB')}
@@ -951,17 +952,33 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       </div>
                     )}
 
-                    {/* Document ID - Full ID */}
-                    <div className="flex justify-between items-start border-b pb-3">
-                      <span className="font-mono text-xs text-gray-400 break-all">
-                        {selectedTransaction.id}
-                      </span>
+                    {/* Document ID with Copy Button */}
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-gray-400 break-all">
+                          {selectedTransaction.id}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(selectedTransaction.id);
+                            toast({
+                              title: "تم النسخ",
+                              description: "تم نسخ رقم المستند",
+                            });
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded transition-colors"
+                          title="نسخ"
+                        >
+                          <Copy className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                        </button>
+                      </div>
                       <span className="text-gray-500 mr-4 shrink-0">:رقم المستند</span>
                     </div>
                   </div>
 
                   {/* Action Button */}
-                  <div className="pt-4">
+                  <div className="pt-4 px-2">
                     <Button
                       variant="outline"
                       className="w-full"
