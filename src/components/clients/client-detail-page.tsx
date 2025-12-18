@@ -763,6 +763,20 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 // Calculate date range (from all transactions, before filtering)
                 const dateRange = getDateRange(allTransactions);
 
+                // Calculate opening balance (sum of all transactions BEFORE the "from" date)
+                let openingBalance = 0;
+                if (dateFrom) {
+                  const fromDate = new Date(dateFrom);
+                  fromDate.setHours(0, 0, 0, 0);
+                  allTransactions.forEach((item) => {
+                    const itemDate = new Date(item.date);
+                    itemDate.setHours(0, 0, 0, 0);
+                    if (itemDate < fromDate) {
+                      openingBalance += item.debit - item.credit;
+                    }
+                  });
+                }
+
                 // Filter transactions by date range
                 const filteredTransactions = allTransactions.filter((item) => {
                   const itemDate = new Date(item.date);
@@ -786,9 +800,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 });
 
                 // Calculate totals from filtered transactions
+                // Running balance starts from opening balance
                 let totalDebit = 0;
                 let totalCredit = 0;
-                let runningBalance = 0;
+                let runningBalance = openingBalance;
                 const rowsWithBalance = filteredTransactions.map((t) => {
                   totalDebit += t.debit;
                   totalCredit += t.credit;
@@ -905,8 +920,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         <tbody>
                           {/* Opening Balance Row */}
                           <tr className="bg-gray-100">
-                            <td className="pl-1 pr-2 py-3 font-medium">د.أ</td>
-                            <td className="pl-0 pr-4 py-3 font-medium text-left">0.00</td>
+                            <td className={`pl-1 pr-2 py-3 font-medium ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
+                              د.أ {openingBalance > 0 ? 'عليه' : openingBalance < 0 ? 'له' : ''}
+                            </td>
+                            <td className={`pl-0 pr-4 py-3 font-medium text-left ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
+                              {formatNumber(Math.abs(openingBalance))}
+                            </td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
                             <td colSpan={2} className="px-4 py-3 text-right font-medium text-gray-600">رصيد افتتاحي</td>
