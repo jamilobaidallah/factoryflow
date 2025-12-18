@@ -147,8 +147,8 @@ export function exportStatementToPDF(data: ExportStatementData) {
     ]);
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (doc as any).autoTable({
+  // @ts-expect-error jspdf-autotable extends jsPDF prototype
+  doc.autoTable({
     startY: yPos,
     head: [['Date', 'Description', 'Debit', 'Credit', 'Balance', '']],
     body: tableData,
@@ -185,12 +185,12 @@ export function exportStatementToPDF(data: ExportStatementData) {
     },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  yPos = (doc as any).lastAutoTable.finalY + 2;
+  // @ts-expect-error jspdf-autotable adds lastAutoTable property
+  yPos = doc.lastAutoTable.finalY + 2;
 
   // === TOTALS ROW ===
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (doc as any).autoTable({
+  // @ts-expect-error jspdf-autotable extends jsPDF prototype
+  doc.autoTable({
     startY: yPos,
     body: [[
       '',
@@ -222,8 +222,8 @@ export function exportStatementToPDF(data: ExportStatementData) {
     margin: { left: margin, right: margin },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  yPos = (doc as any).lastAutoTable.finalY + 10;
+  // @ts-expect-error jspdf-autotable adds lastAutoTable property
+  yPos = doc.lastAutoTable.finalY + 10;
 
   // === FINAL BALANCE BOX ===
   const balanceBoxHeight = 20;
@@ -271,8 +271,8 @@ export function exportStatementToPDF(data: ExportStatementData) {
     const totalPendingCheques = data.pendingCheques.reduce((sum, c) => sum + c.amount, 0);
     chequesData.push(['', '', 'Total:', formatCurrency(totalPendingCheques)]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (doc as any).autoTable({
+    // @ts-expect-error jspdf-autotable extends jsPDF prototype
+    doc.autoTable({
       startY: yPos,
       head: [['Cheque No.', 'Bank', 'Due Date', 'Amount']],
       body: chequesData,
@@ -303,8 +303,8 @@ export function exportStatementToPDF(data: ExportStatementData) {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    yPos = (doc as any).lastAutoTable.finalY + 8;
+    // @ts-expect-error jspdf-autotable adds lastAutoTable property
+    yPos = doc.lastAutoTable.finalY + 8;
 
     // Expected balance after cheques
     if (data.expectedBalanceAfterCheques !== undefined) {
