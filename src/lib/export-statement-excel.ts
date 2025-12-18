@@ -1,53 +1,11 @@
 import ExcelJS from 'exceljs';
+import type { ExportStatementData } from './statement-types';
+import { formatCurrency, formatBalanceWithSuffix, formatStatementDate } from './statement-format';
 
-interface StatementTransaction {
-  date: Date;
-  type?: string;
-  description: string;
-  debit: number;
-  credit: number;
-  balance: number;
-}
+// Alias for backward compatibility
+const formatDate = formatStatementDate;
 
-interface PendingCheque {
-  chequeNumber: string;
-  bankName: string;
-  dueDate: Date;
-  amount: number;
-}
-
-interface ExportStatementExcelData {
-  clientName: string;
-  clientPhone?: string;
-  clientEmail?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
-  openingBalance: number;
-  transactions: StatementTransaction[];
-  totalDebit: number;
-  totalCredit: number;
-  finalBalance: number;
-  pendingCheques?: PendingCheque[];
-  expectedBalanceAfterCheques?: number;
-}
-
-// Helper function
-function formatBalanceWithSuffix(balance: number): string {
-  const formatted = Math.abs(balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (balance > 0.01) return `${formatted} JD (Debit)`;
-  if (balance < -0.01) return `${formatted} JD (Credit)`;
-  return `${formatted} JD (Settled)`;
-}
-
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString('en-GB');
-}
-
-function formatCurrency(amount: number): string {
-  return Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-export async function exportStatementToExcel(data: ExportStatementExcelData): Promise<void> {
+export async function exportStatementToExcel(data: ExportStatementData): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FactoryFlow';
   workbook.created = new Date();

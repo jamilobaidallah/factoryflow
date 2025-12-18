@@ -47,47 +47,16 @@ import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
 import { exportStatementToPDF } from "@/lib/export-statement-pdf";
 import { exportStatementToExcel } from "@/lib/export-statement-excel";
+import {
+  formatCurrency,
+  formatStatementDate,
+  getDateRange,
+  extractPaymentMethod
+} from "@/lib/statement-format";
 
-// ============================================
-// Helper functions for account statement
-// ============================================
-
-/** Format number with commas and 2 decimal places */
-const formatNumber = (num: number): string => {
-  return Math.abs(num).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-};
-
-/** Format date to DD/MM/YYYY format */
-const formatDateAr = (date: Date | string): string => {
-  const d = new Date(date);
-  return d.toLocaleDateString('en-GB'); // DD/MM/YYYY format
-};
-
-/** Calculate date range from transaction items */
-const getDateRange = (items: Array<{ date: Date }>) => {
-  if (items.length === 0) return { oldest: new Date(), newest: new Date() };
-  const dates = items.map(item => new Date(item.date)).sort((a, b) => a.getTime() - b.getTime());
-  return { oldest: dates[0], newest: dates[dates.length - 1] };
-};
-
-/** Extract payment method from notes/description
- * If notes contains " - ", extract only the part before it
- * Examples:
- * - "تحويل كليك" → "تحويل كليك"
- * - "دفعة أولية - سماحة 4 سم" → "دفعة أولية"
- * - "" → ""
- */
-const extractPaymentMethod = (description: string): string => {
-  if (!description) return '';
-  const dashIndex = description.indexOf(' - ');
-  if (dashIndex > 0) {
-    return description.substring(0, dashIndex).trim();
-  }
-  return description.trim();
-};
+// Aliases for backward compatibility with existing code
+const formatNumber = formatCurrency;
+const formatDateAr = formatStatementDate;
 
 interface Client {
   id: string;

@@ -1,51 +1,10 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import type { ExportStatementData } from './statement-types';
+import { formatCurrency, formatBalanceWithSuffix, formatStatementDate } from './statement-format';
 
-interface StatementTransaction {
-  date: Date;
-  description: string;
-  debit: number;
-  credit: number;
-  balance: number;
-}
-
-interface PendingCheque {
-  chequeNumber: string;
-  bankName: string;
-  dueDate: Date;
-  amount: number;
-}
-
-interface ExportStatementData {
-  clientName: string;
-  clientPhone?: string;
-  clientEmail?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
-  openingBalance: number;
-  transactions: StatementTransaction[];
-  totalDebit: number;
-  totalCredit: number;
-  finalBalance: number;
-  pendingCheques?: PendingCheque[];
-  expectedBalanceAfterCheques?: number;
-}
-
-// Helper functions
-function formatCurrency(amount: number): string {
-  return Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatBalanceWithSuffix(balance: number): string {
-  const formatted = formatCurrency(balance);
-  if (balance > 0) return `${formatted} JOD (Debit)`;
-  if (balance < 0) return `${formatted} JOD (Credit)`;
-  return `${formatted} JOD (Settled)`;
-}
-
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString('en-GB');
-}
+// Alias for backward compatibility
+const formatDate = formatStatementDate;
 
 // Load Arabic font from Google Fonts CDN
 async function loadArabicFont(doc: jsPDF): Promise<void> {
