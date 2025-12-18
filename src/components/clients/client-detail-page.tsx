@@ -790,8 +790,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                 <td className="px-4 py-3 text-sm text-red-600 font-medium">
                                   {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
                                 </td>
-                                <td className="px-4 py-3 text-sm">
-                                  <div className="flex items-center gap-2">
+                                <td className="px-4 py-3 text-sm text-right">
+                                  <div className="flex items-center gap-2 justify-end">
                                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
                                       transaction.isPayment
                                         ? 'bg-green-100 text-green-800'
