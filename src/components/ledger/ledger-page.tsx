@@ -63,6 +63,7 @@ export default function LedgerPage() {
   const urlType = searchParams.get("type");
   const urlCategory = searchParams.get("category");
   const urlSubcategory = searchParams.get("subcategory");
+  const urlSearch = searchParams.get("search");
 
   // Map URL type param to EntryType
   const initialEntryType: EntryType | undefined = urlType === "income" ? "دخل" : urlType === "expense" ? "مصروف" : undefined;
@@ -108,6 +109,7 @@ export default function LedgerPage() {
     initialCategory: urlCategory || undefined,
     initialSubCategory: urlSubcategory || undefined,
     initialViewMode: initialViewMode,
+    initialSearch: urlSearch || undefined,
   });
 
   // Apply filters to entries
