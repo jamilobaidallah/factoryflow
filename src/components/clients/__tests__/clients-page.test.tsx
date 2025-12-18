@@ -243,7 +243,7 @@ describe('ClientsPage', () => {
       render(<ClientsPage />);
 
       await waitFor(() => {
-        // Each client should have 3 buttons (view, edit, delete)
+        // Each client should have 2 buttons (edit, delete)
         const rows = screen.getAllByRole('row');
         // First row is header, rest are data rows
         expect(rows.length).toBeGreaterThan(1);
@@ -262,11 +262,11 @@ describe('ClientsPage', () => {
       const dataRow = rows[1]; // First data row
       const buttons = dataRow.querySelectorAll('button');
 
-      // Should have 3 action buttons per row: view, edit, delete
-      expect(buttons.length).toBe(3);
+      // Should have 2 action buttons per row: edit, delete
+      expect(buttons.length).toBe(2);
     });
 
-    it('navigates to client detail page on view button click', async () => {
+    it('navigates to client detail page on row click', async () => {
       render(<ClientsPage />);
 
       await waitFor(() => {
@@ -275,8 +275,8 @@ describe('ClientsPage', () => {
 
       const rows = screen.getAllByRole('row');
       const dataRow = rows[1];
-      const buttons = dataRow.querySelectorAll('button');
-      await userEvent.click(buttons[0]); // View button
+      // Click on the row (not a button) to navigate
+      await userEvent.click(dataRow);
 
       expect(mockPush).toHaveBeenCalledWith('/clients/client-1');
     });
@@ -295,7 +295,7 @@ describe('ClientsPage', () => {
       const rows = screen.getAllByRole('row');
       const dataRow = rows[1];
       const buttons = dataRow.querySelectorAll('button');
-      await userEvent.click(buttons[2]); // Delete button
+      await userEvent.click(buttons[1]); // Delete button (Edit=0, Delete=1)
 
       // Wait for confirmation dialog to appear
       await waitFor(() => {
@@ -321,7 +321,7 @@ describe('ClientsPage', () => {
       const rows = screen.getAllByRole('row');
       const dataRow = rows[1];
       const buttons = dataRow.querySelectorAll('button');
-      await userEvent.click(buttons[2]); // Delete button
+      await userEvent.click(buttons[1]); // Delete button (Edit=0, Delete=1)
 
       // Wait for confirmation dialog to appear
       await waitFor(() => {

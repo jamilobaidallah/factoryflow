@@ -57,6 +57,13 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
+// Mock next/navigation
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => ({
+    get: jest.fn().mockReturnValue(null),
+  }),
+}));
+
 // Sample payment data
 const mockPayments = [
   {
