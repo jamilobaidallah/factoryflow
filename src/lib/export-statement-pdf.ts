@@ -187,7 +187,7 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
     '',
     '',
     formatCurrency(data.openingBalance),
-    data.openingBalance > 0 ? 'DR' : data.openingBalance < 0 ? 'CR' : '-'
+    data.openingBalance > 0 ? 'JD' : data.openingBalance < 0 ? 'CR' : '-'
   ]);
 
   // Transaction rows - process Arabic text in descriptions
@@ -199,7 +199,7 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
       item.debit > 0 ? formatCurrency(item.debit) : '',
       item.credit > 0 ? formatCurrency(item.credit) : '',
       formatCurrency(Math.abs(item.balance)),
-      item.balance > 0 ? 'DR' : item.balance < 0 ? 'CR' : '-'
+      item.balance > 0 ? 'JD' : item.balance < 0 ? 'CR' : '-'
     ]);
   });
 
