@@ -212,10 +212,11 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
       font: hasArabicFont ? 'Amiri' : 'helvetica',
       fontSize: 9,
       cellPadding: 3,
+      textColor: [0, 0, 0], // Black text for body rows
     },
     headStyles: {
       fillColor: [37, 99, 235], // blue-600
-      textColor: 255,
+      textColor: [255, 255, 255], // Pure white text
       fontStyle: 'bold',
       halign: 'center',
       font: 'helvetica',
@@ -272,7 +273,7 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
     },
     bodyStyles: {
       fillColor: [30, 64, 175], // blue-800
-      textColor: 255,
+      textColor: [255, 255, 255], // Pure white text
     },
     margin: { left: margin, right: margin },
   });
@@ -338,10 +339,11 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
         font: hasArabicFont ? 'Amiri' : 'helvetica',
         fontSize: 9,
         cellPadding: 3,
+        textColor: [0, 0, 0], // Black text for body rows
       },
       headStyles: {
         fillColor: [254, 243, 199], // yellow-100
-        textColor: [161, 98, 7], // yellow-700
+        textColor: [161, 98, 7], // yellow-700 (dark enough for yellow bg)
         fontStyle: 'bold',
         font: 'helvetica',
       },
