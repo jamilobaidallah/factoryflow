@@ -61,6 +61,22 @@ const getDateRange = (items: Array<{ date: Date }>) => {
   return { oldest: dates[0], newest: dates[dates.length - 1] };
 };
 
+/** Extract payment method from notes/description
+ * If notes contains " - ", extract only the part before it
+ * Examples:
+ * - "تحويل كليك" → "تحويل كليك"
+ * - "دفعة أولية - سماحة 4 سم" → "دفعة أولية"
+ * - "" → ""
+ */
+const extractPaymentMethod = (description: string): string => {
+  if (!description) return '';
+  const dashIndex = description.indexOf(' - ');
+  if (dashIndex > 0) {
+    return description.substring(0, dashIndex).trim();
+  }
+  return description.trim();
+};
+
 interface Client {
   id: string;
   name: string;
@@ -727,26 +743,26 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       )}
                     </div>
 
-                    {/* Statement Table */}
+                    {/* Statement Table - RTL column order: الرصيد | دائن | مدين | البيان | التاريخ */}
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
                           <tr className="bg-gray-50 border-b-2 border-gray-200">
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">التاريخ</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
                             <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">التاريخ</th>
                           </tr>
                         </thead>
                         <tbody>
                           {/* Opening Balance Row */}
                           <tr className="bg-gray-100">
+                            <td className="px-4 py-3 font-medium">0.00 د.أ</td>
+                            <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3 font-medium text-gray-600">رصيد افتتاحي</td>
                             <td className="px-4 py-3"></td>
-                            <td className="px-4 py-3"></td>
-                            <td className="px-4 py-3 font-medium">0.00 د.أ</td>
                           </tr>
 
                           {/* Transaction Rows */}
@@ -759,23 +775,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           ) : (
                             rowsWithBalance.map((transaction, index) => (
                               <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
-                                <td className="px-4 py-3 text-sm">
-                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${
-                                    transaction.isPayment
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}>
-                                    {transaction.isPayment ? 'دفعة' : 'فاتورة'}
-                                  </span>
-                                  {transaction.description}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-red-600 font-medium">
-                                  {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-green-600 font-medium">
-                                  {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
-                                </td>
                                 <td className="px-4 py-3 text-sm font-semibold">
                                   <span className={transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}>
                                     {formatNumber(Math.abs(transaction.balance))} د.أ
@@ -784,6 +783,25 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                     {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
                                   </span>
                                 </td>
+                                <td className="px-4 py-3 text-sm text-green-600 font-medium">
+                                  {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-red-600 font-medium">
+                                  {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${
+                                    transaction.isPayment
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                  </span>
+                                  {transaction.isPayment
+                                    ? extractPaymentMethod(transaction.description)
+                                    : transaction.description}
+                                </td>
+                                <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
                               </tr>
                             ))
                           )}
@@ -792,9 +810,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-blue-800 text-white font-semibold">
                               <td className="px-4 py-4"></td>
-                              <td className="px-4 py-4">المجموع</td>
-                              <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
                               <td className="px-4 py-4">{formatNumber(totalCredit)}</td>
+                              <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
+                              <td className="px-4 py-4">المجموع</td>
                               <td className="px-4 py-4"></td>
                             </tr>
                           )}
@@ -802,10 +820,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Final Balance Row */}
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-green-50">
-                              <td className="px-4 py-4"></td>
-                              <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
-                                الرصيد المستحق
-                              </td>
                               <td className="px-4 py-4 font-bold text-lg">
                                 <span className={finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}>
                                   {formatNumber(Math.abs(finalBalance))} د.أ
@@ -814,6 +828,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                   {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
                                 </span>
                               </td>
+                              <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
+                                الرصيد المستحق
+                              </td>
+                              <td className="px-4 py-4"></td>
                             </tr>
                           )}
                         </tbody>
