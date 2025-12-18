@@ -4,6 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -159,6 +165,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [totalPaymentsReceived, setTotalPaymentsReceived] = useState(0);
   const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
   const [currentBalance, setCurrentBalance] = useState(0);
+
+  // Modal state for transaction details
+  const [selectedTransaction, setSelectedTransaction] = useState<StatementItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Load client data
   useEffect(() => {
@@ -739,11 +749,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   })),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-                // DEBUG: Verify IDs are preserved (remove after testing)
-                if (allTransactions.length > 0) {
-                  console.log('Statement items with IDs:', allTransactions.slice(0, 2).map(t => ({ id: t.id, source: t.source, description: t.description })));
-                }
-
                 // Calculate date range
                 const dateRange = getDateRange(allTransactions);
 
@@ -804,7 +809,14 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                             </tr>
                           ) : (
                             rowsWithBalance.map((transaction, index) => (
-                              <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                              <tr
+                                key={index}
+                                onClick={() => {
+                                  setSelectedTransaction(transaction);
+                                  setIsModalOpen(true);
+                                }}
+                                className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
+                              >
                                 <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
                                 </td>
@@ -873,6 +885,102 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               })()}
             </CardContent>
           </Card>
+
+          {/* Transaction Detail Modal */}
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogContent className="sm:max-w-md" dir="rtl">
+              <DialogHeader>
+                <DialogTitle className="text-right">
+                  تفاصيل المعاملة
+                </DialogTitle>
+              </DialogHeader>
+
+              {selectedTransaction && (
+                <div className="space-y-4 text-right">
+                  {/* Transaction Type Badge */}
+                  <div className="flex justify-end">
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedTransaction.isPayment
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {selectedTransaction.isPayment ? 'دفعة' : 'فاتورة'}
+                    </span>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid gap-3 text-sm">
+                    <div className="flex justify-between border-b pb-2">
+                      <span className="text-gray-500">التاريخ</span>
+                      <span className="font-medium">
+                        {new Date(selectedTransaction.date).toLocaleDateString('en-GB')}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between border-b pb-2">
+                      <span className="text-gray-500">الوصف</span>
+                      <span className="font-medium">{selectedTransaction.description || '-'}</span>
+                    </div>
+
+                    <div className="flex justify-between border-b pb-2">
+                      <span className="text-gray-500">المبلغ</span>
+                      <span className={`font-bold ${
+                        selectedTransaction.debit > 0 ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {formatNumber(selectedTransaction.debit || selectedTransaction.credit || 0)} د.أ
+                      </span>
+                    </div>
+
+                    {/* Show category for ledger entries */}
+                    {!selectedTransaction.isPayment && selectedTransaction.category && (
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="text-gray-500">الفئة</span>
+                        <span className="font-medium">
+                          {selectedTransaction.subCategory || selectedTransaction.category}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Show payment method for payments */}
+                    {selectedTransaction.isPayment && selectedTransaction.notes && (
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="text-gray-500">طريقة الدفع</span>
+                        <span className="font-medium">
+                          {selectedTransaction.notes.split(' - ')[0]}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Document ID */}
+                    <div className="flex justify-between border-b pb-2">
+                      <span className="text-gray-500">رقم المستند</span>
+                      <span className="font-mono text-xs text-gray-400">
+                        {selectedTransaction.id.slice(0, 8)}...
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="pt-4">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        if (selectedTransaction.isPayment) {
+                          router.push('/payments');
+                        } else {
+                          router.push('/ledger');
+                        }
+                        setIsModalOpen(false);
+                      }}
+                    >
+                      {selectedTransaction.isPayment ? 'عرض في المدفوعات' : 'عرض في دفتر الأستاذ'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>

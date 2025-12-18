@@ -5,12 +5,63 @@
 
 ---
 
-## CURRENT TASK: Add Clickable References to Statement - Part 1 (Preserve IDs)
+## CURRENT TASK: Add Clickable Transaction Modal to Statement (Part 2)
 
 **Branch:** `feature/statement-clickable-ids`
 **Date:** December 18, 2025
 
 ### Problem Statement
+Users need to click on statement rows to see transaction details and navigate to the source record.
+
+### Part 2 Implementation Plan
+
+#### Step 1: Add Modal State
+- [x] 1.1 Add `selectedTransaction` state (StatementItem | null)
+- [x] 1.2 Add `isModalOpen` state (boolean)
+
+#### Step 2: Make Rows Clickable
+- [x] 2.1 Add onClick handler to transaction rows
+- [x] 2.2 Add hover styles (bg-blue-50, cursor-pointer, transition-colors)
+- [x] 2.3 Opening balance, totals, and final balance rows are NOT clickable (no onClick)
+
+#### Step 3: Create Modal Component
+- [x] 3.1 Import Dialog components from shadcn
+- [x] 3.2 Add Dialog with RTL support (dir="rtl")
+- [x] 3.3 Show transaction type badge (فاتورة/دفعة)
+- [x] 3.4 Show date, description, amount
+- [x] 3.5 Show category (for ledger) or payment method (for payments)
+- [x] 3.6 Add navigation button to source page (ledger or payments)
+
+#### Step 4: Verify & Clean Up
+- [x] 4.1 Run TypeScript check - PASSED (0 errors)
+- [x] 4.2 Remove debug console.log from Part 1
+- [ ] 4.3 Manual test modal functionality
+
+### Files Modified
+1. `src/components/clients/client-detail-page.tsx`
+
+### Review Summary (Part 2)
+
+**Changes Made:**
+1. Added Dialog import from shadcn/ui
+2. Added modal state (`selectedTransaction`, `isModalOpen`)
+3. Made transaction rows clickable with hover effect (bg-blue-50)
+4. Created modal showing:
+   - Transaction type badge (فاتورة/دفعة)
+   - Date, description, amount
+   - Category (for ledger) or payment method (for payments)
+   - Shortened document ID
+   - Navigation button to source page
+5. Removed debug console.log from Part 1
+
+**Test Results:**
+- TypeScript: ✅ 0 errors
+
+---
+
+## PREVIOUS TASK (COMPLETED): Part 1 - Preserve IDs
+
+### Problem Statement (Part 1)
 The statement tab (كشف الحساب) in client detail page merges ledger entries and payments but **loses the original document IDs**. This prevents us from implementing clickable rows that open detail modals.
 
 ### Current State (Problem)
