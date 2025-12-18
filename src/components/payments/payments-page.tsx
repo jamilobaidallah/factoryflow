@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Layers } from "lucide-react";
+import { Plus, Layers, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
@@ -65,6 +67,8 @@ const initialFormData: PaymentFormData = {
 export default function PaymentsPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const urlSearch = searchParams.get("search");
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -72,9 +76,17 @@ export default function PaymentsPage() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState(urlSearch || "");
 
   // Multi-allocation hook for delete reversal
   const { reversePaymentAllocations } = usePaymentAllocations();
+
+  // Update search term when URL param changes
+  useEffect(() => {
+    if (urlSearch) {
+      setSearchTerm(urlSearch);
+    }
+  }, [urlSearch]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -142,15 +154,30 @@ export default function PaymentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, pageSize, currentPage]);
 
+  // Filtered payments based on search term
+  const filteredPayments = useMemo(() => {
+    if (!searchTerm.trim()) return payments;
+    const term = searchTerm.toLowerCase().trim();
+    return payments.filter((p) =>
+      p.id.toLowerCase().includes(term) ||
+      p.clientName?.toLowerCase().includes(term) ||
+      p.linkedTransactionId?.toLowerCase().includes(term) ||
+      p.notes?.toLowerCase().includes(term) ||
+      p.category?.toLowerCase().includes(term) ||
+      p.subCategory?.toLowerCase().includes(term) ||
+      p.allocationTransactionIds?.some(txnId => txnId.toLowerCase().includes(term))
+    );
+  }, [payments, searchTerm]);
+
   // Memoized totals
   const { totalReceived, totalPaid } = useMemo(() => ({
-    totalReceived: payments
+    totalReceived: filteredPayments
       .filter((p) => p.type === "قبض" && !p.noCashMovement)
       .reduce((sum, p) => sum + (p.amount || 0), 0),
-    totalPaid: payments
+    totalPaid: filteredPayments
       .filter((p) => p.type === "صرف" && !p.noCashMovement)
       .reduce((sum, p) => sum + (p.amount || 0), 0),
-  }), [payments]);
+  }), [filteredPayments]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -472,8 +499,30 @@ export default function PaymentsPage() {
       />
 
       <div className="space-y-4">
+        {/* Search Input */}
+        <div className="relative max-w-md">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            type="text"
+            placeholder="بحث في المدفوعات..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pr-10 pl-10"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7"
+              onClick={() => setSearchTerm("")}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
         <PaymentsTable
-          payments={payments}
+          payments={filteredPayments}
           loading={dataLoading}
           onEdit={handleEdit}
           onDelete={handleDelete}
@@ -484,7 +533,7 @@ export default function PaymentsPage() {
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
-              عرض {payments.length} من {totalCount} مدفوعة
+              عرض {filteredPayments.length} من {searchTerm ? `${payments.length} (تمت التصفية)` : totalCount} مدفوعة
             </div>
             <Pagination>
               <PaginationContent>

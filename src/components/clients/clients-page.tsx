@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { Plus, Edit, Trash2, AlertCircle } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -434,33 +434,36 @@ export default function ClientsPage() {
               </TableHeader>
               <TableBody>
                 {clients.map((client) => (
-                  <TableRow key={client.id} className="table-row-hover">
-                    <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableRow
+                    key={client.id}
+                    className="hover:bg-blue-50 cursor-pointer transition-colors duration-150"
+                    onClick={() => router.push(`/clients/${client.id}`)}
+                  >
+                    <TableCell>
+                      <span className="text-blue-600 font-medium hover:text-blue-800 hover:underline">
+                        {client.name}
+                      </span>
+                    </TableCell>
                     <TableCell>{client.phone}</TableCell>
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
-                      <span className={`font-semibold ${(client.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatNumber(client.balance || 0)} دينار
+                      <span className={`font-semibold ${(client.balance || 0) > 0 ? 'text-red-600' : (client.balance || 0) < 0 ? 'text-green-600' : ''}`}>
+                        {formatNumber(Math.abs(client.balance || 0))} دينار
+                        {(client.balance || 0) > 0 ? ' عليه' : (client.balance || 0) < 0 ? ' له' : ''}
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group" aria-label="إجراءات العميل">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                          onClick={() => router.push(`/clients/${client.id}`)}
-                          aria-label={`عرض تفاصيل ${client.name}`}
-                        >
-                          <Eye className="h-4 w-4" aria-hidden="true" />
-                        </Button>
                         <PermissionGate action="update" module="clients">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                            onClick={() => handleEdit(client)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(client);
+                            }}
                             aria-label={`تعديل ${client.name}`}
                           >
                             <Edit className="h-4 w-4" aria-hidden="true" />
@@ -471,7 +474,10 @@ export default function ClientsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleDelete(client.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(client.id);
+                            }}
                             aria-label={`حذف ${client.name}`}
                           >
                             <Trash2 className="h-4 w-4" aria-hidden="true" />

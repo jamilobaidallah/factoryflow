@@ -95,6 +95,8 @@ export interface UseLedgerFiltersOptions {
   initialSubCategory?: string;
   /** Initial view mode */
   initialViewMode?: ViewMode;
+  /** Initial search query */
+  initialSearch?: string;
 }
 
 /**
@@ -117,6 +119,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
     category: options?.initialCategory || "all",
     subCategory: options?.initialSubCategory || "all",
     viewMode: options?.initialViewMode || "all",
+    search: options?.initialSearch || "",
   };
   const [filters, setFilters] = useState<LedgerFiltersState>(initialFilters);
 
