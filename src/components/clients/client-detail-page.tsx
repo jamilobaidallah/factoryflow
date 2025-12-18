@@ -106,6 +106,7 @@ interface Payment {
   date: Date;
   description: string;
   paymentMethod: string;
+  notes: string;  // Payment method info is stored in notes field
   associatedParty?: string;
 }
 
@@ -323,7 +324,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     const allTransactions = [
       ...ledgerEntries.map((e) => ({
         date: e.date,
-        type: e.type === "دخل" || e.type === "إيراد" ? "فاتورة (مبيعات)" : "فاتورة (مشتريات)",
+        type: "فاتورة",
         description: e.description,
         // Income/Sales: amount goes in مدين (client owes us)
         // Expense/Purchases from them: amount goes in دائن (we owe them)
@@ -332,8 +333,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       })),
       ...payments.map((p) => ({
         date: p.date,
-        type: p.type === "قبض" ? "دفعة (قبض)" : "دفعة (صرف)",
-        description: p.description,
+        type: "دفعة",
+        description: extractPaymentMethod(p.notes || p.description || ''),  // Use notes field for payment method
         // Payment received (قبض): goes in دائن (reduces what they owe us)
         // Payment made (صرف): goes in مدين (reduces what we owe them)
         debit: p.type === "صرف" ? p.amount : 0,
@@ -706,7 +707,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     date: p.date,
                     isPayment: true,
                     entryType: p.type,
-                    description: p.description,
+                    description: p.notes || p.description || '',  // Use notes field for payment method
                     // Payment received (قبض): goes in دائن (reduces what they owe us)
                     // Payment made (صرف): goes in مدين (reduces what we owe them)
                     debit: p.type === "صرف" ? p.amount : 0,
