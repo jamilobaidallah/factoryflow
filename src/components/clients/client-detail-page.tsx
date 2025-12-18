@@ -775,14 +775,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           ) : (
                             rowsWithBalance.map((transaction, index) => (
                               <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm font-semibold">
-                                  <span className={`text-xs ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                    {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
-                                  </span>
-                                  <span className="mx-1">د.أ</span>
-                                  <span className={transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}>
-                                    {formatNumber(Math.abs(transaction.balance))}
-                                  </span>
+                                <td className={`px-4 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">
+                                  {formatNumber(Math.abs(transaction.balance))} د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-green-600 font-medium">
                                   {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
@@ -825,14 +819,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Final Balance Row */}
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-green-50">
-                              <td className="px-4 py-4 font-bold text-lg">
-                                <span className={`text-sm ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
-                                </span>
-                                <span className="mx-1">د.أ</span>
-                                <span className={finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}>
-                                  {formatNumber(Math.abs(finalBalance))}
-                                </span>
+                              <td className={`px-4 py-4 font-bold text-lg ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">
+                                {formatNumber(Math.abs(finalBalance))} د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
                               </td>
                               <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
                                 الرصيد المستحق
