@@ -126,6 +126,7 @@ interface Cheque {
   chequeNumber: string;
   amount: number;
   chequeDate: Date;
+  dueDate?: Date;
   bank: string;
   status: string;
   type: string;
@@ -333,6 +334,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             id: doc.id,
             ...data,
             chequeDate: data.chequeDate?.toDate?.() || new Date(),
+            dueDate: data.dueDate?.toDate?.() || data.chequeDate?.toDate?.() || new Date(),
           } as Cheque);
         });
         // Sort by date in JavaScript
@@ -1015,6 +1017,72 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Pending Cheques Section */}
+                    {(() => {
+                      const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
+                      if (pendingCheques.length === 0) return null;
+
+                      const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
+                      const balanceAfterCheques = finalBalance - totalPendingCheques;
+
+                      return (
+                        <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
+                          <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                            <span>شيكات قيد الانتظار</span>
+                            <span className="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full">
+                              {pendingCheques.length}
+                            </span>
+                          </h3>
+
+                          <div className="bg-yellow-50 rounded-lg overflow-hidden">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="bg-yellow-100">
+                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">رقم الشيك</th>
+                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">البنك</th>
+                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">تاريخ الاستحقاق</th>
+                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">المبلغ</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pendingCheques.map((cheque, index) => (
+                                  <tr key={cheque.id} className={index % 2 === 0 ? 'bg-yellow-50' : 'bg-white'}>
+                                    <td className="px-4 py-3 text-sm">{cheque.chequeNumber}</td>
+                                    <td className="px-4 py-3 text-sm">{cheque.bank}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      {cheque.dueDate ? formatDateAr(cheque.dueDate) : '-'}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm font-medium">
+                                      {formatNumber(cheque.amount)} د.أ
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-yellow-200 font-semibold">
+                                  <td colSpan={3} className="px-4 py-3 text-right">إجمالي الشيكات المعلقة</td>
+                                  <td className="px-4 py-3">
+                                    {formatNumber(totalPendingCheques)} د.أ
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+
+                          {/* Balance After Cheques Clear */}
+                          <div className="mt-4 p-4 bg-gray-100 rounded-lg flex justify-between items-center">
+                            <span className="font-medium text-gray-600">الرصيد المتوقع بعد صرف الشيكات:</span>
+                            <span className={`text-lg font-bold ${
+                              balanceAfterCheques > 0 ? 'text-red-600' : balanceAfterCheques < 0 ? 'text-green-600' : ''
+                            }`}>
+                              {formatNumber(Math.abs(balanceAfterCheques))} د.أ
+                              {balanceAfterCheques > 0 ? ' عليه' : balanceAfterCheques < 0 ? ' له' : ' (مسدد)'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
