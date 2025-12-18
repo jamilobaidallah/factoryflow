@@ -791,16 +791,20 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                   {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
                                 </td>
                                 <td className="px-4 py-3 text-sm">
-                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${
-                                    transaction.isPayment
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}>
-                                    {transaction.isPayment ? 'دفعة' : 'فاتورة'}
-                                  </span>
-                                  {transaction.isPayment
-                                    ? extractPaymentMethod(transaction.description)
-                                    : transaction.description}
+                                  <div className="flex items-center gap-2">
+                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
+                                      transaction.isPayment
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-blue-100 text-blue-800'
+                                    }`}>
+                                      {transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                    </span>
+                                    <span>
+                                      {transaction.isPayment
+                                        ? extractPaymentMethod(transaction.description)
+                                        : transaction.description}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
                               </tr>
