@@ -440,8 +440,9 @@ export default function ClientsPage() {
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
-                      <span className={`font-semibold ${(client.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatNumber(client.balance || 0)} دينار
+                      <span className={`font-semibold ${(client.balance || 0) > 0 ? 'text-red-600' : (client.balance || 0) < 0 ? 'text-green-600' : ''}`}>
+                        {formatNumber(Math.abs(client.balance || 0))} دينار
+                        {(client.balance || 0) > 0 ? ' عليه' : (client.balance || 0) < 0 ? ' له' : ''}
                       </span>
                     </TableCell>
                     <TableCell>
