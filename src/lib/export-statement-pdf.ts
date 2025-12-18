@@ -43,27 +43,78 @@ function formatBalanceWithSuffix(balance: number): string {
   return `${formatted} JOD (Settled)`;
 }
 
-function formatBalanceArabic(balance: number): string {
-  const formatted = formatCurrency(balance);
-  if (balance > 0) return `عليه`;
-  if (balance < 0) return `له`;
-  return `مسدد`;
-}
-
 function formatDate(date: Date): string {
   return new Date(date).toLocaleDateString('en-GB');
 }
 
-export function exportStatementToPDF(data: ExportStatementData) {
+// Load Arabic font from Google Fonts CDN
+async function loadArabicFont(doc: jsPDF): Promise<void> {
+  try {
+    // Amiri Regular from Google Fonts
+    const fontUrl = 'https://fonts.gstatic.com/s/amiri/v27/J7aRnpd8CGxBHqUpvrIw74NL.ttf';
+    const response = await fetch(fontUrl);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Arabic font');
+    }
+
+    const fontData = await response.arrayBuffer();
+    const base64 = arrayBufferToBase64(fontData);
+
+    // Register the font with jsPDF
+    doc.addFileToVFS('Amiri-Regular.ttf', base64);
+    doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+  } catch (error) {
+    console.warn('Could not load Arabic font, falling back to default:', error);
+  }
+}
+
+// Convert ArrayBuffer to Base64
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// Check if text contains Arabic characters
+function containsArabic(text: string): boolean {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text);
+}
+
+// Reverse Arabic text for proper RTL display in jsPDF
+function processArabicText(text: string): string {
+  if (!containsArabic(text)) return text;
+  // Reverse the text for RTL display since jsPDF doesn't handle RTL natively
+  return text.split('').reverse().join('');
+}
+
+export async function exportStatementToPDF(data: ExportStatementData): Promise<void> {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
   });
 
+  // Load Arabic font
+  await loadArabicFont(doc);
+  const hasArabicFont = doc.getFontList()['Amiri'] !== undefined;
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
   let yPos = 20;
+
+  // Helper to set font based on text content
+  const setFontForText = (text: string, style: 'normal' | 'bold' = 'normal') => {
+    if (hasArabicFont && containsArabic(text)) {
+      doc.setFont('Amiri', style);
+    } else {
+      doc.setFont('helvetica', style);
+    }
+  };
 
   // === HEADER ===
   // Company branding area
@@ -75,6 +126,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
   doc.roundedRect(margin, 8, 28, 18, 2, 2, 'F');
   doc.setFontSize(7);
   doc.setTextColor(37, 99, 235);
+  doc.setFont('helvetica', 'normal');
   doc.text('FactoryFlow', margin + 14, 18, { align: 'center' });
 
   // Title
@@ -96,8 +148,11 @@ export function exportStatementToPDF(data: ExportStatementData) {
   // Left column
   doc.setFont('helvetica', 'bold');
   doc.text('Client:', margin + 5, yPos + 8);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.clientName, margin + 22, yPos + 8);
+
+  // Client name - use Arabic font if needed
+  setFontForText(data.clientName, 'normal');
+  const clientNameDisplay = hasArabicFont ? data.clientName : processArabicText(data.clientName);
+  doc.text(clientNameDisplay, margin + 22, yPos + 8);
 
   if (data.clientPhone) {
     doc.setFont('helvetica', 'bold');
@@ -135,11 +190,12 @@ export function exportStatementToPDF(data: ExportStatementData) {
     data.openingBalance > 0 ? 'DR' : data.openingBalance < 0 ? 'CR' : '-'
   ]);
 
-  // Transaction rows
+  // Transaction rows - process Arabic text in descriptions
   data.transactions.forEach(item => {
+    const description = hasArabicFont ? (item.description || '-') : processArabicText(item.description || '-');
     tableData.push([
       formatDate(item.date),
-      item.description || '-',
+      description,
       item.debit > 0 ? formatCurrency(item.debit) : '',
       item.credit > 0 ? formatCurrency(item.credit) : '',
       formatCurrency(Math.abs(item.balance)),
@@ -153,7 +209,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
     body: tableData,
     theme: 'striped',
     styles: {
-      font: 'helvetica',
+      font: hasArabicFont ? 'Amiri' : 'helvetica',
       fontSize: 9,
       cellPadding: 3,
     },
@@ -162,6 +218,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
       textColor: 255,
       fontStyle: 'bold',
       halign: 'center',
+      font: 'helvetica',
     },
     columnStyles: {
       0: { halign: 'center', cellWidth: 22 },
@@ -258,12 +315,15 @@ export function exportStatementToPDF(data: ExportStatementData) {
 
     yPos += 12;
 
-    const chequesData = data.pendingCheques.map(c => [
-      c.chequeNumber,
-      c.bankName || '-',
-      formatDate(c.dueDate),
-      formatCurrency(c.amount)
-    ]);
+    const chequesData = data.pendingCheques.map(c => {
+      const bankName = hasArabicFont ? (c.bankName || '-') : processArabicText(c.bankName || '-');
+      return [
+        c.chequeNumber,
+        bankName,
+        formatDate(c.dueDate),
+        formatCurrency(c.amount)
+      ];
+    });
 
     // Add total row
     const totalPendingCheques = data.pendingCheques.reduce((sum, c) => sum + c.amount, 0);
@@ -275,7 +335,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
       body: chequesData,
       theme: 'grid',
       styles: {
-        font: 'helvetica',
+        font: hasArabicFont ? 'Amiri' : 'helvetica',
         fontSize: 9,
         cellPadding: 3,
       },
@@ -283,6 +343,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
         fillColor: [254, 243, 199], // yellow-100
         textColor: [161, 98, 7], // yellow-700
         fontStyle: 'bold',
+        font: 'helvetica',
       },
       columnStyles: {
         0: { cellWidth: 35 },

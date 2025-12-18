@@ -452,7 +452,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             CSV
           </Button>
           <Button
-            onClick={() => {
+            onClick={async () => {
               // Build statement data for PDF export
               const allTxns = [
                 ...ledgerEntries.map((e) => ({
@@ -496,23 +496,32 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
               const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
 
-              exportStatementToPDF({
-                clientName: client.name,
-                clientPhone: client.phone,
-                clientEmail: client.email,
-                openingBalance: clientInitialBalance,
-                transactions: txnsWithBalance,
-                totalDebit,
-                totalCredit,
-                finalBalance: runningBalance,
-                pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
-                expectedBalanceAfterCheques: pendingCheques.length > 0 ? runningBalance - totalPendingCheques : undefined,
-              });
+              try {
+                await exportStatementToPDF({
+                  clientName: client.name,
+                  clientPhone: client.phone,
+                  clientEmail: client.email,
+                  openingBalance: clientInitialBalance,
+                  transactions: txnsWithBalance,
+                  totalDebit,
+                  totalCredit,
+                  finalBalance: runningBalance,
+                  pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
+                  expectedBalanceAfterCheques: pendingCheques.length > 0 ? runningBalance - totalPendingCheques : undefined,
+                });
 
-              toast({
-                title: "تم التصدير",
-                description: "تم تصدير كشف الحساب بنجاح",
-              });
+                toast({
+                  title: "تم التصدير",
+                  description: "تم تصدير كشف الحساب بنجاح",
+                });
+              } catch (error) {
+                console.error('PDF export error:', error);
+                toast({
+                  title: "خطأ",
+                  description: "فشل تصدير الملف",
+                  variant: "destructive",
+                });
+              }
             }}
             variant="outline"
           >
