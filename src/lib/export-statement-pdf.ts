@@ -231,6 +231,7 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251], // gray-50
+      textColor: [0, 0, 0], // Ensure black text on alternate rows
     },
     margin: { left: margin, right: margin },
     didParseCell: function(hookData) {
@@ -238,6 +239,11 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
       if (hookData.row.index === 0) {
         hookData.cell.styles.fontStyle = 'bold';
         hookData.cell.styles.fillColor = [243, 244, 246]; // gray-100
+        hookData.cell.styles.textColor = [0, 0, 0]; // Ensure black text
+      }
+      // Ensure all body rows have black text
+      if (hookData.section === 'body') {
+        hookData.cell.styles.textColor = [0, 0, 0];
       }
     },
   });
@@ -355,6 +361,10 @@ export async function exportStatementToPDF(data: ExportStatementData): Promise<v
       },
       margin: { left: margin, right: margin },
       didParseCell: function(hookData) {
+        // Ensure all body rows have black text
+        if (hookData.section === 'body') {
+          hookData.cell.styles.textColor = [0, 0, 0];
+        }
         // Style total row
         if (data.pendingCheques && hookData.row.index === data.pendingCheques.length) {
           hookData.cell.styles.fontStyle = 'bold';
