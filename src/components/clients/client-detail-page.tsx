@@ -759,7 +759,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         <tbody>
                           {/* Opening Balance Row */}
                           <tr className="bg-gray-100">
-                            <td className="pl-1 pr-0 py-3 font-medium">د.أ</td>
+                            <td className="pl-1 pr-2 py-3 font-medium">د.أ</td>
                             <td className="pl-0 pr-4 py-3 font-medium text-left">0.00</td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
@@ -776,7 +776,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           ) : (
                             rowsWithBalance.map((transaction, index) => (
                               <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className={`pl-1 pr-0 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
                                 </td>
                                 <td className={`pl-0 pr-4 py-3 text-sm font-semibold text-left ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -824,7 +824,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Final Balance Row */}
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-green-50">
-                              <td className={`pl-1 pr-0 py-4 font-bold ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              <td className={`pl-1 pr-2 py-4 font-bold ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                 د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
                               </td>
                               <td className={`pl-0 pr-4 py-4 font-bold text-lg text-left ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
