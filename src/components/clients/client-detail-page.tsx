@@ -888,7 +888,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
           {/* Transaction Detail Modal */}
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogContent className="sm:max-w-md" dir="rtl">
+            <DialogContent className="sm:max-w-lg" dir="rtl">
               <DialogHeader>
                 <DialogTitle className="text-right">
                   تفاصيل المعاملة
@@ -896,10 +896,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               </DialogHeader>
 
               {selectedTransaction && (
-                <div className="space-y-4 text-right">
+                <div className="space-y-5 text-right">
                   {/* Transaction Type Badge */}
-                  <div className="flex justify-end">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  <div className="flex justify-end mb-4">
+                    <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
                       selectedTransaction.isPayment
                         ? 'bg-green-100 text-green-800'
                         : 'bg-blue-100 text-blue-800'
@@ -909,54 +909,54 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   </div>
 
                   {/* Details Grid */}
-                  <div className="grid gap-3 text-sm">
-                    <div className="flex justify-between border-b pb-2">
-                      <span className="text-gray-500">التاريخ</span>
+                  <div className="grid gap-4 text-sm">
+                    <div className="flex justify-between items-start border-b pb-3">
                       <span className="font-medium">
                         {new Date(selectedTransaction.date).toLocaleDateString('en-GB')}
                       </span>
+                      <span className="text-gray-500 mr-4">:التاريخ</span>
                     </div>
 
-                    <div className="flex justify-between border-b pb-2">
-                      <span className="text-gray-500">الوصف</span>
+                    <div className="flex justify-between items-start border-b pb-3">
                       <span className="font-medium">{selectedTransaction.description || '-'}</span>
+                      <span className="text-gray-500 mr-4">:الوصف</span>
                     </div>
 
-                    <div className="flex justify-between border-b pb-2">
-                      <span className="text-gray-500">المبلغ</span>
+                    <div className="flex justify-between items-start border-b pb-3">
                       <span className={`font-bold ${
                         selectedTransaction.debit > 0 ? 'text-red-600' : 'text-green-600'
                       }`}>
                         {formatNumber(selectedTransaction.debit || selectedTransaction.credit || 0)} د.أ
                       </span>
+                      <span className="text-gray-500 mr-4">:المبلغ</span>
                     </div>
 
                     {/* Show category for ledger entries */}
                     {!selectedTransaction.isPayment && selectedTransaction.category && (
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="text-gray-500">الفئة</span>
+                      <div className="flex justify-between items-start border-b pb-3">
                         <span className="font-medium">
                           {selectedTransaction.subCategory || selectedTransaction.category}
                         </span>
+                        <span className="text-gray-500 mr-4">:الفئة</span>
                       </div>
                     )}
 
                     {/* Show payment method for payments */}
                     {selectedTransaction.isPayment && selectedTransaction.notes && (
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="text-gray-500">طريقة الدفع</span>
+                      <div className="flex justify-between items-start border-b pb-3">
                         <span className="font-medium">
                           {selectedTransaction.notes.split(' - ')[0]}
                         </span>
+                        <span className="text-gray-500 mr-4">:طريقة الدفع</span>
                       </div>
                     )}
 
-                    {/* Document ID */}
-                    <div className="flex justify-between border-b pb-2">
-                      <span className="text-gray-500">رقم المستند</span>
-                      <span className="font-mono text-xs text-gray-400">
-                        {selectedTransaction.id.slice(0, 8)}...
+                    {/* Document ID - Full ID */}
+                    <div className="flex justify-between items-start border-b pb-3">
+                      <span className="font-mono text-xs text-gray-400 break-all">
+                        {selectedTransaction.id}
                       </span>
+                      <span className="text-gray-500 mr-4 shrink-0">:رقم المستند</span>
                     </div>
                   </div>
 
