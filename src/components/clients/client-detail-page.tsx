@@ -25,10 +25,13 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Calendar,
+  Calendar as CalendarIcon,
   FileText,
   Download,
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -172,6 +175,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   // Modal state for transaction details
   const [selectedTransaction, setSelectedTransaction] = useState<StatementItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Date filter state for statement
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
   // Load client data
   useEffect(() => {
@@ -753,14 +760,36 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   })),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-                // Calculate date range
+                // Calculate date range (from all transactions, before filtering)
                 const dateRange = getDateRange(allTransactions);
 
-                // Calculate totals
+                // Filter transactions by date range
+                const filteredTransactions = allTransactions.filter((item) => {
+                  const itemDate = new Date(item.date);
+                  itemDate.setHours(0, 0, 0, 0);
+
+                  if (dateFrom) {
+                    const fromDate = new Date(dateFrom);
+                    fromDate.setHours(0, 0, 0, 0);
+                    if (itemDate < fromDate) {
+                      return false;
+                    }
+                  }
+                  if (dateTo) {
+                    const toDate = new Date(dateTo);
+                    toDate.setHours(23, 59, 59, 999);
+                    if (itemDate > toDate) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+
+                // Calculate totals from filtered transactions
                 let totalDebit = 0;
                 let totalCredit = 0;
                 let runningBalance = 0;
-                const rowsWithBalance = allTransactions.map((t) => {
+                const rowsWithBalance = filteredTransactions.map((t) => {
                   totalDebit += t.debit;
                   totalCredit += t.credit;
                   runningBalance += t.debit - t.credit;
@@ -777,8 +806,87 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       <div className="text-2xl font-bold mb-2">{client.name}</div>
                       {allTransactions.length > 0 && (
                         <div className="text-sm opacity-90">
-                          الفترة: من {formatDateAr(dateRange.oldest)} إلى {formatDateAr(dateRange.newest)}
+                          الفترة: من {dateFrom ? format(dateFrom, "dd/MM/yyyy") : formatDateAr(dateRange.oldest)} إلى {dateTo ? format(dateTo, "dd/MM/yyyy") : formatDateAr(dateRange.newest)}
                         </div>
+                      )}
+                    </div>
+
+                    {/* Date Range Filter Bar */}
+                    <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 border-b" dir="rtl">
+                      <span className="text-sm font-medium text-gray-600">تصفية حسب التاريخ:</span>
+
+                      {/* From Date */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">من</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-[140px] justify-start text-right font-normal ${
+                                !dateFrom && "text-muted-foreground"
+                              }`}
+                            >
+                              <CalendarIcon className="ml-2 h-4 w-4" />
+                              {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "اختر تاريخ"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={dateFrom}
+                              onSelect={setDateFrom}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* To Date */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">إلى</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-[140px] justify-start text-right font-normal ${
+                                !dateTo && "text-muted-foreground"
+                              }`}
+                            >
+                              <CalendarIcon className="ml-2 h-4 w-4" />
+                              {dateTo ? format(dateTo, "dd/MM/yyyy") : "اختر تاريخ"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={dateTo}
+                              onSelect={setDateTo}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Clear Filter Button */}
+                      {(dateFrom || dateTo) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDateFrom(undefined);
+                            setDateTo(undefined);
+                          }}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          مسح الفلتر
+                        </Button>
+                      )}
+
+                      {/* Show filtered count */}
+                      {(dateFrom || dateTo) && (
+                        <span className="text-sm text-gray-500 mr-auto">
+                          ({filteredTransactions.length} من {allTransactions.length} معاملة)
+                        </span>
                       )}
                     </div>
 
