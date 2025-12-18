@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface StatementTransaction {
   date: Date;
@@ -147,8 +147,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
     ]);
   });
 
-  // @ts-expect-error jspdf-autotable extends jsPDF prototype
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPos,
     head: [['Date', 'Description', 'Debit', 'Credit', 'Balance', '']],
     body: tableData,
@@ -176,7 +175,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
       fillColor: [249, 250, 251], // gray-50
     },
     margin: { left: margin, right: margin },
-    didParseCell: function(hookData: { row: { index: number }; column: { index: number }; cell: { styles: { fontStyle: string; fillColor: number[] } } }) {
+    didParseCell: function(hookData) {
       // Style opening balance row
       if (hookData.row.index === 0) {
         hookData.cell.styles.fontStyle = 'bold';
@@ -189,8 +188,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
   yPos = doc.lastAutoTable.finalY + 2;
 
   // === TOTALS ROW ===
-  // @ts-expect-error jspdf-autotable extends jsPDF prototype
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPos,
     body: [[
       '',
@@ -271,8 +269,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
     const totalPendingCheques = data.pendingCheques.reduce((sum, c) => sum + c.amount, 0);
     chequesData.push(['', '', 'Total:', formatCurrency(totalPendingCheques)]);
 
-    // @ts-expect-error jspdf-autotable extends jsPDF prototype
-    doc.autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Cheque No.', 'Bank', 'Due Date', 'Amount']],
       body: chequesData,
@@ -294,7 +291,7 @@ export function exportStatementToPDF(data: ExportStatementData) {
         3: { halign: 'right', cellWidth: 35 },
       },
       margin: { left: margin, right: margin },
-      didParseCell: function(hookData: { row: { index: number }; cell: { styles: { fontStyle: string; fillColor: number[] } } }) {
+      didParseCell: function(hookData) {
         // Style total row
         if (data.pendingCheques && hookData.row.index === data.pendingCheques.length) {
           hookData.cell.styles.fontStyle = 'bold';
