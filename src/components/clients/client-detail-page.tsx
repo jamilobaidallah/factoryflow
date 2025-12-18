@@ -45,6 +45,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
+import { exportStatementToPDF } from "@/lib/export-statement-pdf";
 
 // ============================================
 // Helper functions for account statement
@@ -445,10 +446,80 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             <p className="text-gray-500">{client.phone}</p>
           </div>
         </div>
-        <Button onClick={exportStatement} variant="outline">
-          <Download className="w-4 h-4 ml-2" />
-          تصدير كشف الحساب
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={exportStatement} variant="outline">
+            <Download className="w-4 h-4 ml-2" />
+            CSV
+          </Button>
+          <Button
+            onClick={() => {
+              // Build statement data for PDF export
+              const allTxns = [
+                ...ledgerEntries.map((e) => ({
+                  date: e.date,
+                  description: e.description,
+                  debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
+                  credit: e.type === "مصروف" ? e.amount : 0,
+                  balance: 0,
+                })),
+                ...payments.map((p) => ({
+                  date: p.date,
+                  description: p.notes || p.description || '',
+                  debit: p.type === "صرف" ? p.amount : 0,
+                  credit: p.type === "قبض" ? p.amount : 0,
+                  balance: 0,
+                })),
+              ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+              // Calculate balances
+              const clientInitialBalance = client?.balance || 0;
+              let runningBalance = clientInitialBalance;
+              let totalDebit = 0;
+              let totalCredit = 0;
+
+              const txnsWithBalance = allTxns.map((t) => {
+                totalDebit += t.debit;
+                totalCredit += t.credit;
+                runningBalance += t.debit - t.credit;
+                return { ...t, balance: runningBalance };
+              });
+
+              // Get pending cheques
+              const pendingCheques = cheques
+                .filter((c) => c.status === "قيد الانتظار")
+                .map((c) => ({
+                  chequeNumber: c.chequeNumber,
+                  bankName: c.bankName,
+                  dueDate: c.dueDate || c.chequeDate,
+                  amount: c.amount,
+                }));
+
+              const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
+
+              exportStatementToPDF({
+                clientName: client.name,
+                clientPhone: client.phone,
+                clientEmail: client.email,
+                openingBalance: clientInitialBalance,
+                transactions: txnsWithBalance,
+                totalDebit,
+                totalCredit,
+                finalBalance: runningBalance,
+                pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
+                expectedBalanceAfterCheques: pendingCheques.length > 0 ? runningBalance - totalPendingCheques : undefined,
+              });
+
+              toast({
+                title: "تم التصدير",
+                description: "تم تصدير كشف الحساب بنجاح",
+              });
+            }}
+            variant="outline"
+          >
+            <FileText className="w-4 h-4 ml-2" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       {/* Financial Overview Cards */}
