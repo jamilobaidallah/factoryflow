@@ -96,6 +96,7 @@ interface Client {
 
 interface LedgerEntry {
   id: string;
+  transactionId?: string;
   type: string;
   amount: number;
   date: Date;
@@ -130,6 +131,7 @@ interface Cheque {
 
 interface StatementItem {
   id: string;
+  transactionId?: string;
   source: 'ledger' | 'payment';
   date: Date;
   isPayment: boolean;
@@ -723,6 +725,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 const allTransactions: StatementItem[] = [
                   ...ledgerEntries.map((e) => ({
                     id: e.id,
+                    transactionId: e.transactionId,
                     source: 'ledger' as const,
                     date: e.date,
                     isPayment: false,
@@ -952,29 +955,31 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       </div>
                     )}
 
-                    {/* Document ID with Copy Button */}
-                    <div className="flex justify-between items-center border-b pb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-gray-400 break-all">
-                          {selectedTransaction.id}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(selectedTransaction.id);
-                            toast({
-                              title: "تم النسخ",
-                              description: "تم نسخ رقم المستند",
-                            });
-                          }}
-                          className="p-1 hover:bg-gray-100 rounded transition-colors"
-                          title="نسخ"
-                        >
-                          <Copy className="h-4 w-4 text-gray-400 hover:text-gray-600" />
-                        </button>
+                    {/* Transaction ID with Copy Button (for ledger entries) */}
+                    {!selectedTransaction.isPayment && selectedTransaction.transactionId && (
+                      <div className="flex justify-between items-center border-b pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-gray-600 break-all">
+                            {selectedTransaction.transactionId}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(selectedTransaction.transactionId || '');
+                              toast({
+                                title: "تم النسخ",
+                                description: "تم نسخ رقم المعاملة",
+                              });
+                            }}
+                            className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            title="نسخ"
+                          >
+                            <Copy className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                          </button>
+                        </div>
+                        <span className="text-gray-500 mr-4 shrink-0">:رقم المعاملة</span>
                       </div>
-                      <span className="text-gray-500 mr-4 shrink-0">:رقم المستند</span>
-                    </div>
+                    )}
                   </div>
 
                   {/* Action Button */}
@@ -983,10 +988,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       variant="outline"
                       className="w-full"
                       onClick={() => {
+                        const searchId = selectedTransaction.transactionId || selectedTransaction.id;
                         if (selectedTransaction.isPayment) {
-                          router.push('/payments');
+                          router.push(`/payments?search=${encodeURIComponent(searchId)}`);
                         } else {
-                          router.push('/ledger');
+                          router.push(`/ledger?search=${encodeURIComponent(searchId)}`);
                         }
                         setIsModalOpen(false);
                       }}
