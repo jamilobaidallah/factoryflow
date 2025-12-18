@@ -127,7 +127,7 @@ interface Cheque {
   amount: number;
   chequeDate: Date;
   dueDate?: Date;
-  bank: string;
+  bankName: string;
   status: string;
   type: string;
   associatedParty?: string;
@@ -698,7 +698,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       <TableRow key={cheque.id}>
                         <TableCell>{cheque.chequeNumber}</TableCell>
                         <TableCell>{formatShortDate(cheque.chequeDate)}</TableCell>
-                        <TableCell>{cheque.bank}</TableCell>
+                        <TableCell>{cheque.bankName}</TableCell>
                         <TableCell>{cheque.type}</TableCell>
                         <TableCell>
                           <span
@@ -1049,7 +1049,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                 {pendingCheques.map((cheque, index) => (
                                   <tr key={cheque.id} className={index % 2 === 0 ? 'bg-yellow-50' : 'bg-white'}>
                                     <td className="px-4 py-3 text-sm">{cheque.chequeNumber}</td>
-                                    <td className="px-4 py-3 text-sm">{cheque.bank}</td>
+                                    <td className="px-4 py-3 text-sm">{cheque.bankName}</td>
                                     <td className="px-4 py-3 text-sm">
                                       {cheque.dueDate ? formatDateAr(cheque.dueDate) : '-'}
                                     </td>
