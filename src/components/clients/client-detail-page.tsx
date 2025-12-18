@@ -36,6 +36,31 @@ import {
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
 
+// ============================================
+// Helper functions for account statement
+// ============================================
+
+/** Format number with commas and 2 decimal places */
+const formatNumber = (num: number): string => {
+  return Math.abs(num).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
+/** Format date to DD/MM/YYYY format */
+const formatDateAr = (date: Date | string): string => {
+  const d = new Date(date);
+  return d.toLocaleDateString('en-GB'); // DD/MM/YYYY format
+};
+
+/** Calculate date range from transaction items */
+const getDateRange = (items: Array<{ date: Date }>) => {
+  if (items.length === 0) return { oldest: new Date(), newest: new Date() };
+  const dates = items.map(item => new Date(item.date)).sort((a, b) => a.getTime() - b.getTime());
+  return { oldest: dates[0], newest: dates[dates.length - 1] };
+};
+
 interface Client {
   id: string;
   name: string;
@@ -278,19 +303,23 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const exportStatement = () => {
     if (!client) {return;}
 
-    // Combine all transactions
+    // Combine all transactions (same logic as statement tab)
     const allTransactions = [
       ...ledgerEntries.map((e) => ({
         date: e.date,
-        type: "قيد",
+        type: e.type === "دخل" || e.type === "إيراد" ? "فاتورة (مبيعات)" : "فاتورة (مشتريات)",
         description: e.description,
+        // Income/Sales: amount goes in مدين (client owes us)
+        // Expense/Purchases from them: amount goes in دائن (we owe them)
         debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
         credit: e.type === "مصروف" ? e.amount : 0,
       })),
       ...payments.map((p) => ({
         date: p.date,
-        type: "دفعة",
+        type: p.type === "قبض" ? "دفعة (قبض)" : "دفعة (صرف)",
         description: p.description,
+        // Payment received (قبض): goes in دائن (reduces what they owe us)
+        // Payment made (صرف): goes in مدين (reduces what we owe them)
         debit: p.type === "صرف" ? p.amount : 0,
         credit: p.type === "قبض" ? p.amount : 0,
       })),
@@ -300,18 +329,28 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     let runningBalance = 0;
     const statementData = allTransactions.map((t) => {
       runningBalance += t.debit - t.credit;
+      const balanceStatus = runningBalance > 0 ? "عليه" : runningBalance < 0 ? "له" : "مسدد";
       return {
-        التاريخ: formatShortDate(t.date),
-        النوع: t.type,
+        التاريخ: formatDateAr(t.date),
+        البيان: t.type,
         الوصف: t.description,
-        مدين: t.debit.toFixed(2),
-        دائن: t.credit.toFixed(2),
-        الرصيد: runningBalance.toFixed(2),
+        مدين: t.debit > 0 ? formatNumber(t.debit) : "",
+        دائن: t.credit > 0 ? formatNumber(t.credit) : "",
+        الرصيد: `${formatNumber(Math.abs(runningBalance))} ${balanceStatus}`,
       };
     });
 
+    if (statementData.length === 0) {
+      toast({
+        title: "لا توجد معاملات",
+        description: "لا توجد معاملات لتصديرها",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Convert to CSV
-    const headers = Object.keys(statementData[0] || {}).join(",");
+    const headers = Object.keys(statementData[0]).join(",");
     const rows = statementData.map((row) => Object.values(row).join(",")).join("\n");
     const csv = `${headers}\n${rows}`;
 
@@ -319,7 +358,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `statement_${client.name}_${new Date().toLocaleDateString("en")}.csv`;
+    link.download = `كشف_حساب_${client.name}_${formatDateAr(new Date())}.csv`;
     link.click();
   };
 
@@ -419,13 +458,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           <CardContent>
             <div
               className={`text-2xl font-bold ${
-                currentBalance >= 0 ? "text-green-600" : "text-red-600"
+                currentBalance >= 0 ? "text-red-600" : "text-green-600"
               }`}
             >
-              {Math.abs(currentBalance).toFixed(2)} د.أ
+              {formatNumber(Math.abs(currentBalance))} د.أ
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              {currentBalance >= 0 ? "لنا (مدين)" : "علينا (دائن)"}
+              {currentBalance > 0 ? "عليه" : currentBalance < 0 ? "له" : "(مسدد)"}
             </p>
           </CardContent>
         </Card>
@@ -630,83 +669,159 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </Card>
         </TabsContent>
 
-        {/* Statement Tab */}
+        {/* Statement Tab - Redesigned Account Statement */}
         <TabsContent value="statement">
           <Card>
-            <CardHeader>
-              <CardTitle>كشف الحساب</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>التاريخ</TableHead>
-                    <TableHead>النوع</TableHead>
-                    <TableHead>الوصف</TableHead>
-                    <TableHead className="text-left">مدين</TableHead>
-                    <TableHead className="text-left">دائن</TableHead>
-                    <TableHead className="text-left">الرصيد</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(() => {
-                    // Combine and sort all transactions
-                    const allTransactions = [
-                      ...ledgerEntries.map((e) => ({
-                        date: e.date,
-                        type: "قيد",
-                        description: e.description,
-                        debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
-                        credit: e.type === "مصروف" ? e.amount : 0,
-                      })),
-                      ...payments.map((p) => ({
-                        date: p.date,
-                        type: "دفعة",
-                        description: p.description,
-                        debit: p.type === "صرف" ? p.amount : 0,
-                        credit: p.type === "قبض" ? p.amount : 0,
-                      })),
-                    ].sort((a, b) => a.date.getTime() - b.date.getTime());
+            <CardContent className="p-0">
+              {(() => {
+                // Combine and sort all transactions chronologically
+                const allTransactions = [
+                  ...ledgerEntries.map((e) => ({
+                    date: e.date,
+                    isPayment: false,
+                    entryType: e.type,
+                    description: e.description,
+                    // Income/Sales: amount goes in مدين (client owes us)
+                    // Expense/Purchases from them: amount goes in دائن (we owe them)
+                    debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
+                    credit: e.type === "مصروف" ? e.amount : 0,
+                  })),
+                  ...payments.map((p) => ({
+                    date: p.date,
+                    isPayment: true,
+                    entryType: p.type,
+                    description: p.description,
+                    // Payment received (قبض): goes in دائن (reduces what they owe us)
+                    // Payment made (صرف): goes in مدين (reduces what we owe them)
+                    debit: p.type === "صرف" ? p.amount : 0,
+                    credit: p.type === "قبض" ? p.amount : 0,
+                  })),
+                ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-                    if (allTransactions.length === 0) {
-                      return (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-gray-500">
-                            لا توجد معاملات
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
+                // Calculate date range
+                const dateRange = getDateRange(allTransactions);
 
-                    let runningBalance = 0;
-                    return allTransactions.map((transaction, index) => {
-                      runningBalance += transaction.debit - transaction.credit;
-                      return (
-                        <TableRow key={index}>
-                          <TableCell>
-                            {formatShortDate(transaction.date)}
-                          </TableCell>
-                          <TableCell>{transaction.type}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell className="text-left">
-                            {transaction.debit > 0 ? `${transaction.debit.toFixed(2)} د.أ` : "-"}
-                          </TableCell>
-                          <TableCell className="text-left">
-                            {transaction.credit > 0 ? `${transaction.credit.toFixed(2)} د.أ` : "-"}
-                          </TableCell>
-                          <TableCell
-                            className={`text-left font-medium ${
-                              runningBalance >= 0 ? "text-green-600" : "text-red-600"
-                            }`}
-                          >
-                            {Math.abs(runningBalance).toFixed(2)} د.أ
-                          </TableCell>
-                        </TableRow>
-                      );
-                    });
-                  })()}
-                </TableBody>
-              </Table>
+                // Calculate totals
+                let totalDebit = 0;
+                let totalCredit = 0;
+                let runningBalance = 0;
+                const rowsWithBalance = allTransactions.map((t) => {
+                  totalDebit += t.debit;
+                  totalCredit += t.credit;
+                  runningBalance += t.debit - t.credit;
+                  return { ...t, balance: runningBalance };
+                });
+
+                const finalBalance = runningBalance;
+
+                return (
+                  <div>
+                    {/* Statement Header */}
+                    <div className="bg-gradient-to-l from-blue-600 to-blue-800 text-white p-5 rounded-t-lg">
+                      <h3 className="text-lg mb-1">كشف حساب</h3>
+                      <div className="text-2xl font-bold mb-2">{client.name}</div>
+                      {allTransactions.length > 0 && (
+                        <div className="text-sm opacity-90">
+                          الفترة: من {formatDateAr(dateRange.oldest)} إلى {formatDateAr(dateRange.newest)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Statement Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-gray-50 border-b-2 border-gray-200">
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">التاريخ</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Opening Balance Row */}
+                          <tr className="bg-gray-100">
+                            <td className="px-4 py-3"></td>
+                            <td className="px-4 py-3 font-medium text-gray-600">رصيد افتتاحي</td>
+                            <td className="px-4 py-3"></td>
+                            <td className="px-4 py-3"></td>
+                            <td className="px-4 py-3 font-medium">0.00 د.أ</td>
+                          </tr>
+
+                          {/* Transaction Rows */}
+                          {rowsWithBalance.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                لا توجد معاملات
+                              </td>
+                            </tr>
+                          ) : (
+                            rowsWithBalance.map((transaction, index) => (
+                              <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
+                                <td className="px-4 py-3 text-sm">
+                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${
+                                    transaction.isPayment
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                  </span>
+                                  {transaction.description}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-red-600 font-medium">
+                                  {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-green-600 font-medium">
+                                  {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-semibold">
+                                  <span className={transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}>
+                                    {formatNumber(Math.abs(transaction.balance))} د.أ
+                                  </span>
+                                  <span className="text-xs text-gray-500 mr-1">
+                                    {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+
+                          {/* Totals Row */}
+                          {rowsWithBalance.length > 0 && (
+                            <tr className="bg-blue-800 text-white font-semibold">
+                              <td className="px-4 py-4"></td>
+                              <td className="px-4 py-4">المجموع</td>
+                              <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
+                              <td className="px-4 py-4">{formatNumber(totalCredit)}</td>
+                              <td className="px-4 py-4"></td>
+                            </tr>
+                          )}
+
+                          {/* Final Balance Row */}
+                          {rowsWithBalance.length > 0 && (
+                            <tr className="bg-green-50">
+                              <td className="px-4 py-4"></td>
+                              <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
+                                الرصيد المستحق
+                              </td>
+                              <td className="px-4 py-4 font-bold text-lg">
+                                <span className={finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}>
+                                  {formatNumber(Math.abs(finalBalance))} د.أ
+                                </span>
+                                <span className="text-sm font-normal text-gray-600 mr-1">
+                                  {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
+                                </span>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

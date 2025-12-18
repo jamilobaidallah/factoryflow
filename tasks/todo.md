@@ -5,7 +5,87 @@
 
 ---
 
-## CURRENT TASK: Fix 3 Bugs (Global Search, Partners Equity, Ledger Stats)
+## CURRENT TASK: Redesign Client Account Statement (كشف الحساب)
+
+**Branch:** `feature/redesign-client-account-statement`
+**Date:** December 18, 2025
+
+### Problem Statement
+The account statement table in the client detail page was hard to read and unprofessional. It needed a clean, readable design that can be sent to clients.
+
+### Issues Fixed
+- [x] No header showing client name and date range
+- [x] Confusing column names (مدين/دائن) - now using neutral accounting terms
+- [x] No opening balance row
+- [x] No totals row at bottom
+- [x] "-" dashes instead of empty cells
+- [x] No context on balance (now shows عليه/له)
+- [x] Numbers not formatted with commas
+
+### Changes Made
+
+#### 1. Added Helper Functions
+- `formatNumber()` - Formats numbers with commas and 2 decimal places (1,200.00)
+- `formatDateAr()` - Formats dates to DD/MM/YYYY format
+- `getDateRange()` - Calculates date range from transactions
+
+#### 2. Added Statement Header
+- Blue gradient header (from-blue-600 to-blue-800)
+- Shows "كشف حساب" title
+- Client name in large bold text
+- Date range: "الفترة: من {oldest} إلى {newest}"
+
+#### 3. Updated Column Headers
+- التاريخ (Date)
+- البيان (Description with type badge)
+- مدين (Debit - red color)
+- دائن (Credit - green color)
+- الرصيد (Balance with عليه/له suffix)
+
+#### 4. Added Opening Balance Row
+- Gray background row showing "رصيد افتتاحي"
+- Initial balance of 0.00 د.أ
+
+#### 5. Redesigned Transaction Rows
+- Colored badges: فاتورة (blue) for ledger entries, دفعة (green) for payments
+- Empty cells instead of "-" dashes
+- Amounts in correct columns:
+  - Income/Sales → مدين (client owes us)
+  - Expense/Purchases → دائن (we owe them)
+  - Payment received (قبض) → دائن (reduces what they owe)
+  - Payment made (صرف) → مدين (reduces what we owe)
+- Balance shows عليه/له suffix with color coding
+
+#### 6. Added Totals Row
+- Dark blue background (bg-blue-800)
+- Shows total مدين and total دائن
+
+#### 7. Added Final Balance Row
+- Light green background (bg-green-50)
+- Shows "الرصيد المستحق" label
+- Final balance with عليه/له/(مسدد) suffix
+
+#### 8. Updated Balance Card
+- Fixed color coding (red for عليه, green for له)
+- Uses formatNumber() for comma formatting
+- Shows عليه/له/(مسدد) labels
+
+#### 9. Updated Export Function
+- Same logic as statement table
+- Includes عليه/له in balance column
+- Arabic filename: كشف_حساب_{clientName}_{date}.csv
+
+### Files Modified
+- `src/components/clients/client-detail-page.tsx`
+
+### Testing
+- [x] TypeScript compilation: ✅ Pass
+- [x] Production build: ✅ Pass (24 pages)
+- [ ] Manual testing with client data
+
+---
+
+## PREVIOUS TASK (COMPLETED): Fix 3 Bugs (Global Search, Partners Equity, Ledger Stats)
 
 **Branch:** `fix/three-bugs-global-search-partners-ledger-stats`
 **Date:** December 16, 2025
