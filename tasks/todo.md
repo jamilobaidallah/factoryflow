@@ -5,7 +5,105 @@
 
 ---
 
-## CURRENT TASK: Redesign Client Account Statement (كشف الحساب)
+## CURRENT TASK: Add Clickable References to Statement - Part 1 (Preserve IDs)
+
+**Branch:** `feature/statement-clickable-ids`
+**Date:** December 18, 2025
+
+### Problem Statement
+The statement tab (كشف الحساب) in client detail page merges ledger entries and payments but **loses the original document IDs**. This prevents us from implementing clickable rows that open detail modals.
+
+### Current State (Problem)
+```typescript
+// Line 694-716 in client-detail-page.tsx
+const allTransactions = [
+  ...ledgerEntries.map((e) => ({
+    date: e.date,
+    isPayment: false,
+    entryType: e.type,
+    description: e.description,
+    debit: ...,
+    credit: ...,
+    // ❌ NO id field - can't link to original record!
+  })),
+  ...payments.map((p) => ({
+    date: p.date,
+    isPayment: true,
+    // ❌ NO id field - can't link to original record!
+  })),
+]
+```
+
+### Target State (Solution)
+```typescript
+const allTransactions = [
+  ...ledgerEntries.map((e) => ({
+    id: e.id,                    // ✅ Preserve ID
+    source: 'ledger' as const,   // ✅ Explicit source
+    // ... rest
+  })),
+  ...payments.map((p) => ({
+    id: p.id,                    // ✅ Preserve ID
+    source: 'payment' as const,  // ✅ Explicit source
+    // ... rest
+  })),
+]
+```
+
+### Implementation Plan
+
+#### Step 1: Add StatementItem Interface
+- [x] 1.1 Create `StatementItem` interface with `id`, `source`, and other fields
+- [x] 1.2 Place interface near other interfaces (LedgerEntry, Payment, Cheque)
+
+#### Step 2: Update Merge Logic
+- [x] 2.1 Update ledger entries mapping to include `id`, `source: 'ledger'`, `category`, `subCategory`
+- [x] 2.2 Update payments mapping to include `id`, `source: 'payment'`, `notes`
+
+#### Step 3: Update Export Function
+- [x] 3.1 Verified export function works (uses independent merge logic for CSV)
+
+#### Step 4: Verify TypeScript
+- [x] 4.1 Run `npx tsc --noEmit` - PASSED (0 errors)
+
+#### Step 5: Add Console Log for Verification
+- [x] 5.1 Add temporary console.log to verify IDs are preserved
+- [ ] 5.2 Remove console.log after manual testing
+
+### Files Modified
+1. `src/components/clients/client-detail-page.tsx` - Added interface and updated merge logic
+
+### Review Summary
+
+**Changes Made:**
+1. Added `StatementItem` interface (lines 124-139) with:
+   - `id: string` - Firestore document ID
+   - `source: 'ledger' | 'payment'` - Explicit source identifier
+   - `category?: string` and `subCategory?: string` - Ledger-specific fields
+   - `notes?: string` - Payment-specific field
+
+2. Updated statement tab merge logic (lines 712-740):
+   - Ledger entries now include: `id`, `source: 'ledger'`, `category`, `subCategory`
+   - Payments now include: `id`, `source: 'payment'`, `notes`
+   - Added type annotation `StatementItem[]` for type safety
+
+3. Added debug console.log (line 742-745) to verify IDs are preserved
+
+**No Breaking Changes:**
+- UI remains unchanged
+- Export function unchanged (uses its own merge logic)
+- Only internal data structure enhanced
+
+**Test Results:**
+- TypeScript: ✅ 0 errors
+
+**Next Steps (Part 2):**
+- Implement clickable rows using preserved IDs
+- Open modals/dialogs showing full transaction details
+
+---
+
+## PREVIOUS TASK (COMPLETED): Redesign Client Account Statement (كشف الحساب)
 
 **Branch:** `feature/redesign-client-account-statement`
 **Date:** December 18, 2025

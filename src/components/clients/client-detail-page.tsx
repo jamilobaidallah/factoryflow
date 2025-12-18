@@ -121,6 +121,23 @@ interface Cheque {
   associatedParty?: string;
 }
 
+interface StatementItem {
+  id: string;
+  source: 'ledger' | 'payment';
+  date: Date;
+  isPayment: boolean;
+  entryType: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance?: number;
+  // Ledger-specific
+  category?: string;
+  subCategory?: string;
+  // Payment-specific
+  notes?: string;
+}
+
 interface ClientDetailPageProps {
   clientId: string;
 }
@@ -692,28 +709,40 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             <CardContent className="p-0">
               {(() => {
                 // Combine and sort all transactions chronologically
-                const allTransactions = [
+                const allTransactions: StatementItem[] = [
                   ...ledgerEntries.map((e) => ({
+                    id: e.id,
+                    source: 'ledger' as const,
                     date: e.date,
                     isPayment: false,
                     entryType: e.type,
                     description: e.description,
+                    category: e.category,
+                    subCategory: e.subCategory,
                     // Income/Sales: amount goes in مدين (client owes us)
                     // Expense/Purchases from them: amount goes in دائن (we owe them)
                     debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
                     credit: e.type === "مصروف" ? e.amount : 0,
                   })),
                   ...payments.map((p) => ({
+                    id: p.id,
+                    source: 'payment' as const,
                     date: p.date,
                     isPayment: true,
                     entryType: p.type,
                     description: p.notes || p.description || '',  // Use notes field for payment method
+                    notes: p.notes,
                     // Payment received (قبض): goes in دائن (reduces what they owe us)
                     // Payment made (صرف): goes in مدين (reduces what we owe them)
                     debit: p.type === "صرف" ? p.amount : 0,
                     credit: p.type === "قبض" ? p.amount : 0,
                   })),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+                // DEBUG: Verify IDs are preserved (remove after testing)
+                if (allTransactions.length > 0) {
+                  console.log('Statement items with IDs:', allTransactions.slice(0, 2).map(t => ({ id: t.id, source: t.source, description: t.description })));
+                }
 
                 // Calculate date range
                 const dateRange = getDateRange(allTransactions);
