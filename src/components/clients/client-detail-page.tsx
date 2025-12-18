@@ -749,7 +749,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       <table className="w-full">
                         <thead>
                           <tr className="bg-gray-50 border-b-2 border-gray-200">
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
+                            <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
                             <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
                             <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
                             <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
@@ -759,7 +759,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         <tbody>
                           {/* Opening Balance Row */}
                           <tr className="bg-gray-100">
-                            <td className="px-4 py-3 font-medium">0.00 د.أ</td>
+                            <td className="px-2 py-3 font-medium text-left">0.00</td>
+                            <td className="px-2 py-3 font-medium">د.أ</td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
                             <td colSpan={2} className="px-4 py-3 text-right font-medium text-gray-600">رصيد افتتاحي</td>
@@ -768,15 +769,18 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Transaction Rows */}
                           {rowsWithBalance.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                              <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                                 لا توجد معاملات
                               </td>
                             </tr>
                           ) : (
                             rowsWithBalance.map((transaction, index) => (
                               <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className={`px-4 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">
-                                  {formatNumber(Math.abs(transaction.balance))} د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
+                                <td className={`px-2 py-3 text-sm font-semibold text-left ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {formatNumber(Math.abs(transaction.balance))}
+                                </td>
+                                <td className={`px-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-green-600 font-medium">
                                   {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
@@ -808,7 +812,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Totals Row */}
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-blue-800 text-white font-semibold">
-                              <td className="px-4 py-4"></td>
+                              <td className="px-2 py-4"></td>
+                              <td className="px-2 py-4"></td>
                               <td className="px-4 py-4">{formatNumber(totalCredit)}</td>
                               <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
                               <td className="px-4 py-4">المجموع</td>
@@ -819,8 +824,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                           {/* Final Balance Row */}
                           {rowsWithBalance.length > 0 && (
                             <tr className="bg-green-50">
-                              <td className={`px-4 py-4 font-bold text-lg ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">
-                                {formatNumber(Math.abs(finalBalance))} د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
+                              <td className={`px-2 py-4 font-bold text-lg text-left ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {formatNumber(Math.abs(finalBalance))}
+                              </td>
+                              <td className={`px-2 py-4 font-bold ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
                               </td>
                               <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
                                 الرصيد المستحق
