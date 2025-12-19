@@ -311,7 +311,7 @@ export async function rollbackInventoryChanges(
         }
       });
 
-      console.log(`Rolled back inventory for item ${itemId}`);
+      // Inventory rollback succeeded
     } catch (rollbackError) {
       console.error(`Failed to rollback inventory for item ${itemId}:`, rollbackError);
     }
