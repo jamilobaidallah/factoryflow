@@ -96,7 +96,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           if (!oldInputSnapshot.empty) {
             const currentQty = oldInputSnapshot.docs[0].data().quantity || 0;
             batch.update(oldInputItemRef, {
-              quantity: currentQty + originalOrder.inputQuantity,
+              quantity: safeAdd(currentQty, originalOrder.inputQuantity),
             });
           }
 
@@ -110,7 +110,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           if (!oldOutputSnapshot.empty) {
             const oldOutputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, oldOutputSnapshot.docs[0].id);
             const currentQty = oldOutputSnapshot.docs[0].data().quantity || 0;
-            const newQty = currentQty - originalOrder.outputQuantity;
+            const newQty = safeSubtract(currentQty, originalOrder.outputQuantity);
 
             if (newQty <= 0) {
               batch.delete(oldOutputItemRef);
@@ -146,7 +146,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             }
 
             batch.update(newInputItemRef, {
-              quantity: currentQty - inputQty,
+              quantity: safeSubtract(currentQty, inputQty),
             });
           }
 
@@ -161,7 +161,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             const newOutputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, newOutputSnapshot.docs[0].id);
             const currentQty = newOutputSnapshot.docs[0].data().quantity || 0;
             batch.update(newOutputItemRef, {
-              quantity: currentQty + outputQty,
+              quantity: safeAdd(currentQty, outputQty),
               unitPrice: calculatedUnitCost,
             });
           } else {
@@ -331,7 +331,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
       if (!inputItemSnapshot.empty) {
         const currentQty = inputItemSnapshot.docs[0].data().quantity || 0;
         batch.update(inputItemRef, {
-          quantity: currentQty - order.inputQuantity,
+          quantity: safeSubtract(currentQty, order.inputQuantity),
         });
       }
 
@@ -346,7 +346,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         const outputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, outputSnapshot.docs[0].id);
         const currentQty = outputSnapshot.docs[0].data().quantity || 0;
         batch.update(outputItemRef, {
-          quantity: currentQty + order.outputQuantity,
+          quantity: safeAdd(currentQty, order.outputQuantity),
           unitPrice: calculatedUnitCost,
         });
       } else {
@@ -457,7 +457,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         if (!inputItemSnapshot.empty) {
           const currentQty = inputItemSnapshot.docs[0].data().quantity || 0;
           batch.update(inputItemRef, {
-            quantity: currentQty + order.inputQuantity,
+            quantity: safeAdd(currentQty, order.inputQuantity),
           });
         }
 
@@ -470,7 +470,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         if (!outputSnapshot.empty) {
           const outputItemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, outputSnapshot.docs[0].id);
           const currentQty = outputSnapshot.docs[0].data().quantity || 0;
-          const newQty = currentQty - order.outputQuantity;
+          const newQty = safeSubtract(currentQty, order.outputQuantity);
 
           if (newQty <= 0) {
             batch.delete(outputItemRef);

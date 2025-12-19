@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcel } from "@/lib/export-utils";
 import { logActivity } from "@/services/activityLogService";
+import { safeAdd, safeSubtract, roundCurrency } from "@/lib/currency";
 import {
   collection,
   addDoc,
@@ -78,10 +79,10 @@ export default function InventoryPage() {
           itemName: formData.itemName,
           category: formData.category,
           subCategory: formData.subCategory,
-          quantity: parseFloat(formData.quantity),
+          quantity: roundCurrency(parseFloat(formData.quantity)),
           unit: formData.unit,
-          unitPrice: parseFloat(formData.unitPrice),
-          minStock: parseFloat(formData.minStock),
+          unitPrice: roundCurrency(parseFloat(formData.unitPrice)),
+          minStock: roundCurrency(parseFloat(formData.minStock)),
           location: formData.location,
           notes: formData.notes,
           thickness: formData.thickness ? parseFloat(formData.thickness) : null,
@@ -113,10 +114,10 @@ export default function InventoryPage() {
           itemName: formData.itemName,
           category: formData.category,
           subCategory: formData.subCategory,
-          quantity: parseFloat(formData.quantity),
+          quantity: roundCurrency(parseFloat(formData.quantity)),
           unit: formData.unit,
-          unitPrice: parseFloat(formData.unitPrice),
-          minStock: parseFloat(formData.minStock),
+          unitPrice: roundCurrency(parseFloat(formData.unitPrice)),
+          minStock: roundCurrency(parseFloat(formData.minStock)),
           location: formData.location,
           notes: formData.notes,
           thickness: formData.thickness ? parseFloat(formData.thickness) : null,
@@ -166,10 +167,10 @@ export default function InventoryPage() {
     setLoading(true);
     try {
       const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, selectedItem.id);
-      const movementQty = parseFloat(movementData.quantity);
+      const movementQty = roundCurrency(parseFloat(movementData.quantity));
       const newQuantity = movementData.type === "دخول"
-        ? selectedItem.quantity + movementQty
-        : selectedItem.quantity - movementQty;
+        ? safeAdd(selectedItem.quantity, movementQty)
+        : safeSubtract(selectedItem.quantity, movementQty);
 
       if (newQuantity < 0) {
         toast({
