@@ -90,8 +90,9 @@ export async function exportLedgerToExcelProfessional(
 
   // === INFO SECTION ===
   // Calculate totals
+  // Note: 'دخل' = income, 'مصروف' = expense in Arabic
   const totalIncome = entries
-    .filter(e => e.type === 'إيراد' || e.type === 'income')
+    .filter(e => e.type === 'دخل' || e.type === 'income')
     .reduce((sum, e) => safeAdd(sum, e.amount || 0), 0);
   const totalExpenses = entries
     .filter(e => e.type === 'مصروف' || e.type === 'expense')
