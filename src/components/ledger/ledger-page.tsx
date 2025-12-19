@@ -18,6 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportLedgerToHTML } from "@/lib/export-utils";
 import { exportLedgerToExcelProfessional } from "@/lib/export-ledger-excel";
+import { createLedgerService } from "@/services/ledgerService";
+import { useUser } from "@/firebase/provider";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Types and hooks
@@ -56,6 +58,7 @@ import {
 
 export default function LedgerPage() {
   const { toast } = useToast();
+  const { user } = useUser();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const searchParams = useSearchParams();
 
@@ -136,14 +139,42 @@ export default function LedgerPage() {
     setInventoryRelatedFormData: setInventoryFormData,
   } = formHook;
 
-  // Export handlers
-  const handleExportExcel = useCallback(() => {
-    exportLedgerToExcelProfessional(filteredEntries);
-  }, [filteredEntries]);
+  // Export handlers - fetch ALL entries, not just current page
+  const handleExportExcel = useCallback(async () => {
+    if (!user) return;
+    try {
+      const service = createLedgerService(user.dataOwnerId);
+      const allEntries = await service.getAllLedgerEntries();
+      // Apply current filters to all entries
+      const filteredAllEntries = filterEntries(allEntries);
+      exportLedgerToExcelProfessional(filteredAllEntries);
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: "خطأ في التصدير",
+        description: appError.message,
+        variant: "destructive",
+      });
+    }
+  }, [user, filterEntries, toast]);
 
-  const handleExportPDF = useCallback(() => {
-    exportLedgerToHTML(filteredEntries);
-  }, [filteredEntries]);
+  const handleExportPDF = useCallback(async () => {
+    if (!user) return;
+    try {
+      const service = createLedgerService(user.dataOwnerId);
+      const allEntries = await service.getAllLedgerEntries();
+      // Apply current filters to all entries
+      const filteredAllEntries = filterEntries(allEntries);
+      exportLedgerToHTML(filteredAllEntries);
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: "خطأ في التصدير",
+        description: appError.message,
+        variant: "destructive",
+      });
+    }
+  }, [user, filterEntries, toast]);
 
   // Handle unpaid card click - set view mode to unpaid
   const handleUnpaidClick = useCallback(() => {

@@ -303,6 +303,26 @@ export class LedgerService {
     return snapshot.data().count;
   }
 
+  /**
+   * Get ALL ledger entries (for export purposes)
+   * No pagination limit - fetches all entries sorted by date ascending
+   */
+  async getAllLedgerEntries(): Promise<LedgerEntry[]> {
+    const q = query(this.ledgerRef, orderBy("date", "asc"));
+    const snapshot = await getDocs(q);
+
+    const entries: LedgerEntry[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      entries.push({
+        id: doc.id,
+        ...convertFirestoreDates(data),
+      } as LedgerEntry);
+    });
+
+    return entries;
+  }
+
   // ============================================
   // Create Operations
   // ============================================
