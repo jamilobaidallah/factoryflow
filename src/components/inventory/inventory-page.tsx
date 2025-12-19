@@ -21,7 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Download } from "lucide-react";
+import { Plus, Edit, Trash2, TrendingUp, Download } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -74,11 +75,27 @@ interface InventoryItem {
   lastPurchaseAmount?: number;
 }
 
+interface InventoryMovement {
+  id: string;
+  itemId: string;
+  itemName: string;
+  type: string;
+  quantity: number;
+  unit?: string;
+  linkedTransactionId?: string;
+  notes?: string;
+  userEmail?: string;
+  createdAt: Date;
+}
+
 export default function InventoryPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("items");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -145,6 +162,29 @@ export default function InventoryPage() {
 
     return () => unsubscribe();
   }, [user, pageSize, currentPage]);
+
+  // Fetch inventory movements
+  useEffect(() => {
+    if (!user) { return; }
+
+    const movementsRef = collection(firestore, `users/${user.dataOwnerId}/inventory_movements`);
+    const q = query(movementsRef, orderBy("createdAt", "desc"), limit(100));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const movementsData: InventoryMovement[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        movementsData.push({
+          id: doc.id,
+          ...convertFirestoreDates(data),
+        } as InventoryMovement);
+      });
+      setMovements(movementsData);
+      setMovementsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -478,10 +518,13 @@ export default function InventoryPage() {
         )}
       </div>
 
-      <div className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-800">سجل المخزون ({items.length})</h2>
-          {items.length > 0 && (
+          <TabsList>
+            <TabsTrigger value="items">المواد ({items.length})</TabsTrigger>
+            <TabsTrigger value="movements">سجل الحركات ({movements.length})</TabsTrigger>
+          </TabsList>
+          {activeTab === "items" && items.length > 0 && (
             <PermissionGate action="export" module="inventory">
               <Button
                 variant="outline"
@@ -494,150 +537,212 @@ export default function InventoryPage() {
             </PermissionGate>
           )}
         </div>
-        {dataLoading ? (
-          <TableSkeleton rows={10} />
-        ) : items.length === 0 ? (
-          <p className="text-slate-500 text-center py-12">
-            لا توجد عناصر في المخزون. اضغط على &quot;إضافة عنصر للمخزون&quot; للبدء.
-          </p>
-        ) : (
-          <div className="card-modern overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                  <TableHead className="text-right font-semibold text-slate-700">اسم العنصر</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الكمية</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الوحدة</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">السماكة</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">العرض</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الطول</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">سعر الوحدة</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الموقع</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id} className="table-row-hover">
-                    <TableCell className="font-medium">{item.itemName}</TableCell>
-                    <TableCell>{item.category}</TableCell>
-                    <TableCell>{item.quantity || 0}</TableCell>
-                    <TableCell>{item.unit}</TableCell>
-                    <TableCell>{item.thickness ? `${item.thickness} سم` : '-'}</TableCell>
-                    <TableCell>{item.width ? `${item.width} سم` : '-'}</TableCell>
-                    <TableCell>{item.length ? `${item.length} سم` : '-'}</TableCell>
-                    <TableCell>
-                      <span className="font-semibold text-slate-900">
-                        {formatNumber(item.unitPrice || 0)} دينار
-                      </span>
-                    </TableCell>
-                    <TableCell>{item.location}</TableCell>
-                    <TableCell>
-                      {item.quantity <= item.minStock ? (
-                        <span className="badge-danger">
-                          مخزون منخفض
-                        </span>
-                      ) : (
-                        <span className="badge-success">
-                          متوفر
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <PermissionGate action="update" module="inventory">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
-                            onClick={() => handleMovement(item)}
-                          >
-                            <TrendingUp className="h-4 w-4" />
-                          </Button>
-                        </PermissionGate>
-                        <PermissionGate action="update" module="inventory">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                            onClick={() => handleEdit(item)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </PermissionGate>
-                        <PermissionGate action="delete" module="inventory">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleDelete(item.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </PermissionGate>
-                      </div>
-                    </TableCell>
+
+        {/* Items Tab */}
+        <TabsContent value="items" className="space-y-4">
+          {dataLoading ? (
+            <TableSkeleton rows={10} />
+          ) : items.length === 0 ? (
+            <p className="text-slate-500 text-center py-12">
+              لا توجد عناصر في المخزون. اضغط على &quot;إضافة عنصر للمخزون&quot; للبدء.
+            </p>
+          ) : (
+            <div className="card-modern overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                    <TableHead className="text-right font-semibold text-slate-700">اسم العنصر</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الكمية</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الوحدة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">السماكة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">العرض</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الطول</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">سعر الوحدة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الموقع</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              عرض {items.length} من {totalCount} عنصر
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id} className="table-row-hover">
+                      <TableCell className="font-medium">{item.itemName}</TableCell>
+                      <TableCell>{item.category}</TableCell>
+                      <TableCell>{item.quantity || 0}</TableCell>
+                      <TableCell>{item.unit}</TableCell>
+                      <TableCell>{item.thickness ? `${item.thickness} سم` : '-'}</TableCell>
+                      <TableCell>{item.width ? `${item.width} سم` : '-'}</TableCell>
+                      <TableCell>{item.length ? `${item.length} سم` : '-'}</TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-slate-900">
+                          {formatNumber(item.unitPrice || 0)} دينار
+                        </span>
+                      </TableCell>
+                      <TableCell>{item.location}</TableCell>
+                      <TableCell>
+                        {item.quantity <= item.minStock ? (
+                          <span className="badge-danger">
+                            مخزون منخفض
+                          </span>
+                        ) : (
+                          <span className="badge-success">
+                            متوفر
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <PermissionGate action="update" module="inventory">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                              onClick={() => handleMovement(item)}
+                            >
+                              <TrendingUp className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate action="update" module="inventory">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                              onClick={() => handleEdit(item)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate action="delete" module="inventory">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleDelete(item.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
-                    }}
-                    className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
+          )}
 
-                {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                  const pageNum = i + 1;
-                  return (
-                    <PaginationItem key={pageNum}>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                  );
-                })}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                عرض {items.length} من {totalCount} عنصر
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
+                      }}
+                      className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
 
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (currentPage > 1) { setCurrentPage(currentPage - 1); }
-                    }}
-                    className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        )}
-      </div>
+                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(pageNum);
+                          }}
+                          isActive={currentPage === pageNum}
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage > 1) { setCurrentPage(currentPage - 1); }
+                      }}
+                      className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Movement History Tab */}
+        <TabsContent value="movements" className="space-y-4">
+          {movementsLoading ? (
+            <TableSkeleton rows={10} />
+          ) : movements.length === 0 ? (
+            <p className="text-slate-500 text-center py-12">
+              لا توجد حركات مخزون مسجلة بعد.
+            </p>
+          ) : (
+            <div className="card-modern overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                    <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">اسم العنصر</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">نوع الحركة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">الكمية</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">رقم المعاملة</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">ملاحظات</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700">المستخدم</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {movements.map((movement) => (
+                    <TableRow key={movement.id} className="table-row-hover">
+                      <TableCell>
+                        {movement.createdAt?.toLocaleDateString?.('ar-SA') || '-'}
+                      </TableCell>
+                      <TableCell className="font-medium">{movement.itemName}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          movement.type === "دخول"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                        }`}>
+                          {movement.type}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {movement.quantity} {movement.unit || ''}
+                      </TableCell>
+                      <TableCell className="text-slate-600 text-sm">
+                        {movement.linkedTransactionId || '-'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 text-sm max-w-[200px] truncate">
+                        {movement.notes || '-'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 text-sm">
+                        {movement.userEmail || '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
