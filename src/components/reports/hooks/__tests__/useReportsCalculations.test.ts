@@ -322,7 +322,8 @@ describe('useReportsCalculations', () => {
         })
       );
 
-      expect(result.current.incomeStatement.revenueByCategory['إيرادات المبيعات']).toBe(5000);
+      expect(result.current.incomeStatement.revenueByCategory['إيرادات المبيعات'].total).toBe(5000);
+      expect(result.current.incomeStatement.revenueByCategory['إيرادات المبيعات'].subcategories['مبيعات نقدية']).toBe(5000);
     });
 
     it('should group expenses by category', () => {
@@ -335,8 +336,10 @@ describe('useReportsCalculations', () => {
         })
       );
 
-      expect(result.current.incomeStatement.expensesByCategory['رواتب']).toBe(2000);
-      expect(result.current.incomeStatement.expensesByCategory['تكلفة البضاعة المباعة (COGS)']).toBe(3000);
+      expect(result.current.incomeStatement.expensesByCategory['رواتب'].total).toBe(2000);
+      expect(result.current.incomeStatement.expensesByCategory['رواتب'].subcategories['رواتب شهرية']).toBe(2000);
+      expect(result.current.incomeStatement.expensesByCategory['تكلفة البضاعة المباعة (COGS)'].total).toBe(3000);
+      expect(result.current.incomeStatement.expensesByCategory['تكلفة البضاعة المباعة (COGS)'].subcategories['مشتريات']).toBe(3000);
     });
   });
 
