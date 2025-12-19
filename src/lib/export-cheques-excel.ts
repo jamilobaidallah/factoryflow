@@ -16,6 +16,12 @@ interface Cheque {
   notes?: string;
 }
 
+/**
+ * Export cheques to a professional Excel file with styled headers,
+ * status-based cell coloring (pending=yellow, cleared=green, bounced=red),
+ * and summary totals.
+ * @param cheques - Array of cheque records to export
+ */
 export async function exportChequesToExcelProfessional(cheques: Cheque[]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FactoryFlow';

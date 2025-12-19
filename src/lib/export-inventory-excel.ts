@@ -18,6 +18,11 @@ interface InventoryItem {
   notes?: string;
 }
 
+/**
+ * Export inventory items to a professional Excel file with styled headers,
+ * stock status coloring (available=green, low stock=red), and value totals.
+ * @param items - Array of inventory items to export
+ */
 export async function exportInventoryToExcelProfessional(items: InventoryItem[]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FactoryFlow';

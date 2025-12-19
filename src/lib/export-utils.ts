@@ -5,7 +5,13 @@ import { formatShortDate, formatNumber } from './date-utils';
 // ExcelJS is dynamically imported only when needed to reduce bundle size (~23MB)
 
 /**
- * Export data to Excel file
+ * Export data to Excel file (basic version)
+ * @deprecated Use the professional export functions in separate files instead:
+ * - exportLedgerToExcelProfessional from '@/lib/export-ledger-excel'
+ * - exportPaymentsToExcelProfessional from '@/lib/export-payments-excel'
+ * - exportChequesToExcelProfessional from '@/lib/export-cheques-excel'
+ * - exportInventoryToExcelProfessional from '@/lib/export-inventory-excel'
+ * - exportReportsToExcelProfessional from '@/lib/export-reports-excel'
  * @param data Array of objects to export
  * @param filename Name of the file (without extension)
  * @param sheetName Name of the worksheet
@@ -66,7 +72,8 @@ export async function exportToExcel(
 }
 
 /**
- * Export ledger entries to Excel
+ * Export ledger entries to Excel (basic version)
+ * @deprecated Use exportLedgerToExcelProfessional from '@/lib/export-ledger-excel' instead
  * @param entries Ledger entries to export
  * @param filename Name of the file
  */
@@ -89,7 +96,8 @@ export async function exportLedgerToExcel(entries: any[], filename: string = 'le
 }
 
 /**
- * Export payments to Excel
+ * Export payments to Excel (basic version)
+ * @deprecated Use exportPaymentsToExcelProfessional from '@/lib/export-payments-excel' instead
  * @param payments Payment entries to export
  * @param filename Name of the file
  */
@@ -108,7 +116,8 @@ export async function exportPaymentsToExcel(payments: any[], filename: string = 
 }
 
 /**
- * Export cheques to Excel
+ * Export cheques to Excel (basic version)
+ * @deprecated Use exportChequesToExcelProfessional from '@/lib/export-cheques-excel' instead
  * @param cheques Cheque entries to export
  * @param filename Name of the file
  */
@@ -129,7 +138,8 @@ export async function exportChequesToExcel(cheques: any[], filename: string = 'c
 }
 
 /**
- * Export inventory to Excel
+ * Export inventory to Excel (basic version)
+ * @deprecated Use exportInventoryToExcelProfessional from '@/lib/export-inventory-excel' instead
  * @param items Inventory items to export
  * @param filename Name of the file
  */

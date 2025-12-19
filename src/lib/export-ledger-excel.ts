@@ -16,6 +16,13 @@ interface LedgerEntry {
   remainingBalance?: number;
 }
 
+/**
+ * Export ledger entries to a professional Excel file with styled headers,
+ * alternating row colors, and summary totals.
+ * @param entries - Array of ledger entries to export
+ * @param dateFrom - Optional start date for the report period
+ * @param dateTo - Optional end date for the report period
+ */
 export async function exportLedgerToExcelProfessional(
   entries: LedgerEntry[],
   dateFrom?: Date,

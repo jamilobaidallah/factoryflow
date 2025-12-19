@@ -15,6 +15,12 @@ interface DateRange {
   end: Date;
 }
 
+/**
+ * Export financial reports to a professional Excel file with separate
+ * revenue and expenses sections, color-coded totals, and net income display.
+ * @param data - Report data containing revenue/expenses by category and totals
+ * @param dateRange - The date range for the report period
+ */
 export async function exportReportsToExcelProfessional(
   data: ReportData,
   dateRange: DateRange

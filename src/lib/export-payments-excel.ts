@@ -13,6 +13,11 @@ interface Payment {
   notes?: string;
 }
 
+/**
+ * Export payments to a professional Excel file with styled headers,
+ * color-coded receipts (green) and disbursements (red), and summary totals.
+ * @param payments - Array of payment records to export
+ */
 export async function exportPaymentsToExcelProfessional(payments: Payment[]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FactoryFlow';

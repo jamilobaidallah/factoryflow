@@ -54,8 +54,8 @@ jest.mock('@/hooks/use-toast', () => ({
 }));
 
 // Mock export utils
-jest.mock('@/lib/export-utils', () => ({
-  exportInventoryToExcel: jest.fn(),
+jest.mock('@/lib/export-inventory-excel', () => ({
+  exportInventoryToExcelProfessional: jest.fn(),
 }));
 
 // Sample inventory data
