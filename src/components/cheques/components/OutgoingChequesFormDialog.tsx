@@ -86,7 +86,7 @@ export function OutgoingChequesFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editingCheque ? "تعديل الشيك الصادر" : "إضافة شيك صادر جديد"}
@@ -98,7 +98,7 @@ export function OutgoingChequesFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 px-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="chequeNumber">رقم الشيك</Label>

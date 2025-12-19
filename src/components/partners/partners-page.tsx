@@ -624,7 +624,7 @@ export default function PartnersPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingPartner ? "تعديل بيانات الشريك" : "إضافة شريك جديد"}
@@ -636,7 +636,7 @@ export default function PartnersPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 px-6 py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">الاسم</Label>
                 <Input

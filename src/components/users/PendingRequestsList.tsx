@@ -201,7 +201,7 @@ export function PendingRequestsList({
 
       {/* Approval Dialog */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>قبول طلب الوصول</DialogTitle>
             <DialogDescription>
@@ -209,7 +209,7 @@ export function PendingRequestsList({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
+          <div className="px-6 py-4">
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-slate-700">الدور</label>
