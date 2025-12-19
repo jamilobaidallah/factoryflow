@@ -34,7 +34,7 @@ export function MovementDialog({
 }: MovementDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>تسجيل حركة مخزون</DialogTitle>
           <DialogDescription>
@@ -42,7 +42,7 @@ export function MovementDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 px-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="movementType">نوع الحركة</Label>
               <select

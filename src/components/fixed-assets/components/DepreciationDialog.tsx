@@ -37,14 +37,14 @@ export function DepreciationDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>تسجيل استهلاك شهري</DialogTitle>
           <DialogDescription>
             اختر الشهر والسنة لتسجيل الاستهلاك لجميع الأصول النشطة
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 px-6 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="month">الشهر</Label>

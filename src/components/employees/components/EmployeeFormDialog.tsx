@@ -34,7 +34,7 @@ export function EmployeeFormDialog({
 }: EmployeeFormDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editingEmployee ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}
@@ -46,7 +46,7 @@ export function EmployeeFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 px-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="name">الاسم</Label>
               <Input

@@ -25,12 +25,12 @@ export function SalaryHistoryDialog({
 }: SalaryHistoryDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>سجل الرواتب</DialogTitle>
           <DialogDescription>تاريخ التغييرات على الراتب</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 px-6">
           {history.length === 0 ? (
             <p className="text-gray-500 text-center py-4">لا يوجد سجل تغييرات</p>
           ) : (

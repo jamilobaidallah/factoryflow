@@ -47,7 +47,7 @@ function PaymentsFormDialogComponent({
 }: PaymentsFormDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editingPayment ? "تعديل المدفوعة" : "إضافة مدفوعة جديدة"}
@@ -59,7 +59,7 @@ function PaymentsFormDialogComponent({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 px-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="clientName">اسم العميل</Label>
               <Input

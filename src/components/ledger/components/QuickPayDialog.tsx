@@ -109,7 +109,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>إضافة دفعة</DialogTitle>
           <DialogDescription>
@@ -117,7 +117,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
           </DialogDescription>
         </DialogHeader>
         {entry && (
-          <div className="space-y-2 mb-4">
+          <div className="space-y-2 px-6 mb-4">
             <div className="text-sm">
               <span className="font-medium">المعاملة:</span> {entry.description}
             </div>
@@ -137,7 +137,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
             )}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 px-6">
           <div className="space-y-2">
             <Label htmlFor="quickPayAmount">المبلغ المدفوع</Label>
             <div className="flex gap-2">
