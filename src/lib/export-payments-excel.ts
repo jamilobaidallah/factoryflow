@@ -39,6 +39,13 @@ export async function exportPaymentsToExcelProfessional(payments: Payment[]): Pr
     { key: 'notes', width: 40 },
   ];
 
+  // Sort payments by date ascending (oldest first)
+  const sortedPayments = [...payments].sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime();
+    const dateB = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime();
+    return dateA - dateB;
+  });
+
   let rowNum = 1;
 
   // === TITLE ROW ===
@@ -140,7 +147,7 @@ export async function exportPaymentsToExcelProfessional(payments: Payment[]): Pr
   rowNum++;
 
   // === DATA ROWS ===
-  payments.forEach((payment, index) => {
+  sortedPayments.forEach((payment, index) => {
     const row = worksheet.getRow(rowNum);
     const isReceipt = payment.type === 'قبض' || payment.type === 'receipt';
 

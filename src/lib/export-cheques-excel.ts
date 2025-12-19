@@ -43,6 +43,13 @@ export async function exportChequesToExcelProfessional(cheques: Cheque[]): Promi
     { key: 'bank', width: 25 },
   ];
 
+  // Sort cheques by due date ascending (oldest first)
+  const sortedCheques = [...cheques].sort((a, b) => {
+    const dateA = a.dueDate instanceof Date ? a.dueDate.getTime() : new Date(a.dueDate).getTime();
+    const dateB = b.dueDate instanceof Date ? b.dueDate.getTime() : new Date(b.dueDate).getTime();
+    return dateA - dateB;
+  });
+
   let rowNum = 1;
 
   // === TITLE ROW ===
@@ -150,7 +157,7 @@ export async function exportChequesToExcelProfessional(cheques: Cheque[]): Promi
   rowNum++;
 
   // === DATA ROWS ===
-  cheques.forEach((cheque, index) => {
+  sortedCheques.forEach((cheque, index) => {
     const row = worksheet.getRow(rowNum);
     const isPending = cheque.status === 'قيد الانتظار' || cheque.status === 'pending' || cheque.status === 'معلق';
     const isCleared = cheque.status === 'مقبوض' || cheque.status === 'cleared' || cheque.status === 'تم التحصيل';
