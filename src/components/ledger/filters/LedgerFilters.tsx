@@ -53,6 +53,7 @@ const typeOptions: { value: EntryType; label: string }[] = [
   { value: "all", label: "جميع الأنواع" },
   { value: "دخل", label: "دخل" },
   { value: "مصروف", label: "مصروف" },
+  { value: "حركة رأس مال", label: "حركة رأس مال" },
 ];
 
 /**

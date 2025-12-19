@@ -12,8 +12,8 @@ import { isEquityTransaction, isCapitalContribution, isOwnerDrawing } from "../u
 
 /** Date filter preset options */
 export type DatePreset = "today" | "week" | "month" | "all" | "custom";
-/** Entry type filter options (income/expense) */
-export type EntryType = "all" | "دخل" | "مصروف";
+/** Entry type filter options (income/expense/capital) */
+export type EntryType = "all" | "دخل" | "مصروف" | "حركة رأس مال";
 
 /** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
