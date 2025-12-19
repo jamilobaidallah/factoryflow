@@ -274,6 +274,7 @@ export default function InventoryPage() {
         quantity: movementQty,
         linkedTransactionId: movementData.linkedTransactionId,
         notes: movementData.notes,
+        userEmail: user.email || '',
         createdAt: new Date(),
       });
 

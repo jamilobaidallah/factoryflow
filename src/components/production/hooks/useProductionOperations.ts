@@ -193,6 +193,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             unit: originalOrder.unit,
             linkedTransactionId: originalOrder.orderNumber,
             notes: `عكس تعديل أمر الإنتاج - ${originalOrder.orderNumber}`,
+            userEmail: user.email || '',
             createdAt: new Date(),
           });
 
@@ -204,6 +205,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             unit: originalOrder.unit,
             linkedTransactionId: originalOrder.orderNumber,
             notes: `عكس تعديل أمر الإنتاج - ${originalOrder.orderNumber}`,
+            userEmail: user.email || '',
             createdAt: new Date(),
           });
 
@@ -215,6 +217,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             unit: selectedItem.unit,
             linkedTransactionId: originalOrder.orderNumber,
             notes: `تعديل أمر الإنتاج - ${originalOrder.orderNumber}`,
+            userEmail: user.email || '',
             createdAt: new Date(),
           });
 
@@ -226,6 +229,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             unit: selectedItem.unit,
             linkedTransactionId: originalOrder.orderNumber,
             notes: `تعديل أمر الإنتاج - ${originalOrder.orderNumber}`,
+            userEmail: user.email || '',
             createdAt: new Date(),
           });
         }
@@ -374,6 +378,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         unit: order.unit,
         linkedTransactionId: order.orderNumber,
         notes: `استخدام في الإنتاج - ${order.orderNumber}`,
+        userEmail: user.email || '',
         createdAt: new Date(),
       });
 
@@ -388,6 +393,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         length: order.outputLength || null,
         linkedTransactionId: order.orderNumber,
         notes: `إنتاج من أمر ${order.orderNumber}`,
+        userEmail: user.email || '',
         createdAt: new Date(),
       });
 
@@ -486,6 +492,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           unit: order.unit,
           linkedTransactionId: order.orderNumber,
           notes: `عكس حذف أمر الإنتاج - ${order.orderNumber}`,
+          userEmail: user.email || '',
           createdAt: new Date(),
         });
 
@@ -497,6 +504,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           unit: order.unit,
           linkedTransactionId: order.orderNumber,
           notes: `عكس حذف أمر الإنتاج - ${order.orderNumber}`,
+          userEmail: user.email || '',
           createdAt: new Date(),
         });
       }
