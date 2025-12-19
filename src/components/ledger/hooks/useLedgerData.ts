@@ -12,16 +12,20 @@ interface UseLedgerDataOptions {
 /**
  * Custom hook to fetch and manage ledger data with cursor-based pagination
  * Uses LedgerService for all Firestore operations
+ *
+ * Returns both paginated entries (for table display) and all entries (for stats calculation)
  */
 export function useLedgerData(options: UseLedgerDataOptions = {}) {
     const { pageSize = 50, currentPage = 1 } = options;
     const { user } = useUser();
     const [entries, setEntries] = useState<LedgerEntry[]>([]);
+    const [allEntriesForStats, setAllEntriesForStats] = useState<LedgerEntry[]>([]);
     const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
     const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
     const [loading, setLoading] = useState(true);
+    const [statsLoading, setStatsLoading] = useState(true);
     // Store page cursors for cursor-based pagination (using ref to avoid re-renders)
     const pageCursorsRef = useRef<Map<number, DocumentSnapshot>>(new Map());
 
@@ -33,6 +37,31 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
         service.getTotalCount().then((count) => {
             setTotalCount(count);
         });
+    }, [user]);
+
+    // Subscribe to ALL entries for stats calculation (not paginated)
+    // This ensures LedgerStats shows accurate totals across all entries
+    useEffect(() => {
+        if (!user) { return; }
+
+        const service = createLedgerService(user.dataOwnerId);
+        setStatsLoading(true);
+
+        // Subscribe to all entries without pagination limit
+        const unsubscribe = service.subscribeLedgerEntries(
+            10000, // Large limit to get all entries
+            (entriesData) => {
+                setAllEntriesForStats(entriesData);
+                setStatsLoading(false);
+            },
+            (error) => {
+                console.error("Error fetching all entries for stats:", error);
+                setStatsLoading(false);
+            },
+            null // No cursor - start from beginning
+        );
+
+        return () => unsubscribe();
     }, [user]);
 
     // Load ledger entries with cursor-based pagination
@@ -107,11 +136,13 @@ export function useLedgerData(options: UseLedgerDataOptions = {}) {
 
     return {
         entries,
+        allEntriesForStats, // All entries for stats calculation (not paginated)
         clients,
         partners,
         totalCount,
         lastDoc,
         totalPages: Math.ceil(totalCount / pageSize),
         loading,
+        statsLoading,
     };
 }

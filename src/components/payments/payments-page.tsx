@@ -71,6 +71,7 @@ export default function PaymentsPage() {
   const urlSearch = searchParams.get("search");
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [allPaymentsForStats, setAllPaymentsForStats] = useState<Payment[]>([]); // All payments for accurate stats
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMultiAllocationDialogOpen, setIsMultiAllocationDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
@@ -105,6 +106,29 @@ export default function PaymentsPage() {
     getCountFromServer(query(paymentsRef)).then((snapshot) => {
       setTotalCount(snapshot.data().count);
     });
+  }, [user]);
+
+  // Subscribe to ALL payments for stats calculation (not paginated)
+  // This ensures PaymentsSummaryCards shows accurate totals across all payments
+  useEffect(() => {
+    if (!user) return;
+
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+    const q = query(paymentsRef, orderBy("date", "desc"), limit(10000));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allPaymentsData: Payment[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        allPaymentsData.push({
+          id: docSnap.id,
+          ...convertFirestoreDates(data),
+        } as Payment);
+      });
+      setAllPaymentsForStats(allPaymentsData);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   // Fetch payments with cursor-based pagination
@@ -169,15 +193,15 @@ export default function PaymentsPage() {
     );
   }, [payments, searchTerm]);
 
-  // Memoized totals
+  // Memoized totals - calculated from ALL payments, not just current page
   const { totalReceived, totalPaid } = useMemo(() => ({
-    totalReceived: filteredPayments
+    totalReceived: allPaymentsForStats
       .filter((p) => p.type === "قبض" && !p.noCashMovement)
       .reduce((sum, p) => sum + (p.amount || 0), 0),
-    totalPaid: filteredPayments
+    totalPaid: allPaymentsForStats
       .filter((p) => p.type === "صرف" && !p.noCashMovement)
       .reduce((sum, p) => sum + (p.amount || 0), 0),
-  }), [filteredPayments]);
+  }), [allPaymentsForStats]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -463,7 +487,8 @@ export default function PaymentsPage() {
   };
 
   const handleExport = () => {
-    exportPaymentsToExcelProfessional(payments);
+    // Export all payments, not just current page
+    exportPaymentsToExcelProfessional(allPaymentsForStats);
   };
 
   return (

@@ -86,7 +86,7 @@ export default function LedgerPage() {
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
 
   // Data and operations hooks
-  const { entries, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
+  const { entries, allEntriesForStats, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
     pageSize: state.pagination.pageSize,
     currentPage: state.pagination.currentPage,
   });
@@ -122,12 +122,12 @@ export default function LedgerPage() {
   // Calculate totals for filtered entries
   const filteredTotals = useMemo(() => calculateTotals(filteredEntries), [calculateTotals, filteredEntries]);
 
-  // Calculate unpaid count for stats and filter tabs
+  // Calculate unpaid count for stats and filter tabs (from all entries, not just current page)
   const unpaidCount = useMemo(() => {
-    return entries.filter(
+    return allEntriesForStats.filter(
       (e) => e.isARAPEntry && e.paymentStatus !== "paid"
     ).length;
-  }, [entries]);
+  }, [allEntriesForStats]);
 
   // Related records forms (from original hook)
   const {
@@ -346,7 +346,7 @@ export default function LedgerPage() {
           <StatCardSkeleton />
         </div>
       ) : (
-        <LedgerStats entries={entries} onUnpaidClick={handleUnpaidClick} />
+        <LedgerStats entries={allEntriesForStats} onUnpaidClick={handleUnpaidClick} />
       )}
 
       {/* Filters */}
