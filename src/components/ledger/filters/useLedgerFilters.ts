@@ -273,14 +273,18 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         // Search filter
         if (filters.search) {
           const searchLower = filters.search.toLowerCase();
-          const matchesDescription = entry.description?.toLowerCase().includes(searchLower);
-          const matchesParty = entry.associatedParty?.toLowerCase().includes(searchLower);
-          const matchesOwnerName = entry.ownerName?.toLowerCase().includes(searchLower);
-          const matchesCategory = entry.category?.toLowerCase().includes(searchLower);
-          const matchesSubCategory = entry.subCategory?.toLowerCase().includes(searchLower);
-          const matchesTransactionId = entry.transactionId?.toLowerCase().includes(searchLower);
-
-          if (!matchesDescription && !matchesParty && !matchesOwnerName && !matchesCategory && !matchesSubCategory && !matchesTransactionId) {
+          const searchableFields = [
+            entry.description,
+            entry.associatedParty,
+            entry.ownerName,
+            entry.category,
+            entry.subCategory,
+            entry.transactionId,
+          ];
+          const matchesAny = searchableFields.some(
+            (field) => field?.toLowerCase().includes(searchLower)
+          );
+          if (!matchesAny) {
             return false;
           }
         }
