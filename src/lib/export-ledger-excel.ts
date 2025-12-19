@@ -40,13 +40,20 @@ export async function exportLedgerToExcelProfessional(
   // Set column widths
   worksheet.columns = [
     { key: 'date', width: 14 },
-    { key: 'transactionId', width: 20 },
+    { key: 'transactionId', width: 26 },
     { key: 'description', width: 55 },
     { key: 'category', width: 40 },
     { key: 'type', width: 12 },
     { key: 'amount', width: 16 },
     { key: 'status', width: 14 },
   ];
+
+  // Sort entries by date ascending (oldest first)
+  const sortedEntries = [...entries].sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime();
+    const dateB = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime();
+    return dateA - dateB;
+  });
 
   let rowNum = 1;
 
@@ -154,7 +161,7 @@ export async function exportLedgerToExcelProfessional(
   rowNum++;
 
   // === DATA ROWS ===
-  entries.forEach((entry, index) => {
+  sortedEntries.forEach((entry, index) => {
     const row = worksheet.getRow(rowNum);
     const isExpense = entry.type === 'مصروف' || entry.type === 'expense';
     const categoryDisplay = entry.subCategory ? `${entry.category} / ${entry.subCategory}` : (entry.category || '-');
