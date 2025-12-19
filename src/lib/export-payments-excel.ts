@@ -26,12 +26,12 @@ export async function exportPaymentsToExcelProfessional(payments: Payment[]): Pr
   // Set column widths
   worksheet.columns = [
     { key: 'date', width: 14 },
-    { key: 'clientName', width: 28 },
+    { key: 'clientName', width: 35 },
     { key: 'type', width: 12 },
     { key: 'amount', width: 16 },
-    { key: 'method', width: 14 },
-    { key: 'reference', width: 18 },
-    { key: 'notes', width: 30 },
+    { key: 'method', width: 16 },
+    { key: 'reference', width: 20 },
+    { key: 'notes', width: 40 },
   ];
 
   let rowNum = 1;

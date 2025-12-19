@@ -30,9 +30,9 @@ export async function exportReportsToExcelProfessional(
 
   // Set column widths
   worksheet.columns = [
-    { key: 'category', width: 35 },
-    { key: 'type', width: 14 },
-    { key: 'amount', width: 18 },
+    { key: 'category', width: 50 },
+    { key: 'type', width: 16 },
+    { key: 'amount', width: 20 },
   ];
 
   let rowNum = 1;

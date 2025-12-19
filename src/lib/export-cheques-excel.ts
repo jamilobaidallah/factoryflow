@@ -28,13 +28,13 @@ export async function exportChequesToExcelProfessional(cheques: Cheque[]): Promi
 
   // Set column widths
   worksheet.columns = [
-    { key: 'chequeNumber', width: 16 },
-    { key: 'clientName', width: 26 },
+    { key: 'chequeNumber', width: 18 },
+    { key: 'clientName', width: 35 },
     { key: 'dueDate', width: 14 },
     { key: 'amount', width: 16 },
-    { key: 'type', width: 12 },
-    { key: 'status', width: 14 },
-    { key: 'bank', width: 18 },
+    { key: 'type', width: 14 },
+    { key: 'status', width: 16 },
+    { key: 'bank', width: 25 },
   ];
 
   let rowNum = 1;

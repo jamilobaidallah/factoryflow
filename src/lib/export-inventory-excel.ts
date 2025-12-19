@@ -30,13 +30,13 @@ export async function exportInventoryToExcelProfessional(items: InventoryItem[])
 
   // Set column widths
   worksheet.columns = [
-    { key: 'itemName', width: 30 },
-    { key: 'category', width: 25 },
-    { key: 'quantity', width: 12 },
-    { key: 'unit', width: 10 },
-    { key: 'unitPrice', width: 14 },
-    { key: 'totalValue', width: 16 },
-    { key: 'status', width: 14 },
+    { key: 'itemName', width: 40 },
+    { key: 'category', width: 40 },
+    { key: 'quantity', width: 14 },
+    { key: 'unit', width: 12 },
+    { key: 'unitPrice', width: 16 },
+    { key: 'totalValue', width: 18 },
+    { key: 'status', width: 16 },
   ];
 
   let rowNum = 1;

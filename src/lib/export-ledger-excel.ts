@@ -33,9 +33,9 @@ export async function exportLedgerToExcelProfessional(
   // Set column widths
   worksheet.columns = [
     { key: 'date', width: 14 },
-    { key: 'transactionId', width: 16 },
-    { key: 'description', width: 40 },
-    { key: 'category', width: 20 },
+    { key: 'transactionId', width: 20 },
+    { key: 'description', width: 55 },
+    { key: 'category', width: 40 },
     { key: 'type', width: 12 },
     { key: 'amount', width: 16 },
     { key: 'status', width: 14 },
