@@ -16,7 +16,8 @@ import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
-import { exportLedgerToExcel, exportLedgerToHTML } from "@/lib/export-utils";
+import { exportLedgerToHTML } from "@/lib/export-utils";
+import { exportLedgerToExcelProfessional } from "@/lib/export-ledger-excel";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Types and hooks
@@ -137,7 +138,7 @@ export default function LedgerPage() {
 
   // Export handlers
   const handleExportExcel = useCallback(() => {
-    exportLedgerToExcel(filteredEntries, `الحركات_المالية_${new Date().toISOString().split('T')[0]}`);
+    exportLedgerToExcelProfessional(filteredEntries);
   }, [filteredEntries]);
 
   const handleExportPDF = useCallback(() => {

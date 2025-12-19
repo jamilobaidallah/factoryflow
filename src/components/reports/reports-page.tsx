@@ -3,10 +3,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useUser } from "@/firebase/provider";
 import { formatNumber } from "@/lib/date-utils";
-import {
-  exportToExcel,
-  exportIncomeStatementToHTML,
-} from "@/lib/export-utils";
+import { exportIncomeStatementToHTML } from "@/lib/export-utils";
+import { exportReportsToExcelProfessional } from "@/lib/export-reports-excel";
 
 // Hooks
 import { useReportsData } from "./hooks/useReportsData";
@@ -276,34 +274,16 @@ export default function ReportsPage() {
   }, [filteredData, dateRange]);
 
   const handleExportExcel = useCallback(() => {
-    const revenueData = Object.entries(filteredData.revenueByCategory).map(
-      ([category, amount]) => ({
-        الفئة: category,
-        النوع: "إيراد",
-        المبلغ: amount,
-      })
+    exportReportsToExcelProfessional(
+      {
+        revenueByCategory: filteredData.revenueByCategory,
+        expensesByCategory: filteredData.expensesByCategory,
+        totalRevenue: filteredData.totalRevenue,
+        totalExpenses: filteredData.totalExpenses,
+        netProfit: filteredData.netProfit,
+      },
+      dateRange
     );
-
-    const expenseData = Object.entries(filteredData.expensesByCategory).map(
-      ([category, amount]) => ({
-        الفئة: category,
-        النوع: "مصروف",
-        المبلغ: amount,
-      })
-    );
-
-    const periodStart = dateRange.start.toISOString().split("T")[0];
-    const periodEnd = dateRange.end.toISOString().split("T")[0];
-
-    const allData = [
-      ...revenueData,
-      { الفئة: "إجمالي الإيرادات", النوع: "", المبلغ: filteredData.totalRevenue },
-      ...expenseData,
-      { الفئة: "إجمالي المصروفات", النوع: "", المبلغ: filteredData.totalExpenses },
-      { الفئة: "صافي الدخل", النوع: "", المبلغ: filteredData.netProfit },
-    ];
-
-    exportToExcel(allData, `تقرير_مالي_${periodStart}_${periodEnd}`, "التقرير المالي");
   }, [filteredData, dateRange]);
 
   const handleExportCSV = useCallback(() => {

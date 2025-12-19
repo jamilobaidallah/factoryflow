@@ -11,7 +11,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
-import { exportPaymentsToExcel } from "@/lib/export-utils";
+import { exportPaymentsToExcelProfessional } from "@/lib/export-payments-excel";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
 import { isMultiAllocationPayment } from "@/lib/arap-utils";
@@ -463,7 +463,7 @@ export default function PaymentsPage() {
   };
 
   const handleExport = () => {
-    exportPaymentsToExcel(payments, `المدفوعات_${new Date().toISOString().split('T')[0]}`);
+    exportPaymentsToExcelProfessional(payments);
   };
 
   return (

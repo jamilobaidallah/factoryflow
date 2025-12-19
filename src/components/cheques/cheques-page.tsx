@@ -10,7 +10,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { ChequesList } from "./cheques-list";
 import type { Cheque as ChequeType } from "./cheque-card";
-import { exportChequesToExcel } from "@/lib/export-utils";
+import { exportChequesToExcelProfessional } from "@/lib/export-cheques-excel";
 import {
   Pagination,
   PaginationContent,
@@ -384,7 +384,7 @@ export default function ChequesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportChequesToExcel(dueSoonDays ? filteredCheques : cheques, `الشيكات_${new Date().toISOString().split('T')[0]}`)}
+                onClick={() => exportChequesToExcelProfessional(dueSoonDays ? filteredCheques : cheques)}
               >
                 <Download className="w-4 h-4 ml-2" />
                 Excel
