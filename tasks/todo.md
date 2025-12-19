@@ -1,52 +1,60 @@
-# Task: Fix Client Dialog Scroll & Alignment
+# Task: Fix Party Balance Display in Ledger Dialog
 
-**Branch:** `fix/client-dialog-scroll-alignment`
+**Branch:** `fix/party-balance-display`
 **Date:** December 19, 2025
 
 ---
 
 ## Problem
 
-1. **Dialog Not Scrollable:** The "إضافة عميل جديد" dialog is too tall on smaller screens and cannot scroll
-2. **Labels Pushed to Edge:** The field labels and inputs are pushed to the far right edge with no padding
+In the ledger entry dialog, the party dropdown shows incorrect balance labels:
+- موسى shows "لنا عليه: 720.00" (he owes us 720)
+- But his actual account statement shows balance is 0.00 (fully paid)
+- Even the direction is wrong - we owed him, not the other way around
+
+---
+
+## Root Cause
+
+**Issue 1: Swapped labels** in `StepPartyARAP.tsx`
+- When balance > 0 (they owe us): was showing "له علينا" (we owe him) - WRONG
+- When balance < 0 (we owe them): was showing "لنا عليه" (he owes us) - WRONG
+
+**Issue 2: Stale balance data** (separate investigation needed)
+- The dropdown shows 720 but the entry is marked as paid
+- This may be a data integrity issue from an old payment that didn't update `remainingBalance`
 
 ---
 
 ## Solution
 
-### Fix 1: Add scroll to dialog
-Add `max-h-[90vh] overflow-y-auto` to DialogContent (matches inventory dialog pattern)
-
-### Fix 2: Add horizontal padding
-Add `px-6` to form content to match header/footer padding
+### Fix 1: Swap the labels (this PR)
+Changed line 168 from:
+```tsx
+{client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
+```
+To:
+```tsx
+{client.balance && client.balance > 0 ? 'لنا عليه: ' : 'له علينا: '}
+```
 
 ---
 
 ## Todo Items
 
-- [x] Add scroll to client dialog (`max-h-[90vh] overflow-y-auto`)
-- [x] Add horizontal padding to form content (`px-6`)
-- [x] Add padding wrapper to alert section
-- [x] Test the changes
+- [x] Fix swapped balance labels in `StepPartyARAP.tsx`
+- [x] Test TypeScript compilation
 
 ---
 
 ## Files Modified
 
-1. `src/components/clients/clients-page.tsx`
-   - Line 497: Added `max-h-[90vh] overflow-y-auto` to DialogContent
-   - Line 510: Wrapped Alert in div with `px-6`
-   - Line 521: Added `px-6` to form grid container
+1. `src/components/ledger/steps/StepPartyARAP.tsx`
+   - Line 168: Swapped "له علينا" and "لنا عليه" labels
+   - Updated comments to clarify positive/negative balance meanings
 
 ---
 
-## Review
+## Test Results
 
-### Summary of Changes
-- Dialog now scrolls on smaller screens
-- Form content properly padded with 24px (px-6) horizontal spacing
-- Matches the pattern used in inventory dialog
-
-### Test Results
-- TypeScript: ✅ 0 errors
-- ESLint: ✅ No errors
+- TypeScript: 0 errors

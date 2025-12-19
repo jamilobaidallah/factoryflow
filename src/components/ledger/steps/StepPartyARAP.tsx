@@ -162,10 +162,10 @@ export function StepPartyARAP({
                       {client.hasBalance && client.balance !== 0 && (
                         <span className={`text-xs px-1.5 py-0.5 rounded ${
                           client.balance && client.balance > 0
-                            ? 'bg-red-100 text-red-700' // They owe us (receivable)
-                            : 'bg-green-100 text-green-700' // We owe them (payable)
+                            ? 'bg-red-100 text-red-700' // Positive = they owe us (receivable)
+                            : 'bg-green-100 text-green-700' // Negative = we owe them (payable)
                         }`}>
-                          {client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
+                          {client.balance && client.balance > 0 ? 'لنا عليه: ' : 'له علينا: '}
                           {Math.abs(client.balance || 0).toFixed(2)}
                         </span>
                       )}
