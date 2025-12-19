@@ -59,13 +59,18 @@ export interface OwnerEquityData {
   netOwnerEquity: number;
 }
 
+export interface CategoryBreakdown {
+  total: number;
+  subcategories: { [key: string]: number };
+}
+
 export interface IncomeStatementData {
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
   profitMargin: number;
-  revenueByCategory: { [key: string]: number };
-  expensesByCategory: { [key: string]: number };
+  revenueByCategory: { [key: string]: CategoryBreakdown };
+  expensesByCategory: { [key: string]: CategoryBreakdown };
 }
 
 export interface CashFlowData {
@@ -169,8 +174,8 @@ export function useReportsCalculations({
   const incomeStatement = useMemo((): IncomeStatementData => {
     let totalRevenue = 0;
     let totalExpenses = 0;
-    const revenueByCategory: { [key: string]: number } = {};
-    const expensesByCategory: { [key: string]: number } = {};
+    const revenueByCategory: { [key: string]: CategoryBreakdown } = {};
+    const expensesByCategory: { [key: string]: CategoryBreakdown } = {};
 
     ledgerEntries.forEach((entry) => {
       // EXCLUDE owner equity transactions from profit/loss
@@ -185,12 +190,40 @@ export function useReportsCalculations({
 
       if (entry.type === "دخل") {
         totalRevenue = safeAdd(totalRevenue, entry.amount);
-        revenueByCategory[entry.category] =
-          safeAdd(revenueByCategory[entry.category] || 0, entry.amount);
+        // Initialize category if not exists
+        if (!revenueByCategory[entry.category]) {
+          revenueByCategory[entry.category] = { total: 0, subcategories: {} };
+        }
+        revenueByCategory[entry.category].total = safeAdd(
+          revenueByCategory[entry.category].total,
+          entry.amount
+        );
+        // Add to subcategory if exists
+        if (entry.subCategory) {
+          revenueByCategory[entry.category].subcategories[entry.subCategory] =
+            safeAdd(
+              revenueByCategory[entry.category].subcategories[entry.subCategory] || 0,
+              entry.amount
+            );
+        }
       } else if (entry.type === "مصروف") {
         totalExpenses = safeAdd(totalExpenses, entry.amount);
-        expensesByCategory[entry.category] =
-          safeAdd(expensesByCategory[entry.category] || 0, entry.amount);
+        // Initialize category if not exists
+        if (!expensesByCategory[entry.category]) {
+          expensesByCategory[entry.category] = { total: 0, subcategories: {} };
+        }
+        expensesByCategory[entry.category].total = safeAdd(
+          expensesByCategory[entry.category].total,
+          entry.amount
+        );
+        // Add to subcategory if exists
+        if (entry.subCategory) {
+          expensesByCategory[entry.category].subcategories[entry.subCategory] =
+            safeAdd(
+              expensesByCategory[entry.category].subcategories[entry.subCategory] || 0,
+              entry.amount
+            );
+        }
       }
     });
 

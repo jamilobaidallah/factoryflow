@@ -3,6 +3,7 @@
  * Extracted from reports-page.tsx for better maintainability
  */
 
+import { Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,13 +16,18 @@ import {
 } from "@/components/ui/table";
 import { Download } from "lucide-react";
 
+interface CategoryBreakdown {
+  total: number;
+  subcategories: { [key: string]: number };
+}
+
 interface IncomeStatementData {
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
   profitMargin: number;
-  revenueByCategory: Record<string, number>;
-  expensesByCategory: Record<string, number>;
+  revenueByCategory: Record<string, CategoryBreakdown>;
+  expensesByCategory: Record<string, CategoryBreakdown>;
 }
 
 interface OwnerEquityData {
@@ -204,22 +210,36 @@ export function IncomeStatementTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>الفئة</TableHead>
+                    <TableHead>الفئة / الفئة الفرعية</TableHead>
                     <TableHead className="text-left">المبلغ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {Object.entries(incomeStatement.revenueByCategory).map(
-                    ([category, amount]) => (
-                      <TableRow key={category}>
-                        <TableCell>{category}</TableCell>
-                        <TableCell className="text-left font-medium">
-                          {(amount as number).toFixed(2)} د.أ
-                        </TableCell>
-                      </TableRow>
+                    ([category, breakdown]) => (
+                      <Fragment key={category}>
+                        <TableRow className="bg-green-50/50">
+                          <TableCell className="font-semibold">{category}</TableCell>
+                          <TableCell className="text-left font-semibold">
+                            {breakdown.total.toFixed(2)} د.أ
+                          </TableCell>
+                        </TableRow>
+                        {Object.entries(breakdown.subcategories).map(
+                          ([subCategory, amount]) => (
+                            <TableRow key={`${category}-${subCategory}`}>
+                              <TableCell className="pr-8 text-gray-600">
+                                ↳ {subCategory}
+                              </TableCell>
+                              <TableCell className="text-left font-medium text-gray-600">
+                                {amount.toFixed(2)} د.أ
+                              </TableCell>
+                            </TableRow>
+                          )
+                        )}
+                      </Fragment>
                     )
                   )}
-                  <TableRow className="bg-green-50">
+                  <TableRow className="bg-green-100">
                     <TableCell className="font-bold">المجموع</TableCell>
                     <TableCell className="text-left font-bold text-green-700">
                       {incomeStatement.totalRevenue.toFixed(2)} د.أ
@@ -237,22 +257,36 @@ export function IncomeStatementTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>الفئة</TableHead>
+                    <TableHead>الفئة / الفئة الفرعية</TableHead>
                     <TableHead className="text-left">المبلغ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {Object.entries(incomeStatement.expensesByCategory).map(
-                    ([category, amount]) => (
-                      <TableRow key={category}>
-                        <TableCell>{category}</TableCell>
-                        <TableCell className="text-left font-medium">
-                          {(amount as number).toFixed(2)} د.أ
-                        </TableCell>
-                      </TableRow>
+                    ([category, breakdown]) => (
+                      <Fragment key={category}>
+                        <TableRow className="bg-red-50/50">
+                          <TableCell className="font-semibold">{category}</TableCell>
+                          <TableCell className="text-left font-semibold">
+                            {breakdown.total.toFixed(2)} د.أ
+                          </TableCell>
+                        </TableRow>
+                        {Object.entries(breakdown.subcategories).map(
+                          ([subCategory, amount]) => (
+                            <TableRow key={`${category}-${subCategory}`}>
+                              <TableCell className="pr-8 text-gray-600">
+                                ↳ {subCategory}
+                              </TableCell>
+                              <TableCell className="text-left font-medium text-gray-600">
+                                {amount.toFixed(2)} د.أ
+                              </TableCell>
+                            </TableRow>
+                          )
+                        )}
+                      </Fragment>
                     )
                   )}
-                  <TableRow className="bg-red-50">
+                  <TableRow className="bg-red-100">
                     <TableCell className="font-bold">المجموع</TableCell>
                     <TableCell className="text-left font-bold text-red-700">
                       {incomeStatement.totalExpenses.toFixed(2)} د.أ

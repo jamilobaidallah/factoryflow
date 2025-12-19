@@ -1,52 +1,72 @@
-# Task: Fix Client Dialog Scroll & Alignment
+# Task: Add Subcategory Breakdown to Financial Reports
 
-**Branch:** `fix/client-dialog-scroll-alignment`
+**Branch:** `feature/reports-subcategory-breakdown`
 **Date:** December 19, 2025
 
 ---
 
 ## Problem
 
-1. **Dialog Not Scrollable:** The "إضافة عميل جديد" dialog is too tall on smaller screens and cannot scroll
-2. **Labels Pushed to Edge:** The field labels and inputs are pushed to the far right edge with no padding
+The Income Statement report currently shows only category totals (e.g., "مصروفات تشغيلية: 500 دينار"). The user wants to see subcategories under each category for more detailed breakdown.
 
 ---
 
 ## Solution
 
-### Fix 1: Add scroll to dialog
-Add `max-h-[90vh] overflow-y-auto` to DialogContent (matches inventory dialog pattern)
+Changed data structure from flat category totals to hierarchical breakdown:
 
-### Fix 2: Add horizontal padding
-Add `px-6` to form content to match header/footer padding
+**Before:**
+```typescript
+revenueByCategory: { [key: string]: number }
+```
+
+**After:**
+```typescript
+revenueByCategory: {
+  [category: string]: {
+    total: number,
+    subcategories: { [subCategory: string]: number }
+  }
+}
+```
 
 ---
 
 ## Todo Items
 
-- [x] Add scroll to client dialog (`max-h-[90vh] overflow-y-auto`)
-- [x] Add horizontal padding to form content (`px-6`)
-- [x] Add padding wrapper to alert section
-- [x] Test the changes
+- [x] Update `IncomeStatementData` interface in `useReportsCalculations.ts`
+- [x] Update income statement calculation to group by category AND subcategory
+- [x] Update `IncomeStatementData` interface in `IncomeStatementTab.tsx`
+- [x] Update revenue table to show subcategories under each category
+- [x] Update expenses table to show subcategories under each category
+- [x] Test the changes with TypeScript and verify UI
 
 ---
 
 ## Files Modified
 
-1. `src/components/clients/clients-page.tsx`
-   - Line 497: Added `max-h-[90vh] overflow-y-auto` to DialogContent
-   - Line 510: Wrapped Alert in div with `px-6`
-   - Line 521: Added `px-6` to form grid container
+1. `src/components/reports/hooks/useReportsCalculations.ts`
+   - Added `CategoryBreakdown` interface (lines 62-65)
+   - Updated `IncomeStatementData` interface to use new structure (lines 67-74)
+   - Updated `incomeStatement` calculation to group by category AND subcategory (lines 173-228)
+
+2. `src/components/reports/tabs/IncomeStatementTab.tsx`
+   - Added `Fragment` import from React (line 6)
+   - Added `CategoryBreakdown` interface (lines 18-21)
+   - Updated `IncomeStatementData` interface (lines 23-30)
+   - Updated revenue table to show category rows with subcategory rows underneath (lines 205-250)
+   - Updated expenses table to show category rows with subcategory rows underneath (lines 252-297)
 
 ---
 
 ## Review
 
 ### Summary of Changes
-- Dialog now scrolls on smaller screens
-- Form content properly padded with 24px (px-6) horizontal spacing
-- Matches the pattern used in inventory dialog
+- Categories now show as highlighted rows with bold text and totals
+- Subcategories show indented underneath each category with "↳" prefix
+- Both revenue and expense tables now show hierarchical breakdown
+- Header changed from "الفئة" to "الفئة / الفئة الفرعية" for clarity
 
 ### Test Results
-- TypeScript: ✅ 0 errors
-- ESLint: ✅ No errors
+- TypeScript: 0 errors
+- ESLint: No new errors (only pre-existing warnings)
