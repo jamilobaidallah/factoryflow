@@ -26,8 +26,8 @@ import { formatNumber } from "@/lib/date-utils";
 
 export default function DashboardPage() {
   // View states
-  const [summaryView, setSummaryView] = useState<ViewMode>("month");
-  const [expenseView, setExpenseView] = useState<ViewMode>("month");
+  const [summaryView, setSummaryView] = useState<ViewMode>("total");
+  const [expenseView, setExpenseView] = useState<ViewMode>("total");
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("3");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();

@@ -41,6 +41,10 @@ function getDateRange(periodType: PeriodType, customStart?: Date, customEnd?: Da
   start.setHours(0, 0, 0, 0);
 
   switch (periodType) {
+    case 'total':
+      // All time - set start to a very early date
+      start.setFullYear(2000, 0, 1);
+      break;
     case 'today':
       // Start is already set to today
       break;

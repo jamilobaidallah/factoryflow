@@ -4,7 +4,7 @@
  */
 
 // Period selection types
-export type PeriodType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+export type PeriodType = 'total' | 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 export type ComparisonType = 'lastMonth' | 'lastQuarter' | 'lastYear' | 'none';
 export type ChartPeriodType = '1' | '3' | '6';
 

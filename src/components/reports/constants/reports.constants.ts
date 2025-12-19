@@ -60,6 +60,7 @@ export const REPORTS_LABELS = {
 
 // Period options for quick selection
 export const PERIOD_OPTIONS: PeriodOption[] = [
+  { id: 'total', label: 'الإجمالي' },
   { id: 'today', label: 'اليوم' },
   { id: 'week', label: 'الأسبوع' },
   { id: 'month', label: 'الشهر' },

@@ -40,7 +40,7 @@ export default function ReportsPage() {
   const { user } = useUser();
 
   // Period & comparison state
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("month");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("total");
   const [comparisonType, setComparisonType] = useState<ComparisonType>("lastMonth");
   const [chartPeriod, setChartPeriod] = useState<ChartPeriodType>("6");
   const [activeReport, setActiveReport] = useState<string | null>(null);
