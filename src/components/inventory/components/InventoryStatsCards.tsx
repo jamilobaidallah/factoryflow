@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCardSkeleton } from "@/components/ui/loading-skeleton";
+import { safeMultiply, safeAdd, roundCurrency } from "@/lib/currency";
 import { InventoryItem } from "../types/inventory.types";
 
 interface InventoryStatsCardsProps {
@@ -15,10 +16,12 @@ export function InventoryStatsCards({ items, loading }: InventoryStatsCardsProps
     const minStock = item.minStock || 0;
     return minStock > 0 && item.quantity <= minStock;
   }).length;
+  // Use safe currency arithmetic to avoid floating point errors
   const totalValue = items.reduce((sum, item) => {
     const quantity = item.quantity || 0;
     const unitPrice = item.unitPrice || 0;
-    return sum + (quantity * unitPrice);
+    const itemValue = safeMultiply(quantity, unitPrice);
+    return safeAdd(sum, itemValue);
   }, 0);
 
   if (loading) {
@@ -59,7 +62,7 @@ export function InventoryStatsCards({ items, loading }: InventoryStatsCardsProps
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-green-600">
-            {totalValue.toFixed(2)} دينار
+            {roundCurrency(totalValue).toFixed(2)} دينار
           </div>
         </CardContent>
       </Card>

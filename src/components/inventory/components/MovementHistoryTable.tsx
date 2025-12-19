@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -8,15 +9,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Trash2 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { InventoryMovement } from "../types/inventory.types";
 
 interface MovementHistoryTableProps {
   movements: InventoryMovement[];
   loading: boolean;
+  isOwner?: boolean;
+  onDelete?: (movementId: string) => void;
 }
 
-export function MovementHistoryTable({ movements, loading }: MovementHistoryTableProps) {
+export function MovementHistoryTable({ movements, loading, isOwner, onDelete }: MovementHistoryTableProps) {
   if (loading) {
     return <TableSkeleton rows={10} />;
   }
@@ -41,6 +45,9 @@ export function MovementHistoryTable({ movements, loading }: MovementHistoryTabl
             <TableHead className="text-right font-semibold text-slate-700">رقم المعاملة</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">ملاحظات</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">المستخدم</TableHead>
+            {isOwner && (
+              <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -71,6 +78,18 @@ export function MovementHistoryTable({ movements, loading }: MovementHistoryTabl
               <TableCell className="text-slate-600 text-sm">
                 {movement.userEmail || '-'}
               </TableCell>
+              {isOwner && onDelete && (
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => onDelete(movement.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

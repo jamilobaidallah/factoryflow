@@ -8,6 +8,7 @@ import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcel } from "@/lib/export-utils";
 import { logActivity } from "@/services/activityLogService";
@@ -39,6 +40,7 @@ export default function InventoryPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
+  const { isOwner } = usePermissions();
 
   // Data from custom hook
   const {
@@ -306,6 +308,50 @@ export default function InventoryPage() {
     );
   };
 
+  const handleDeleteMovement = (movementId: string) => {
+    if (!user) { return; }
+
+    const movement = movements.find((m) => m.id === movementId);
+
+    confirm(
+      "حذف الحركة",
+      "هل أنت متأكد من حذف هذه الحركة؟ لا يمكن التراجع عن هذا الإجراء.",
+      async () => {
+        try {
+          const movementRef = doc(firestore, `users/${user.dataOwnerId}/inventory_movements`, movementId);
+          await deleteDoc(movementRef);
+
+          logActivity(user.dataOwnerId, {
+            action: 'delete',
+            module: 'inventory',
+            targetId: movementId,
+            userId: user.uid,
+            userEmail: user.email || '',
+            description: `حذف حركة مخزون: ${movement?.itemName || ''} - ${movement?.type || ''}`,
+            metadata: {
+              quantity: movement?.quantity,
+              itemName: movement?.itemName,
+              movementType: movement?.type,
+            },
+          });
+
+          toast({
+            title: "تم الحذف",
+            description: "تم حذف الحركة بنجاح",
+          });
+        } catch (error) {
+          const appError = handleError(error);
+          toast({
+            title: getErrorTitle(appError),
+            description: appError.message,
+            variant: "destructive",
+          });
+        }
+      },
+      "destructive"
+    );
+  };
+
   const resetForm = () => {
     setFormData(INITIAL_FORM_DATA);
     setEditingItem(null);
@@ -376,6 +422,8 @@ export default function InventoryPage() {
           <MovementHistoryTable
             movements={movements}
             loading={movementsLoading}
+            isOwner={isOwner}
+            onDelete={handleDeleteMovement}
           />
         </TabsContent>
       </Tabs>
