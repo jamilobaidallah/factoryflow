@@ -10,7 +10,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
-import { exportInventoryToExcel } from "@/lib/export-utils";
+import { exportInventoryToExcelProfessional } from "@/lib/export-inventory-excel";
 import { logActivity } from "@/services/activityLogService";
 import { safeAdd, safeSubtract, roundCurrency } from "@/lib/currency";
 import {
@@ -394,7 +394,7 @@ export default function InventoryPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportInventoryToExcel(items, `المخزون_${new Date().toISOString().split('T')[0]}`)}
+                onClick={() => exportInventoryToExcelProfessional(items)}
               >
                 <Download className="w-4 h-4 ml-2" />
                 Excel
