@@ -229,6 +229,8 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           if (filters.viewMode === "income" && entry.type !== "دخل") return false;
           if (filters.viewMode === "expense" && entry.type !== "مصروف") return false;
           if (filters.viewMode === "unpaid") {
+            // Exclude equity/capital transactions - they don't have AR/AP
+            if (isEquityTransaction(entry.type, entry.category)) return false;
             if (!entry.paymentStatus) return false;
             if (entry.paymentStatus !== "unpaid" && entry.paymentStatus !== "partial") return false;
           }

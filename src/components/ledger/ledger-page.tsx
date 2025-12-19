@@ -55,6 +55,7 @@ import {
   EntryType,
   ViewMode,
 } from "./filters";
+import { isEquityTransaction } from "./utils/ledger-helpers";
 
 export default function LedgerPage() {
   const { toast } = useToast();
@@ -123,9 +124,12 @@ export default function LedgerPage() {
   const filteredTotals = useMemo(() => calculateTotals(filteredEntries), [calculateTotals, filteredEntries]);
 
   // Calculate unpaid count for stats and filter tabs (from all entries, not just current page)
+  // Exclude equity/capital transactions - they don't have AR/AP
   const unpaidCount = useMemo(() => {
     return allEntriesForStats.filter(
-      (e) => e.isARAPEntry && e.paymentStatus !== "paid"
+      (e) => e.isARAPEntry &&
+             e.paymentStatus !== "paid" &&
+             !isEquityTransaction(e.type, e.category)
     ).length;
   }, [allEntriesForStats]);
 
