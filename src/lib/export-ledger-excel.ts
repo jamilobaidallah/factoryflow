@@ -91,11 +91,15 @@ export async function exportLedgerToExcelProfessional(
   // === INFO SECTION ===
   // Calculate totals
   // Note: 'دخل' = income, 'مصروف' = expense in Arabic
+  // Skip equity/capital transactions (رأس المال) - they don't affect P&L
+  const isEquityEntry = (e: LedgerEntry) =>
+    e.type === 'حركة رأس مال' || e.category === 'رأس المال' || e.category === 'Owner Equity';
+
   const totalIncome = entries
-    .filter(e => e.type === 'دخل' || e.type === 'income')
+    .filter(e => (e.type === 'دخل' || e.type === 'income') && !isEquityEntry(e))
     .reduce((sum, e) => safeAdd(sum, e.amount || 0), 0);
   const totalExpenses = entries
-    .filter(e => e.type === 'مصروف' || e.type === 'expense')
+    .filter(e => (e.type === 'مصروف' || e.type === 'expense') && !isEquityEntry(e))
     .reduce((sum, e) => safeAdd(sum, e.amount || 0), 0);
   const netBalance = roundCurrency(totalIncome - totalExpenses);
 
