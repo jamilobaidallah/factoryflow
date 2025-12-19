@@ -494,7 +494,7 @@ export default function ClientsPage() {
       </div>
 
       <Dialog open={ui.isDialogOpen} onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_DIALOG' })}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {ui.editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
@@ -507,16 +507,18 @@ export default function ClientsPage() {
           </DialogHeader>
 
           {Object.keys(ui.validationErrors).length > 0 && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                يرجى تصحيح الأخطاء أدناه
-              </AlertDescription>
-            </Alert>
+            <div className="px-6">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  يرجى تصحيح الأخطاء أدناه
+                </AlertDescription>
+              </Alert>
+            </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 px-6 py-4">
               <ValidatedInput
                 label="الاسم"
                 name="name"
