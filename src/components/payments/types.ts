@@ -57,6 +57,9 @@ export interface AllocationEntry {
   totalAmount: number;
   remainingBalance: number;
   allocatedAmount: number;      // User input: how much to allocate
+  discountAmount?: number;      // User input: discount for this transaction
+  discountReason?: string;      // Reason for the discount
+  currentTotalDiscount?: number; // Current discount already on the ledger entry
 }
 
 /**

@@ -22,7 +22,7 @@ import {
   AllocationEntry,
   FIFODistributionResult,
 } from '../types';
-import { calculatePaymentStatus } from '@/lib/arap-utils';
+import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
 import { createJournalEntryForPayment } from '@/services/journalService';
 
@@ -207,27 +207,59 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           );
           const allocationDocRef = doc(allocationsRef);
 
-          transaction.set(allocationDocRef, {
+          const allocationData: Record<string, unknown> = {
             transactionId: allocation.transactionId,
             ledgerDocId: allocation.ledgerDocId,
             allocatedAmount: allocation.allocatedAmount,
             transactionDate: allocation.transactionDate,
             description: allocation.description,
             createdAt: new Date(),
-          });
+          };
 
-          // Update ledger entry with new payment totals
+          // Add discount fields if discount was given
+          if (allocation.discountAmount && allocation.discountAmount > 0) {
+            allocationData.discountAmount = allocation.discountAmount;
+            allocationData.discountReason = allocation.discountReason || 'خصم تسوية';
+          }
+
+          transaction.set(allocationDocRef, allocationData);
+
+          // Update ledger entry with new payment totals (including discount if any)
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
-          const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
-          const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-          const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+          const currentTotalDiscount = (ledgerData.totalDiscount as number) || 0;
+          const writeoffAmount = (ledgerData.writeoffAmount as number) || 0;
 
-          transaction.update(ledgerRef, {
+          const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
+          const discountAmount = allocation.discountAmount || 0;
+          const newTotalDiscount = safeAdd(currentTotalDiscount, discountAmount);
+
+          const newRemainingBalance = calculateRemainingBalance(
+            transactionAmount,
+            newTotalPaid,
+            newTotalDiscount,
+            writeoffAmount
+          );
+          const newStatus = calculatePaymentStatus(
+            newTotalPaid,
+            transactionAmount,
+            newTotalDiscount,
+            writeoffAmount
+          );
+
+          // Build update object
+          const updateData: Record<string, unknown> = {
             totalPaid: newTotalPaid,
             remainingBalance: newRemainingBalance,
             paymentStatus: newStatus,
-          });
+          };
+
+          // Only update totalDiscount if there's a discount
+          if (discountAmount > 0 || currentTotalDiscount > 0) {
+            updateData.totalDiscount = newTotalDiscount;
+          }
+
+          transaction.update(ledgerRef, updateData);
         }
       });
 
@@ -298,7 +330,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       // Use transaction for atomic reversal
       await runTransaction(firestore, async (transaction) => {
         // 1. Read all ledger entries that need updating
-        const ledgerUpdates: { ref: ReturnType<typeof doc>; data: Record<string, unknown>; allocatedAmount: number }[] = [];
+        const ledgerUpdates: { ref: ReturnType<typeof doc>; data: Record<string, unknown>; allocatedAmount: number; discountAmount: number }[] = [];
 
         for (const allocationDoc of allocationsSnapshot.docs) {
           const allocation = allocationDoc.data();
@@ -310,6 +342,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
               ref: ledgerRef,
               data: ledgerDoc.data() as Record<string, unknown>,
               allocatedAmount: allocation.allocatedAmount || 0,
+              discountAmount: allocation.discountAmount || 0,
             });
           }
         }
@@ -322,19 +355,42 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         // 3. Delete payment document
         transaction.delete(paymentRef);
 
-        // 4. Update ledger entries (reverse the payments)
-        for (const { ref: ledgerRef, data: ledgerData, allocatedAmount } of ledgerUpdates) {
+        // 4. Update ledger entries (reverse the payments and discounts)
+        for (const { ref: ledgerRef, data: ledgerData, allocatedAmount, discountAmount } of ledgerUpdates) {
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
-          const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, allocatedAmount));
-          const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-          const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+          const currentTotalDiscount = (ledgerData.totalDiscount as number) || 0;
+          const writeoffAmount = (ledgerData.writeoffAmount as number) || 0;
 
-          transaction.update(ledgerRef, {
+          const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, allocatedAmount));
+          const newTotalDiscount = zeroFloor(safeSubtract(currentTotalDiscount, discountAmount));
+
+          const newRemainingBalance = calculateRemainingBalance(
+            transactionAmount,
+            newTotalPaid,
+            newTotalDiscount,
+            writeoffAmount
+          );
+          const newStatus = calculatePaymentStatus(
+            newTotalPaid,
+            transactionAmount,
+            newTotalDiscount,
+            writeoffAmount
+          );
+
+          // Build update object
+          const updateData: Record<string, unknown> = {
             totalPaid: newTotalPaid,
             remainingBalance: newRemainingBalance,
             paymentStatus: newStatus,
-          });
+          };
+
+          // Update totalDiscount if it was affected
+          if (discountAmount > 0 || currentTotalDiscount > 0) {
+            updateData.totalDiscount = newTotalDiscount;
+          }
+
+          transaction.update(ledgerRef, updateData);
         }
       });
 
