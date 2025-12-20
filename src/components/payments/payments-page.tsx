@@ -14,7 +14,7 @@ import { logActivity } from "@/services/activityLogService";
 import { exportPaymentsToExcelProfessional } from "@/lib/export-payments-excel";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
-import { isMultiAllocationPayment } from "@/lib/arap-utils";
+import { isMultiAllocationPayment, calculateRemainingBalance, calculatePaymentStatus } from "@/lib/arap-utils";
 import {
   collection,
   addDoc,
@@ -407,27 +407,65 @@ export default function PaymentsPage() {
 
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
+                const currentTotalDiscount = ledgerData.totalDiscount || 0;
+                const currentWriteoff = ledgerData.writeoffAmount || 0;
                 const transactionAmount = ledgerData.amount || 0;
 
+                // Reverse the payment amount
                 const newTotalPaid = assertNonNegative(currentTotalPaid - payment.amount, {
                   operation: 'reversePaymentDelete',
                   entityId: ledgerDoc.id,
                   entityType: 'ledger'
                 });
-                const newRemainingBalance = transactionAmount - newTotalPaid;
 
-                let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-                if (newRemainingBalance <= 0) {
-                  newStatus = "paid";
-                } else if (newTotalPaid > 0) {
-                  newStatus = "partial";
-                }
+                // Reverse discount if payment had one
+                const paymentDiscountAmount = payment.discountAmount || 0;
+                const newTotalDiscount = assertNonNegative(currentTotalDiscount - paymentDiscountAmount, {
+                  operation: 'reverseDiscountDelete',
+                  entityId: ledgerDoc.id,
+                  entityType: 'ledger'
+                });
 
-                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+                // Reverse writeoff if payment was a writeoff
+                const paymentWriteoffAmount = payment.writeoffAmount || 0;
+                const newWriteoffAmount = assertNonNegative(currentWriteoff - paymentWriteoffAmount, {
+                  operation: 'reverseWriteoffDelete',
+                  entityId: ledgerDoc.id,
+                  entityType: 'ledger'
+                });
+
+                // Calculate new remaining balance and status using proper formulas
+                const newRemainingBalance = calculateRemainingBalance(
+                  transactionAmount,
+                  newTotalPaid,
+                  newTotalDiscount,
+                  newWriteoffAmount
+                );
+                const newStatus = calculatePaymentStatus(
+                  newTotalPaid,
+                  transactionAmount,
+                  newTotalDiscount,
+                  newWriteoffAmount
+                );
+
+                // Build update object - only include fields that changed
+                const updateData: Record<string, unknown> = {
                   totalPaid: newTotalPaid,
                   remainingBalance: newRemainingBalance,
                   paymentStatus: newStatus,
-                });
+                };
+
+                // Only update discount if it changed
+                if (paymentDiscountAmount > 0) {
+                  updateData.totalDiscount = newTotalDiscount;
+                }
+
+                // Only update writeoff if it changed
+                if (paymentWriteoffAmount > 0) {
+                  updateData.writeoffAmount = newWriteoffAmount;
+                }
+
+                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), updateData);
               }
             }
           }
