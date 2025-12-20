@@ -825,20 +825,61 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
                     credit: e.type === "مصروف" ? e.amount : 0,
                   })),
-                  ...payments.map((p) => ({
-                    id: p.id,
-                    source: 'payment' as const,
-                    date: p.date,
-                    isPayment: true,
-                    entryType: p.type,
-                    description: p.notes || p.description || '',  // Use notes field for payment method
-                    notes: p.notes,
-                    // Payment received (قبض): goes in دائن (reduces what they owe us)
-                    // Payment made (صرف): goes in مدين (reduces what we owe them)
-                    // Include discountAmount as additional credit (settlement discount reduces debt)
-                    debit: p.type === "صرف" ? p.amount : 0,
-                    credit: p.type === "قبض" ? (p.amount + (p.discountAmount || 0)) : 0,
-                  })),
+                  // Split payments with discounts into separate rows for clarity
+                  ...payments.flatMap((p) => {
+                    const rows = [];
+
+                    // Row 1: The actual cash payment (if amount > 0)
+                    if (p.amount > 0) {
+                      rows.push({
+                        id: p.id,
+                        source: 'payment' as const,
+                        date: p.date,
+                        isPayment: true,
+                        entryType: p.type,
+                        description: p.notes || p.description || '',
+                        notes: p.notes,
+                        // Payment received (قبض): goes in دائن (reduces what they owe us)
+                        // Payment made (صرف): goes in مدين (reduces what we owe them)
+                        debit: p.type === "صرف" ? p.amount : 0,
+                        credit: p.type === "قبض" ? p.amount : 0,
+                      });
+                    }
+
+                    // Row 2: The discount (if discountAmount > 0)
+                    if (p.discountAmount && p.discountAmount > 0) {
+                      rows.push({
+                        id: `${p.id}-discount`,
+                        source: 'payment' as const,
+                        date: p.date,
+                        isPayment: true,
+                        entryType: p.type,
+                        description: 'خصم تسوية',  // Settlement discount
+                        notes: 'خصم',
+                        isDiscount: true,
+                        // Discount always reduces the debt (credit for قبض transactions)
+                        debit: 0,
+                        credit: p.type === "قبض" ? p.discountAmount : 0,
+                      });
+                    }
+
+                    // If both amount and discount are 0, still show the payment row
+                    if (rows.length === 0) {
+                      rows.push({
+                        id: p.id,
+                        source: 'payment' as const,
+                        date: p.date,
+                        isPayment: true,
+                        entryType: p.type,
+                        description: p.notes || p.description || '',
+                        notes: p.notes,
+                        debit: 0,
+                        credit: 0,
+                      });
+                    }
+
+                    return rows;
+                  }),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
                 // Calculate date range (from all transactions, before filtering)
