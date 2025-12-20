@@ -79,6 +79,8 @@ interface LedgerEntry {
   description: string;
   associatedParty?: string;
   remainingBalance?: number;
+  totalDiscount?: number;      // Settlement discounts (خصم تسوية)
+  writeoffAmount?: number;     // Bad debt write-offs (ديون معدومة)
 }
 
 interface Payment {
@@ -810,75 +812,82 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               {(() => {
                 // Combine and sort all transactions chronologically
                 const allTransactions: StatementItem[] = [
-                  ...ledgerEntries.map((e) => ({
-                    id: e.id,
-                    transactionId: e.transactionId,
-                    source: 'ledger' as const,
-                    date: e.date,
-                    isPayment: false,
-                    entryType: e.type,
-                    description: e.description,
-                    category: e.category,
-                    subCategory: e.subCategory,
-                    // Income/Sales: amount goes in مدين (client owes us)
-                    // Expense/Purchases from them: amount goes in دائن (we owe them)
-                    debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
-                    credit: e.type === "مصروف" ? e.amount : 0,
-                  })),
-                  // Split payments with discounts into separate rows for clarity
-                  ...payments.flatMap((p) => {
-                    const rows = [];
+                  // Ledger entries (invoices) plus their discounts and writeoffs
+                  ...ledgerEntries.flatMap((e) => {
+                    const rows: StatementItem[] = [];
 
-                    // Row 1: The actual cash payment (if amount > 0)
-                    if (p.amount > 0) {
+                    // Row 1: The invoice itself
+                    rows.push({
+                      id: e.id,
+                      transactionId: e.transactionId,
+                      source: 'ledger' as const,
+                      date: e.date,
+                      isPayment: false,
+                      entryType: e.type,
+                      description: e.description,
+                      category: e.category,
+                      subCategory: e.subCategory,
+                      // Income/Sales: amount goes in مدين (client owes us)
+                      // Expense/Purchases from them: amount goes in دائن (we owe them)
+                      debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
+                      credit: e.type === "مصروف" ? e.amount : 0,
+                    });
+
+                    // Row 2: Discount from ledger entry (if any) - reduces what client owes
+                    if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
                       rows.push({
-                        id: p.id,
-                        source: 'payment' as const,
-                        date: p.date,
-                        isPayment: true,
-                        entryType: p.type,
-                        description: p.notes || p.description || '',
-                        notes: p.notes,
-                        // Payment received (قبض): goes in دائن (reduces what they owe us)
-                        // Payment made (صرف): goes in مدين (reduces what we owe them)
-                        debit: p.type === "صرف" ? p.amount : 0,
-                        credit: p.type === "قبض" ? p.amount : 0,
+                        id: `${e.id}-discount`,
+                        transactionId: e.transactionId,
+                        source: 'ledger' as const,
+                        date: e.date,
+                        isPayment: true,  // Display as payment-like row
+                        entryType: 'خصم',
+                        description: 'خصم تسوية',
+                        category: e.category,
+                        debit: 0,
+                        credit: e.totalDiscount,  // Credit reduces debt
                       });
                     }
 
-                    // Row 2: The discount (if discountAmount > 0)
-                    if (p.discountAmount && p.discountAmount > 0) {
+                    // Row 3: Writeoff from ledger entry (if any) - reduces what client owes
+                    if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
                       rows.push({
-                        id: `${p.id}-discount`,
-                        source: 'payment' as const,
-                        date: p.date,
-                        isPayment: true,
-                        entryType: p.type,
-                        description: 'خصم تسوية',  // Settlement discount
-                        notes: 'خصم',
-                        isDiscount: true,
-                        // Discount always reduces the debt (credit for قبض transactions)
+                        id: `${e.id}-writeoff`,
+                        transactionId: e.transactionId,
+                        source: 'ledger' as const,
+                        date: e.date,
+                        isPayment: true,  // Display as payment-like row
+                        entryType: 'شطب',
+                        description: 'شطب دين معدوم',
+                        category: e.category,
                         debit: 0,
-                        credit: p.type === "قبض" ? p.discountAmount : 0,
-                      });
-                    }
-
-                    // If both amount and discount are 0, still show the payment row
-                    if (rows.length === 0) {
-                      rows.push({
-                        id: p.id,
-                        source: 'payment' as const,
-                        date: p.date,
-                        isPayment: true,
-                        entryType: p.type,
-                        description: p.notes || p.description || '',
-                        notes: p.notes,
-                        debit: 0,
-                        credit: 0,
+                        credit: e.writeoffAmount,  // Credit reduces debt
                       });
                     }
 
                     return rows;
+                  }),
+                  // Payments (cash/cheque payments only - discounts/writeoffs come from ledger)
+                  // Note: Don't include payment.discountAmount here as it's already in ledger.totalDiscount
+                  ...payments.flatMap((p) => {
+                    // Only show payments with actual amount (skip discount-only records)
+                    if (p.amount <= 0) {
+                      return [];
+                    }
+
+                    return [{
+                      id: p.id,
+                      source: 'payment' as const,
+                      date: p.date,
+                      isPayment: true,
+                      entryType: p.type,
+                      description: p.notes || p.description || '',
+                      notes: p.notes,
+                      // Payment received (قبض): goes in دائن (reduces what they owe us)
+                      // Payment made (صرف): goes in مدين (reduces what we owe them)
+                      debit: p.type === "صرف" ? p.amount : 0,
+                      credit: p.type === "قبض" ? p.amount : 0,
+                    }];
                   }),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
