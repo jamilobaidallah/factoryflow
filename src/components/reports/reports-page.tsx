@@ -127,8 +127,9 @@ export default function ReportsPage() {
     const expensesByCategory: Record<string, number> = {};
     let totalRevenue = 0;
     let totalExpenses = 0;
+    let totalDiscounts = 0;  // Track discounts (contra-revenue)
 
-    filtered.forEach((entry) => {
+    filtered.forEach((entry: any) => {
       // Exclude owner equity
       if (OWNER_EQUITY_CATEGORIES.includes(entry.category as typeof OWNER_EQUITY_CATEGORIES[number])) {
         return;
@@ -137,18 +138,21 @@ export default function ReportsPage() {
       if (entry.type === "دخل") {
         totalRevenue += entry.amount;
         revenueByCategory[entry.category] = (revenueByCategory[entry.category] || 0) + entry.amount;
+        // Track discounts on income entries (contra-revenue)
+        totalDiscounts += entry.totalDiscount || 0;
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount;
         expensesByCategory[entry.category] = (expensesByCategory[entry.category] || 0) + entry.amount;
       }
     });
 
+    // Net profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
     return {
       revenueByCategory,
       expensesByCategory,
       totalRevenue,
       totalExpenses,
-      netProfit: totalRevenue - totalExpenses,
+      netProfit: totalRevenue - totalExpenses - totalDiscounts,
     };
   }, [ledgerEntries, dateRange]);
 

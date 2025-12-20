@@ -90,6 +90,7 @@ interface Payment {
   paymentMethod: string;
   notes: string;  // Payment method info is stored in notes field
   associatedParty?: string;
+  discountAmount?: number;  // Settlement discount applied with this payment
 }
 
 interface Cheque {
@@ -834,8 +835,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     notes: p.notes,
                     // Payment received (قبض): goes in دائن (reduces what they owe us)
                     // Payment made (صرف): goes in مدين (reduces what we owe them)
+                    // Include discountAmount as additional credit (settlement discount reduces debt)
                     debit: p.type === "صرف" ? p.amount : 0,
-                    credit: p.type === "قبض" ? p.amount : 0,
+                    credit: p.type === "قبض" ? (p.amount + (p.discountAmount || 0)) : 0,
                   })),
                 ].sort((a, b) => a.date.getTime() - b.date.getTime());
 

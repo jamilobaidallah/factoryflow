@@ -525,7 +525,7 @@ function CashFlowReport({
 
       // OPERATING CASH: Calculate based on payment status
       // - Non-ARAP entries (instant settlement) = full amount
-      // - Paid ARAP entries = full amount
+      // - Paid ARAP entries = totalPaid (actual cash, excludes discounts/writeoffs)
       // - Partial ARAP entries = only totalPaid portion
       // - Unpaid ARAP entries = 0 (no cash movement yet)
       let cashAmount = 0;
@@ -533,8 +533,8 @@ function CashFlowReport({
         // Non-AR/AP = instant settlement, full amount
         cashAmount = entry.amount;
       } else if (entry.paymentStatus === "paid" || entry.paymentStatus === "مدفوع") {
-        // Fully paid = full amount
-        cashAmount = entry.amount;
+        // Fully paid - use totalPaid (actual cash received, excludes discounts/writeoffs)
+        cashAmount = entry.totalPaid ?? entry.amount;
       } else if (entry.paymentStatus === "partial" || entry.paymentStatus === "جزئي") {
         // Partial = only the paid portion
         cashAmount = entry.totalPaid || 0;

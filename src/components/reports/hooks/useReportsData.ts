@@ -31,6 +31,8 @@ interface LedgerEntry {
   remainingBalance?: number;
   paymentStatus?: "paid" | "unpaid" | "partial";
   isARAPEntry?: boolean;
+  totalDiscount?: number;
+  writeoffAmount?: number;
 }
 
 interface Payment {
