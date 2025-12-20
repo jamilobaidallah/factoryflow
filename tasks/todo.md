@@ -1,60 +1,67 @@
-# Task: Fix Party Balance Display in Ledger Dialog
+# Task: Fix Client Cheques Issue Date & Pending Balance Calculation
 
-**Branch:** `fix/party-balance-display`
-**Date:** December 19, 2025
-
----
-
-## Problem
-
-In the ledger entry dialog, the party dropdown shows incorrect balance labels:
-- موسى shows "لنا عليه: 720.00" (he owes us 720)
-- But his actual account statement shows balance is 0.00 (fully paid)
-- Even the direction is wrong - we owed him, not the other way around
+**Branch:** `fix/client-cheques-issue-date`
+**Date:** December 20, 2025
 
 ---
 
-## Root Cause
+## Problem 1: Wrong Date Display
 
-**Issue 1: Swapped labels** in `StepPartyARAP.tsx`
-- When balance > 0 (they owe us): was showing "له علينا" (we owe him) - WRONG
-- When balance < 0 (we owe them): was showing "لنا عليه" (he owes us) - WRONG
+In the client detail page cheques tab, the "تاريخ الشيك" column was showing the wrong date:
+- It was displaying the date when the transaction was entered (from `chequeDate` field)
+- User wanted to see the actual issue date (`issueDate`) when the cheque was issued
 
-**Issue 2: Stale balance data** (separate investigation needed)
-- The dropdown shows 720 but the entry is marked as paid
-- This may be a data integrity issue from an old payment that didn't update `remainingBalance`
+## Problem 2: Wrong Balance Calculation for Pending Cheques
+
+The "الرصيد المتوقع بعد صرف الشيكات" was calculating incorrectly for outgoing cheques:
+- All pending cheques were being subtracted from the balance
+- But outgoing cheques (صادر) should ADD to the balance (reduce what we owe them)
+- Example: Balance 6,650 له (we owe them) with 7,500 outgoing cheques should become -850 (they owe us 850), not 14,150
 
 ---
 
 ## Solution
 
-### Fix 1: Swap the labels (this PR)
-Changed line 168 from:
-```tsx
-{client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
-```
-To:
-```tsx
-{client.balance && client.balance > 0 ? 'لنا عليه: ' : 'له علينا: '}
-```
+### Fix 1: Issue Date Display
+Changed all references from `chequeDate` to `issueDate`:
+- Updated the local `Cheque` interface
+- Updated data loading to read `issueDate` from Firestore
+- Updated the column header from "تاريخ الشيك" to "تاريخ الإصدار"
+- Updated the table cell to display `issueDate`
+
+### Fix 2: Pending Cheques Balance Calculation
+Changed calculation to handle incoming vs outgoing cheques differently:
+- **Incoming cheques (وارد)**: Subtract from balance (we receive money, reduces what they owe us)
+- **Outgoing cheques (صادر)**: Add to balance (we pay money, reduces what we owe them)
+- Added "النوع" (type) column to pending cheques table for clarity
 
 ---
 
 ## Todo Items
 
-- [x] Fix swapped balance labels in `StepPartyARAP.tsx`
+- [x] Update Cheque interface to use issueDate instead of chequeDate
+- [x] Update data loading to read issueDate field
+- [x] Update cheques table to display issueDate
+- [x] Fix pending cheques balance calculation for incoming vs outgoing
+- [x] Add type column to pending cheques table
 - [x] Test TypeScript compilation
 
 ---
 
 ## Files Modified
 
-1. `src/components/ledger/steps/StepPartyARAP.tsx`
-   - Line 168: Swapped "له علينا" and "لنا عليه" labels
-   - Updated comments to clarify positive/negative balance meanings
+1. `src/components/clients/client-detail-page.tsx`
+   - Line 99: Changed interface field from `chequeDate` to `issueDate`
+   - Line 307: Changed data loading from `data.chequeDate` to `data.issueDate`
+   - Line 312: Changed sort to use `issueDate`
+   - Line 746: Changed column header to "تاريخ الإصدار"
+   - Line 764: Changed display from `cheque.chequeDate` to `cheque.issueDate`
+   - Lines 1091-1100: Fixed balance calculation for incoming vs outgoing cheques
+   - Lines 1115-1126: Added type column to pending cheques table
 
 ---
 
 ## Test Results
 
 - TypeScript: 0 errors
+
