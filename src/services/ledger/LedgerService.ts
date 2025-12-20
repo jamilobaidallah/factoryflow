@@ -652,7 +652,10 @@ export class LedgerService {
       });
 
       // If there's a transaction ID, sync associated party to linked payments
-      if (existingTransactionId && formData.associatedParty) {
+      // Sync even when removing the associated party (set to empty)
+      if (existingTransactionId) {
+        const newClientName = formData.associatedParty || "غير محدد";
+
         const paymentsQuery = query(
           this.paymentsRef,
           where("linkedTransactionId", "==", existingTransactionId)
@@ -661,7 +664,7 @@ export class LedgerService {
 
         paymentsSnapshot.forEach((paymentDoc) => {
           batch.update(paymentDoc.ref, {
-            clientName: formData.associatedParty,
+            clientName: newClientName,
           });
         });
 
@@ -674,7 +677,7 @@ export class LedgerService {
 
         chequesSnapshot.forEach((chequeDoc) => {
           batch.update(chequeDoc.ref, {
-            clientName: formData.associatedParty,
+            clientName: newClientName,
           });
         });
       }
