@@ -27,6 +27,7 @@ interface ReportsInlineReportProps {
     totalRevenue: number;
     totalExpenses: number;
     totalDiscounts: number;
+    totalBadDebt: number;
     netProfit: number;
   };
   dateRange: {
@@ -139,6 +140,7 @@ function IncomeStatementReport({
 }) {
   const isProfit = filteredData.netProfit >= 0;
   const hasDiscounts = filteredData.totalDiscounts > 0;
+  const hasBadDebt = filteredData.totalBadDebt > 0;
   const netRevenue = filteredData.totalRevenue - filteredData.totalDiscounts;
 
   return (
@@ -208,6 +210,22 @@ function IncomeStatementReport({
           </div>
         </div>
       </div>
+
+      {/* Bad Debt Section - Treated as expense */}
+      {hasBadDebt && (
+        <div>
+          <h4 className="text-sm font-semibold text-orange-700 mb-3 flex items-center gap-2">
+            <span className="w-2 h-2 bg-orange-500 rounded-full" />
+            ديون معدومة
+          </h4>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+              <span className="text-sm text-slate-700">شطب ديون غير قابلة للتحصيل</span>
+              <span className="text-sm font-semibold text-orange-700">-{formatNumber(filteredData.totalBadDebt)} د.أ</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Net Income */}
       <div className={`p-4 rounded-xl ${isProfit ? "bg-emerald-100 border-2 border-emerald-300" : "bg-rose-100 border-2 border-rose-300"}`}>
