@@ -34,18 +34,38 @@ interface LedgerTableProps {
 function StatusBadge({
   status,
   remaining,
+  totalDiscount,
+  writeoffAmount,
 }: {
   status: "paid" | "partial" | "unpaid" | undefined;
   remaining?: number;
+  totalDiscount?: number;
+  writeoffAmount?: number;
 }) {
   if (!status) return <span className="text-xs text-slate-400">-</span>;
 
+  // Show discount/writeoff indicators
+  const hasDiscount = (totalDiscount || 0) > 0;
+  const hasWriteoff = (writeoffAmount || 0) > 0;
+
   if (status === "paid") {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-        مدفوع
-      </span>
+      <div className="flex flex-col gap-1">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+          مدفوع
+        </span>
+        {hasDiscount && (
+          <span className="text-[10px] text-blue-600" title="خصم تسوية">
+            خصم: {formatNumber(totalDiscount!)}
+          </span>
+        )}
+        {hasWriteoff && (
+          <span className="text-[10px] text-amber-600" title="دين معدوم">
+            شُطب: {formatNumber(writeoffAmount!)}
+          </span>
+        )}
+      </div>
     );
   }
 
@@ -59,6 +79,16 @@ function StatusBadge({
         {remaining !== undefined && remaining > 0 && (
           <span className="text-[10px] text-slate-500">
             متبقي: {formatNumber(remaining)}
+          </span>
+        )}
+        {hasDiscount && (
+          <span className="text-[10px] text-blue-600" title="خصم تسوية">
+            خصم: {formatNumber(totalDiscount!)}
+          </span>
+        )}
+        {hasWriteoff && (
+          <span className="text-[10px] text-amber-600" title="دين معدوم">
+            شُطب: {formatNumber(writeoffAmount!)}
           </span>
         )}
       </div>
@@ -230,6 +260,8 @@ const LedgerTableRow = memo(function LedgerTableRow({
           <StatusBadge
             status={entry.paymentStatus}
             remaining={entry.remainingBalance}
+            totalDiscount={entry.totalDiscount}
+            writeoffAmount={entry.writeoffAmount}
           />
         ) : (
           <span className="text-xs text-slate-400">-</span>
@@ -392,6 +424,8 @@ const LedgerCard = memo(function LedgerCard({
           <StatusBadge
             status={entry.paymentStatus}
             remaining={entry.remainingBalance}
+            totalDiscount={entry.totalDiscount}
+            writeoffAmount={entry.writeoffAmount}
           />
         ) : null}
       </div>

@@ -14,6 +14,8 @@ interface LedgerEntry {
   paymentStatus?: string;
   totalPaid?: number;
   remainingBalance?: number;
+  totalDiscount?: number;
+  writeoffAmount?: number;
 }
 
 /**
@@ -45,6 +47,8 @@ export async function exportLedgerToExcelProfessional(
     { key: 'category', width: 40 },
     { key: 'type', width: 12 },
     { key: 'amount', width: 16 },
+    { key: 'discount', width: 14 },
+    { key: 'writeoff', width: 14 },
     { key: 'status', width: 14 },
   ];
 
@@ -58,7 +62,7 @@ export async function exportLedgerToExcelProfessional(
   let rowNum = 1;
 
   // === TITLE ROW ===
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const titleCell = worksheet.getCell(`A${rowNum}`);
   titleCell.value = 'Ledger Report - دفتر الأستاذ';
   titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -72,7 +76,7 @@ export async function exportLedgerToExcelProfessional(
   rowNum++;
 
   // === SUBTITLE ROW ===
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const subtitleCell = worksheet.getCell(`A${rowNum}`);
   subtitleCell.value = 'Financial Transactions Report';
   subtitleCell.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -104,7 +108,7 @@ export async function exportLedgerToExcelProfessional(
   const netBalance = roundCurrency(totalIncome - totalExpenses);
 
   // Generated date
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const genCell = worksheet.getCell(`A${rowNum}`);
   genCell.value = `Generated: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
   genCell.font = { size: 11 };
@@ -113,7 +117,7 @@ export async function exportLedgerToExcelProfessional(
 
   // Period
   if (dateFrom || dateTo) {
-    worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+    worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
     const periodCell = worksheet.getCell(`A${rowNum}`);
     const fromStr = dateFrom ? formatShortDate(dateFrom) : 'Start';
     const toStr = dateTo ? formatShortDate(dateTo) : 'Present';
@@ -124,7 +128,7 @@ export async function exportLedgerToExcelProfessional(
   }
 
   // Total entries
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const entriesCell = worksheet.getCell(`A${rowNum}`);
   entriesCell.value = `Total Entries: ${entries.length}`;
   entriesCell.font = { size: 11, bold: true };
@@ -132,7 +136,7 @@ export async function exportLedgerToExcelProfessional(
   rowNum++;
 
   // Income/Expense summary
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const incomeCell = worksheet.getCell(`A${rowNum}`);
   incomeCell.value = `Total Income: ${formatNumber(totalIncome, 2)} JOD | Total Expenses: ${formatNumber(totalExpenses, 2)} JOD | Net: ${formatNumber(netBalance, 2)} JOD`;
   incomeCell.font = { size: 11, bold: true, color: { argb: netBalance >= 0 ? 'FF16A34A' : 'FFDC2626' } };
@@ -144,9 +148,9 @@ export async function exportLedgerToExcelProfessional(
 
   // === TABLE HEADER ===
   const headerRow = worksheet.getRow(rowNum);
-  headerRow.values = ['Date', 'Transaction ID', 'Description', 'Category', 'Type', 'Amount', 'Status'];
+  headerRow.values = ['Date', 'Transaction ID', 'Description', 'Category', 'Type', 'Amount', 'Discount', 'Write-off', 'Status'];
   headerRow.eachCell((cell, colNumber) => {
-    if (colNumber <= 7) {
+    if (colNumber <= 9) {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
@@ -178,13 +182,15 @@ export async function exportLedgerToExcelProfessional(
       categoryDisplay,
       entry.type || '-',
       formatNumber(entry.amount || 0, 2),
+      entry.totalDiscount ? formatNumber(entry.totalDiscount, 2) : '-',
+      entry.writeoffAmount ? formatNumber(entry.writeoffAmount, 2) : '-',
       entry.paymentStatus || '-'
     ];
 
     // Alternate row colors
     const bgColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB';
     row.eachCell((cell, colNumber) => {
-      if (colNumber <= 7) {
+      if (colNumber <= 9) {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
@@ -197,7 +203,7 @@ export async function exportLedgerToExcelProfessional(
           right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
         };
 
-        // Align amount to right
+        // Align amount to right with color
         if (colNumber === 6) {
           cell.alignment = { horizontal: 'right' };
           cell.font = {
@@ -206,8 +212,22 @@ export async function exportLedgerToExcelProfessional(
           };
         }
 
+        // Align discount and writeoff to right with special colors
+        if (colNumber === 7) {
+          cell.alignment = { horizontal: 'right' };
+          if (entry.totalDiscount && entry.totalDiscount > 0) {
+            cell.font = { color: { argb: 'FF2563EB' } }; // Blue for discounts
+          }
+        }
+        if (colNumber === 8) {
+          cell.alignment = { horizontal: 'right' };
+          if (entry.writeoffAmount && entry.writeoffAmount > 0) {
+            cell.font = { color: { argb: 'FFD97706' } }; // Amber for writeoffs
+          }
+        }
+
         // Center type and status
-        if (colNumber === 5 || colNumber === 7) {
+        if (colNumber === 5 || colNumber === 9) {
           cell.alignment = { horizontal: 'center' };
         }
       }
@@ -216,10 +236,20 @@ export async function exportLedgerToExcelProfessional(
   });
 
   // === TOTALS ROW ===
+  // Calculate total discounts and writeoffs
+  const totalDiscounts = entries.reduce((sum, e) => safeAdd(sum, e.totalDiscount || 0), 0);
+  const totalWriteoffs = entries.reduce((sum, e) => safeAdd(sum, e.writeoffAmount || 0), 0);
+
   const totalsRow = worksheet.getRow(rowNum);
-  totalsRow.values = ['TOTALS', '', '', '', '', formatNumber(roundCurrency(totalIncome - totalExpenses), 2), ''];
+  totalsRow.values = [
+    'TOTALS', '', '', '', '',
+    formatNumber(roundCurrency(totalIncome - totalExpenses), 2),
+    totalDiscounts > 0 ? formatNumber(totalDiscounts, 2) : '-',
+    totalWriteoffs > 0 ? formatNumber(totalWriteoffs, 2) : '-',
+    ''
+  ];
   totalsRow.eachCell((cell, colNumber) => {
-    if (colNumber <= 7) {
+    if (colNumber <= 9) {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
@@ -232,7 +262,7 @@ export async function exportLedgerToExcelProfessional(
         left: { style: 'medium', color: { argb: 'FF922B21' } },
         right: { style: 'medium', color: { argb: 'FF922B21' } }
       };
-      if (colNumber === 6) {
+      if (colNumber === 6 || colNumber === 7 || colNumber === 8) {
         cell.alignment = { horizontal: 'right' };
       }
     }
@@ -241,7 +271,7 @@ export async function exportLedgerToExcelProfessional(
   rowNum += 2;
 
   // === FOOTER ===
-  worksheet.mergeCells(`A${rowNum}:G${rowNum}`);
+  worksheet.mergeCells(`A${rowNum}:I${rowNum}`);
   const footerCell = worksheet.getCell(`A${rowNum}`);
   footerCell.value = 'Generated by FactoryFlow - Factory Management System';
   footerCell.font = { size: 9, color: { argb: 'FF9CA3AF' }, italic: true };
