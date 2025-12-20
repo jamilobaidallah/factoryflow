@@ -54,6 +54,10 @@ import {
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
+import {
+  calculatePaymentStatus,
+  calculateRemainingBalance,
+} from "@/lib/arap-utils";
 
 // Import types
 import type {
@@ -904,43 +908,81 @@ export class LedgerService {
 
   /**
    * Add a quick payment (from QuickPayDialog)
+   * Supports optional settlement discount
    */
   async addQuickPayment(data: QuickPaymentData): Promise<ServiceResult> {
     try {
-      if (data.isARAPEntry && data.amount > data.remainingBalance) {
+      const discountAmount = data.discountAmount || 0;
+      const totalSettlement = safeAdd(data.amount, discountAmount);
+
+      // Validate: payment + discount cannot exceed remaining balance
+      if (data.isARAPEntry && totalSettlement > data.remainingBalance) {
         return {
           success: false,
-          error: `المبلغ المتبقي هو ${roundCurrency(data.remainingBalance).toFixed(2)} دينار فقط`,
+          error: `المجموع (${roundCurrency(totalSettlement).toFixed(2)}) أكبر من المتبقي (${roundCurrency(data.remainingBalance).toFixed(2)})`,
         };
       }
 
       const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
       const batch = writeBatch(firestore);
 
-      const paymentDocRef = doc(this.paymentsRef);
-      batch.set(paymentDocRef, {
-        clientName: data.associatedParty || "غير محدد",
-        amount: data.amount,
-        type: paymentType,
-        linkedTransactionId: data.entryTransactionId,
-        date: data.date || new Date(),
-        notes: `دفعة جزئية - ${data.entryDescription}`,
-        category: data.entryCategory,
-        subCategory: data.entrySubCategory,
-        createdAt: new Date(),
-      });
+      // Create payment record (only if there's actual cash payment)
+      if (data.amount > 0) {
+        const paymentDocRef = doc(this.paymentsRef);
+        const paymentData: Record<string, unknown> = {
+          clientName: data.associatedParty || "غير محدد",
+          amount: data.amount,
+          type: paymentType,
+          linkedTransactionId: data.entryTransactionId,
+          date: data.date || new Date(),
+          notes: discountAmount > 0
+            ? `دفعة مع خصم - ${data.entryDescription}`
+            : `دفعة جزئية - ${data.entryDescription}`,
+          category: data.entryCategory,
+          subCategory: data.entrySubCategory,
+          createdAt: new Date(),
+        };
 
+        // Add discount fields to payment if discount was given
+        if (discountAmount > 0) {
+          paymentData.discountAmount = discountAmount;
+          paymentData.discountReason = data.discountReason;
+          paymentData.isSettlementDiscount = true;
+        }
+
+        batch.set(paymentDocRef, paymentData);
+      }
+
+      // Calculate new totals using arap-utils functions
       const newTotalPaid = safeAdd(data.totalPaid, data.amount);
-      const newRemainingBalance = safeSubtract(data.entryAmount, newTotalPaid);
-      const newStatus: "paid" | "unpaid" | "partial" =
-        newRemainingBalance === 0 ? "paid" : newRemainingBalance < data.entryAmount ? "partial" : "unpaid";
+      const newTotalDiscount = safeAdd(data.totalDiscount || 0, discountAmount);
+      const newRemainingBalance = calculateRemainingBalance(
+        data.entryAmount,
+        newTotalPaid,
+        newTotalDiscount,
+        0 // writeoffAmount
+      );
+      const newStatus = calculatePaymentStatus(
+        newTotalPaid,
+        data.entryAmount,
+        newTotalDiscount,
+        0 // writeoffAmount
+      );
 
-      const entryRef = this.getLedgerDocRef(data.entryId);
-      batch.update(entryRef, {
+      // Build update object for ledger entry
+      const updateData: Record<string, unknown> = {
         totalPaid: newTotalPaid,
         remainingBalance: newRemainingBalance,
         paymentStatus: newStatus,
-      });
+      };
+
+      // Only update totalDiscount if there's a discount
+      if (discountAmount > 0 || (data.totalDiscount || 0) > 0) {
+        updateData.totalDiscount = newTotalDiscount;
+      }
+
+      const entryRef = this.getLedgerDocRef(data.entryId);
+      batch.update(entryRef, updateData);
 
       await batch.commit();
       return { success: true };

@@ -69,9 +69,13 @@ export interface QuickPaymentData {
   entrySubCategory: string;
   associatedParty: string;
   totalPaid: number;
+  totalDiscount?: number;
   remainingBalance: number;
   isARAPEntry: boolean;
   date?: Date;
+  // Settlement discount fields
+  discountAmount?: number;
+  discountReason?: string;
 }
 
 // ============================================

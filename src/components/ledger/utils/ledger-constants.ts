@@ -20,6 +20,13 @@ export interface LedgerEntry {
     remainingBalance?: number;
     paymentStatus?: "paid" | "unpaid" | "partial";
     isARAPEntry?: boolean;
+    // Settlement Discount Fields
+    totalDiscount?: number;           // Sum of all discounts given (خصم تسوية)
+    // Bad Debt Write-off Fields
+    writeoffAmount?: number;          // Amount written off as bad debt
+    writeoffReason?: string;          // Reason for writeoff (required)
+    writeoffDate?: Date;              // When written off
+    writeoffBy?: string;              // User who authorized (audit)
 }
 
 /**

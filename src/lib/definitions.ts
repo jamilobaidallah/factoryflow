@@ -34,6 +34,10 @@ export interface Payment {
   isEndorsement?: boolean;
   noCashMovement?: boolean;
   endorsementChequeId?: string;
+  // Settlement Discount Fields
+  discountAmount?: number;           // Discount given with THIS payment
+  discountReason?: string;           // "خصم سداد مبكر", "خصم تسوية"
+  isSettlementDiscount?: boolean;    // Flag for reporting
 }
 
 export interface InventoryItem {
@@ -227,12 +231,20 @@ export interface LedgerEntry {
   remainingBalance?: number;
   paymentStatus?: PaymentStatus;
   createdAt: Date | string;
+  // Settlement Discount Fields
+  totalDiscount?: number;           // Sum of all discounts given (خصم تسوية)
+  // Bad Debt Write-off Fields
+  writeoffAmount?: number;          // Amount written off as bad debt
+  writeoffReason?: string;          // Reason for writeoff (required)
+  writeoffDate?: Date | string;     // When written off
+  writeoffBy?: string;              // User who authorized (audit)
 }
 
 export interface ARAPUpdateResult {
   success: boolean;
   message: string;
   newTotalPaid?: number;
+  newTotalDiscount?: number;
   newRemainingBalance?: number;
   newStatus?: PaymentStatus;
 }

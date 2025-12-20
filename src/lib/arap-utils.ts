@@ -42,17 +42,43 @@ const ERRORS = {
 // ============================================================================
 
 /**
- * Calculate the payment status based on total paid and transaction amount
+ * Calculate the payment status based on total paid, discounts, writeoffs, and transaction amount
+ *
+ * The effective settled amount includes:
+ * - totalPaid: Actual cash/cheque payments received
+ * - totalDiscount: Settlement discounts given (خصم تسوية)
+ * - writeoffAmount: Bad debt written off (ديون معدومة)
+ *
+ * @param totalPaid - Sum of all payment amounts
+ * @param transactionAmount - Original invoice/transaction amount
+ * @param totalDiscount - Sum of all discounts given (default: 0)
+ * @param writeoffAmount - Amount written off as bad debt (default: 0)
  */
 export function calculatePaymentStatus(
   totalPaid: number,
-  transactionAmount: number
+  transactionAmount: number,
+  totalDiscount: number = 0,
+  writeoffAmount: number = 0
 ): PaymentStatus {
-  const remaining = safeSubtract(transactionAmount, totalPaid);
+  const effectiveSettled = safeAdd(safeAdd(totalPaid, totalDiscount), writeoffAmount);
+  const remaining = safeSubtract(transactionAmount, effectiveSettled);
 
   if (remaining <= 0) return PAYMENT_STATUSES.PAID;
-  if (totalPaid > 0) return PAYMENT_STATUSES.PARTIAL;
+  if (effectiveSettled > 0) return PAYMENT_STATUSES.PARTIAL;
   return PAYMENT_STATUSES.UNPAID;
+}
+
+/**
+ * Calculate the remaining balance considering payments, discounts, and writeoffs
+ */
+export function calculateRemainingBalance(
+  transactionAmount: number,
+  totalPaid: number,
+  totalDiscount: number = 0,
+  writeoffAmount: number = 0
+): number {
+  const effectiveSettled = safeAdd(safeAdd(totalPaid, totalDiscount), writeoffAmount);
+  return safeSubtract(transactionAmount, effectiveSettled);
 }
 
 /**
@@ -100,43 +126,92 @@ export function isMultiAllocationPayment(payment: {
 interface LedgerData {
   isARAPEntry?: boolean;
   totalPaid?: number;
+  totalDiscount?: number;
+  writeoffAmount?: number;
   amount?: number;
 }
 
+interface ARAPPaymentInput {
+  paymentAmount: number;
+  discountAmount?: number;
+}
+
+interface ARAPValuesResult {
+  newTotalPaid: number;
+  newTotalDiscount: number;
+  newRemainingBalance: number;
+  newStatus: PaymentStatus;
+}
+
 /**
- * Calculate new ARAP values after a payment change
+ * Calculate new ARAP values after a payment change (with optional discount)
+ *
+ * @param ledgerData - Current ledger entry data
+ * @param input - Payment amount and optional discount amount
+ * @param operation - 'add' for new payment, 'subtract' for reversal
  */
 function calculateNewARAPValues(
   ledgerData: LedgerData,
-  paymentAmount: number,
+  input: ARAPPaymentInput | number,
   operation: 'add' | 'subtract'
-): { newTotalPaid: number; newRemainingBalance: number; newStatus: PaymentStatus } {
+): ARAPValuesResult {
+  // Support both old signature (number) and new signature (object) for backward compatibility
+  const paymentAmount = typeof input === 'number' ? input : input.paymentAmount;
+  const discountAmount = typeof input === 'number' ? 0 : (input.discountAmount || 0);
+
   const currentTotalPaid = ledgerData.totalPaid || 0;
+  const currentTotalDiscount = ledgerData.totalDiscount || 0;
+  const writeoffAmount = ledgerData.writeoffAmount || 0;
   const transactionAmount = ledgerData.amount || 0;
 
+  // Calculate new payment total
   const rawNewTotalPaid = operation === 'add'
     ? safeAdd(currentTotalPaid, paymentAmount)
     : safeSubtract(currentTotalPaid, paymentAmount);
 
-  // Fail fast on negative totalPaid - this indicates data corruption (e.g., double-reversal)
+  // Calculate new discount total
+  const rawNewTotalDiscount = operation === 'add'
+    ? safeAdd(currentTotalDiscount, discountAmount)
+    : safeSubtract(currentTotalDiscount, discountAmount);
+
+  // Fail fast on negative values - this indicates data corruption (e.g., double-reversal)
   const newTotalPaid = assertNonNegative(rawNewTotalPaid, {
     operation: 'calculateARAPPayment',
     entityType: 'payment'
   });
 
-  const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-  const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
+  const newTotalDiscount = assertNonNegative(rawNewTotalDiscount, {
+    operation: 'calculateARAPDiscount',
+    entityType: 'discount'
+  });
 
-  return { newTotalPaid, newRemainingBalance, newStatus };
+  // Calculate remaining balance considering all settlements
+  const newRemainingBalance = calculateRemainingBalance(
+    transactionAmount,
+    newTotalPaid,
+    newTotalDiscount,
+    writeoffAmount
+  );
+
+  // Calculate status considering all settlements
+  const newStatus = calculatePaymentStatus(
+    newTotalPaid,
+    transactionAmount,
+    newTotalDiscount,
+    writeoffAmount
+  );
+
+  return { newTotalPaid, newTotalDiscount, newRemainingBalance, newStatus };
 }
 
 /**
  * Execute atomic ARAP update within a Firestore transaction
+ * Supports both payment-only and payment+discount scenarios
  */
 async function executeARAPTransaction(
   transaction: Transaction,
   ledgerDocRef: DocumentReference,
-  paymentAmount: number,
+  input: ARAPPaymentInput | number,
   operation: 'add' | 'subtract',
   successMessage: string
 ): Promise<ARAPUpdateResult> {
@@ -152,22 +227,32 @@ async function executeARAPTransaction(
     throw new Error(ERRORS.ARAP_NOT_ENABLED);
   }
 
-  const { newTotalPaid, newRemainingBalance, newStatus } = calculateNewARAPValues(
+  const { newTotalPaid, newTotalDiscount, newRemainingBalance, newStatus } = calculateNewARAPValues(
     ledgerData,
-    paymentAmount,
+    input,
     operation
   );
 
-  transaction.update(ledgerDocRef, {
+  // Build update object - only include totalDiscount if there's a discount
+  const updateData: Record<string, unknown> = {
     totalPaid: newTotalPaid,
     remainingBalance: newRemainingBalance,
     paymentStatus: newStatus,
-  });
+  };
+
+  // Only update totalDiscount if it changed (to avoid unnecessary writes)
+  const discountAmount = typeof input === 'number' ? 0 : (input.discountAmount || 0);
+  if (discountAmount > 0 || (ledgerData.totalDiscount || 0) > 0) {
+    updateData.totalDiscount = newTotalDiscount;
+  }
+
+  transaction.update(ledgerDocRef, updateData);
 
   return {
     success: true,
     message: successMessage,
     newTotalPaid,
+    newTotalDiscount,
     newRemainingBalance,
     newStatus,
   };

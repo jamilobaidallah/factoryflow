@@ -297,6 +297,16 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Other miscellaneous income'
   ),
 
+  // Contra-Revenue - خصومات المبيعات
+  defineAccount(
+    ACCOUNT_CODES.SALES_DISCOUNT,
+    'Sales Discount',
+    'خصم المبيعات',
+    'revenue', // Contra-revenue: reduces net revenue, but stays in revenue range
+    undefined,
+    'Settlement discounts given to customers (contra-revenue)'
+  ),
+
   // ═══════════════════════════════════════════════════════════════════════════
   // EXPENSES (5000-5999) - المصروفات
   // ═══════════════════════════════════════════════════════════════════════════
@@ -333,6 +343,16 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'expense',
     ACCOUNT_CODES.COST_OF_GOODS_SOLD,
     'Cost of finished goods purchased for resale'
+  ),
+
+  // Contra-Expense - خصومات المشتريات
+  defineAccount(
+    ACCOUNT_CODES.PURCHASE_DISCOUNT,
+    'Purchase Discount',
+    'خصم المشتريات',
+    'expense', // Contra-expense: reduces net expenses, but stays in expense range
+    undefined,
+    'Settlement discounts received from suppliers (contra-expense)'
   ),
 
   // Operating Expenses - مصاريف تشغيلية
@@ -433,6 +453,16 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'expense',
     ACCOUNT_CODES.OTHER_EXPENSES,
     'Other miscellaneous expenses'
+  ),
+
+  // Bad Debt - ديون معدومة
+  defineAccount(
+    ACCOUNT_CODES.BAD_DEBT_EXPENSE,
+    'Bad Debt Expense',
+    'مصروف ديون معدومة',
+    'expense',
+    undefined,
+    'Uncollectible accounts receivable written off'
   ),
 ];
 
