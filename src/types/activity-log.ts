@@ -11,7 +11,8 @@ export type ActivityAction =
   | 'approve'
   | 'reject'
   | 'role_change'
-  | 'remove_access';
+  | 'remove_access'
+  | 'write_off';
 
 /** الوحدات/الأقسام */
 export type ActivityModule =
@@ -36,6 +37,7 @@ export const ACTION_LABELS: Record<ActivityAction, string> = {
   reject: 'رفض طلب',
   role_change: 'تغيير دور',
   remove_access: 'إزالة وصول',
+  write_off: 'شطب دين معدوم',
 };
 
 /** تسميات الوحدات بالعربية */

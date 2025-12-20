@@ -252,6 +252,7 @@ function ActionBadge({ action }: { action: ActivityAction }) {
     reject: "bg-orange-100 text-orange-700",
     role_change: "bg-purple-100 text-purple-700",
     remove_access: "bg-rose-100 text-rose-700",
+    write_off: "bg-amber-100 text-amber-700",
   };
 
   return (

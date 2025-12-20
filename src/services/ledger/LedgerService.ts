@@ -65,6 +65,7 @@ import type {
   DeleteResult,
   CreateLedgerEntryOptions,
   QuickPaymentData,
+  WriteOffData,
   InvoiceData,
   InventoryUpdateResult,
   HandlerContext,
@@ -989,6 +990,103 @@ export class LedgerService {
     } catch (error) {
       const { message, type } = handleError(error);
       console.error("Error adding quick payment:", error);
+      return {
+        success: false,
+        error: message,
+        errorType: type,
+      };
+    }
+  }
+
+  /**
+   * Write off bad debt (ديون معدومة)
+   * Records uncollectible amount and updates ledger entry
+   */
+  async writeOffBadDebt(data: WriteOffData): Promise<ServiceResult> {
+    try {
+      // Validate: writeoff cannot exceed remaining balance
+      if (data.writeoffAmount > data.remainingBalance) {
+        return {
+          success: false,
+          error: `المبلغ للشطب (${roundCurrency(data.writeoffAmount).toFixed(2)}) أكبر من المتبقي (${roundCurrency(data.remainingBalance).toFixed(2)})`,
+        };
+      }
+
+      // Validate: writeoff amount must be positive
+      if (data.writeoffAmount <= 0) {
+        return {
+          success: false,
+          error: "مبلغ الشطب يجب أن يكون أكبر من صفر",
+        };
+      }
+
+      // Validate: reason is required
+      if (!data.writeoffReason || data.writeoffReason.trim() === '') {
+        return {
+          success: false,
+          error: "سبب الشطب مطلوب",
+        };
+      }
+
+      const batch = writeBatch(firestore);
+
+      // Calculate new totals
+      const newWriteoffAmount = safeAdd(data.currentWriteoff, data.writeoffAmount);
+      const newRemainingBalance = calculateRemainingBalance(
+        data.entryAmount,
+        data.totalPaid,
+        data.totalDiscount,
+        newWriteoffAmount
+      );
+      const newStatus = calculatePaymentStatus(
+        data.totalPaid,
+        data.entryAmount,
+        data.totalDiscount,
+        newWriteoffAmount
+      );
+
+      // Update ledger entry with writeoff
+      const entryRef = this.getLedgerDocRef(data.entryId);
+      batch.update(entryRef, {
+        writeoffAmount: newWriteoffAmount,
+        writeoffReason: data.writeoffReason,
+        writeoffDate: new Date(),
+        writeoffBy: data.writeoffBy,
+        remainingBalance: newRemainingBalance,
+        paymentStatus: newStatus,
+      });
+
+      // TODO: Add journal entry for bad debt expense when journal service is extended
+      // DR: Bad Debt Expense (5600)
+      // CR: Accounts Receivable (1200)
+
+      await batch.commit();
+
+      // Log the writeoff activity
+      try {
+        logActivity(this.userId, {
+          userId: this.userId,
+          userEmail: this.userEmail,
+          action: 'write_off',
+          module: 'ledger',
+          targetId: data.entryId,
+          description: `شطب دين معدوم: ${data.writeoffAmount.toFixed(2)} دينار من ${data.associatedParty}`,
+          metadata: {
+            writeoffAmount: data.writeoffAmount,
+            writeoffReason: data.writeoffReason,
+            associatedParty: data.associatedParty,
+            transactionId: data.entryTransactionId,
+            newStatus,
+          },
+        });
+      } catch (logError) {
+        console.error("Failed to log writeoff activity:", logError);
+      }
+
+      return { success: true };
+    } catch (error) {
+      const { message, type } = handleError(error);
+      console.error("Error writing off bad debt:", error);
       return {
         success: false,
         error: message,

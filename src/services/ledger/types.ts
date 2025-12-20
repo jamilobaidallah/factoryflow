@@ -78,6 +78,22 @@ export interface QuickPaymentData {
   discountReason?: string;
 }
 
+export interface WriteOffData {
+  entryId: string;
+  entryTransactionId: string;
+  entryAmount: number;
+  entryType: string;
+  entryDescription: string;
+  associatedParty: string;
+  totalPaid: number;
+  totalDiscount: number;
+  currentWriteoff: number;
+  remainingBalance: number;
+  writeoffAmount: number;
+  writeoffReason: string;
+  writeoffBy: string;
+}
+
 // ============================================
 // Invoice Types
 // ============================================
