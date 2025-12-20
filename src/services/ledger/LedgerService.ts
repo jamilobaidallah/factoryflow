@@ -625,16 +625,20 @@ export class LedgerService {
 
   /**
    * Update an existing ledger entry
+   * Also syncs associated party changes to linked payments
    */
   async updateLedgerEntry(
     entryId: string,
-    formData: LedgerFormData
+    formData: LedgerFormData,
+    existingTransactionId?: string
   ): Promise<ServiceResult> {
     try {
       const entryType = getCategoryType(formData.category, formData.subCategory);
       const entryRef = this.getLedgerDocRef(entryId);
+      const batch = writeBatch(firestore);
 
-      await updateDoc(entryRef, {
+      // Update the ledger entry
+      batch.update(entryRef, {
         description: formData.description,
         type: entryType,
         amount: parseFloat(formData.amount),
@@ -646,6 +650,36 @@ export class LedgerService {
         reference: formData.reference,
         notes: formData.notes,
       });
+
+      // If there's a transaction ID, sync associated party to linked payments
+      if (existingTransactionId && formData.associatedParty) {
+        const paymentsQuery = query(
+          this.paymentsRef,
+          where("linkedTransactionId", "==", existingTransactionId)
+        );
+        const paymentsSnapshot = await getDocs(paymentsQuery);
+
+        paymentsSnapshot.forEach((paymentDoc) => {
+          batch.update(paymentDoc.ref, {
+            clientName: formData.associatedParty,
+          });
+        });
+
+        // Also sync to linked cheques
+        const chequesQuery = query(
+          this.chequesRef,
+          where("linkedTransactionId", "==", existingTransactionId)
+        );
+        const chequesSnapshot = await getDocs(chequesQuery);
+
+        chequesSnapshot.forEach((chequeDoc) => {
+          batch.update(chequeDoc.ref, {
+            clientName: formData.associatedParty,
+          });
+        });
+      }
+
+      await batch.commit();
 
       // Log activity (fire and forget - don't block the main operation)
       logActivity(this.userId, {

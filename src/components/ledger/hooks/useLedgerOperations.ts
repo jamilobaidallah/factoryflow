@@ -51,8 +51,12 @@ export function useLedgerOperations() {
 
     try {
       if (editingEntry) {
-        // Update existing entry
-        const result = await service.updateLedgerEntry(editingEntry.id, formData);
+        // Update existing entry - pass transactionId to sync associated party to linked records
+        const result = await service.updateLedgerEntry(
+          editingEntry.id,
+          formData,
+          editingEntry.transactionId
+        );
 
         if (result.success) {
           toast({
