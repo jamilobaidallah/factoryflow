@@ -43,6 +43,7 @@ export default function DashboardPage() {
     cashBalance,
     totalRevenue,
     totalExpenses,
+    totalDiscounts,
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,
@@ -78,9 +79,10 @@ export default function DashboardPage() {
   }, [cashBalance]);
 
   // Monthly/Total data for summary cards
+  // Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
   const summaryData = useMemo<DashboardSummaryData>(() => {
     if (summaryView === "total") {
-      const profit = totalRevenue - totalExpenses;
+      const profit = totalRevenue - totalExpenses - totalDiscounts;
       return {
         revenue: totalRevenue,
         expenses: totalExpenses,
@@ -88,8 +90,8 @@ export default function DashboardPage() {
         isLoss: profit < 0,
       };
     } else {
-      const monthData = monthlyDataMap.get(selectedMonth) || { revenue: 0, expenses: 0 };
-      const profit = monthData.revenue - monthData.expenses;
+      const monthData = monthlyDataMap.get(selectedMonth) || { revenue: 0, expenses: 0, discounts: 0 };
+      const profit = monthData.revenue - monthData.expenses - (monthData.discounts || 0);
       return {
         revenue: monthData.revenue,
         expenses: monthData.expenses,
@@ -97,7 +99,7 @@ export default function DashboardPage() {
         isLoss: profit < 0,
       };
     }
-  }, [summaryView, selectedMonth, totalRevenue, totalExpenses, monthlyDataMap]);
+  }, [summaryView, selectedMonth, totalRevenue, totalExpenses, totalDiscounts, monthlyDataMap]);
 
   // Chart data for bar chart
   const chartData = useMemo<ChartDataPoint[]>(() => {

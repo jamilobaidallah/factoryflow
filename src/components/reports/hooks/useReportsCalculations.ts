@@ -21,6 +21,8 @@ interface LedgerEntry {
   remainingBalance?: number;
   paymentStatus?: "paid" | "unpaid" | "partial";
   isARAPEntry?: boolean;
+  totalDiscount?: number;
+  writeoffAmount?: number;
 }
 
 interface Payment {
@@ -166,9 +168,11 @@ export function useReportsCalculations({
   }, [ledgerEntries]);
 
   // Calculate Income Statement (EXCLUDING owner equity)
+  // Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
   const incomeStatement = useMemo((): IncomeStatementData => {
     let totalRevenue = 0;
     let totalExpenses = 0;
+    let totalDiscounts = 0;
     const revenueByCategory: { [key: string]: number } = {};
     const expensesByCategory: { [key: string]: number } = {};
 
@@ -187,6 +191,10 @@ export function useReportsCalculations({
         totalRevenue = safeAdd(totalRevenue, entry.amount);
         revenueByCategory[entry.category] =
           safeAdd(revenueByCategory[entry.category] || 0, entry.amount);
+        // Track discounts on income entries (contra-revenue)
+        if (entry.totalDiscount) {
+          totalDiscounts = safeAdd(totalDiscounts, entry.totalDiscount);
+        }
       } else if (entry.type === "مصروف") {
         totalExpenses = safeAdd(totalExpenses, entry.amount);
         expensesByCategory[entry.category] =
@@ -194,7 +202,8 @@ export function useReportsCalculations({
       }
     });
 
-    const netProfit = safeSubtract(totalRevenue, totalExpenses);
+    // Net profit = Revenue - Expenses - Discounts
+    const netProfit = safeSubtract(safeSubtract(totalRevenue, totalExpenses), totalDiscounts);
     const profitMargin = totalRevenue > 0 ? safeMultiply(safeDivide(netProfit, totalRevenue), 100) : 0;
 
     return {

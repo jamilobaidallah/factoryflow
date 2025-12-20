@@ -16,6 +16,7 @@ export interface DashboardLedgerEntry {
   paymentStatus?: "paid" | "unpaid" | "partial";
   remainingBalance?: number;
   totalPaid?: number;
+  totalDiscount?: number;
   isARAPEntry?: boolean;
 }
 
@@ -31,6 +32,7 @@ export interface DashboardSummaryData {
 export interface MonthlyFinancialData {
   revenue: number;
   expenses: number;
+  discounts?: number;
 }
 
 /** Chart bar data point */
@@ -141,6 +143,7 @@ export interface UseDashboardDataReturn {
   // Revenue & Expenses
   totalRevenue: number;
   totalExpenses: number;
+  totalDiscounts: number;
   // Monthly data
   monthlyDataMap: Map<string, MonthlyFinancialData>;
   // Expense categories

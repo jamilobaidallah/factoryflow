@@ -19,6 +19,7 @@ interface LedgerEntry {
   amount: number;
   category: string;
   date: Date;
+  totalDiscount?: number;
 }
 
 interface UseReportsComparisonProps {
@@ -128,6 +129,7 @@ function filterEntriesByDateRange(
 
 /**
  * Calculate period data (revenue, expenses, profit, margin)
+ * Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
  */
 function calculatePeriodData(entries: LedgerEntry[]): {
   revenue: number;
@@ -137,6 +139,7 @@ function calculatePeriodData(entries: LedgerEntry[]): {
 } {
   let revenue = 0;
   let expenses = 0;
+  let discounts = 0;
 
   entries.forEach((entry) => {
     // Exclude owner equity transactions
@@ -146,12 +149,15 @@ function calculatePeriodData(entries: LedgerEntry[]): {
 
     if (entry.type === 'دخل') {
       revenue += entry.amount;
+      // Track discounts on income entries (contra-revenue)
+      discounts += entry.totalDiscount || 0;
     } else if (entry.type === 'مصروف') {
       expenses += entry.amount;
     }
   });
 
-  const profit = safeSubtract(revenue, expenses);
+  // Net profit = Revenue - Expenses - Discounts
+  const profit = safeSubtract(safeSubtract(revenue, expenses), discounts);
   const margin = revenue > 0 ? safeMultiply(safeDivide(profit, revenue), 100) : 0;
 
   return { revenue, expenses, profit, margin };
