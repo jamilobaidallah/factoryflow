@@ -96,7 +96,7 @@ interface Cheque {
   id: string;
   chequeNumber: string;
   amount: number;
-  chequeDate: Date;
+  issueDate: Date;
   dueDate?: Date;
   bankName: string;
   status: string;
@@ -304,12 +304,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           chequesList.push({
             id: doc.id,
             ...data,
-            chequeDate: data.chequeDate?.toDate?.() || new Date(),
-            dueDate: data.dueDate?.toDate?.() || data.chequeDate?.toDate?.() || new Date(),
+            issueDate: data.issueDate?.toDate?.() || new Date(),
+            dueDate: data.dueDate?.toDate?.() || data.issueDate?.toDate?.() || new Date(),
           } as Cheque);
         });
-        // Sort by date in JavaScript
-        chequesList.sort((a, b) => b.chequeDate.getTime() - a.chequeDate.getTime());
+        // Sort by issue date in JavaScript
+        chequesList.sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime());
         setCheques(chequesList);
       },
       (error) => {
@@ -369,7 +369,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       .map((c) => ({
         chequeNumber: c.chequeNumber,
         bankName: c.bankName,
-        dueDate: c.dueDate || c.chequeDate,
+        dueDate: c.dueDate || c.issueDate,
         amount: c.amount,
       }));
 
@@ -474,7 +474,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 .map((c) => ({
                   chequeNumber: c.chequeNumber,
                   bankName: c.bankName,
-                  dueDate: c.dueDate || c.chequeDate,
+                  dueDate: c.dueDate || c.issueDate,
                   amount: c.amount,
                 }));
 
@@ -743,7 +743,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>رقم الشيك</TableHead>
-                    <TableHead>تاريخ الشيك</TableHead>
+                    <TableHead>تاريخ الإصدار</TableHead>
                     <TableHead>البنك</TableHead>
                     <TableHead>النوع</TableHead>
                     <TableHead>الحالة</TableHead>
@@ -761,7 +761,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     cheques.map((cheque) => (
                       <TableRow key={cheque.id}>
                         <TableCell>{cheque.chequeNumber}</TableCell>
-                        <TableCell>{formatShortDate(cheque.chequeDate)}</TableCell>
+                        <TableCell>{formatShortDate(cheque.issueDate)}</TableCell>
                         <TableCell>{cheque.bankName}</TableCell>
                         <TableCell>{cheque.type}</TableCell>
                         <TableCell>

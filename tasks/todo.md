@@ -1,60 +1,61 @@
-# Task: Fix Party Balance Display in Ledger Dialog
+# Task: Fix Client Cheques Issue Date Display
 
-**Branch:** `fix/party-balance-display`
-**Date:** December 19, 2025
+**Branch:** `fix/client-cheques-issue-date`
+**Date:** December 20, 2025
 
 ---
 
 ## Problem
 
-In the ledger entry dialog, the party dropdown shows incorrect balance labels:
-- موسى shows "لنا عليه: 720.00" (he owes us 720)
-- But his actual account statement shows balance is 0.00 (fully paid)
-- Even the direction is wrong - we owed him, not the other way around
+In the client detail page cheques tab, the "تاريخ الشيك" column was showing the wrong date:
+- It was displaying the date when the transaction was entered (from `chequeDate` field)
+- User wanted to see the actual issue date (`issueDate`) when the cheque was issued
 
 ---
 
 ## Root Cause
 
-**Issue 1: Swapped labels** in `StepPartyARAP.tsx`
-- When balance > 0 (they owe us): was showing "له علينا" (we owe him) - WRONG
-- When balance < 0 (we owe them): was showing "لنا عليه" (he owes us) - WRONG
-
-**Issue 2: Stale balance data** (separate investigation needed)
-- The dropdown shows 720 but the entry is marked as paid
-- This may be a data integrity issue from an old payment that didn't update `remainingBalance`
+The client-detail-page.tsx had a local `Cheque` interface that used `chequeDate` instead of `issueDate`:
+- The official Cheque type in `src/components/cheques/types/cheques.ts` uses `issueDate`
+- But the local interface in client-detail-page.tsx was using a different field name `chequeDate`
 
 ---
 
 ## Solution
 
-### Fix 1: Swap the labels (this PR)
-Changed line 168 from:
-```tsx
-{client.balance && client.balance > 0 ? 'له علينا: ' : 'لنا عليه: '}
-```
-To:
-```tsx
-{client.balance && client.balance > 0 ? 'لنا عليه: ' : 'له علينا: '}
-```
+Changed all references from `chequeDate` to `issueDate`:
+
+1. Updated the local `Cheque` interface (line 99)
+2. Updated data loading to read `issueDate` from Firestore (line 307)
+3. Updated the sorting to use `issueDate` (line 312)
+4. Updated the table cell to display `issueDate` (line 764)
+5. Updated the column header from "تاريخ الشيك" to "تاريخ الإصدار" (line 746)
+6. Updated fallback references for `dueDate` (lines 372, 477)
 
 ---
 
 ## Todo Items
 
-- [x] Fix swapped balance labels in `StepPartyARAP.tsx`
+- [x] Update Cheque interface to use issueDate instead of chequeDate
+- [x] Update data loading to read issueDate field
+- [x] Update cheques table to display issueDate
 - [x] Test TypeScript compilation
 
 ---
 
 ## Files Modified
 
-1. `src/components/ledger/steps/StepPartyARAP.tsx`
-   - Line 168: Swapped "له علينا" and "لنا عليه" labels
-   - Updated comments to clarify positive/negative balance meanings
+1. `src/components/clients/client-detail-page.tsx`
+   - Line 99: Changed interface field from `chequeDate` to `issueDate`
+   - Line 307: Changed data loading from `data.chequeDate` to `data.issueDate`
+   - Line 312: Changed sort to use `issueDate`
+   - Line 746: Changed column header to "تاريخ الإصدار"
+   - Line 764: Changed display from `cheque.chequeDate` to `cheque.issueDate`
+   - Lines 372, 477: Changed fallback from `c.chequeDate` to `c.issueDate`
 
 ---
 
 ## Test Results
 
 - TypeScript: 0 errors
+
