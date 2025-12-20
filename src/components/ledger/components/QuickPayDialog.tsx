@@ -345,7 +345,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
               إلغاء
             </Button>
             <Button type="submit" disabled={loading || isOverpaying}>
-              {loading ? "جاري الإضافة..." : willFullySettle ? "تسوية كاملة" : "إضافة الدفعة"}
+              {loading ? "جاري الإضافة..." : (entry && willFullySettle) ? "تسوية كاملة" : "إضافة الدفعة"}
             </Button>
           </DialogFooter>
         </form>

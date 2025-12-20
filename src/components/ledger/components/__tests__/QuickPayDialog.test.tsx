@@ -210,7 +210,7 @@ describe('QuickPayDialog', () => {
       expect(input.value).toBe('500');
     });
 
-    it('should show maximum amount hint', () => {
+    it('should show remaining balance', () => {
       render(
         <QuickPayDialog
           isOpen={true}
@@ -220,12 +220,12 @@ describe('QuickPayDialog', () => {
         />
       );
 
-      expect(screen.getByText(/الحد الأقصى: 1000.00 دينار/)).toBeInTheDocument();
+      expect(screen.getByText(/المبلغ المتبقي:/)).toBeInTheDocument();
     });
   });
 
   describe('Form Validation', () => {
-    it('should show error for empty amount', async () => {
+    it('should show error for empty amount (treated as no payment)', async () => {
       render(
         <QuickPayDialog
           isOpen={true}
@@ -238,20 +238,20 @@ describe('QuickPayDialog', () => {
       const input = screen.getByLabelText('المبلغ المدفوع');
       const form = input.closest('form');
 
-      // Leave the input empty (or clear it) - parseFloat('') returns NaN
+      // Leave the input empty - parseFloat('') returns NaN, treated as 0
       fireEvent.change(input, { target: { value: '' } });
       fireEvent.submit(form!);
 
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'خطأ',
-          description: 'يرجى إدخال مبلغ صحيح',
+          description: 'يرجى إدخال مبلغ دفعة أو خصم',
           variant: 'destructive',
         });
       });
     });
 
-    it('should show error for negative amount', async () => {
+    it('should show error for negative amount (treated as no payment)', async () => {
       render(
         <QuickPayDialog
           isOpen={true}
@@ -262,21 +262,22 @@ describe('QuickPayDialog', () => {
       );
 
       const input = screen.getByLabelText('المبلغ المدفوع');
-      const submitButton = screen.getByText('إضافة الدفعة');
+      const form = input.closest('form');
 
+      // Negative amount is treated as 0, triggering "payment or discount required" error
       fireEvent.change(input, { target: { value: '-100' } });
-      fireEvent.click(submitButton);
+      fireEvent.submit(form!);
 
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'خطأ',
-          description: 'يرجى إدخال مبلغ صحيح',
+          description: 'يرجى إدخال مبلغ دفعة أو خصم',
           variant: 'destructive',
         });
       });
     });
 
-    it('should show error for zero amount', async () => {
+    it('should show error when payment and discount are both zero', async () => {
       render(
         <QuickPayDialog
           isOpen={true}
@@ -287,21 +288,21 @@ describe('QuickPayDialog', () => {
       );
 
       const input = screen.getByLabelText('المبلغ المدفوع');
-      const submitButton = screen.getByText('إضافة الدفعة');
+      const form = input.closest('form');
 
       fireEvent.change(input, { target: { value: '0' } });
-      fireEvent.click(submitButton);
+      fireEvent.submit(form!);
 
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'خطأ',
-          description: 'يرجى إدخال مبلغ صحيح',
+          description: 'يرجى إدخال مبلغ دفعة أو خصم',
           variant: 'destructive',
         });
       });
     });
 
-    it('should show error when amount exceeds remaining balance', async () => {
+    it('should disable submit button when amount exceeds remaining balance', async () => {
       render(
         <QuickPayDialog
           isOpen={true}
@@ -312,17 +313,13 @@ describe('QuickPayDialog', () => {
       );
 
       const input = screen.getByLabelText('المبلغ المدفوع');
-      const submitButton = screen.getByText('إضافة الدفعة');
 
+      // When amount exceeds remaining, button should be disabled
       fireEvent.change(input, { target: { value: '1500' } });
-      fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith({
-          title: 'خطأ في المبلغ',
-          description: 'المبلغ المتبقي هو 1000.00 دينار فقط',
-          variant: 'destructive',
-        });
+        const submitButton = screen.getByRole('button', { name: /إضافة الدفعة|تسوية كاملة/ });
+        expect(submitButton).toBeDisabled();
       });
     });
 

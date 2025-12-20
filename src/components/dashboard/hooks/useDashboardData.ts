@@ -132,8 +132,8 @@ export function useDashboardData(): UseDashboardDataReturn {
             // Non-AR/AP = instant settlement, full amount
             cashAmount = entry.amount;
           } else if (entry.paymentStatus === "paid") {
-            // Fully paid = full amount
-            cashAmount = entry.amount;
+            // Fully paid - use totalPaid (actual cash received, excludes discounts/writeoffs)
+            cashAmount = entry.totalPaid ?? entry.amount;
           } else if (entry.paymentStatus === "partial") {
             // Partial = only the paid portion
             cashAmount = entry.totalPaid || 0;

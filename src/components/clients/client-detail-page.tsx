@@ -143,6 +143,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [totalPaymentsReceived, setTotalPaymentsReceived] = useState(0);
   const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
   const [currentBalance, setCurrentBalance] = useState(0);
+  // Discounts and writeoffs from ledger entries
+  const [totalDiscounts, setTotalDiscounts] = useState(0);
+  const [totalWriteoffs, setTotalWriteoffs] = useState(0);
 
   // Modal state for transaction details
   const [selectedTransaction, setSelectedTransaction] = useState<StatementItem | null>(null);
@@ -203,6 +206,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         const entries: LedgerEntry[] = [];
         let sales = 0;
         let purchases = 0;
+        let discounts = 0;
+        let writeoffs = 0;
 
         snapshot.forEach((doc) => {
           const data = doc.data();
@@ -219,6 +224,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           } else if (entry.type === "مصروف") {
             purchases += entry.amount;
           }
+
+          // Track discounts and writeoffs (for balance calculation)
+          discounts += data.totalDiscount || 0;
+          writeoffs += data.writeoffAmount || 0;
         });
 
         // Sort by date in JavaScript instead of Firestore
@@ -227,6 +236,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         setLedgerEntries(entries);
         setTotalSales(sales);
         setTotalPurchases(purchases);
+        setTotalDiscounts(discounts);
+        setTotalWriteoffs(writeoffs);
       },
       (error) => {
         console.error("Error loading ledger entries:", error);
@@ -321,10 +332,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   }, [user, client]);
 
   // Calculate current balance
+  // Formula: balance = (sales - purchases) - (payments received - payments made) - discounts - writeoffs
+  // Discounts and writeoffs reduce what the client owes (like payments)
   useEffect(() => {
-    const balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade);
+    const balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade) - totalDiscounts - totalWriteoffs;
     setCurrentBalance(balance);
-  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade]);
+  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalDiscounts, totalWriteoffs]);
 
   // Export statement to Excel
   const exportStatement = async () => {
