@@ -40,6 +40,7 @@ describe('LedgerTable', () => {
   const mockOnEdit = jest.fn();
   const mockOnDelete = jest.fn();
   const mockOnQuickPay = jest.fn();
+  const mockOnWriteOff = jest.fn();
   const mockOnViewRelated = jest.fn();
   const mockOnClearFilters = jest.fn();
 
@@ -122,6 +123,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -136,6 +138,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
           isFiltered={true}
           onClearFilters={mockOnClearFilters}
@@ -153,6 +156,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
           isFiltered={true}
           onClearFilters={mockOnClearFilters}
@@ -170,6 +174,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -186,6 +191,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -208,6 +214,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -230,6 +237,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -249,6 +257,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -270,6 +279,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -288,6 +298,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -308,6 +319,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -325,6 +337,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -342,6 +355,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -358,6 +372,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -377,6 +392,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -394,6 +410,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -410,6 +427,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -427,6 +445,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -443,6 +462,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -459,6 +479,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -475,6 +496,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -498,6 +520,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -517,6 +540,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -535,6 +559,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -552,6 +577,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );
@@ -571,6 +597,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
           highlightedSubcategory="منتجات"
         />
@@ -590,6 +617,7 @@ describe('LedgerTable', () => {
           onEdit={mockOnEdit}
           onDelete={mockOnDelete}
           onQuickPay={mockOnQuickPay}
+          onWriteOff={mockOnWriteOff}
           onViewRelated={mockOnViewRelated}
         />
       );

@@ -35,6 +35,7 @@ export interface LedgerPageState {
     related: boolean;
     quickPay: boolean;
     quickInvoice: boolean;
+    writeOff: boolean;
   };
 
   // Selected/editing data
@@ -42,6 +43,7 @@ export interface LedgerPageState {
     editingEntry: LedgerEntry | null;
     selectedEntry: LedgerEntry | null;
     quickPayEntry: LedgerEntry | null;
+    writeOffEntry: LedgerEntry | null;
     pendingInvoiceData: { clientName: string; amount: number } | null;
   };
 
@@ -84,11 +86,13 @@ export const initialLedgerPageState: LedgerPageState = {
     related: false,
     quickPay: false,
     quickInvoice: false,
+    writeOff: false,
   },
   data: {
     editingEntry: null,
     selectedEntry: null,
     quickPayEntry: null,
+    writeOffEntry: null,
     pendingInvoiceData: null,
   },
   ui: {
@@ -129,6 +133,8 @@ export type LedgerPageAction =
   | { type: "CLOSE_QUICK_PAY_DIALOG" }
   | { type: "OPEN_QUICK_INVOICE_DIALOG"; payload: { clientName: string; amount: number } }
   | { type: "CLOSE_QUICK_INVOICE_DIALOG" }
+  | { type: "OPEN_WRITE_OFF_DIALOG"; payload: LedgerEntry }
+  | { type: "CLOSE_WRITE_OFF_DIALOG" }
 
   // Data actions
   | { type: "SET_EDITING_ENTRY"; payload: LedgerEntry | null }
@@ -227,6 +233,20 @@ export function ledgerPageReducer(
         ...state,
         dialogs: { ...state.dialogs, quickInvoice: false },
         data: { ...state.data, pendingInvoiceData: null },
+      };
+
+    case "OPEN_WRITE_OFF_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, writeOff: true },
+        data: { ...state.data, writeOffEntry: action.payload },
+      };
+
+    case "CLOSE_WRITE_OFF_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, writeOff: false },
+        data: { ...state.data, writeOffEntry: null },
       };
 
     // Data

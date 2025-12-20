@@ -38,6 +38,7 @@ import { ledgerPageReducer, initialLedgerPageState } from "./reducers/ledgerPage
 
 // Components
 import { QuickPayDialog } from "./components/QuickPayDialog";
+import { WriteOffDialog } from "./components/WriteOffDialog";
 import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
 import { LedgerFormDialog } from "./components/LedgerFormDialog";
@@ -246,6 +247,7 @@ export default function LedgerPage() {
   const openAddDialog = useCallback(() => dispatch({ type: "OPEN_ADD_DIALOG" }), []);
   const openRelatedDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_RELATED_DIALOG", payload: entry }), []);
   const openQuickPayDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_QUICK_PAY_DIALOG", payload: entry }), []);
+  const openWriteOffDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_WRITE_OFF_DIALOG", payload: entry }), []);
 
   const handleAddPayment = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,6 +389,7 @@ export default function LedgerPage() {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onQuickPay={openQuickPayDialog}
+              onWriteOff={openWriteOffDialog}
               onViewRelated={openRelatedDialog}
               highlightedSubcategory={filters.subCategory}
               onClearFilters={clearFilters}
@@ -479,6 +482,17 @@ export default function LedgerPage() {
         onSuccess={() => {
           // Data will refresh automatically via onSnapshot in useLedgerData
           dispatch({ type: "CLOSE_QUICK_PAY_DIALOG" });
+        }}
+      />
+
+      {/* Bad Debt Write-Off Dialog */}
+      <WriteOffDialog
+        isOpen={state.dialogs.writeOff}
+        onClose={() => dispatch({ type: "CLOSE_WRITE_OFF_DIALOG" })}
+        entry={state.data.writeOffEntry}
+        onSuccess={() => {
+          // Data will refresh automatically via onSnapshot in useLedgerData
+          dispatch({ type: "CLOSE_WRITE_OFF_DIALOG" });
         }}
       />
 

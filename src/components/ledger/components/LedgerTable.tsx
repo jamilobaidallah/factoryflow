@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Edit, Trash2, DollarSign, FolderOpen, FileText, X } from "lucide-react";
+import { Edit, Trash2, DollarSign, FolderOpen, FileText, X, Ban } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { LedgerEntry } from "../utils/ledger-constants";
 import { isEquityTransaction, isCapitalContribution } from "../utils/ledger-helpers";
@@ -23,6 +23,7 @@ interface LedgerTableProps {
   onEdit: (entry: LedgerEntry) => void;
   onDelete: (entry: LedgerEntry) => void;
   onQuickPay: (entry: LedgerEntry) => void;
+  onWriteOff: (entry: LedgerEntry) => void;
   onViewRelated: (entry: LedgerEntry) => void;
   highlightedSubcategory?: string;
   onClearFilters?: () => void;
@@ -114,6 +115,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
   onEdit,
   onDelete,
   onQuickPay,
+  onWriteOff,
   onViewRelated,
   highlightedSubcategory,
 }: {
@@ -123,6 +125,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
   onEdit: (entry: LedgerEntry) => void;
   onDelete: (entry: LedgerEntry) => void;
   onQuickPay: (entry: LedgerEntry) => void;
+  onWriteOff: (entry: LedgerEntry) => void;
   onViewRelated: (entry: LedgerEntry) => void;
   highlightedSubcategory?: string;
 }) {
@@ -255,6 +258,18 @@ const LedgerTableRow = memo(function LedgerTableRow({
               </button>
             )}
           </PermissionGate>
+          {/* Write Off - Only for AR/AP entries with remaining balance */}
+          <PermissionGate action="update" module="ledger">
+            {!isEquityTransaction(entry.type, entry.category) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (entry.remainingBalance || 0) > 0 && (
+              <button
+                onClick={() => onWriteOff(entry)}
+                title="شطب دين معدوم"
+                className="p-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors"
+              >
+                <Ban className="w-4 h-4" />
+              </button>
+            )}
+          </PermissionGate>
           {/* View Related Records - Not for equity transactions */}
           {!isEquityTransaction(entry.type, entry.category) && (
             <button
@@ -297,6 +312,7 @@ const LedgerCard = memo(function LedgerCard({
   onEdit,
   onDelete,
   onQuickPay,
+  onWriteOff,
   onViewRelated,
   highlightedSubcategory,
 }: {
@@ -306,6 +322,7 @@ const LedgerCard = memo(function LedgerCard({
   onEdit: (entry: LedgerEntry) => void;
   onDelete: (entry: LedgerEntry) => void;
   onQuickPay: (entry: LedgerEntry) => void;
+  onWriteOff: (entry: LedgerEntry) => void;
   onViewRelated: (entry: LedgerEntry) => void;
   highlightedSubcategory?: string;
 }) {
@@ -399,6 +416,20 @@ const LedgerCard = memo(function LedgerCard({
             </Button>
           )}
         </PermissionGate>
+        {/* Write Off - Only for AR/AP entries with remaining balance */}
+        <PermissionGate action="update" module="ledger">
+          {!isEquityTransaction(entry.type, entry.category) && entry.isARAPEntry && entry.paymentStatus !== "paid" && (entry.remainingBalance || 0) > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onWriteOff(entry)}
+              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+            >
+              <Ban className="w-4 h-4 ml-1" />
+              شطب
+            </Button>
+          )}
+        </PermissionGate>
         {/* View Related Records - Not for equity transactions */}
         {!isEquityTransaction(entry.type, entry.category) && (
           <Button
@@ -475,6 +506,7 @@ export const LedgerTable = memo(function LedgerTable({
   onEdit,
   onDelete,
   onQuickPay,
+  onWriteOff,
   onViewRelated,
   highlightedSubcategory,
   onClearFilters,
@@ -505,6 +537,7 @@ export const LedgerTable = memo(function LedgerTable({
             onEdit={onEdit}
             onDelete={onDelete}
             onQuickPay={onQuickPay}
+            onWriteOff={onWriteOff}
             onViewRelated={onViewRelated}
             highlightedSubcategory={highlightedSubcategory}
           />
@@ -537,6 +570,7 @@ export const LedgerTable = memo(function LedgerTable({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onQuickPay={onQuickPay}
+                onWriteOff={onWriteOff}
                 onViewRelated={onViewRelated}
                 highlightedSubcategory={highlightedSubcategory}
               />
