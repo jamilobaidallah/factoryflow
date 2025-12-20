@@ -152,6 +152,7 @@ export default function ReportsPage() {
       expensesByCategory,
       totalRevenue,
       totalExpenses,
+      totalDiscounts,
       netProfit: totalRevenue - totalExpenses - totalDiscounts,
     };
   }, [ledgerEntries, dateRange]);

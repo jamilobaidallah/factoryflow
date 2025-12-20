@@ -26,6 +26,7 @@ interface ReportsInlineReportProps {
     expensesByCategory: Record<string, number>;
     totalRevenue: number;
     totalExpenses: number;
+    totalDiscounts: number;
     netProfit: number;
   };
   dateRange: {
@@ -137,6 +138,8 @@ function IncomeStatementReport({
   filteredData: ReportsInlineReportProps["filteredData"];
 }) {
   const isProfit = filteredData.netProfit >= 0;
+  const hasDiscounts = filteredData.totalDiscounts > 0;
+  const netRevenue = filteredData.totalRevenue - filteredData.totalDiscounts;
 
   return (
     <div className="space-y-6">
@@ -163,6 +166,20 @@ function IncomeStatementReport({
             <span className="text-sm font-bold text-emerald-800">إجمالي الإيرادات</span>
             <span className="text-sm font-bold text-emerald-800">{formatNumber(filteredData.totalRevenue)} د.أ</span>
           </div>
+
+          {/* Discounts Section - shows how we get from gross to net */}
+          {hasDiscounts && (
+            <>
+              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                <span className="text-sm text-amber-700">خصومات التسوية</span>
+                <span className="text-sm font-semibold text-amber-700">-{formatNumber(filteredData.totalDiscounts)} د.أ</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-emerald-100 rounded-lg border border-emerald-300">
+                <span className="text-sm font-bold text-emerald-800">صافي الإيرادات</span>
+                <span className="text-sm font-bold text-emerald-800">{formatNumber(netRevenue)} د.أ</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
