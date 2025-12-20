@@ -1,36 +1,39 @@
-# Task: Fix Client Cheques Issue Date Display
+# Task: Fix Client Cheques Issue Date & Pending Balance Calculation
 
 **Branch:** `fix/client-cheques-issue-date`
 **Date:** December 20, 2025
 
 ---
 
-## Problem
+## Problem 1: Wrong Date Display
 
 In the client detail page cheques tab, the "تاريخ الشيك" column was showing the wrong date:
 - It was displaying the date when the transaction was entered (from `chequeDate` field)
 - User wanted to see the actual issue date (`issueDate`) when the cheque was issued
 
----
+## Problem 2: Wrong Balance Calculation for Pending Cheques
 
-## Root Cause
-
-The client-detail-page.tsx had a local `Cheque` interface that used `chequeDate` instead of `issueDate`:
-- The official Cheque type in `src/components/cheques/types/cheques.ts` uses `issueDate`
-- But the local interface in client-detail-page.tsx was using a different field name `chequeDate`
+The "الرصيد المتوقع بعد صرف الشيكات" was calculating incorrectly for outgoing cheques:
+- All pending cheques were being subtracted from the balance
+- But outgoing cheques (صادر) should ADD to the balance (reduce what we owe them)
+- Example: Balance 6,650 له (we owe them) with 7,500 outgoing cheques should become -850 (they owe us 850), not 14,150
 
 ---
 
 ## Solution
 
+### Fix 1: Issue Date Display
 Changed all references from `chequeDate` to `issueDate`:
+- Updated the local `Cheque` interface
+- Updated data loading to read `issueDate` from Firestore
+- Updated the column header from "تاريخ الشيك" to "تاريخ الإصدار"
+- Updated the table cell to display `issueDate`
 
-1. Updated the local `Cheque` interface (line 99)
-2. Updated data loading to read `issueDate` from Firestore (line 307)
-3. Updated the sorting to use `issueDate` (line 312)
-4. Updated the table cell to display `issueDate` (line 764)
-5. Updated the column header from "تاريخ الشيك" to "تاريخ الإصدار" (line 746)
-6. Updated fallback references for `dueDate` (lines 372, 477)
+### Fix 2: Pending Cheques Balance Calculation
+Changed calculation to handle incoming vs outgoing cheques differently:
+- **Incoming cheques (وارد)**: Subtract from balance (we receive money, reduces what they owe us)
+- **Outgoing cheques (صادر)**: Add to balance (we pay money, reduces what we owe them)
+- Added "النوع" (type) column to pending cheques table for clarity
 
 ---
 
@@ -39,6 +42,8 @@ Changed all references from `chequeDate` to `issueDate`:
 - [x] Update Cheque interface to use issueDate instead of chequeDate
 - [x] Update data loading to read issueDate field
 - [x] Update cheques table to display issueDate
+- [x] Fix pending cheques balance calculation for incoming vs outgoing
+- [x] Add type column to pending cheques table
 - [x] Test TypeScript compilation
 
 ---
@@ -51,7 +56,8 @@ Changed all references from `chequeDate` to `issueDate`:
    - Line 312: Changed sort to use `issueDate`
    - Line 746: Changed column header to "تاريخ الإصدار"
    - Line 764: Changed display from `cheque.chequeDate` to `cheque.issueDate`
-   - Lines 372, 477: Changed fallback from `c.chequeDate` to `c.issueDate`
+   - Lines 1091-1100: Fixed balance calculation for incoming vs outgoing cheques
+   - Lines 1115-1126: Added type column to pending cheques table
 
 ---
 

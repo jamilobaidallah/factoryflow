@@ -1088,7 +1088,16 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       if (pendingCheques.length === 0) return null;
 
                       const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
-                      const balanceAfterCheques = finalBalance - totalPendingCheques;
+                      // Calculate balance after cheques based on cheque type:
+                      // - Incoming (وارد): We receive money → subtract from balance (reduces what they owe us)
+                      // - Outgoing (صادر): We pay money → add to balance (reduces what we owe them)
+                      const incomingTotal = pendingCheques
+                        .filter(c => c.type === "وارد")
+                        .reduce((sum, c) => sum + (c.amount || 0), 0);
+                      const outgoingTotal = pendingCheques
+                        .filter(c => c.type === "صادر")
+                        .reduce((sum, c) => sum + (c.amount || 0), 0);
+                      const balanceAfterCheques = finalBalance - incomingTotal + outgoingTotal;
 
                       return (
                         <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
@@ -1104,6 +1113,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                               <thead>
                                 <tr className="bg-yellow-100">
                                   <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">رقم الشيك</th>
+                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">النوع</th>
                                   <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">البنك</th>
                                   <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">تاريخ الاستحقاق</th>
                                   <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">المبلغ</th>
@@ -1113,6 +1123,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                 {pendingCheques.map((cheque, index) => (
                                   <tr key={cheque.id} className={index % 2 === 0 ? 'bg-yellow-50' : 'bg-white'}>
                                     <td className="px-4 py-3 text-sm">{cheque.chequeNumber}</td>
+                                    <td className="px-4 py-3 text-sm">{cheque.type}</td>
                                     <td className="px-4 py-3 text-sm">{cheque.bankName}</td>
                                     <td className="px-4 py-3 text-sm">
                                       {cheque.dueDate ? formatDateAr(cheque.dueDate) : '-'}
@@ -1125,7 +1136,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                               </tbody>
                               <tfoot>
                                 <tr className="bg-yellow-200 font-semibold">
-                                  <td colSpan={3} className="px-4 py-3 text-right">إجمالي الشيكات المعلقة</td>
+                                  <td colSpan={4} className="px-4 py-3 text-right">إجمالي الشيكات المعلقة</td>
                                   <td className="px-4 py-3">
                                     {formatNumber(totalPendingCheques)} د.أ
                                   </td>
