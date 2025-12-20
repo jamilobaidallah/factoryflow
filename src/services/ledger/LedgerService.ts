@@ -961,18 +961,27 @@ export class LedgerService {
       const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
       const batch = writeBatch(firestore);
 
-      // Create payment record (only if there's actual cash payment)
-      if (data.amount > 0) {
+      // Create payment record (if there's cash payment OR discount)
+      if (data.amount > 0 || discountAmount > 0) {
         const paymentDocRef = doc(this.paymentsRef);
+
+        // Determine notes based on payment type
+        let notes: string;
+        if (data.amount > 0 && discountAmount > 0) {
+          notes = `دفعة مع خصم - ${data.entryDescription}`;
+        } else if (discountAmount > 0 && data.amount === 0) {
+          notes = `خصم تسوية - ${data.entryDescription}`;
+        } else {
+          notes = `دفعة جزئية - ${data.entryDescription}`;
+        }
+
         const paymentData: Record<string, unknown> = {
           clientName: data.associatedParty || "غير محدد",
           amount: data.amount,
           type: paymentType,
           linkedTransactionId: data.entryTransactionId,
           date: data.date || new Date(),
-          notes: discountAmount > 0
-            ? `دفعة مع خصم - ${data.entryDescription}`
-            : `دفعة جزئية - ${data.entryDescription}`,
+          notes,
           category: data.entryCategory,
           subCategory: data.entrySubCategory,
           createdAt: new Date(),
@@ -1088,6 +1097,23 @@ export class LedgerService {
         writeoffBy: data.writeoffBy,
         remainingBalance: newRemainingBalance,
         paymentStatus: newStatus,
+      });
+
+      // Create payment record for the writeoff (so it appears in payments page)
+      const paymentDocRef = doc(this.paymentsRef);
+      const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      batch.set(paymentDocRef, {
+        clientName: data.associatedParty || "غير محدد",
+        amount: 0,  // No actual cash payment
+        type: paymentType,
+        linkedTransactionId: data.entryTransactionId,
+        date: new Date(),
+        notes: `شطب دين معدوم - ${data.writeoffReason}`,
+        createdAt: new Date(),
+        // Writeoff-specific fields
+        writeoffAmount: data.writeoffAmount,
+        writeoffReason: data.writeoffReason,
+        isWriteoff: true,
       });
 
       // TODO: Add journal entry for bad debt expense when journal service is extended

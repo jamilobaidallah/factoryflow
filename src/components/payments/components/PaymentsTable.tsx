@@ -36,6 +36,14 @@ export interface Payment {
   allocationMethod?: 'fifo' | 'manual';
   allocationCount?: number;
   allocationTransactionIds?: string[];
+  // Settlement discount fields
+  discountAmount?: number;
+  discountReason?: string;
+  isSettlementDiscount?: boolean;
+  // Writeoff fields
+  writeoffAmount?: number;
+  writeoffReason?: string;
+  isWriteoff?: boolean;
 }
 
 interface PaymentsTableProps {
@@ -161,9 +169,26 @@ const PaymentRow = memo(function PaymentRow({
         </div>
       </TableCell>
       <TableCell>
-        <span className={`font-semibold ${payment.type === "قبض" ? 'text-green-600' : 'text-red-600'}`}>
-          {formatNumber(payment.amount || 0)} دينار
-        </span>
+        <div className="flex flex-col gap-1">
+          {payment.amount > 0 && (
+            <span className={`font-semibold ${payment.type === "قبض" ? 'text-green-600' : 'text-red-600'}`}>
+              {formatNumber(payment.amount)} دينار
+            </span>
+          )}
+          {payment.discountAmount && payment.discountAmount > 0 && (
+            <span className="text-sm text-amber-600 font-medium">
+              خصم: {formatNumber(payment.discountAmount)} دينار
+            </span>
+          )}
+          {payment.writeoffAmount && payment.writeoffAmount > 0 && (
+            <span className="text-sm text-orange-600 font-medium">
+              شطب: {formatNumber(payment.writeoffAmount)} دينار
+            </span>
+          )}
+          {payment.amount === 0 && !payment.discountAmount && !payment.writeoffAmount && (
+            <span className="text-slate-400">0 دينار</span>
+          )}
+        </div>
       </TableCell>
       <TableCell>
         {isMultiAllocationPayment(payment) && payment.allocationTransactionIds?.length ? (
