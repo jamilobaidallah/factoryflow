@@ -39,6 +39,7 @@ export interface ComparisonData {
   // Revenue breakdown (optional - for reports page detail)
   grossRevenue?: number;
   discounts?: number;
+  badDebt?: number;  // Bad debt write-offs (ديون معدومة)
 }
 
 // Insight types

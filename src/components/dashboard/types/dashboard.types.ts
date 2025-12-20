@@ -33,6 +33,7 @@ export interface MonthlyFinancialData {
   revenue: number;
   expenses: number;
   discounts?: number;
+  badDebt?: number;  // Bad debt write-offs (ديون معدومة)
 }
 
 /** Chart bar data point */
@@ -144,6 +145,7 @@ export interface UseDashboardDataReturn {
   totalRevenue: number;
   totalExpenses: number;
   totalDiscounts: number;
+  totalBadDebt: number;  // Bad debt write-offs (ديون معدومة)
   // Monthly data
   monthlyDataMap: Map<string, MonthlyFinancialData>;
   // Expense categories

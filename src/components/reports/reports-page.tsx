@@ -128,6 +128,7 @@ export default function ReportsPage() {
     let totalRevenue = 0;
     let totalExpenses = 0;
     let totalDiscounts = 0;  // Track discounts (contra-revenue)
+    let totalBadDebt = 0;    // Track bad debt write-offs (treated as expense)
 
     filtered.forEach((entry: any) => {
       // Exclude owner equity
@@ -140,20 +141,24 @@ export default function ReportsPage() {
         revenueByCategory[entry.category] = (revenueByCategory[entry.category] || 0) + entry.amount;
         // Track discounts on income entries (contra-revenue)
         totalDiscounts += entry.totalDiscount || 0;
+        // Track bad debt write-offs (treated as expense)
+        totalBadDebt += entry.writeoffAmount || 0;
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount;
         expensesByCategory[entry.category] = (expensesByCategory[entry.category] || 0) + entry.amount;
       }
     });
 
-    // Net profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
+    // Net profit = Revenue - Discounts - Expenses - Bad Debt
+    // Discounts are contra-revenue, bad debt is treated as expense
     return {
       revenueByCategory,
       expensesByCategory,
       totalRevenue,
       totalExpenses,
       totalDiscounts,
-      netProfit: totalRevenue - totalExpenses - totalDiscounts,
+      totalBadDebt,
+      netProfit: totalRevenue - totalDiscounts - totalExpenses - totalBadDebt,
     };
   }, [ledgerEntries, dateRange]);
 

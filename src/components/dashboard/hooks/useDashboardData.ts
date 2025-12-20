@@ -38,6 +38,7 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [totalDiscounts, setTotalDiscounts] = useState(0);
+  const [totalBadDebt, setTotalBadDebt] = useState(0);  // Bad debt write-offs (ديون معدومة)
 
   // Monthly aggregations
   const [monthlyDataMap, setMonthlyDataMap] = useState<Map<string, MonthlyFinancialData>>(
@@ -68,6 +69,7 @@ export function useDashboardData(): UseDashboardDataReturn {
       let revenue = 0;
       let expenses = 0;
       let discounts = 0;  // Track discounts (contra-revenue, reduces net income)
+      let badDebt = 0;    // Track bad debt write-offs (ديون معدومة, treated as expense)
       // Operating cash - from paid income/expense entries
       let opCashIn = 0;
       let opCashOut = 0;
@@ -122,10 +124,14 @@ export function useDashboardData(): UseDashboardDataReturn {
             if (entry.totalDiscount) {
               discounts += entry.totalDiscount;
             }
-            updateMonthlyData(monthlyMap, monthKey, entry.amount, 0, entry.totalDiscount || 0);
+            // Track bad debt write-offs (treated as expense, reduces profit)
+            if (data.writeoffAmount) {
+              badDebt += data.writeoffAmount;
+            }
+            updateMonthlyData(monthlyMap, monthKey, entry.amount, 0, entry.totalDiscount || 0, data.writeoffAmount || 0);
           } else if (entry.type === EXPENSE_TYPE) {
             expenses += entry.amount;
-            updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0);
+            updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
             updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
           }
 
@@ -162,6 +168,7 @@ export function useDashboardData(): UseDashboardDataReturn {
       setTotalRevenue(revenue);
       setTotalExpenses(expenses);
       setTotalDiscounts(discounts);
+      setTotalBadDebt(badDebt);
       setOperatingCashIn(opCashIn);
       setOperatingCashOut(opCashOut);
       setFinancingCashIn(finCashIn);
@@ -190,6 +197,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     totalRevenue,
     totalExpenses,
     totalDiscounts,
+    totalBadDebt,
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,
@@ -208,12 +216,14 @@ function updateMonthlyData(
   monthKey: string,
   revenue: number,
   expenses: number,
-  discounts: number
+  discounts: number,
+  badDebt: number
 ): void {
-  const existing = map.get(monthKey) || { revenue: 0, expenses: 0, discounts: 0 };
+  const existing = map.get(monthKey) || { revenue: 0, expenses: 0, discounts: 0, badDebt: 0 };
   existing.revenue += revenue;
   existing.expenses += expenses;
   existing.discounts = (existing.discounts || 0) + discounts;
+  existing.badDebt = (existing.badDebt || 0) + badDebt;
   map.set(monthKey, existing);
 }
 

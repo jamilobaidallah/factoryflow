@@ -44,6 +44,7 @@ export default function DashboardPage() {
     totalRevenue,
     totalExpenses,
     totalDiscounts,
+    totalBadDebt,
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,
@@ -80,11 +81,12 @@ export default function DashboardPage() {
 
   // Monthly/Total data for summary cards
   // Dashboard shows NET revenue (after discounts) for cleaner view
-  // Profit = Net Revenue - Expenses
+  // Profit = Net Revenue - Expenses - Bad Debt
+  // Bad debt is treated as an expense (ديون معدومة)
   const summaryData = useMemo<DashboardSummaryData>(() => {
     if (summaryView === "total") {
       const netRevenue = totalRevenue - totalDiscounts;
-      const profit = netRevenue - totalExpenses;
+      const profit = netRevenue - totalExpenses - totalBadDebt;
       return {
         revenue: netRevenue,  // Show net revenue on dashboard
         expenses: totalExpenses,
@@ -92,9 +94,9 @@ export default function DashboardPage() {
         isLoss: profit < 0,
       };
     } else {
-      const monthData = monthlyDataMap.get(selectedMonth) || { revenue: 0, expenses: 0, discounts: 0 };
+      const monthData = monthlyDataMap.get(selectedMonth) || { revenue: 0, expenses: 0, discounts: 0, badDebt: 0 };
       const netRevenue = monthData.revenue - (monthData.discounts || 0);
-      const profit = netRevenue - monthData.expenses;
+      const profit = netRevenue - monthData.expenses - (monthData.badDebt || 0);
       return {
         revenue: netRevenue,  // Show net revenue on dashboard
         expenses: monthData.expenses,
@@ -102,7 +104,7 @@ export default function DashboardPage() {
         isLoss: profit < 0,
       };
     }
-  }, [summaryView, selectedMonth, totalRevenue, totalExpenses, totalDiscounts, monthlyDataMap]);
+  }, [summaryView, selectedMonth, totalRevenue, totalExpenses, totalDiscounts, totalBadDebt, monthlyDataMap]);
 
   // Chart data for bar chart
   const chartData = useMemo<ChartDataPoint[]>(() => {
