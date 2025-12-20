@@ -22,7 +22,9 @@ export const REPORTS_LABELS = {
   custom: 'مخصص...',
 
   // Summary cards
-  revenue: 'الإيرادات',
+  revenue: 'صافي الإيرادات',
+  grossRevenue: 'إجمالي الإيرادات',
+  discounts: 'خصومات التسوية',
   expenses: 'المصروفات',
   netProfit: 'صافي الربح',
   profitMargin: 'هامش الربح',

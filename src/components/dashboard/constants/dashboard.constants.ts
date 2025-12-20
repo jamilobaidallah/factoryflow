@@ -108,7 +108,7 @@ export const DASHBOARD_LABELS = {
   cashBalance: "الرصيد النقدي",
   currency: "دينار",
   financialSummary: "الملخص المالي",
-  revenue: "الإيرادات",
+  revenue: "صافي الإيرادات",
   expenses: "المصروفات",
   netProfit: "صافي الربح",
   profit: "ربح",

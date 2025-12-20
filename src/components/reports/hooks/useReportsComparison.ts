@@ -132,12 +132,14 @@ function filterEntriesByDateRange(
  * Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
  */
 function calculatePeriodData(entries: LedgerEntry[]): {
-  revenue: number;
+  grossRevenue: number;
+  discounts: number;
+  revenue: number;  // Net revenue (gross - discounts)
   expenses: number;
   profit: number;
   margin: number;
 } {
-  let revenue = 0;
+  let grossRevenue = 0;
   let expenses = 0;
   let discounts = 0;
 
@@ -148,7 +150,7 @@ function calculatePeriodData(entries: LedgerEntry[]): {
     }
 
     if (entry.type === 'دخل') {
-      revenue += entry.amount;
+      grossRevenue += entry.amount;
       // Track discounts on income entries (contra-revenue)
       discounts += entry.totalDiscount || 0;
     } else if (entry.type === 'مصروف') {
@@ -156,11 +158,13 @@ function calculatePeriodData(entries: LedgerEntry[]): {
     }
   });
 
-  // Net profit = Revenue - Expenses - Discounts
-  const profit = safeSubtract(safeSubtract(revenue, expenses), discounts);
-  const margin = revenue > 0 ? safeMultiply(safeDivide(profit, revenue), 100) : 0;
+  // Net revenue = Gross Revenue - Discounts
+  const revenue = safeSubtract(grossRevenue, discounts);
+  // Net profit = Net Revenue - Expenses
+  const profit = safeSubtract(revenue, expenses);
+  const margin = grossRevenue > 0 ? safeMultiply(safeDivide(profit, grossRevenue), 100) : 0;
 
-  return { revenue, expenses, profit, margin };
+  return { grossRevenue, discounts, revenue, expenses, profit, margin };
 }
 
 /**
@@ -214,7 +218,7 @@ export function useReportsComparison({
     const currentData = calculatePeriodData(currentEntries);
 
     // Filter entries for comparison period (if applicable)
-    let previousData = { revenue: 0, expenses: 0, profit: 0, margin: 0 };
+    let previousData = { grossRevenue: 0, discounts: 0, revenue: 0, expenses: 0, profit: 0, margin: 0 };
     if (comparisonDateRange) {
       const previousEntries = filterEntriesByDateRange(
         ledgerEntries,
@@ -230,6 +234,9 @@ export function useReportsComparison({
       expenses: calculateComparisonResult(currentData.expenses, previousData.expenses, true),
       profit: calculateComparisonResult(currentData.profit, previousData.profit, false),
       margin: calculateComparisonResult(currentData.margin, previousData.margin, false),
+      // Include gross revenue and discounts for detailed breakdown
+      grossRevenue: currentData.grossRevenue,
+      discounts: currentData.discounts,
     };
 
     return {

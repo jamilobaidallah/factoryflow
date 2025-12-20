@@ -26,7 +26,11 @@ function ReportsSummaryCardsComponent({ comparison, isLoading }: ReportsSummaryC
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <RevenueCard data={comparison.revenue} />
+      <RevenueCard
+        data={comparison.revenue}
+        grossRevenue={comparison.grossRevenue}
+        discounts={comparison.discounts}
+      />
       <ExpensesCard data={comparison.expenses} />
       <ProfitCard data={comparison.profit} />
       <MarginCard data={comparison.margin} />
@@ -34,8 +38,18 @@ function ReportsSummaryCardsComponent({ comparison, isLoading }: ReportsSummaryC
   );
 }
 
-/** Revenue card - increase is good (green) */
-function RevenueCard({ data }: { data: ComparisonResult }) {
+/** Revenue card with breakdown - shows gross, discounts, and net when applicable */
+function RevenueCard({
+  data,
+  grossRevenue,
+  discounts,
+}: {
+  data: ComparisonResult;
+  grossRevenue?: number;
+  discounts?: number;
+}) {
+  const hasDiscounts = discounts && discounts > 0;
+
   return (
     <article className="bg-white rounded-xl p-5 border border-slate-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer">
       <div className="flex items-center justify-between mb-3">
@@ -49,6 +63,21 @@ function RevenueCard({ data }: { data: ComparisonResult }) {
         <p className="text-xs text-slate-400">{REPORTS_LABELS.currency}</p>
         <ChangeIndicator change={data.percentChange} isPositive={data.isPositive} />
       </div>
+
+      {/* Revenue breakdown when discounts exist */}
+      {hasDiscounts && (
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
+          <div className="flex justify-between text-xs">
+            <span className="text-slate-400">{REPORTS_LABELS.grossRevenue}</span>
+            <span className="text-slate-600">{formatNumber(grossRevenue || 0)}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-amber-500">{REPORTS_LABELS.discounts}</span>
+            <span className="text-amber-600">-{formatNumber(discounts)}</span>
+          </div>
+        </div>
+      )}
+
       {data.previous > 0 && (
         <p className="text-[10px] text-slate-400 mt-1">
           {REPORTS_LABELS.previous} {formatNumber(data.previous)}

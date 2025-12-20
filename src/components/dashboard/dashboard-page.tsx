@@ -79,21 +79,24 @@ export default function DashboardPage() {
   }, [cashBalance]);
 
   // Monthly/Total data for summary cards
-  // Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
+  // Dashboard shows NET revenue (after discounts) for cleaner view
+  // Profit = Net Revenue - Expenses
   const summaryData = useMemo<DashboardSummaryData>(() => {
     if (summaryView === "total") {
-      const profit = totalRevenue - totalExpenses - totalDiscounts;
+      const netRevenue = totalRevenue - totalDiscounts;
+      const profit = netRevenue - totalExpenses;
       return {
-        revenue: totalRevenue,
+        revenue: netRevenue,  // Show net revenue on dashboard
         expenses: totalExpenses,
         profit,
         isLoss: profit < 0,
       };
     } else {
       const monthData = monthlyDataMap.get(selectedMonth) || { revenue: 0, expenses: 0, discounts: 0 };
-      const profit = monthData.revenue - monthData.expenses - (monthData.discounts || 0);
+      const netRevenue = monthData.revenue - (monthData.discounts || 0);
+      const profit = netRevenue - monthData.expenses;
       return {
-        revenue: monthData.revenue,
+        revenue: netRevenue,  // Show net revenue on dashboard
         expenses: monthData.expenses,
         profit,
         isLoss: profit < 0,

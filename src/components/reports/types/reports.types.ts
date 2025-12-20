@@ -36,6 +36,9 @@ export interface ComparisonData {
   expenses: ComparisonResult;
   profit: ComparisonResult;
   margin: ComparisonResult;
+  // Revenue breakdown (optional - for reports page detail)
+  grossRevenue?: number;
+  discounts?: number;
 }
 
 // Insight types
