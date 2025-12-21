@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import { ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import { LedgerEntry } from "../utils/ledger-constants";
-import { isExcludedFromPL } from "../utils/ledger-helpers";
+import { isExcludedFromPL, isEquityTransaction } from "../utils/ledger-helpers";
 import { formatNumber } from "@/lib/date-utils";
 
 interface LedgerStatsProps {
@@ -25,9 +25,10 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
     let unpaidAmount = 0;
 
     entries.forEach((entry) => {
-      // Count unpaid/partial ARAP entries (includes advances like سلفة مورد)
-      // These represent receivables/payables that need collection
-      if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
+      // Count unpaid/partial ARAP entries (excludes equity, includes advances like سلفة مورد)
+      // Advances represent receivables/payables that need collection
+      const isEquity = isEquityTransaction(entry.type, entry.category);
+      if (entry.isARAPEntry && entry.paymentStatus !== "paid" && !isEquity) {
         unpaidCount++;
         unpaidAmount += entry.remainingBalance || 0;
       }
