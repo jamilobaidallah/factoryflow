@@ -40,6 +40,32 @@ export function isEquityTransaction(type?: string, category?: string): boolean {
 }
 
 /**
+ * Helper function to check if a transaction is an advance (prepaid credit)
+ * Advances are NOT counted in P&L - they represent prepaid credits, not income/expense
+ *
+ * - سلفة مورد (Supplier Advance): We paid supplier more than owed, they owe us
+ * - سلفة عميل (Client Advance): Client paid us more than owed, we owe them
+ *
+ * @param category - Transaction category name
+ * @returns true if this is an advance transaction
+ */
+export function isAdvanceTransaction(category?: string): boolean {
+    return category === "سلفة مورد" || category === "سلفة عميل";
+}
+
+/**
+ * Helper function to check if a transaction should be excluded from P&L
+ * Combines equity and advance checks
+ *
+ * @param type - Transaction type
+ * @param category - Transaction category name
+ * @returns true if this transaction should be excluded from P&L
+ */
+export function isExcludedFromPL(type?: string, category?: string): boolean {
+    return isEquityTransaction(type, category) || isAdvanceTransaction(category);
+}
+
+/**
  * Helper function to check if a subcategory represents capital contribution (cash IN)
  * @param subCategory - The equity subcategory
  * @returns true if this is a capital contribution (increases equity)

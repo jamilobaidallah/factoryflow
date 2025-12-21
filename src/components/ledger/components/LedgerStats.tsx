@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import { ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import { LedgerEntry } from "../utils/ledger-constants";
-import { isEquityTransaction } from "../utils/ledger-helpers";
+import { isExcludedFromPL } from "../utils/ledger-helpers";
 import { formatNumber } from "@/lib/date-utils";
 
 interface LedgerStatsProps {
@@ -25,9 +25,10 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
     let unpaidAmount = 0;
 
     entries.forEach((entry) => {
-      // Skip equity transactions - they don't affect P&L or AR/AP
-      if (isEquityTransaction(entry.type, entry.category)) {
-        return; // Skip equity entries from P&L calculations
+      // Skip equity AND advance transactions - they don't affect P&L
+      // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not income/expense
+      if (isExcludedFromPL(entry.type, entry.category)) {
+        return; // Skip from P&L calculations
       }
 
       if (entry.type === "دخل") {
