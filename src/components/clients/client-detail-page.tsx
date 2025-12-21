@@ -53,6 +53,7 @@ import {
   getDateRange,
   extractPaymentMethod
 } from "@/lib/statement-format";
+import { CHEQUE_STATUS_AR } from "@/lib/constants";
 
 // Aliases for backward compatibility with existing code
 const formatNumber = formatCurrency;
@@ -93,6 +94,9 @@ interface Payment {
   notes: string;  // Payment method info is stored in notes field
   associatedParty?: string;
   discountAmount?: number;  // Settlement discount applied with this payment
+  isEndorsement?: boolean;  // True if payment is from cheque endorsement
+  noCashMovement?: boolean; // True if no actual cash moved (endorsements)
+  endorsementChequeId?: string; // Links payment to the endorsed cheque
 }
 
 interface Cheque {
@@ -105,6 +109,12 @@ interface Cheque {
   status: string;
   type: string;
   associatedParty?: string;
+  // Endorsement fields
+  endorsedTo?: string;        // Name of party cheque was endorsed to
+  endorsedDate?: Date;        // When the cheque was endorsed
+  chequeType?: string;        // "عادي" (normal) or "مجير" (endorsed)
+  isEndorsedCheque?: boolean; // Flag for endorsed cheques
+  endorsedFromId?: string;    // Reference to original incoming cheque
 }
 
 interface StatementItem {
@@ -123,6 +133,7 @@ interface StatementItem {
   subCategory?: string;
   // Payment-specific
   notes?: string;
+  isEndorsement?: boolean; // True if this is an endorsement-based payment
 }
 
 interface ClientDetailPageProps {
@@ -781,17 +792,31 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         <TableCell>{cheque.bankName}</TableCell>
                         <TableCell>{cheque.type}</TableCell>
                         <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              cheque.status === "معلق"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : cheque.status === "مصروف"
-                                ? "bg-green-100 text-green-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {cheque.status}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={`px-2 py-1 rounded text-xs inline-block w-fit ${
+                                cheque.status === CHEQUE_STATUS_AR.PENDING
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : cheque.status === CHEQUE_STATUS_AR.CASHED || cheque.status === CHEQUE_STATUS_AR.COLLECTED
+                                  ? "bg-green-100 text-green-800"
+                                  : cheque.status === CHEQUE_STATUS_AR.ENDORSED
+                                  ? "bg-purple-100 text-purple-800"
+                                  : cheque.status === CHEQUE_STATUS_AR.BOUNCED
+                                  ? "bg-red-100 text-red-800"
+                                  : cheque.status === CHEQUE_STATUS_AR.RETURNED
+                                  ? "bg-orange-100 text-orange-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {cheque.status}
+                            </span>
+                            {/* Show endorsement info if cheque is endorsed */}
+                            {cheque.endorsedTo && (
+                              <span className="text-xs text-purple-600">
+                                ← {cheque.endorsedTo}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-left font-medium">
                           {cheque.amount.toFixed(2)} د.أ
@@ -883,6 +908,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       entryType: p.type,
                       description: p.notes || p.description || '',
                       notes: p.notes,
+                      isEndorsement: p.isEndorsement || false, // Track endorsement payments
                       // Payment received (قبض): goes in دائن (reduces what they owe us)
                       // Payment made (صرف): goes in مدين (reduces what we owe them)
                       debit: p.type === "صرف" ? p.amount : 0,
@@ -1098,11 +1124,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                 <td className="px-4 py-3 text-sm text-right">
                                   <div className="flex items-center gap-2 justify-end">
                                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
-                                      transaction.isPayment
+                                      transaction.isEndorsement
+                                        ? 'bg-purple-100 text-purple-800'
+                                        : transaction.isPayment
                                         ? 'bg-green-100 text-green-800'
                                         : 'bg-blue-100 text-blue-800'
                                     }`}>
-                                      {transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                      {transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
                                     </span>
                                     <span>
                                       {transaction.isPayment
