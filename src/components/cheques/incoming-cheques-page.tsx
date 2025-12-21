@@ -23,7 +23,7 @@ import { ImageViewerDialog } from "./components/IncomingChequeDialogs";
 import { EndorsementAllocationDialog } from "./components/EndorsementAllocationDialog";
 import { PaymentDateModal } from "./components/PaymentDateModal";
 import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -190,7 +190,9 @@ export default function IncomingChequesPage() {
 
   const submitChequeWithDate = async (paymentDate?: Date) => {
     setLoading(true);
-    if (chequeImage) setUploadingImage(true);
+    if (chequeImage) {
+      setUploadingImage(true);
+    }
 
     const dataToSubmit = pendingFormData || formData;
     const success = await submitCheque(dataToSubmit, editingCheque, chequeImage, paymentDate);
@@ -216,7 +218,9 @@ export default function IncomingChequesPage() {
 
   // Handler for successful cheque cashing via MultiAllocationDialog
   const handleChequeCashingSuccess = async (paymentId: string, paidTransactionIds: string[]) => {
-    if (!user || !chequeToCash) return;
+    if (!user || !chequeToCash) {
+      return;
+    }
 
     try {
       // Update the cheque status to 'Cashed' and link the payment + transaction IDs
@@ -260,7 +264,9 @@ export default function IncomingChequesPage() {
 
   // Handle endorsement with multi-allocation
   const handleEndorseWithAllocations = async (data: EndorsementAllocationData): Promise<boolean> => {
-    if (!chequeToEndorse) return false;
+    if (!chequeToEndorse) {
+      return false;
+    }
 
     setLoading(true);
     const success = await endorseChequeWithAllocations(chequeToEndorse, data);

@@ -11,6 +11,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
@@ -92,7 +93,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     linkedTransactionId: string,
     amount: number
   ) => {
-    if (!user || !linkedTransactionId) return;
+    if (!user || !linkedTransactionId) {
+      return;
+    }
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const ledgerQuery = query(
@@ -137,7 +140,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     chequeImage: File | null,
     paymentDate?: Date
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {
+      return false;
+    }
 
     try {
       // Upload image first (external storage - before batch)
@@ -358,7 +363,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
   };
 
   const deleteCheque = async (chequeId: string): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {
+      return false;
+    }
 
     try {
       const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, chequeId);
@@ -809,27 +816,77 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         });
       }
 
-      // 9. Create supplier advance entry if there's unallocated amount
+      // 9. Create client advance entry if there's unallocated amount on client side
+      // This happens when cheque value > client's total debt (client has credit with us)
+      // ACCOUNTING: Client advance = We owe the client (liability) → Shows in PAYABLES
+      const clientUnallocated = safeSubtract(cheque.amount, clientTotalAllocated);
+      let clientAdvanceDocId: string | null = null;
+
+      if (clientUnallocated > 0) {
+        const clientAdvanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-C`;
+        const clientAdvanceLedgerRef = doc(ledgerRef);
+        clientAdvanceDocId = clientAdvanceLedgerRef.id;
+
+        // Create the advance entry in ledger
+        // Type "مصروف" = shows in payables (we owe them)
+        // paymentStatus "unpaid" = visible in ARAP aging
+        batch.set(clientAdvanceLedgerRef, {
+          transactionId: clientAdvanceTransactionId,
+          type: "مصروف",  // Liability - we owe the client
+          date: now,
+          description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
+          category: "سلفة عميل",
+          amount: clientUnallocated,
+          totalPaid: 0,  // Not yet consumed against future sales
+          remainingBalance: clientUnallocated,  // Full amount still available as credit
+          paymentStatus: "unpaid",  // Visible in ARAP
+          associatedParty: cheque.clientName,
+          isARAPEntry: true,
+          isClientAdvance: true,
+          linkedEndorsementChequeId: cheque.id,
+          createdAt: now,
+          notes: `رصيد دائن للعميل ${cheque.clientName} عبر تظهير شيك رقم ${cheque.chequeNumber} للمورد ${supplierName}`,
+        });
+
+        // Add allocation entry for the client advance
+        const clientAdvanceAllocationRef = doc(collection(firestore, `users/${user.dataOwnerId}/payments/${receiptDocRef.id}/allocations`));
+        batch.set(clientAdvanceAllocationRef, {
+          transactionId: clientAdvanceTransactionId,
+          ledgerDocId: clientAdvanceDocId,
+          amount: clientUnallocated,
+          transactionDate: now,
+          description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
+          isAdvance: true,
+          createdAt: now,
+        });
+
+        clientTransactionIds.push(clientAdvanceTransactionId);
+      }
+
+      // 10. Create supplier advance entry if there's unallocated amount
+      // ACCOUNTING: Supplier advance = Supplier owes us goods/services (asset) → Shows in RECEIVABLES
       const supplierUnallocated = safeSubtract(cheque.amount, supplierTotalAllocated);
       let supplierAdvanceDocId: string | null = null;
 
       if (supplierUnallocated > 0) {
         // Generate a transaction ID for the advance
-        const advanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const advanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-S`;
         const advanceLedgerRef = doc(ledgerRef);
         supplierAdvanceDocId = advanceLedgerRef.id;
 
         // Create the advance entry in ledger
-        // This is a RECEIVABLE from the supplier (they owe us)
+        // Type "دخل" = shows in receivables (they owe us)
+        // paymentStatus "unpaid" = visible in ARAP aging (supplier hasn't "paid" with goods yet)
         batch.set(advanceLedgerRef, {
           transactionId: advanceTransactionId,
+          type: "دخل",  // Asset - supplier owes us goods/services
           date: now,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
           category: "سلفة مورد",
           amount: supplierUnallocated,
-          totalPaid: 0,
-          remainingBalance: supplierUnallocated,
-          paymentStatus: "unpaid",
+          totalPaid: 0,  // Supplier hasn't delivered goods yet
+          remainingBalance: supplierUnallocated,  // Full amount still owed
+          paymentStatus: "unpaid",  // Visible in ARAP
           associatedParty: supplierName,
           isARAPEntry: true,
           isSupplierAdvance: true,
@@ -854,21 +911,34 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         supplierTransactionIds.push(advanceTransactionId);
       }
 
-      // Update cheque with advance doc ID if created
+      // Update cheque with advance doc IDs if created
+      const advanceUpdates: Record<string, string | null> = {};
+      if (clientAdvanceDocId) {
+        advanceUpdates.endorsedClientAdvanceDocId = clientAdvanceDocId;
+      }
       if (supplierAdvanceDocId) {
-        batch.update(incomingChequeRef, {
-          endorsedSupplierAdvanceDocId: supplierAdvanceDocId,
-        });
+        advanceUpdates.endorsedSupplierAdvanceDocId = supplierAdvanceDocId;
+      }
+      if (Object.keys(advanceUpdates).length > 0) {
+        batch.update(incomingChequeRef, advanceUpdates);
       }
 
       // Commit atomically
       await batch.commit();
 
       // Show appropriate toast message
+      const advanceMessages: string[] = [];
+      if (clientUnallocated > 0) {
+        advanceMessages.push(`سلفة عميل: ${clientUnallocated.toFixed(2)}`);
+      }
       if (supplierUnallocated > 0) {
+        advanceMessages.push(`سلفة مورد: ${supplierUnallocated.toFixed(2)}`);
+      }
+
+      if (advanceMessages.length > 0) {
         toast({
           title: "تم التظهير بنجاح",
-          description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}. تم إنشاء سلفة بقيمة ${supplierUnallocated.toFixed(2)} دينار`,
+          description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}. ${advanceMessages.join(' | ')} دينار`,
         });
       } else {
         toast({
@@ -878,14 +948,22 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       }
 
       // Log activity
+      const advanceInfo = [];
+      if (clientUnallocated > 0) {
+        advanceInfo.push(`سلفة عميل ${clientUnallocated.toFixed(2)}`);
+      }
+      if (supplierUnallocated > 0) {
+        advanceInfo.push(`سلفة مورد ${supplierUnallocated.toFixed(2)}`);
+      }
+
       logActivity(user.dataOwnerId, {
         action: 'update',
         module: 'cheques',
         targetId: cheque.id,
         userId: user.uid,
         userEmail: user.email || '',
-        description: supplierUnallocated > 0
-          ? `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (مع سلفة ${supplierUnallocated.toFixed(2)})`
+        description: advanceInfo.length > 0
+          ? `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (${advanceInfo.join(' + ')})`
           : `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (توزيع متعدد)`,
         metadata: {
           amount: cheque.amount,
@@ -897,6 +975,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           supplierAllocationsCount: supplierAllocations.length,
           clientTotalAllocated,
           supplierTotalAllocated,
+          clientAdvanceAmount: clientUnallocated > 0 ? clientUnallocated : null,
+          clientAdvanceDocId: clientAdvanceDocId,
           supplierAdvanceAmount: supplierUnallocated > 0 ? supplierUnallocated : null,
           supplierAdvanceDocId: supplierAdvanceDocId,
         },
@@ -920,7 +1000,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
    * Ensures outgoing cheque deletion + incoming revert + payments deletion + ARAP reversal succeed or fail together
    */
   const cancelEndorsement = async (cheque: Cheque): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {
+      return false;
+    }
 
     try {
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
@@ -957,7 +1039,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsedClientTransactionIds: null,
         endorsedSupplierTransactionIds: null,
         isMultiAllocationEndorsement: null,
-        // Clear supplier advance field
+        // Clear advance fields
+        endorsedClientAdvanceDocId: null,
         endorsedSupplierAdvanceDocId: null,
       });
 
@@ -984,8 +1067,29 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
               const ledgerDocRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDocId);
 
               if (isAdvance) {
-                // For advance entries, DELETE the entire ledger entry
-                // (it was created specifically for this endorsement)
+                // For advance entries, check if they've been partially consumed
+                // Both supplier and client advances start with totalPaid=0
+                // If totalPaid > 0, the advance has been used against later invoices
+                const advanceDoc = await getDoc(ledgerDocRef);
+                if (advanceDoc.exists()) {
+                  const advanceData = advanceDoc.data();
+                  const isSupplierAdvance = advanceData.isSupplierAdvance === true;
+                  const isClientAdvance = advanceData.isClientAdvance === true;
+                  const advanceTotalPaid = advanceData.totalPaid || 0;
+
+                  // Both advance types start with totalPaid=0; if > 0, they've been consumed
+                  if (isSupplierAdvance && advanceTotalPaid > 0) {
+                    throw new Error(
+                      `لا يمكن إلغاء التظهير: تم استخدام جزء من سلفة المورد (${advanceTotalPaid.toFixed(2)} دينار) في معاملات لاحقة`
+                    );
+                  }
+                  if (isClientAdvance && advanceTotalPaid > 0) {
+                    throw new Error(
+                      `لا يمكن إلغاء التظهير: تم استخدام جزء من رصيد العميل الدائن (${advanceTotalPaid.toFixed(2)} دينار) في معاملات لاحقة`
+                    );
+                  }
+                }
+                // DELETE the advance entry (it was created specifically for this endorsement)
                 batch.delete(ledgerDocRef);
               } else {
                 // For regular allocations, reverse the ARAP update
@@ -1092,9 +1196,14 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       return true;
     } catch (error) {
       console.error("Error canceling endorsement:", error);
+
+      // Check if this is our custom error for consumed advances
+      const errorMessage = error instanceof Error ? error.message : "";
+      const isConsumedAdvanceError = errorMessage.includes("لا يمكن إلغاء التظهير");
+
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إلغاء التظهير",
+        title: isConsumedAdvanceError ? "لا يمكن إلغاء التظهير" : "خطأ",
+        description: isConsumedAdvanceError ? errorMessage : "حدث خطأ أثناء إلغاء التظهير",
         variant: "destructive",
       });
       return false;

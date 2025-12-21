@@ -36,11 +36,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Zap, AlertCircle, CheckCircle2, Loader2, ChevronDown } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
-import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from "@/lib/currency";
+import { safeSubtract, safeAdd, sumAmounts } from "@/lib/currency";
 import { Cheque } from "../types/cheques";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface ClientInfo {
   name: string;
@@ -86,6 +90,100 @@ interface EndorsementAllocationDialogProps {
   onEndorse: (data: EndorsementData) => Promise<boolean>;
 }
 
+// ============================================================================
+// AllocationTable Component - Reusable table for client/supplier allocations
+// ============================================================================
+
+interface AllocationTableProps {
+  allocations: AllocationEntry[];
+  loading: boolean;
+  isEmpty: boolean;
+  emptyMessage: string;
+  emptyIcon: "success" | "warning" | "info";
+  idPrefix: string;
+  partyName: string;
+  onAllocationChange: (index: number, value: string) => void;
+}
+
+function AllocationTable({
+  allocations,
+  loading,
+  isEmpty,
+  emptyMessage,
+  emptyIcon,
+  idPrefix,
+  partyName,
+  onAllocationChange,
+}: AllocationTableProps) {
+  if (loading) {
+    return (
+      <div className="p-4 text-center">
+        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+        <p className="text-gray-500 text-sm">جاري التحميل...</p>
+      </div>
+    );
+  }
+
+  if (isEmpty) {
+    const IconComponent = emptyIcon === "success" ? CheckCircle2 : AlertCircle;
+    const iconColor = emptyIcon === "success" ? "text-green-500" : "text-yellow-500";
+    return (
+      <div className="p-4 text-center">
+        <IconComponent className={`w-6 h-6 ${iconColor} mx-auto mb-2`} />
+        <p className="text-gray-500 text-sm">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[250px] overflow-y-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-xs">التاريخ</TableHead>
+            <TableHead className="text-xs">الوصف</TableHead>
+            <TableHead className="text-xs text-left">المتبقي</TableHead>
+            <TableHead className="text-xs text-left w-[100px]">التخصيص</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {allocations.map((allocation, index) => (
+            <TableRow key={allocation.transactionId}>
+              <TableCell className="text-xs py-1">
+                {formatShortDate(allocation.transactionDate)}
+              </TableCell>
+              <TableCell className="text-xs py-1 max-w-[120px] truncate">
+                {allocation.description || "-"}
+              </TableCell>
+              <TableCell className="text-xs py-1 text-left text-orange-600 font-medium">
+                {allocation.remainingBalance.toFixed(2)}
+              </TableCell>
+              <TableCell className="py-1">
+                <Input
+                  id={`${idPrefix}-allocation-${index}`}
+                  aria-label={`تخصيص للمعاملة ${allocation.transactionId} - ${partyName}`}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={allocation.remainingBalance}
+                  value={allocation.allocatedAmount || ""}
+                  onChange={(e) => onAllocationChange(index, e.target.value)}
+                  className="h-7 text-xs"
+                  placeholder="0"
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export function EndorsementAllocationDialog({
   open,
   onOpenChange,
@@ -114,7 +212,7 @@ export function EndorsementAllocationDialog({
   // UI state
   const [saving, setSaving] = useState(false);
 
-  // Reset state when dialog closes or cheque changes
+  // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
       setSupplierName("");
@@ -126,16 +224,29 @@ export function EndorsementAllocationDialog({
     }
   }, [open]);
 
-  // Fetch client's unpaid transactions when dialog opens
-  const fetchClientTransactions = useCallback(async () => {
-    if (!user || !cheque?.clientName) return;
+  /**
+   * Shared helper to fetch unpaid transactions for a party
+   * Reduces code duplication between client and supplier fetching
+   */
+  const fetchUnpaidTransactions = useCallback(async (
+    partyName: string,
+    setTransactions: (t: UnpaidTransaction[]) => void,
+    setAllocations: (a: AllocationEntry[]) => void,
+    setLoading: (l: boolean) => void,
+    errorMessage: string
+  ) => {
+    if (!user || !partyName.trim()) {
+      setTransactions([]);
+      setAllocations([]);
+      return;
+    }
 
-    setClientTransactionsLoading(true);
+    setLoading(true);
     try {
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const q = query(
         ledgerRef,
-        where('associatedParty', '==', cheque.clientName),
+        where('associatedParty', '==', partyName),
         where('isARAPEntry', '==', true)
       );
 
@@ -145,13 +256,17 @@ export function EndorsementAllocationDialog({
       snapshot.forEach((doc) => {
         const data = doc.data();
         const paymentStatus = data.paymentStatus || 'unpaid';
-        if (paymentStatus === 'paid') return;
+        if (paymentStatus === 'paid') {
+          return;
+        }
 
         const amount = data.amount || 0;
         const totalPaid = data.totalPaid || 0;
         const remainingBalance = data.remainingBalance ?? safeSubtract(amount, totalPaid);
 
-        if (remainingBalance <= 0) return;
+        if (remainingBalance <= 0) {
+          return;
+        }
 
         transactions.push({
           id: doc.id,
@@ -168,9 +283,9 @@ export function EndorsementAllocationDialog({
 
       // Sort by date (oldest first for FIFO)
       transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
-      setClientTransactions(transactions);
+      setTransactions(transactions);
 
-      // Initialize client allocations
+      // Initialize allocations
       const allocations: AllocationEntry[] = transactions.map((txn) => ({
         transactionId: txn.transactionId,
         ledgerDocId: txn.id,
@@ -180,18 +295,32 @@ export function EndorsementAllocationDialog({
         remainingBalance: txn.remainingBalance,
         allocatedAmount: 0,
       }));
-      setClientAllocations(allocations);
+      setAllocations(allocations);
     } catch (error) {
-      console.error("Error fetching client transactions:", error);
+      console.error("Error fetching transactions:", error);
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء جلب معاملات العميل",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setClientTransactionsLoading(false);
+      setLoading(false);
     }
-  }, [user, cheque?.clientName, toast]);
+  }, [user, toast]);
+
+  // Fetch client's unpaid transactions when dialog opens
+  const fetchClientTransactions = useCallback(() => {
+    if (!cheque?.clientName) {
+      return;
+    }
+    fetchUnpaidTransactions(
+      cheque.clientName,
+      setClientTransactions,
+      setClientAllocations,
+      setClientTransactionsLoading,
+      "حدث خطأ أثناء جلب معاملات العميل"
+    );
+  }, [cheque?.clientName, fetchUnpaidTransactions]);
 
   // Fetch when dialog opens with a cheque
   useEffect(() => {
@@ -201,75 +330,15 @@ export function EndorsementAllocationDialog({
   }, [open, cheque, fetchClientTransactions]);
 
   // Fetch supplier's unpaid transactions when supplier is selected
-  const fetchSupplierTransactions = useCallback(async (supplierNameParam: string) => {
-    if (!user || !supplierNameParam.trim()) {
-      setSupplierTransactions([]);
-      setSupplierAllocations([]);
-      return;
-    }
-
-    setSupplierTransactionsLoading(true);
-    try {
-      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-      const q = query(
-        ledgerRef,
-        where('associatedParty', '==', supplierNameParam),
-        where('isARAPEntry', '==', true)
-      );
-
-      const snapshot = await getDocs(q);
-      const transactions: UnpaidTransaction[] = [];
-
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const paymentStatus = data.paymentStatus || 'unpaid';
-        if (paymentStatus === 'paid') return;
-
-        const amount = data.amount || 0;
-        const totalPaid = data.totalPaid || 0;
-        const remainingBalance = data.remainingBalance ?? safeSubtract(amount, totalPaid);
-
-        if (remainingBalance <= 0) return;
-
-        transactions.push({
-          id: doc.id,
-          transactionId: data.transactionId || '',
-          date: data.date?.toDate?.() || new Date(data.date) || new Date(),
-          description: data.description || '',
-          category: data.category || '',
-          amount,
-          totalPaid,
-          remainingBalance,
-          paymentStatus: paymentStatus as 'unpaid' | 'partial',
-        });
-      });
-
-      // Sort by date (oldest first for FIFO)
-      transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
-      setSupplierTransactions(transactions);
-
-      // Initialize supplier allocations
-      const allocations: AllocationEntry[] = transactions.map((txn) => ({
-        transactionId: txn.transactionId,
-        ledgerDocId: txn.id,
-        transactionDate: txn.date,
-        description: txn.description,
-        totalAmount: txn.amount,
-        remainingBalance: txn.remainingBalance,
-        allocatedAmount: 0,
-      }));
-      setSupplierAllocations(allocations);
-    } catch (error) {
-      console.error("Error fetching supplier transactions:", error);
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء جلب معاملات المورد",
-        variant: "destructive",
-      });
-    } finally {
-      setSupplierTransactionsLoading(false);
-    }
-  }, [user, toast]);
+  const fetchSupplierTransactions = useCallback((supplierNameParam: string) => {
+    fetchUnpaidTransactions(
+      supplierNameParam,
+      setSupplierTransactions,
+      setSupplierAllocations,
+      setSupplierTransactionsLoading,
+      "حدث خطأ أثناء جلب معاملات المورد"
+    );
+  }, [fetchUnpaidTransactions]);
 
   // Filter suppliers (exclude the cheque's client)
   const filteredSuppliers = useMemo(() => {
@@ -295,7 +364,6 @@ export function EndorsementAllocationDialog({
   // FIFO distribution function
   const distributeFIFO = (
     amount: number,
-    transactions: UnpaidTransaction[],
     currentAllocations: AllocationEntry[]
   ): AllocationEntry[] => {
     let remainingPayment = amount;
@@ -311,23 +379,27 @@ export function EndorsementAllocationDialog({
 
   // Handle FIFO for client
   const handleClientFIFO = () => {
-    if (!cheque) return;
-    const newAllocations = distributeFIFO(cheque.amount, clientTransactions, clientAllocations);
+    if (!cheque) {
+      return;
+    }
+    const newAllocations = distributeFIFO(cheque.amount, clientAllocations);
     setClientAllocations(newAllocations);
   };
 
   // Handle FIFO for supplier
   const handleSupplierFIFO = () => {
-    if (!cheque) return;
-    const newAllocations = distributeFIFO(cheque.amount, supplierTransactions, supplierAllocations);
+    if (!cheque) {
+      return;
+    }
+    const newAllocations = distributeFIFO(cheque.amount, supplierAllocations);
     setSupplierAllocations(newAllocations);
   };
 
-  // Handle manual allocation change
-  const handleClientAllocationChange = (index: number, value: string) => {
+  // Handle manual allocation change for client
+  const handleClientAllocationChange = useCallback((index: number, value: string) => {
     const amount = parseFloat(value) || 0;
-    const maxAmount = clientAllocations[index].remainingBalance;
     setClientAllocations((prev) => {
+      const maxAmount = prev[index].remainingBalance;
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
@@ -335,12 +407,13 @@ export function EndorsementAllocationDialog({
       };
       return updated;
     });
-  };
+  }, []);
 
-  const handleSupplierAllocationChange = (index: number, value: string) => {
+  // Handle manual allocation change for supplier
+  const handleSupplierAllocationChange = useCallback((index: number, value: string) => {
     const amount = parseFloat(value) || 0;
-    const maxAmount = supplierAllocations[index].remainingBalance;
     setSupplierAllocations((prev) => {
+      const maxAmount = prev[index].remainingBalance;
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
@@ -348,7 +421,7 @@ export function EndorsementAllocationDialog({
       };
       return updated;
     });
-  };
+  }, []);
 
   // Calculate totals
   const chequeAmount = cheque?.amount || 0;
@@ -361,15 +434,20 @@ export function EndorsementAllocationDialog({
 
   // Validation
   const canProceed = useMemo(() => {
-    if (!supplierName.trim()) return false;
-    if (totalClientAllocated === 0 && totalSupplierAllocated === 0) return false;
-    // At least one side must have allocations
+    if (!supplierName.trim()) {
+      return false;
+    }
+    if (totalClientAllocated === 0 && totalSupplierAllocated === 0) {
+      return false;
+    }
     return true;
   }, [supplierName, totalClientAllocated, totalSupplierAllocated]);
 
   // Handle endorsement
   const handleEndorseClick = async () => {
-    if (!user || !cheque || !supplierName.trim()) return;
+    if (!user || !cheque || !supplierName.trim()) {
+      return;
+    }
 
     // Get active allocations
     const activeClientAllocations = clientAllocations.filter((a) => a.allocatedAmount > 0);
@@ -387,8 +465,6 @@ export function EndorsementAllocationDialog({
     setSaving(true);
 
     try {
-      // Call the onEndorse callback with all allocation data
-      // The parent component handles Firestore operations and shows toasts
       const success = await onEndorse({
         supplierName: supplierName.trim(),
         clientAllocations: activeClientAllocations,
@@ -410,12 +486,34 @@ export function EndorsementAllocationDialog({
     }
   };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!open) {
-      setShowSupplierDropdown(false);
+  // Helper to get difference status styling
+  const getDifferenceStyle = (difference: number) => {
+    if (difference === 0) {
+      return {
+        bg: 'bg-green-50',
+        text: 'text-green-600',
+        textBold: 'text-green-700',
+        label: 'متوازن',
+      };
     }
-  }, [open]);
+    if (difference > 0) {
+      return {
+        bg: 'bg-yellow-50',
+        text: 'text-yellow-600',
+        textBold: 'text-yellow-700',
+        label: 'غير موزع',
+      };
+    }
+    return {
+      bg: 'bg-red-50',
+      text: 'text-red-600',
+      textBold: 'text-red-700',
+      label: 'تجاوز',
+    };
+  };
+
+  const clientStyle = getDifferenceStyle(clientDifference);
+  const supplierStyle = getDifferenceStyle(supplierDifference);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -527,68 +625,25 @@ export function EndorsementAllocationDialog({
                   <div className="text-blue-600">إجمالي المستحق</div>
                   <div className="font-bold text-blue-700">{clientTotalOutstanding.toFixed(2)}</div>
                 </div>
-                <div className={`p-2 rounded ${clientDifference === 0 ? 'bg-green-50' : clientDifference > 0 ? 'bg-yellow-50' : 'bg-red-50'}`}>
-                  <div className={clientDifference === 0 ? 'text-green-600' : clientDifference > 0 ? 'text-yellow-600' : 'text-red-600'}>
-                    {clientDifference === 0 ? 'متوازن' : clientDifference > 0 ? 'غير موزع' : 'تجاوز'}
-                  </div>
-                  <div className={`font-bold ${clientDifference === 0 ? 'text-green-700' : clientDifference > 0 ? 'text-yellow-700' : 'text-red-700'}`}>
+                <div className={`p-2 rounded ${clientStyle.bg}`}>
+                  <div className={clientStyle.text}>{clientStyle.label}</div>
+                  <div className={`font-bold ${clientStyle.textBold}`}>
                     {Math.abs(clientDifference).toFixed(2)}
                   </div>
                 </div>
               </div>
 
               {/* Client Transactions Table */}
-              {clientTransactionsLoading ? (
-                <div className="p-4 text-center">
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">جاري التحميل...</p>
-                </div>
-              ) : clientTransactions.length === 0 ? (
-                <div className="p-4 text-center">
-                  <CheckCircle2 className="w-6 h-6 text-green-500 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">لا توجد معاملات مستحقة</p>
-                </div>
-              ) : (
-                <div className="max-h-[250px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">التاريخ</TableHead>
-                        <TableHead className="text-xs">الوصف</TableHead>
-                        <TableHead className="text-xs text-left">المتبقي</TableHead>
-                        <TableHead className="text-xs text-left w-[100px]">التخصيص</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {clientAllocations.map((allocation, index) => (
-                        <TableRow key={allocation.transactionId}>
-                          <TableCell className="text-xs py-1">
-                            {formatShortDate(allocation.transactionDate)}
-                          </TableCell>
-                          <TableCell className="text-xs py-1 max-w-[120px] truncate">
-                            {allocation.description || "-"}
-                          </TableCell>
-                          <TableCell className="text-xs py-1 text-left text-orange-600 font-medium">
-                            {allocation.remainingBalance.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="py-1">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max={allocation.remainingBalance}
-                              value={allocation.allocatedAmount || ""}
-                              onChange={(e) => handleClientAllocationChange(index, e.target.value)}
-                              className="h-7 text-xs"
-                              placeholder="0"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              <AllocationTable
+                allocations={clientAllocations}
+                loading={clientTransactionsLoading}
+                isEmpty={clientTransactions.length === 0}
+                emptyMessage="لا توجد معاملات مستحقة"
+                emptyIcon="success"
+                idPrefix="client"
+                partyName={cheque?.clientName || "العميل"}
+                onAllocationChange={handleClientAllocationChange}
+              />
             </div>
 
             {/* Supplier Side Allocations */}
@@ -617,11 +672,9 @@ export function EndorsementAllocationDialog({
                   <div className="text-purple-600">إجمالي المستحق</div>
                   <div className="font-bold text-purple-700">{supplierTotalOutstanding.toFixed(2)}</div>
                 </div>
-                <div className={`p-2 rounded ${supplierDifference === 0 ? 'bg-green-50' : supplierDifference > 0 ? 'bg-yellow-50' : 'bg-red-50'}`}>
-                  <div className={supplierDifference === 0 ? 'text-green-600' : supplierDifference > 0 ? 'text-yellow-600' : 'text-red-600'}>
-                    {supplierDifference === 0 ? 'متوازن' : supplierDifference > 0 ? 'غير موزع' : 'تجاوز'}
-                  </div>
-                  <div className={`font-bold ${supplierDifference === 0 ? 'text-green-700' : supplierDifference > 0 ? 'text-yellow-700' : 'text-red-700'}`}>
+                <div className={`p-2 rounded ${supplierStyle.bg}`}>
+                  <div className={supplierStyle.text}>{supplierStyle.label}</div>
+                  <div className={`font-bold ${supplierStyle.textBold}`}>
                     {Math.abs(supplierDifference).toFixed(2)}
                   </div>
                 </div>
@@ -632,56 +685,17 @@ export function EndorsementAllocationDialog({
                 <div className="p-4 text-center">
                   <p className="text-gray-400 text-sm">اختر المورد أولاً</p>
                 </div>
-              ) : supplierTransactionsLoading ? (
-                <div className="p-4 text-center">
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">جاري التحميل...</p>
-                </div>
-              ) : supplierTransactions.length === 0 ? (
-                <div className="p-4 text-center">
-                  <AlertCircle className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">لا توجد معاملات مستحقة للمورد</p>
-                </div>
               ) : (
-                <div className="max-h-[250px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">التاريخ</TableHead>
-                        <TableHead className="text-xs">الوصف</TableHead>
-                        <TableHead className="text-xs text-left">المتبقي</TableHead>
-                        <TableHead className="text-xs text-left w-[100px]">التخصيص</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {supplierAllocations.map((allocation, index) => (
-                        <TableRow key={allocation.transactionId}>
-                          <TableCell className="text-xs py-1">
-                            {formatShortDate(allocation.transactionDate)}
-                          </TableCell>
-                          <TableCell className="text-xs py-1 max-w-[120px] truncate">
-                            {allocation.description || "-"}
-                          </TableCell>
-                          <TableCell className="text-xs py-1 text-left text-orange-600 font-medium">
-                            {allocation.remainingBalance.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="py-1">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max={allocation.remainingBalance}
-                              value={allocation.allocatedAmount || ""}
-                              onChange={(e) => handleSupplierAllocationChange(index, e.target.value)}
-                              className="h-7 text-xs"
-                              placeholder="0"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <AllocationTable
+                  allocations={supplierAllocations}
+                  loading={supplierTransactionsLoading}
+                  isEmpty={supplierTransactions.length === 0}
+                  emptyMessage="لا توجد معاملات مستحقة للمورد"
+                  emptyIcon="warning"
+                  idPrefix="supplier"
+                  partyName={supplierName}
+                  onAllocationChange={handleSupplierAllocationChange}
+                />
               )}
             </div>
           </div>

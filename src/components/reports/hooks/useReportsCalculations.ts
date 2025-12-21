@@ -188,8 +188,11 @@ export function useReportsCalculations({
                        entry.category === "رأس المال" ||
                        entry.category === "Owner Equity";
 
-      if (isEquity) {
-        return; // Skip owner equity transactions
+      // EXCLUDE advances from P&L (prepaid expense/credit, not actual income/expense)
+      const isAdvance = entry.category === "سلفة مورد" || entry.category === "سلفة عميل";
+
+      if (isEquity || isAdvance) {
+        return; // Skip owner equity and advance transactions
       }
 
       if (entry.type === "دخل") {
