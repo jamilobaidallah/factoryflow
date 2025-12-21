@@ -351,6 +351,17 @@ export default function PaymentsPage() {
     if (!user) return;
 
     const payment = payments.find((p) => p.id === paymentId);
+
+    // Block deletion of endorsement payments - must cancel endorsement from cheques page
+    if (payment && 'isEndorsement' in payment && payment.isEndorsement) {
+      toast({
+        title: "لا يمكن حذف دفعة التظهير",
+        description: "لإلغاء التظهير، اذهب إلى صفحة الشيكات الواردة واستخدم زر 'إلغاء التظهير'",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const isMultiAlloc = payment && isMultiAllocationPayment(payment);
 
     confirm(
