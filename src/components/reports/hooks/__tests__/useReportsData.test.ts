@@ -20,6 +20,17 @@ jest.mock('firebase/firestore', () => ({
   getDocs: jest.fn(() => mockGetDocs()),
   orderBy: jest.fn(),
   limit: jest.fn(),
+  onSnapshot: jest.fn((query, callback) => {
+    // Simulate async snapshot callback with empty data using setTimeout
+    // This allows React to properly batch state updates
+    setTimeout(() => {
+      callback({
+        forEach: jest.fn(),
+      });
+    }, 0);
+    // Return unsubscribe function
+    return jest.fn();
+  }),
 }));
 
 // Mock useToast
