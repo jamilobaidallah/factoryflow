@@ -388,6 +388,16 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       return false;
     }
 
+    // Require supplier transaction ID for ARAP tracking
+    if (!transactionId.trim()) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء إدخال رقم معاملة المورد لتحديث رصيد الذمم",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     // Validate state transition: only PENDING cheques can be endorsed
     try {
       validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.ENDORSED);

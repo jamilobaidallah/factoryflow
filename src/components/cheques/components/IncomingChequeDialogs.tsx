@@ -202,9 +202,9 @@ export function EndorseDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="endorseTransactionId">
-              رقم معاملة المورد (اختياري)
+              رقم معاملة المورد <span className="text-red-500">*</span>
               <span className="text-xs text-gray-500 block mt-1">
-                لتحديث رصيد ذمة المورد في دفتر الأستاذ
+                مطلوب لتحديث رصيد ذمة المورد في دفتر الأستاذ
               </span>
             </Label>
             <Input
@@ -212,6 +212,7 @@ export function EndorseDialog({
               value={transactionId}
               onChange={(e) => setTransactionId(e.target.value)}
               placeholder="TXN-20250109-123456-789"
+              required
             />
           </div>
         </div>
@@ -219,7 +220,7 @@ export function EndorseDialog({
           <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             إلغاء
           </Button>
-          <Button type="button" onClick={onEndorse} disabled={loading || !supplierName.trim()}>
+          <Button type="button" onClick={onEndorse} disabled={loading || !supplierName.trim() || !transactionId.trim()}>
             {loading ? "جاري التظهير..." : "تظهير الشيك"}
           </Button>
         </DialogFooter>
