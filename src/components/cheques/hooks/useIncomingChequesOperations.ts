@@ -760,7 +760,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(allocationRef, {
           transactionId: allocation.transactionId,
           ledgerDocId: allocation.ledgerDocId,
-          amount: allocation.allocatedAmount,
+          allocatedAmount: allocation.allocatedAmount,
           transactionDate: allocation.transactionDate,
           description: allocation.description,
           createdAt: now,
@@ -773,7 +773,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(allocationRef, {
           transactionId: allocation.transactionId,
           ledgerDocId: allocation.ledgerDocId,
-          amount: allocation.allocatedAmount,
+          allocatedAmount: allocation.allocatedAmount,
           transactionDate: allocation.transactionDate,
           description: allocation.description,
           createdAt: now,
@@ -853,7 +853,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(clientAdvanceAllocationRef, {
           transactionId: clientAdvanceTransactionId,
           ledgerDocId: clientAdvanceDocId,
-          amount: clientUnallocated,
+          allocatedAmount: clientUnallocated,
           transactionDate: now,
           description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
           isAdvance: true,
@@ -900,7 +900,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(advanceAllocationRef, {
           transactionId: advanceTransactionId,
           ledgerDocId: supplierAdvanceDocId,
-          amount: supplierUnallocated,
+          allocatedAmount: supplierUnallocated,
           transactionDate: now,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
           isAdvance: true,
@@ -1060,7 +1060,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           for (const allocationDoc of allocationsSnapshot.docs) {
             const allocationData = allocationDoc.data();
             const ledgerDocId = allocationData.ledgerDocId;
-            const allocatedAmount = allocationData.amount || 0;
+            const allocatedAmount = allocationData.allocatedAmount || 0;
             const isAdvance = allocationData.isAdvance === true;
 
             if (ledgerDocId && allocatedAmount > 0) {
