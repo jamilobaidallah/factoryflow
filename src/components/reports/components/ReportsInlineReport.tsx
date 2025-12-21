@@ -19,10 +19,21 @@ interface LedgerEntry {
   writeoffAmount?: number;
 }
 
+interface Payment {
+  id: string;
+  amount: number;
+  type: string;
+  date: Date;
+  linkedTransactionId?: string;
+  isEndorsement?: boolean;
+  noCashMovement?: boolean;
+}
+
 interface ReportsInlineReportProps {
   reportId: string | null;
   onClose: () => void;
   ledgerEntries: LedgerEntry[];
+  payments: Payment[];
   filteredData: {
     revenueByCategory: Record<string, number>;
     expensesByCategory: Record<string, number>;
@@ -45,6 +56,7 @@ function ReportsInlineReportComponent({
   reportId,
   onClose,
   ledgerEntries,
+  payments,
   filteredData,
   dateRange,
 }: ReportsInlineReportProps) {
@@ -125,7 +137,7 @@ function ReportsInlineReportComponent({
           <ExpenseAnalysisReport ledgerEntries={ledgerEntries} filteredData={filteredData} dateRange={dateRange} />
         )}
         {reportId === "cashflow" && (
-          <CashFlowReport ledgerEntries={ledgerEntries} dateRange={dateRange} />
+          <CashFlowReport ledgerEntries={ledgerEntries} payments={payments} dateRange={dateRange} />
         )}
       </div>
     </div>
@@ -520,22 +532,43 @@ function ExpenseAnalysisReport({
 
 /**
  * Cash Flow Report - Includes Operating and Financing Activities
+ * Operating cash is calculated from PAYMENTS (excludes endorsements with noCashMovement)
+ * Financing activities are calculated from LEDGER (equity transactions)
  */
 function CashFlowReport({
   ledgerEntries,
+  payments,
   dateRange,
 }: {
   ledgerEntries: LedgerEntry[];
+  payments: Payment[];
   dateRange: { start: Date; end: Date };
 }) {
   const cashFlowData = useMemo(() => {
-    // Operating Activities (from ledger - income/expense)
+    // Operating Activities - from PAYMENTS collection
+    // IMPORTANT: Skip payments with noCashMovement (endorsements don't move actual cash)
     let operatingIn = 0;
     let operatingOut = 0;
-    const inByCategory: Record<string, number> = {};
-    const outByCategory: Record<string, number> = {};
 
-    // Financing Activities (equity - capital and drawings)
+    payments.forEach((payment) => {
+      const paymentDate = payment.date instanceof Date ? payment.date : new Date(payment.date);
+      if (paymentDate < dateRange.start || paymentDate > dateRange.end) {
+        return;
+      }
+
+      // Skip endorsement payments - they don't involve actual cash movement
+      if (payment.isEndorsement || payment.noCashMovement) {
+        return;
+      }
+
+      if (payment.type === "قبض") {
+        operatingIn += payment.amount;
+      } else if (payment.type === "صرف") {
+        operatingOut += payment.amount;
+      }
+    });
+
+    // Financing Activities (equity - capital and drawings) - from LEDGER
     let capitalIn = 0;    // رأس مال مالك
     let capitalOut = 0;   // سحوبات المالك
 
@@ -557,35 +590,6 @@ function CashFlowReport({
         } else if (entry.subCategory === "سحوبات المالك") {
           capitalOut += entry.amount;
         }
-        return;
-      }
-
-      // OPERATING CASH: Calculate based on payment status
-      // - Non-ARAP entries (instant settlement) = full amount
-      // - Paid ARAP entries = totalPaid (actual cash, excludes discounts/writeoffs)
-      // - Partial ARAP entries = only totalPaid portion
-      // - Unpaid ARAP entries = 0 (no cash movement yet)
-      let cashAmount = 0;
-      if (!entry.isARAPEntry) {
-        // Non-AR/AP = instant settlement, full amount
-        cashAmount = entry.amount;
-      } else if (entry.paymentStatus === "paid" || entry.paymentStatus === "مدفوع") {
-        // Fully paid - use totalPaid (actual cash received, excludes discounts/writeoffs)
-        cashAmount = entry.totalPaid ?? entry.amount;
-      } else if (entry.paymentStatus === "partial" || entry.paymentStatus === "جزئي") {
-        // Partial = only the paid portion
-        cashAmount = entry.totalPaid || 0;
-      }
-      // unpaid = 0, already initialized
-
-      if (cashAmount > 0) {
-        if (entry.type === "دخل") {
-          operatingIn += cashAmount;
-          inByCategory[entry.category] = (inByCategory[entry.category] || 0) + cashAmount;
-        } else if (entry.type === "مصروف") {
-          operatingOut += cashAmount;
-          outByCategory[entry.category] = (outByCategory[entry.category] || 0) + cashAmount;
-        }
       }
     });
 
@@ -601,10 +605,8 @@ function CashFlowReport({
       capitalOut,
       netFinancing,
       totalCashFlow,
-      inByCategory,
-      outByCategory,
     };
-  }, [ledgerEntries, dateRange]);
+  }, [ledgerEntries, payments, dateRange]);
 
   const isTotalPositive = cashFlowData.totalCashFlow >= 0;
 
@@ -662,50 +664,6 @@ function CashFlowReport({
           <p className={`text-2xl font-bold ${isTotalPositive ? "text-slate-800" : "text-rose-700"}`}>
             {formatNumber(cashFlowData.totalCashFlow)} د.أ
           </p>
-        </div>
-      </div>
-
-      {/* Operating Cash In Details */}
-      <div>
-        <h4 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4" />
-          تفاصيل النقد التشغيلي الوارد
-        </h4>
-        <div className="space-y-2">
-          {Object.entries(cashFlowData.inByCategory).length > 0 ? (
-            Object.entries(cashFlowData.inByCategory)
-              .sort(([, a], [, b]) => b - a)
-              .map(([category, amount]) => (
-                <div key={category} className="flex items-center justify-between p-2 bg-emerald-50 rounded">
-                  <span className="text-sm text-slate-700">{category}</span>
-                  <span className="text-sm font-medium text-emerald-700">{formatNumber(amount)} د.أ</span>
-                </div>
-              ))
-          ) : (
-            <p className="text-sm text-slate-400 p-2">لا يوجد نقد وارد في هذه الفترة</p>
-          )}
-        </div>
-      </div>
-
-      {/* Operating Cash Out Details */}
-      <div>
-        <h4 className="text-sm font-semibold text-rose-700 mb-3 flex items-center gap-2">
-          <TrendingDown className="w-4 h-4" />
-          تفاصيل النقد التشغيلي الصادر
-        </h4>
-        <div className="space-y-2">
-          {Object.entries(cashFlowData.outByCategory).length > 0 ? (
-            Object.entries(cashFlowData.outByCategory)
-              .sort(([, a], [, b]) => b - a)
-              .map(([category, amount]) => (
-                <div key={category} className="flex items-center justify-between p-2 bg-rose-50 rounded">
-                  <span className="text-sm text-slate-700">{category}</span>
-                  <span className="text-sm font-medium text-rose-700">{formatNumber(amount)} د.أ</span>
-                </div>
-              ))
-          ) : (
-            <p className="text-sm text-slate-400 p-2">لا يوجد نقد صادر في هذه الفترة</p>
-          )}
         </div>
       </div>
 

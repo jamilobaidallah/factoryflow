@@ -94,7 +94,7 @@ export default function ReportsPage() {
   }, [selectedPeriod]);
 
   // Fetch data
-  const { loading, ledgerEntries } = useReportsData({
+  const { loading, ledgerEntries, payments } = useReportsData({
     userId: user?.uid || null,
     startDate,
     endDate,
@@ -408,6 +408,7 @@ export default function ReportsPage() {
           reportId={activeReport}
           onClose={() => setActiveReport(null)}
           ledgerEntries={ledgerEntries}
+          payments={payments}
           filteredData={filteredData}
           dateRange={dateRange}
         />
