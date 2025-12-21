@@ -2,7 +2,9 @@
 
 ## Summary
 
-After thorough analysis of the client page components and endorsed cheques implementation, I've identified **10 bugs** (6 display bugs + 4 calculation bugs) and created **18 test scenarios** for Vercel testing.
+After thorough analysis of the client page components and endorsed cheques implementation, I've identified **11 bugs** (6 display bugs + 5 calculation bugs) and created **18 test scenarios** for Vercel testing.
+
+**Latest Fix (Dec 21, 2025)**: Fixed critical Bug 11 - Statement balance mismatch caused by سلفة double-counting.
 
 ---
 
@@ -234,6 +236,41 @@ const balanceAfterCheques = finalBalance - incomingTotal + outgoingTotal;
 If the supplier is ALSO a client in the system, this entry would be fetched for the supplier's client page and counted as a SALE, which is incorrect.
 
 **This is an edge case** but worth testing if suppliers can also be clients.
+
+---
+
+### BUG 11: Statement Balance Mismatch - سلفة Double Counting (CRITICAL - FIXED)
+**Location**: [client-detail-page.tsx:944-959](src/components/clients/client-detail-page.tsx#L944-L959)
+
+**Issue**: The header card and statement showed DIFFERENT balance values!
+
+**Root Cause**:
+- **Header card**: Correctly EXCLUDED سلفة entries from `totalSales` and `totalPurchases`
+- **Statement**: INCLUDED سلفة entries in DEBIT column (since type="دخل")
+
+This caused سلفة amounts to be counted TWICE:
+1. The endorsement payment (صرف) already covers the full amount paid
+2. The سلفة entry was ALSO added to statement DEBIT
+
+**Example**:
+- Supplier had 1000 in purchases (مصروف)
+- We endorsed 1850 cheque (creating سلفة مورد of 850)
+
+**Before Fix**:
+- Header card: 850 عليه (correct)
+- Statement: 0 (opening) - 1000 (purchases) + 1850 (payment) + 850 (سلفة) = **1700 عليه** ❌
+
+**After Fix**:
+- Header card: 850 عليه
+- Statement: 0 (opening) - 1000 (purchases) + 1850 (payment) + 0 (سلفة excluded) = **850 عليه** ✓
+
+**Fix Applied**:
+- سلفة entries are now marked with `entryType: 'سلفة'` and displayed with orange badge
+- Their debit/credit values are set to 0 (don't affect running balance)
+- Amount is shown in description: `"سلفة مورد (850.00 د.أ - لا يؤثر على الرصيد)"`
+- Same logic applied to Excel/PDF exports
+
+**Status**: ✅ FIXED in commit on branch `fix/client-page-endorsed-cheques-bugs`
 
 ---
 

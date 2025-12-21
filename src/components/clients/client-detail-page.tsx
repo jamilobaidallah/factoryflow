@@ -368,13 +368,17 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       ...ledgerEntries.flatMap((e) => {
         const rows: { date: Date; type: "Invoice" | "Payment"; description: string; debit: number; credit: number; balance: number }[] = [];
 
+        // Check if this is an advance (سلفة) entry - these don't affect balance
+        const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
+
         // Row 1: The invoice itself
+        // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
         rows.push({
           date: e.date,
           type: "Invoice" as const,
-          description: e.description,
-          debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
-          credit: e.type === "مصروف" ? e.amount : 0,
+          description: isAdvance ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)` : e.description,
+          debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
+          credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
           balance: 0,
         });
 
@@ -517,12 +521,16 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 ...ledgerEntries.flatMap((e) => {
                   const rows: { date: Date; description: string; debit: number; credit: number; balance: number }[] = [];
 
+                  // Check if this is an advance (سلفة) entry - these don't affect balance
+                  const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
+
                   // Row 1: The invoice itself
+                  // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
                   rows.push({
                     date: e.date,
-                    description: e.description,
-                    debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
-                    credit: e.type === "مصروف" ? e.amount : 0,
+                    description: isAdvance ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)` : e.description,
+                    debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
+                    credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
                     balance: 0,
                   });
 
@@ -928,21 +936,32 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   ...ledgerEntries.flatMap((e) => {
                     const rows: StatementItem[] = [];
 
+                    // Check if this is an advance (سلفة) entry
+                    // Advances are INFORMATIONAL ONLY - they explain where overpayment sits
+                    // They should NOT affect running balance (the payment already captured the money flow)
+                    const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
+
                     // Row 1: The invoice itself
+                    // For advances: show amount in description since debit/credit are 0
+                    const advanceDescription = isAdvance
+                      ? `${e.description} (${e.amount.toFixed(2)} د.أ - لا يؤثر على الرصيد)`
+                      : e.description;
+
                     rows.push({
                       id: e.id,
                       transactionId: e.transactionId,
                       source: 'ledger' as const,
                       date: e.date,
                       isPayment: false,
-                      entryType: e.type,
-                      description: e.description,
+                      entryType: isAdvance ? 'سلفة' : e.type, // Mark as سلفة for special styling
+                      description: advanceDescription,
                       category: e.category,
                       subCategory: e.subCategory,
                       // Income/Sales: amount goes in مدين (client owes us)
                       // Expense/Purchases from them: amount goes in دائن (we owe them)
-                      debit: e.type === "دخل" || e.type === "إيراد" ? e.amount : 0,
-                      credit: e.type === "مصروف" ? e.amount : 0,
+                      // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
+                      debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
+                      credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
                     });
 
                     // Row 2: Discount from ledger entry (if any) - reduces what client owes
@@ -1211,13 +1230,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                 <td className="px-4 py-3 text-sm text-right">
                                   <div className="flex items-center gap-2 justify-end">
                                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
-                                      transaction.isEndorsement
+                                      transaction.entryType === 'سلفة'
+                                        ? 'bg-orange-100 text-orange-800'
+                                        : transaction.isEndorsement
                                         ? 'bg-purple-100 text-purple-800'
                                         : transaction.isPayment
                                         ? 'bg-green-100 text-green-800'
                                         : 'bg-blue-100 text-blue-800'
                                     }`}>
-                                      {transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                      {transaction.entryType === 'سلفة' ? 'سلفة' : transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
                                     </span>
                                     <span>
                                       {transaction.isPayment
