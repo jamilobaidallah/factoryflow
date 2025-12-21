@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
-import { toDate } from "@/lib/firestore-utils";
+import { toDate, type FirestoreDateValue } from "@/lib/firestore-utils";
 import type { AlertData, UseChequesAlertsReturn } from "../types/dashboard.types";
 import { DASHBOARD_CONFIG, CHEQUE_PENDING_STATUS } from "../constants/dashboard.constants";
 
@@ -30,11 +30,8 @@ export function useChequesAlerts(): UseChequesAlertsReturn {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const dueDate = toDate(data.dueDate);
-        const status = data.status;
 
-        // Only count pending cheques due within configured days
-        if (isPendingAndDueSoon(status, dueDate, now, futureDate)) {
+        if (isEligibleForAlert(data, futureDate)) {
           count++;
           total += data.amount || 0;
         }
@@ -55,16 +52,15 @@ function calculateFutureDate(from: Date, days: number): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-/** Check if cheque is pending and due soon (or past due) */
-function isPendingAndDueSoon(
-  status: string,
-  dueDate: Date,
-  _now: Date,
+/** Check if cheque should appear in due soon alert */
+function isEligibleForAlert(
+  data: { status?: string; dueDate?: FirestoreDateValue; isEndorsedCheque?: boolean },
   futureDate: Date
 ): boolean {
-  // Include both:
-  // 1. Past-due pending cheques (dueDate < now) - URGENT
-  // 2. Cheques due within configured days (dueDate <= futureDate)
-  // Simplified: any pending cheque with dueDate <= futureDate
-  return status === CHEQUE_PENDING_STATUS && dueDate <= futureDate;
+  const isPending = data.status === CHEQUE_PENDING_STATUS;
+  const isEndorsed = data.isEndorsedCheque === true;
+  const dueDate = toDate(data.dueDate);
+  const isDueSoon = dueDate <= futureDate;
+
+  return isPending && !isEndorsed && isDueSoon;
 }
