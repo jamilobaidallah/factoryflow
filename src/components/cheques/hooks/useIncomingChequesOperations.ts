@@ -809,13 +809,73 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         });
       }
 
+      // 9. Create supplier advance entry if there's unallocated amount
+      const supplierUnallocated = safeSubtract(cheque.amount, supplierTotalAllocated);
+      let supplierAdvanceDocId: string | null = null;
+
+      if (supplierUnallocated > 0) {
+        // Generate a transaction ID for the advance
+        const advanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const advanceLedgerRef = doc(ledgerRef);
+        supplierAdvanceDocId = advanceLedgerRef.id;
+
+        // Create the advance entry in ledger
+        // This is a RECEIVABLE from the supplier (they owe us)
+        batch.set(advanceLedgerRef, {
+          transactionId: advanceTransactionId,
+          date: now,
+          description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
+          category: "سلفة مورد",
+          amount: supplierUnallocated,
+          totalPaid: 0,
+          remainingBalance: supplierUnallocated,
+          paymentStatus: "unpaid",
+          associatedParty: supplierName,
+          isARAPEntry: true,
+          isSupplierAdvance: true,
+          linkedEndorsementChequeId: cheque.id,
+          createdAt: now,
+          notes: `دفعة مقدمة للمورد ${supplierName} عبر تظهير شيك رقم ${cheque.chequeNumber} من العميل ${cheque.clientName}`,
+        });
+
+        // Add allocation entry for the advance to the supplier payment
+        const advanceAllocationRef = doc(collection(firestore, `users/${user.dataOwnerId}/payments/${disbursementDocRef.id}/allocations`));
+        batch.set(advanceAllocationRef, {
+          transactionId: advanceTransactionId,
+          ledgerDocId: supplierAdvanceDocId,
+          amount: supplierUnallocated,
+          transactionDate: now,
+          description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
+          isAdvance: true,
+          createdAt: now,
+        });
+
+        // Update the paidTransactionIds array to include the advance
+        supplierTransactionIds.push(advanceTransactionId);
+      }
+
+      // Update cheque with advance doc ID if created
+      if (supplierAdvanceDocId) {
+        batch.update(incomingChequeRef, {
+          endorsedSupplierAdvanceDocId: supplierAdvanceDocId,
+        });
+      }
+
       // Commit atomically
       await batch.commit();
 
-      toast({
-        title: "تم التظهير بنجاح",
-        description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName} مع توزيع المبالغ`,
-      });
+      // Show appropriate toast message
+      if (supplierUnallocated > 0) {
+        toast({
+          title: "تم التظهير بنجاح",
+          description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}. تم إنشاء سلفة بقيمة ${supplierUnallocated.toFixed(2)} دينار`,
+        });
+      } else {
+        toast({
+          title: "تم التظهير بنجاح",
+          description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName} مع توزيع المبالغ`,
+        });
+      }
 
       // Log activity
       logActivity(user.dataOwnerId, {
@@ -824,7 +884,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         targetId: cheque.id,
         userId: user.uid,
         userEmail: user.email || '',
-        description: `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (توزيع متعدد)`,
+        description: supplierUnallocated > 0
+          ? `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (مع سلفة ${supplierUnallocated.toFixed(2)})`
+          : `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (توزيع متعدد)`,
         metadata: {
           amount: cheque.amount,
           chequeNumber: cheque.chequeNumber,
@@ -835,6 +897,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           supplierAllocationsCount: supplierAllocations.length,
           clientTotalAllocated,
           supplierTotalAllocated,
+          supplierAdvanceAmount: supplierUnallocated > 0 ? supplierUnallocated : null,
+          supplierAdvanceDocId: supplierAdvanceDocId,
         },
       });
 
@@ -893,6 +957,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsedClientTransactionIds: null,
         endorsedSupplierTransactionIds: null,
         isMultiAllocationEndorsement: null,
+        // Clear supplier advance field
+        endorsedSupplierAdvanceDocId: null,
       });
 
       // 3. Process each payment and reverse its ARAP entries
@@ -912,34 +978,42 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             const allocationData = allocationDoc.data();
             const ledgerDocId = allocationData.ledgerDocId;
             const allocatedAmount = allocationData.amount || 0;
+            const isAdvance = allocationData.isAdvance === true;
 
             if (ledgerDocId && allocatedAmount > 0) {
-              // Read current ledger data
               const ledgerDocRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDocId);
-              const ledgerQuery = query(ledgerRef, where("__name__", "==", ledgerDocId));
-              const ledgerSnapshot = await getDocs(ledgerQuery);
 
-              if (!ledgerSnapshot.empty) {
-                const ledgerData = ledgerSnapshot.docs[0].data();
+              if (isAdvance) {
+                // For advance entries, DELETE the entire ledger entry
+                // (it was created specifically for this endorsement)
+                batch.delete(ledgerDocRef);
+              } else {
+                // For regular allocations, reverse the ARAP update
+                const ledgerQuery = query(ledgerRef, where("__name__", "==", ledgerDocId));
+                const ledgerSnapshot = await getDocs(ledgerQuery);
 
-                if (ledgerData.isARAPEntry) {
-                  const currentTotalPaid = ledgerData.totalPaid || 0;
-                  const currentDiscount = ledgerData.totalDiscount || 0;
-                  const writeoffAmount = ledgerData.writeoffAmount || 0;
-                  const transactionAmount = ledgerData.amount || 0;
+                if (!ledgerSnapshot.empty) {
+                  const ledgerData = ledgerSnapshot.docs[0].data();
 
-                  // Reverse the allocation (subtract)
-                  const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, allocatedAmount));
-                  const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
-                  const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-                  const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                    newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+                  if (ledgerData.isARAPEntry) {
+                    const currentTotalPaid = ledgerData.totalPaid || 0;
+                    const currentDiscount = ledgerData.totalDiscount || 0;
+                    const writeoffAmount = ledgerData.writeoffAmount || 0;
+                    const transactionAmount = ledgerData.amount || 0;
 
-                  batch.update(ledgerDocRef, {
-                    totalPaid: newTotalPaid,
-                    remainingBalance: zeroFloor(newRemainingBalance),
-                    paymentStatus: newPaymentStatus,
-                  });
+                    // Reverse the allocation (subtract)
+                    const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, allocatedAmount));
+                    const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+                    const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+                    const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                      newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+
+                    batch.update(ledgerDocRef, {
+                      totalPaid: newTotalPaid,
+                      remainingBalance: zeroFloor(newRemainingBalance),
+                      paymentStatus: newPaymentStatus,
+                    });
+                  }
                 }
               }
             }
