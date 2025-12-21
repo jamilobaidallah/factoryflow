@@ -17,6 +17,7 @@ import {
   EXPENSE_TYPE,
   EQUITY_TYPE,
   EQUITY_SUBCATEGORIES,
+  PAYMENT_TYPES,
 } from "../constants/dashboard.constants";
 
 /**
@@ -26,7 +27,7 @@ import {
 export function useDashboardData(): UseDashboardDataReturn {
   const { user } = useUser();
 
-  // Operating cash state (from ledger - paid income/expenses)
+  // Operating cash state (from PAYMENTS collection - excludes noCashMovement)
   const [operatingCashIn, setOperatingCashIn] = useState(0);
   const [operatingCashOut, setOperatingCashOut] = useState(0);
 
@@ -53,10 +54,12 @@ export function useDashboardData(): UseDashboardDataReturn {
   // Recent transactions
   const [recentTransactions, setRecentTransactions] = useState<DashboardLedgerEntry[]>([]);
 
-  // Loading state
-  const [isLoading, setIsLoading] = useState(true);
+  // Loading states
+  const [isLedgerLoading, setIsLedgerLoading] = useState(true);
+  const [isPaymentsLoading, setIsPaymentsLoading] = useState(true);
 
-  // Load ledger data
+  // Load ledger data for P&L, financing cash, and recent transactions
+  // NOTE: Operating cash is calculated separately from payments collection
   // NOTE: Ideal solution would be pre-computed counters via Cloud Functions.
   // This uses a safety limit to prevent excessive reads while maintaining functionality.
   useEffect(() => {
@@ -70,10 +73,7 @@ export function useDashboardData(): UseDashboardDataReturn {
       let expenses = 0;
       let discounts = 0;  // Track discounts (contra-revenue, reduces net income)
       let badDebt = 0;    // Track bad debt write-offs (ديون معدومة, treated as expense)
-      // Operating cash - from paid income/expense entries
-      let opCashIn = 0;
-      let opCashOut = 0;
-      // Financing cash - from equity entries
+      // Financing cash - from equity entries (NOT from payments)
       let finCashIn = 0;
       let finCashOut = 0;
       const transactions: DashboardLedgerEntry[] = [];
@@ -108,6 +108,7 @@ export function useDashboardData(): UseDashboardDataReturn {
           // FINANCING ACTIVITIES: Equity transactions affect cash balance
           // Capital contribution (رأس مال مالك) = cash IN
           // Owner drawings (سحوبات المالك) = cash OUT
+          // NOTE: These don't go through payments collection, calculated from ledger
           if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
             finCashIn += entry.amount;
           } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
@@ -134,32 +135,7 @@ export function useDashboardData(): UseDashboardDataReturn {
             updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
             updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
           }
-
-          // OPERATING CASH: Calculate based on payment status
-          // - Non-ARAP entries (instant settlement) = full amount
-          // - Paid ARAP entries = full amount
-          // - Partial ARAP entries = only totalPaid portion
-          // - Unpaid ARAP entries = 0 (no cash movement yet)
-          let cashAmount = 0;
-          if (!entry.isARAPEntry) {
-            // Non-AR/AP = instant settlement, full amount
-            cashAmount = entry.amount;
-          } else if (entry.paymentStatus === "paid") {
-            // Fully paid - use totalPaid (actual cash received, excludes discounts/writeoffs)
-            cashAmount = entry.totalPaid ?? entry.amount;
-          } else if (entry.paymentStatus === "partial") {
-            // Partial = only the paid portion
-            cashAmount = entry.totalPaid || 0;
-          }
-          // unpaid = 0, already initialized
-
-          if (cashAmount > 0) {
-            if (isIncome) {
-              opCashIn += cashAmount;
-            } else if (entry.type === EXPENSE_TYPE) {
-              opCashOut += cashAmount;
-            }
-          }
+          // NOTE: Operating cash is now calculated from payments collection, not here
         }
 
         transactions.push(entry);
@@ -169,8 +145,6 @@ export function useDashboardData(): UseDashboardDataReturn {
       setTotalExpenses(expenses);
       setTotalDiscounts(discounts);
       setTotalBadDebt(badDebt);
-      setOperatingCashIn(opCashIn);
-      setOperatingCashOut(opCashOut);
       setFinancingCashIn(finCashIn);
       setFinancingCashOut(finCashOut);
       setMonthlyDataMap(monthlyMap);
@@ -179,16 +153,56 @@ export function useDashboardData(): UseDashboardDataReturn {
       // Sort by date and get recent transactions
       transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
       setRecentTransactions(transactions.slice(0, DASHBOARD_CONFIG.TRANSACTIONS_LIMIT));
-      setIsLoading(false);
+      setIsLedgerLoading(false);
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  // Total cash = Operating (paid income - paid expenses) + Financing (capital - drawings)
+  // Load payments data for operating cash calculation
+  // IMPORTANT: Skip payments with noCashMovement (e.g., endorsements)
+  useEffect(() => {
+    if (!user) return;
+
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+    const paymentsQuery = query(paymentsRef, orderBy("date", "desc"), limit(5000));
+    const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+      let opCashIn = 0;
+      let opCashOut = 0;
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+
+        // Skip endorsement payments - they don't involve actual cash movement
+        if (data.isEndorsement || data.noCashMovement) {
+          return;
+        }
+
+        const amount = data.amount || 0;
+        const paymentType = data.type || "";
+
+        if (paymentType === PAYMENT_TYPES.INCOMING) {
+          opCashIn += amount;
+        } else if (paymentType === PAYMENT_TYPES.OUTGOING) {
+          opCashOut += amount;
+        }
+      });
+
+      setOperatingCashIn(opCashIn);
+      setOperatingCashOut(opCashOut);
+      setIsPaymentsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Total cash = Operating (from payments) + Financing (from ledger equity)
   // This matches the Cash Flow Report calculation
   const totalCashIn = operatingCashIn + financingCashIn;
   const totalCashOut = operatingCashOut + financingCashOut;
+
+  // Combined loading state - wait for both ledger and payments to load
+  const isLoading = isLedgerLoading || isPaymentsLoading;
 
   return {
     totalCashIn,
