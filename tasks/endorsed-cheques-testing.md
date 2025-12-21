@@ -409,6 +409,248 @@ Add conditional display in cheques table when `cheque.endorsedTo` exists.
 
 ---
 
+---
+
+## NUMERIC CALCULATION TESTS
+
+These tests verify exact numbers to catch calculation bugs.
+
+### Numeric Test A: Balance Calculation Formula Verification
+
+**Purpose**: Verify the balance formula correctly handles endorsed cheques
+
+**Formula under test** (line 341):
+```typescript
+balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade) - totalDiscounts - totalWriteoffs
+```
+
+**Setup - Create exact data**:
+| Entry | Type | Amount |
+|-------|------|--------|
+| Sale 1 | دخل | 1,000 |
+| Sale 2 | دخل | 500 |
+| Purchase 1 | مصروف | 200 |
+| Cash Payment | قبض | 300 |
+| **Endorsement Payment** | قبض | 500 |
+
+**Expected Calculations**:
+```
+totalSales = 1000 + 500 = 1,500
+totalPurchases = 200
+totalPaymentsReceived = 300 + 500 = 800  (includes endorsement!)
+totalPaymentsMade = 0
+
+Balance = 1500 - 200 - (800 - 0) - 0 - 0 = 500 عليه
+```
+
+**Verification**:
+- [ ] Header card shows: `الرصيد الحالي = 500.00 د.أ`
+- [ ] Color is RED (عليه)
+- [ ] Text shows "عليه"
+
+**If endorsement NOT counted**: Balance would be 1000 (WRONG)
+
+---
+
+### Numeric Test B: Statement Running Balance
+
+**Purpose**: Verify each row's running balance is calculated correctly
+
+**Setup**: Same as Test A, transactions in chronological order:
+1. Dec 1: Sale 1 (1000)
+2. Dec 5: Sale 2 (500)
+3. Dec 10: Purchase 1 (200)
+4. Dec 15: Cash Payment (300)
+5. Dec 20: Endorsement Payment (500)
+
+**Assuming opening balance = 0**
+
+| Date | Description | Debit | Credit | Expected Balance |
+|------|-------------|-------|--------|------------------|
+| - | رصيد افتتاحي | - | - | 0 |
+| Dec 1 | Sale 1 | 1000 | - | 1000 عليه |
+| Dec 5 | Sale 2 | 500 | - | 1500 عليه |
+| Dec 10 | Purchase 1 | - | 200 | 1300 عليه |
+| Dec 15 | Cash Payment | - | 300 | 1000 عليه |
+| Dec 20 | Endorsement | - | 500 | **500 عليه** |
+
+**Verification** - Check each row:
+- [ ] Row 1 balance = 1000
+- [ ] Row 2 balance = 1500
+- [ ] Row 3 balance = 1300
+- [ ] Row 4 balance = 1000
+- [ ] Row 5 balance = 500 ← **Endorsement correctly reduces balance**
+
+---
+
+### Numeric Test C: Statement Totals Row
+
+**Purpose**: Verify المجموع row shows correct totals
+
+**Same setup as Test B**
+
+**Expected Totals**:
+```
+Total Debit (مدين) = 1000 + 500 = 1,500
+Total Credit (دائن) = 200 + 300 + 500 = 1,000
+```
+
+**Verification**:
+- [ ] مدين column total = 1,500.00
+- [ ] دائن column total = 1,000.00
+- [ ] الرصيد المستحق = 500.00 عليه
+
+---
+
+### Numeric Test D: Pending Cheques Calculation
+
+**Purpose**: Verify pending cheques section excludes endorsed cheques
+
+**Setup**:
+- Current balance: 2,000 عليه
+- Cheque 1: 600 JOD, status = قيد الانتظار, type = وارد
+- Cheque 2: 400 JOD, status = مجيّر (ENDORSED), type = وارد
+- Cheque 3: 300 JOD, status = قيد الانتظار, type = صادر
+
+**Expected in "شيكات قيد الانتظار" section**:
+```
+Pending incoming (وارد): 600 only (NOT 1000!)
+Pending outgoing (صادر): 300
+Total pending: 600 + 300 = 900
+
+Balance after = 2000 - 600 + 300 = 1,700 عليه
+```
+
+**Verification**:
+- [ ] Pending cheques table shows 2 rows (NOT 3)
+- [ ] Endorsed cheque (400) is NOT in pending section
+- [ ] إجمالي الشيكات المعلقة = 900.00 (NOT 1,300)
+- [ ] الرصيد المتوقع بعد صرف الشيكات = 1,700.00 عليه
+
+---
+
+### Numeric Test E: Multi-Allocation with Advance
+
+**Purpose**: Verify exact balance when cheque > client debt
+
+**Setup**:
+- Sale: 700 JOD (client owes 700)
+- Cheque endorsed: 1,000 JOD
+- Allocation: 700 to sale, 300 unallocated → سلفة عميل
+
+**Expected**:
+```
+totalSales = 700
+totalPaymentsReceived = 1000 (full cheque amount)
+Balance = 700 - 0 - (1000 - 0) = -300 له
+```
+
+**Verification**:
+- [ ] Current balance = 300.00 له (GREEN, negative = we owe client)
+- [ ] Statement shows receipt of 1,000
+- [ ] A سلفة عميل entry of 300 appears in ledger
+- [ ] Running balance after endorsement = -300
+
+---
+
+### Numeric Test F: Cancel Endorsement Reversal
+
+**Purpose**: Verify exact numbers after canceling endorsement
+
+**Before Cancel** (from Test E):
+- Balance: -300 له
+- Payments received: 1,000
+- Ledger has سلفة عميل of 300
+
+**After Cancel**:
+```
+totalSales = 700
+totalPaymentsReceived = 0 (endorsement removed)
+Balance = 700 - 0 - 0 = 700 عليه
+```
+
+**Verification**:
+- [ ] Balance changes from -300 له to 700 عليه
+- [ ] Statement no longer shows the 1,000 receipt
+- [ ] سلفة عميل entry is deleted
+- [ ] Cheque status back to قيد الانتظار
+
+---
+
+### Numeric Test G: Date Filter Balance Calculation
+
+**Purpose**: Verify opening balance adjusts correctly with date filter
+
+**Setup** (transactions in order):
+- Dec 1: Sale 1,000 (debit)
+- Dec 10: Payment 400 (credit)
+- Dec 20: Endorsement 300 (credit)
+
+**Test 1: Filter Dec 1-31 (all transactions)**
+- Opening balance: 0
+- Final balance: 1000 - 400 - 300 = 300 عليه
+
+**Test 2: Filter Dec 15-31**
+- Opening balance should include Dec 1 & Dec 10: 0 + 1000 - 400 = 600 عليه
+- Transactions shown: only endorsement (300 credit)
+- Final balance: 600 - 300 = 300 عليه
+
+**Verification**:
+- [ ] Filter Dec 15-31 shows opening balance = 600.00
+- [ ] Only 1 transaction in table (the endorsement)
+- [ ] Final balance still = 300.00
+
+---
+
+### Numeric Test H: Export Totals Match Display
+
+**Purpose**: Verify Excel/PDF exports match on-screen numbers
+
+**Setup**: Client with mixed transactions
+
+**Verification**:
+1. Note these values from screen:
+   - Total Debit: ________
+   - Total Credit: ________
+   - Final Balance: ________
+
+2. Export to Excel, verify:
+   - [ ] Excel Total Debit matches
+   - [ ] Excel Total Credit matches
+   - [ ] Excel Final Balance matches
+
+3. Export to PDF, verify:
+   - [ ] PDF Total Debit matches
+   - [ ] PDF Total Credit matches
+   - [ ] PDF Final Balance matches
+
+---
+
+## Calculation Formula Quick Reference
+
+### Current Balance (Header Card)
+```typescript
+balance = totalSales - totalPurchases
+        - (totalPaymentsReceived - totalPaymentsMade)
+        - totalDiscounts - totalWriteoffs
+```
+- Endorsement payments ARE included in totalPaymentsReceived ✓
+
+### Running Balance (Statement Table)
+```typescript
+runningBalance = openingBalance + debit - credit
+```
+- Each row adds debit and subtracts credit
+
+### Balance After Pending Cheques
+```typescript
+balanceAfterCheques = finalBalance - incomingTotal + outgoingTotal
+```
+- Only includes cheques with status = "قيد الانتظار"
+- Endorsed cheques (status = "مجيّر") are EXCLUDED ✓
+
+---
+
 ## Test Execution Log
 
 **Date**: _______________
@@ -426,3 +668,11 @@ Add conditional display in cheques table when `cheque.endorsedTo` exists.
 | Test 8 | | |
 | Test 9 | | |
 | Test 10 | | |
+| Numeric A | | |
+| Numeric B | | |
+| Numeric C | | |
+| Numeric D | | |
+| Numeric E | | |
+| Numeric F | | |
+| Numeric G | | |
+| Numeric H | | |
