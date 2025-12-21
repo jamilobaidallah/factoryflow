@@ -34,7 +34,7 @@ import type {
   CategoryData,
   CustomDateRange,
 } from "./types/reports.types";
-import { CATEGORY_COLORS, ANIMATION_CONFIG, OWNER_EQUITY_CATEGORIES, ARABIC_MONTH_NAMES } from "./constants/reports.constants";
+import { CATEGORY_COLORS, ANIMATION_CONFIG, OWNER_EQUITY_CATEGORIES, EXCLUDED_FROM_PL_CATEGORIES, ARABIC_MONTH_NAMES } from "./constants/reports.constants";
 
 export default function ReportsPage() {
   const { user } = useUser();
@@ -131,8 +131,9 @@ export default function ReportsPage() {
     let totalBadDebt = 0;    // Track bad debt write-offs (treated as expense)
 
     filtered.forEach((entry: any) => {
-      // Exclude owner equity
-      if (OWNER_EQUITY_CATEGORIES.includes(entry.category as typeof OWNER_EQUITY_CATEGORIES[number])) {
+      // Exclude owner equity AND advances from P&L
+      // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
+      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
         return;
       }
 
@@ -213,8 +214,8 @@ export default function ReportsPage() {
 
       const data = monthlyData.get(monthKey)!;
 
-      // Exclude owner equity
-      if (OWNER_EQUITY_CATEGORIES.includes(entry.category as typeof OWNER_EQUITY_CATEGORIES[number])) {
+      // Exclude owner equity AND advances from P&L
+      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
         return;
       }
 

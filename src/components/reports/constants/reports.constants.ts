@@ -143,6 +143,15 @@ export const ANIMATION_CONFIG = {
 // Owner equity categories to exclude from calculations
 export const OWNER_EQUITY_CATEGORIES = ['رأس المال', 'Owner Equity'] as const;
 
+// Advance categories to exclude from P&L (prepaid credits, not actual income/expense)
+export const ADVANCE_CATEGORIES = ['سلفة مورد', 'سلفة عميل'] as const;
+
+// All categories excluded from P&L calculations
+export const EXCLUDED_FROM_PL_CATEGORIES = [
+  ...OWNER_EQUITY_CATEGORIES,
+  ...ADVANCE_CATEGORIES,
+] as const;
+
 // Arabic month names for charts
 export const ARABIC_MONTH_NAMES = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',

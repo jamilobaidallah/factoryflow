@@ -12,6 +12,7 @@ import type {
   ComparisonResult,
   UseReportsComparisonReturn,
 } from '../types/reports.types';
+import { EXCLUDED_FROM_PL_CATEGORIES } from '../constants/reports.constants';
 
 interface LedgerEntry {
   id: string;
@@ -149,8 +150,9 @@ function calculatePeriodData(entries: LedgerEntry[]): {
   let badDebt = 0;
 
   entries.forEach((entry) => {
-    // Exclude owner equity transactions
-    if (entry.category === 'رأس المال' || entry.category === 'Owner Equity') {
+    // Exclude owner equity AND advances from P&L
+    // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
+    if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
       return;
     }
 
