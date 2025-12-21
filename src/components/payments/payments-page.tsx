@@ -14,6 +14,7 @@ import { logActivity } from "@/services/activityLogService";
 import { exportPaymentsToExcelProfessional } from "@/lib/export-payments-excel";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
+import { useAllClients } from "@/hooks/useAllClients";
 import { isMultiAllocationPayment, calculateRemainingBalance, calculatePaymentStatus } from "@/lib/arap-utils";
 import {
   collection,
@@ -81,6 +82,9 @@ export default function PaymentsPage() {
 
   // Multi-allocation hook for delete reversal
   const { reversePaymentAllocations } = usePaymentAllocations();
+
+  // Fetch all clients/partners for the dropdown
+  const { clients, loading: clientsLoading } = useAllClients();
 
   // Update search term when URL param changes
   useEffect(() => {
@@ -664,6 +668,8 @@ export default function PaymentsPage() {
         setFormData={setFormData}
         loading={loading}
         onSubmit={handleSubmit}
+        clients={clients}
+        clientsLoading={clientsLoading}
       />
 
       {confirmationDialog}
