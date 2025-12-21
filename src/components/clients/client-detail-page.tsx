@@ -140,6 +140,171 @@ interface ClientDetailPageProps {
   clientId: string;
 }
 
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Check if a ledger entry is an advance (سلفة)
+ * Advances are informational only - they explain where overpayment sits
+ * but should NOT affect running balance (the payment already captured the money flow)
+ */
+function isAdvanceEntry(entry: LedgerEntry): boolean {
+  return entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
+}
+
+/**
+ * Filter pending cheques, excluding endorsed cheques
+ * Endorsed cheques are already accounted for in the statement as endorsement payments
+ * Including them would double-count the amount
+ */
+function filterPendingCheques(cheques: Cheque[]): Cheque[] {
+  return cheques.filter(c => c.status === "قيد الانتظار" && !c.isEndorsedCheque);
+}
+
+/**
+ * Calculate expected balance after pending cheques clear
+ * - Incoming (وارد): We receive money → reduces what they owe us
+ * - Outgoing (صادر): We pay money → reduces what we owe them
+ */
+function calculateBalanceAfterCheques(
+  currentBalance: number,
+  pendingCheques: Cheque[]
+): { incomingTotal: number; outgoingTotal: number; balanceAfterCheques: number } {
+  const incomingTotal = pendingCheques
+    .filter(c => c.type === "وارد")
+    .reduce((sum, c) => sum + (c.amount || 0), 0);
+  const outgoingTotal = pendingCheques
+    .filter(c => c.type === "صادر")
+    .reduce((sum, c) => sum + (c.amount || 0), 0);
+  const balanceAfterCheques = currentBalance - incomingTotal + outgoingTotal;
+
+  return { incomingTotal, outgoingTotal, balanceAfterCheques };
+}
+
+interface ExportTransaction {
+  date: Date;
+  type?: "Invoice" | "Payment";
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+interface ExportData {
+  transactions: ExportTransaction[];
+  totalDebit: number;
+  totalCredit: number;
+  finalBalance: number;
+  pendingCheques: Array<{
+    chequeNumber: string;
+    bankName: string;
+    dueDate: Date;
+    amount: number;
+    type: string;
+  }>;
+  balanceAfterCheques: number;
+}
+
+/**
+ * Build export data from ledger entries, payments, and cheques
+ * This shared function is used by both Excel and PDF exports
+ */
+function buildExportData(
+  ledgerEntries: LedgerEntry[],
+  payments: Payment[],
+  cheques: Cheque[],
+  clientInitialBalance: number
+): ExportData {
+  // Build transaction rows from ledger entries (including discounts and writeoffs)
+  const allTxns: ExportTransaction[] = [
+    ...ledgerEntries.flatMap((e) => {
+      const rows: ExportTransaction[] = [];
+      const isAdvance = isAdvanceEntry(e);
+
+      // Row 1: The invoice itself
+      rows.push({
+        date: e.date,
+        type: "Invoice" as const,
+        description: isAdvance
+          ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)`
+          : e.description,
+        debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
+        credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
+        balance: 0,
+      });
+
+      // Row 2: Discount (if any) - reduces what client owes
+      if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+        rows.push({
+          date: e.date,
+          type: "Payment" as const,
+          description: "خصم تسوية",
+          debit: 0,
+          credit: e.totalDiscount,
+          balance: 0,
+        });
+      }
+
+      // Row 3: Writeoff (if any) - reduces what client owes
+      if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+        rows.push({
+          date: e.date,
+          type: "Payment" as const,
+          description: "شطب دين معدوم",
+          debit: 0,
+          credit: e.writeoffAmount,
+          balance: 0,
+        });
+      }
+
+      return rows;
+    }),
+    ...payments.map((p) => ({
+      date: p.date,
+      type: "Payment" as const,
+      description: p.notes || p.description || '',
+      debit: p.type === "صرف" ? p.amount : 0,
+      credit: p.type === "قبض" ? p.amount : 0,
+      balance: 0,
+    })),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Calculate running balances
+  let runningBalance = clientInitialBalance;
+  let totalDebit = 0;
+  let totalCredit = 0;
+
+  const txnsWithBalance = allTxns.map((t) => {
+    totalDebit += t.debit;
+    totalCredit += t.credit;
+    runningBalance += t.debit - t.credit;
+    return { ...t, balance: runningBalance };
+  });
+
+  // Get pending cheques
+  const pending = filterPendingCheques(cheques);
+  const pendingChequeData = pending.map((c) => ({
+    chequeNumber: c.chequeNumber,
+    bankName: c.bankName,
+    dueDate: c.dueDate || c.issueDate,
+    amount: c.amount,
+    type: c.type,
+  }));
+
+  // Calculate balance after cheques
+  const { balanceAfterCheques } = calculateBalanceAfterCheques(runningBalance, pending);
+
+  return {
+    transactions: txnsWithBalance,
+    totalDebit,
+    totalCredit,
+    finalBalance: runningBalance,
+    pendingCheques: pendingChequeData,
+    balanceAfterCheques,
+  };
+}
+
 export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const router = useRouter();
   const { user } = useUser();
@@ -232,15 +397,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           } as LedgerEntry;
           entries.push(entry);
 
-          // Calculate totals
-          // Note: Exclude advances (سلفة) from sales/purchases as they are not actual transactions
-          // سلفة عميل (client advance) = money we owe client, NOT a purchase
-          // سلفة مورد (supplier advance) = prepaid to supplier, NOT a sale
-          const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
-
-          if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvance) {
+          // Calculate totals (exclude advances - they are informational only)
+          if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvanceEntry(entry)) {
             sales += entry.amount;
-          } else if (entry.type === "مصروف" && !isAdvance) {
+          } else if (entry.type === "مصروف" && !isAdvanceEntry(entry)) {
             purchases += entry.amount;
           }
 
@@ -360,99 +520,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
   // Export statement to Excel
   const exportStatement = async () => {
-    if (!client) {return;}
+    if (!client) return;
 
-    // Combine all transactions (same logic as statement tab)
-    // Including discount and writeoff rows for each ledger entry
-    const allTxns = [
-      ...ledgerEntries.flatMap((e) => {
-        const rows: { date: Date; type: "Invoice" | "Payment"; description: string; debit: number; credit: number; balance: number }[] = [];
-
-        // Check if this is an advance (سلفة) entry - these don't affect balance
-        const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
-
-        // Row 1: The invoice itself
-        // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
-        rows.push({
-          date: e.date,
-          type: "Invoice" as const,
-          description: isAdvance ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)` : e.description,
-          debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
-          credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
-          balance: 0,
-        });
-
-        // Row 2: Discount (if any) - reduces what client owes
-        if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-          rows.push({
-            date: e.date,
-            type: "Payment" as const,
-            description: "خصم تسوية",
-            debit: 0,
-            credit: e.totalDiscount,
-            balance: 0,
-          });
-        }
-
-        // Row 3: Writeoff (if any) - reduces what client owes
-        if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-          rows.push({
-            date: e.date,
-            type: "Payment" as const,
-            description: "شطب دين معدوم",
-            debit: 0,
-            credit: e.writeoffAmount,
-            balance: 0,
-          });
-        }
-
-        return rows;
-      }),
-      ...payments.map((p) => ({
-        date: p.date,
-        type: "Payment" as const,
-        description: p.notes || p.description || '',
-        debit: p.type === "صرف" ? p.amount : 0,
-        credit: p.type === "قبض" ? p.amount : 0,
-        balance: 0,
-      })),
-    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // Calculate balances
-    const clientInitialBalance = client?.balance || 0;
-    let runningBalance = clientInitialBalance;
-    let totalDebit = 0;
-    let totalCredit = 0;
-
-    const txnsWithBalance = allTxns.map((t) => {
-      totalDebit += t.debit;
-      totalCredit += t.credit;
-      runningBalance += t.debit - t.credit;
-      return { ...t, balance: runningBalance };
-    });
-
-    // Get pending cheques and calculate balance after cheques correctly
-    // Get pending cheques, EXCLUDING endorsed cheques (already in statement)
-    const pendingCheques = cheques
-      .filter((c) => c.status === "قيد الانتظار" && !c.isEndorsedCheque)
-      .map((c) => ({
-        chequeNumber: c.chequeNumber,
-        bankName: c.bankName,
-        dueDate: c.dueDate || c.issueDate,
-        amount: c.amount,
-        type: c.type, // Include type for correct calculation
-      }));
-
-    // Calculate balance after cheques correctly:
-    // - Incoming (وارد): subtract (we receive money, reduces what they owe)
-    // - Outgoing (صادر): add (we pay money, reduces what we owe them)
-    const incomingTotal = pendingCheques
-      .filter(c => c.type === "وارد")
-      .reduce((sum, c) => sum + c.amount, 0);
-    const outgoingTotal = pendingCheques
-      .filter(c => c.type === "صادر")
-      .reduce((sum, c) => sum + c.amount, 0);
-    const balanceAfterCheques = runningBalance - incomingTotal + outgoingTotal;
+    const clientInitialBalance = client.balance || 0;
+    const exportData = buildExportData(ledgerEntries, payments, cheques, clientInitialBalance);
 
     try {
       await exportStatementToExcel({
@@ -460,12 +531,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         clientPhone: client.phone,
         clientEmail: client.email,
         openingBalance: clientInitialBalance,
-        transactions: txnsWithBalance,
-        totalDebit,
-        totalCredit,
-        finalBalance: runningBalance,
-        pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
-        expectedBalanceAfterCheques: pendingCheques.length > 0 ? balanceAfterCheques : undefined,
+        transactions: exportData.transactions,
+        totalDebit: exportData.totalDebit,
+        totalCredit: exportData.totalCredit,
+        finalBalance: exportData.finalBalance,
+        pendingCheques: exportData.pendingCheques.length > 0 ? exportData.pendingCheques : undefined,
+        expectedBalanceAfterCheques: exportData.pendingCheques.length > 0 ? exportData.balanceAfterCheques : undefined,
       });
 
       toast({
@@ -516,92 +587,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </Button>
           <Button
             onClick={async () => {
-              // Build statement data for PDF export (same logic as Excel export)
-              // Including discount and writeoff rows for each ledger entry
-              const allTxns = [
-                ...ledgerEntries.flatMap((e) => {
-                  const rows: { date: Date; description: string; debit: number; credit: number; balance: number }[] = [];
+              if (!client) return;
 
-                  // Check if this is an advance (سلفة) entry - these don't affect balance
-                  const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
-
-                  // Row 1: The invoice itself
-                  // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
-                  rows.push({
-                    date: e.date,
-                    description: isAdvance ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)` : e.description,
-                    debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
-                    credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
-                    balance: 0,
-                  });
-
-                  // Row 2: Discount (if any) - reduces what client owes
-                  if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-                    rows.push({
-                      date: e.date,
-                      description: "خصم تسوية",
-                      debit: 0,
-                      credit: e.totalDiscount,
-                      balance: 0,
-                    });
-                  }
-
-                  // Row 3: Writeoff (if any) - reduces what client owes
-                  if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-                    rows.push({
-                      date: e.date,
-                      description: "شطب دين معدوم",
-                      debit: 0,
-                      credit: e.writeoffAmount,
-                      balance: 0,
-                    });
-                  }
-
-                  return rows;
-                }),
-                ...payments.map((p) => ({
-                  date: p.date,
-                  description: p.notes || p.description || '',
-                  debit: p.type === "صرف" ? p.amount : 0,
-                  credit: p.type === "قبض" ? p.amount : 0,
-                  balance: 0,
-                })),
-              ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-              // Calculate balances
-              const clientInitialBalance = client?.balance || 0;
-              let runningBalance = clientInitialBalance;
-              let totalDebit = 0;
-              let totalCredit = 0;
-
-              const txnsWithBalance = allTxns.map((t) => {
-                totalDebit += t.debit;
-                totalCredit += t.credit;
-                runningBalance += t.debit - t.credit;
-                return { ...t, balance: runningBalance };
-              });
-
-              // Get pending cheques, EXCLUDING endorsed cheques (already in statement)
-              const pendingCheques = cheques
-                .filter((c) => c.status === "قيد الانتظار" && !c.isEndorsedCheque)
-                .map((c) => ({
-                  chequeNumber: c.chequeNumber,
-                  bankName: c.bankName,
-                  dueDate: c.dueDate || c.issueDate,
-                  amount: c.amount,
-                  type: c.type, // Include type for correct calculation
-                }));
-
-              // Calculate balance after cheques correctly:
-              // - Incoming (وارد): subtract (we receive money, reduces what they owe)
-              // - Outgoing (صادر): add (we pay money, reduces what we owe them)
-              const incomingTotal = pendingCheques
-                .filter(c => c.type === "وارد")
-                .reduce((sum, c) => sum + c.amount, 0);
-              const outgoingTotal = pendingCheques
-                .filter(c => c.type === "صادر")
-                .reduce((sum, c) => sum + c.amount, 0);
-              const balanceAfterCheques = runningBalance - incomingTotal + outgoingTotal;
+              const clientInitialBalance = client.balance || 0;
+              const exportData = buildExportData(ledgerEntries, payments, cheques, clientInitialBalance);
 
               try {
                 await exportStatementToPDF({
@@ -609,12 +598,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   clientPhone: client.phone,
                   clientEmail: client.email,
                   openingBalance: clientInitialBalance,
-                  transactions: txnsWithBalance,
-                  totalDebit,
-                  totalCredit,
-                  finalBalance: runningBalance,
-                  pendingCheques: pendingCheques.length > 0 ? pendingCheques : undefined,
-                  expectedBalanceAfterCheques: pendingCheques.length > 0 ? balanceAfterCheques : undefined,
+                  transactions: exportData.transactions,
+                  totalDebit: exportData.totalDebit,
+                  totalCredit: exportData.totalCredit,
+                  finalBalance: exportData.finalBalance,
+                  pendingCheques: exportData.pendingCheques.length > 0 ? exportData.pendingCheques : undefined,
+                  expectedBalanceAfterCheques: exportData.pendingCheques.length > 0 ? exportData.balanceAfterCheques : undefined,
                 });
 
                 toast({
@@ -936,13 +925,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   // Ledger entries (invoices) plus their discounts and writeoffs
                   ...ledgerEntries.flatMap((e) => {
                     const rows: StatementItem[] = [];
+                    const isAdvance = isAdvanceEntry(e);
 
-                    // Check if this is an advance (سلفة) entry
-                    // Advances are INFORMATIONAL ONLY - they explain where overpayment sits
-                    // They should NOT affect running balance (the payment already captured the money flow)
-                    const isAdvance = e.category === "سلفة عميل" || e.category === "سلفة مورد";
-
-                    // Row 1: The invoice itself
                     // For advances: show amount in description since debit/credit are 0
                     const advanceDescription = isAdvance
                       ? `${e.description} (${e.amount.toFixed(2)} د.أ - لا يؤثر على الرصيد)`
@@ -954,13 +938,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       source: 'ledger' as const,
                       date: e.date,
                       isPayment: false,
-                      entryType: isAdvance ? 'سلفة' : e.type, // Mark as سلفة for special styling
+                      entryType: isAdvance ? 'سلفة' : e.type,
                       description: advanceDescription,
                       category: e.category,
                       subCategory: e.subCategory,
-                      // Income/Sales: amount goes in مدين (client owes us)
-                      // Expense/Purchases from them: amount goes in دائن (we owe them)
-                      // IMPORTANT: Advances (سلفة) don't affect balance - set to 0
                       debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
                       credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
                     });
@@ -1286,25 +1267,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
                     {/* Pending Cheques Section */}
                     {(() => {
-                      // Filter pending cheques, EXCLUDING endorsed cheques
-                      // Endorsed cheques are already accounted for in the statement as endorsement payments
-                      // Including them here would double-count the amount
-                      const pendingCheques = cheques.filter(c =>
-                        c.status === "قيد الانتظار" && !c.isEndorsedCheque
-                      );
+                      const pendingCheques = filterPendingCheques(cheques);
                       if (pendingCheques.length === 0) return null;
 
                       const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
-                      // Calculate balance after cheques based on cheque type:
-                      // - Incoming (وارد): We receive money → subtract from balance (reduces what they owe us)
-                      // - Outgoing (صادر): We pay money → add to balance (reduces what we owe them)
-                      const incomingTotal = pendingCheques
-                        .filter(c => c.type === "وارد")
-                        .reduce((sum, c) => sum + (c.amount || 0), 0);
-                      const outgoingTotal = pendingCheques
-                        .filter(c => c.type === "صادر")
-                        .reduce((sum, c) => sum + (c.amount || 0), 0);
-                      const balanceAfterCheques = finalBalance - incomingTotal + outgoingTotal;
+                      const { balanceAfterCheques } = calculateBalanceAfterCheques(finalBalance, pendingCheques);
 
                       return (
                         <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
