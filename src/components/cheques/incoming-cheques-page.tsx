@@ -12,14 +12,15 @@ import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 // Types and hooks
 import { Cheque, ChequeFormData } from "./types/cheques";
 import { useIncomingChequesData } from "./hooks/useIncomingChequesData";
-import { useIncomingChequesOperations } from "./hooks/useIncomingChequesOperations";
+import { useIncomingChequesOperations, type EndorsementAllocationData } from "./hooks/useIncomingChequesOperations";
 import { useReversePayment } from "./hooks/useReversePayment";
 import { useAllClients } from "@/hooks/useAllClients";
 
 // Components
 import { IncomingChequesTable } from "./components/IncomingChequesTable";
 import { IncomingChequesFormDialog } from "./components/IncomingChequesFormDialog";
-import { ImageViewerDialog, EndorseDialog } from "./components/IncomingChequeDialogs";
+import { ImageViewerDialog } from "./components/IncomingChequeDialogs";
+import { EndorsementAllocationDialog } from "./components/EndorsementAllocationDialog";
 import { PaymentDateModal } from "./components/PaymentDateModal";
 import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
@@ -61,6 +62,7 @@ export default function IncomingChequesPage() {
     submitCheque,
     deleteCheque,
     endorseCheque,
+    endorseChequeWithAllocations,
     cancelEndorsement,
   } = useIncomingChequesOperations();
 
@@ -83,8 +85,6 @@ export default function IncomingChequesPage() {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string>("");
   const [endorseDialogOpen, setEndorseDialogOpen] = useState(false);
   const [chequeToEndorse, setChequeToEndorse] = useState<Cheque | null>(null);
-  const [endorseToSupplier, setEndorseToSupplier] = useState("");
-  const [endorseTransactionId, setEndorseTransactionId] = useState("");
 
   // Payment date modal state
   const [paymentDateModalOpen, setPaymentDateModalOpen] = useState(false);
@@ -258,17 +258,19 @@ export default function IncomingChequesPage() {
     );
   };
 
-  const handleEndorse = async () => {
-    if (!chequeToEndorse) return;
+  // Handle endorsement with multi-allocation
+  const handleEndorseWithAllocations = async (data: EndorsementAllocationData): Promise<boolean> => {
+    if (!chequeToEndorse) return false;
+
     setLoading(true);
-    const success = await endorseCheque(chequeToEndorse, endorseToSupplier, endorseTransactionId);
+    const success = await endorseChequeWithAllocations(chequeToEndorse, data);
+
     if (success) {
-      setEndorseDialogOpen(false);
       setChequeToEndorse(null);
-      setEndorseToSupplier("");
-      setEndorseTransactionId("");
     }
+
     setLoading(false);
+    return success;
   };
 
   const handleCancelEndorsement = (cheque: Cheque) => {
@@ -353,8 +355,6 @@ export default function IncomingChequesPage() {
               onDelete={handleDelete}
               onEndorse={(cheque) => {
                 setChequeToEndorse(cheque);
-                setEndorseToSupplier("");
-                setEndorseTransactionId("");
                 setEndorseDialogOpen(true);
               }}
               onCancelEndorsement={handleCancelEndorsement}
@@ -390,18 +390,18 @@ export default function IncomingChequesPage() {
         imageUrl={selectedImageUrl}
       />
 
-      <EndorseDialog
-        isOpen={endorseDialogOpen}
-        onClose={() => setEndorseDialogOpen(false)}
+      <EndorsementAllocationDialog
+        open={endorseDialogOpen}
+        onOpenChange={(open) => {
+          setEndorseDialogOpen(open);
+          if (!open) {
+            setChequeToEndorse(null);
+          }
+        }}
         cheque={chequeToEndorse}
-        supplierName={endorseToSupplier}
-        setSupplierName={setEndorseToSupplier}
-        transactionId={endorseTransactionId}
-        setTransactionId={setEndorseTransactionId}
-        loading={loading}
-        onEndorse={handleEndorse}
         clients={clients}
         clientsLoading={clientsLoading}
+        onEndorse={handleEndorseWithAllocations}
       />
 
       <PaymentDateModal

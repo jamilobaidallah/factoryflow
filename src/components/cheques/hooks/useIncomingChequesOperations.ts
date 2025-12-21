@@ -17,7 +17,7 @@ import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
-import { safeAdd, safeSubtract } from "@/lib/currency";
+import { safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
 import {
   validateTransition,
   validateDeletion,
@@ -25,6 +25,24 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
+
+/** Allocation entry for multi-allocation endorsement */
+interface EndorsementAllocation {
+  transactionId: string;
+  ledgerDocId: string;
+  transactionDate: Date;
+  description: string;
+  totalAmount: number;
+  remainingBalance: number;
+  allocatedAmount: number;
+}
+
+/** Data for multi-allocation endorsement */
+interface EndorsementAllocationData {
+  supplierName: string;
+  clientAllocations: EndorsementAllocation[];
+  supplierAllocations: EndorsementAllocation[];
+}
 
 interface UseIncomingChequesOperationsReturn {
   submitCheque: (
@@ -38,6 +56,10 @@ interface UseIncomingChequesOperationsReturn {
     cheque: Cheque,
     supplierName: string,
     transactionId: string
+  ) => Promise<boolean>;
+  endorseChequeWithAllocations: (
+    cheque: Cheque,
+    allocationData: EndorsementAllocationData
   ) => Promise<boolean>;
   cancelEndorsement: (cheque: Cheque) => Promise<boolean>;
 }
@@ -592,7 +614,245 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
   };
 
   /**
+   * Endorse incoming cheque with multi-allocation support
+   * Creates two multi-allocation payments (client receipt + supplier disbursement)
+   * and updates ARAP for all allocated transactions atomically
+   */
+  const endorseChequeWithAllocations = async (
+    cheque: Cheque,
+    allocationData: EndorsementAllocationData
+  ): Promise<boolean> => {
+    if (!user || !allocationData.supplierName.trim()) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء إدخال اسم المورد",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const { supplierName, clientAllocations, supplierAllocations } = allocationData;
+
+    // Validate at least one allocation exists
+    if (clientAllocations.length === 0 && supplierAllocations.length === 0) {
+      toast({
+        title: "خطأ",
+        description: "يجب تخصيص المبلغ على معاملة واحدة على الأقل",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    // Validate state transition: only PENDING cheques can be endorsed
+    try {
+      validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.ENDORSED);
+    } catch (error) {
+      if (error instanceof InvalidChequeTransitionError) {
+        toast({
+          title: "عملية غير مسموحة",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      throw error;
+    }
+
+    try {
+      const batch = writeBatch(firestore);
+      const now = new Date();
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+      const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
+      const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+      const incomingChequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
+
+      // Pre-generate document refs
+      const outgoingChequeRef = doc(chequesRef);
+      const receiptDocRef = doc(paymentsRef);
+      const disbursementDocRef = doc(paymentsRef);
+
+      // Calculate totals
+      const clientTotalAllocated = clientAllocations.reduce((sum, a) => safeAdd(sum, a.allocatedAmount), 0);
+      const supplierTotalAllocated = supplierAllocations.reduce((sum, a) => safeAdd(sum, a.allocatedAmount), 0);
+
+      // Get primary transaction IDs for linking
+      const primaryClientTransactionId = clientAllocations[0]?.transactionId || cheque.linkedTransactionId || "";
+      const primarySupplierTransactionId = supplierAllocations[0]?.transactionId || "";
+
+      // Store allocated transaction IDs for later reversal
+      const clientTransactionIds = clientAllocations.map(a => a.transactionId);
+      const supplierTransactionIds = supplierAllocations.map(a => a.transactionId);
+
+      // 1. Update incoming cheque status
+      batch.update(incomingChequeRef, {
+        chequeType: "مجير",
+        status: CHEQUE_STATUS_AR.ENDORSED,
+        endorsedTo: supplierName,
+        endorsedDate: now,
+        endorsedToOutgoingId: outgoingChequeRef.id,
+        endorsedSupplierTransactionId: primarySupplierTransactionId,
+        // Store all allocated transaction IDs for reversal
+        endorsedClientTransactionIds: clientTransactionIds,
+        endorsedSupplierTransactionIds: supplierTransactionIds,
+        isMultiAllocationEndorsement: true,
+      });
+
+      // 2. Create outgoing cheque entry
+      batch.set(outgoingChequeRef, {
+        chequeNumber: cheque.chequeNumber,
+        clientName: supplierName,
+        amount: cheque.amount,
+        type: CHEQUE_TYPES.OUTGOING,
+        chequeType: "مجير",
+        status: CHEQUE_STATUS_AR.PENDING,
+        linkedTransactionId: primarySupplierTransactionId,
+        issueDate: cheque.issueDate,
+        dueDate: cheque.dueDate,
+        bankName: cheque.bankName,
+        notes: `شيك مظهر من العميل: ${cheque.clientName}`,
+        createdAt: now,
+        endorsedFromId: cheque.id,
+        isEndorsedCheque: true,
+      });
+
+      // 3. Create receipt payment for client (with allocations)
+      batch.set(receiptDocRef, {
+        clientName: cheque.clientName,
+        amount: cheque.amount,
+        type: PAYMENT_TYPES.RECEIPT,
+        linkedTransactionId: primaryClientTransactionId,
+        date: now,
+        notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
+        createdAt: now,
+        isEndorsement: true,
+        noCashMovement: true,
+        endorsementChequeId: cheque.id,
+        isMultiAllocation: clientAllocations.length > 1,
+        paidTransactionIds: clientTransactionIds,
+      });
+
+      // 4. Create disbursement payment for supplier (with allocations)
+      batch.set(disbursementDocRef, {
+        clientName: supplierName,
+        amount: cheque.amount,
+        type: PAYMENT_TYPES.DISBURSEMENT,
+        linkedTransactionId: primarySupplierTransactionId,
+        date: now,
+        notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
+        createdAt: now,
+        isEndorsement: true,
+        noCashMovement: true,
+        endorsementChequeId: cheque.id,
+        isMultiAllocation: supplierAllocations.length > 1,
+        paidTransactionIds: supplierTransactionIds,
+      });
+
+      // 5. Create allocation subcollections for client payment
+      for (const allocation of clientAllocations) {
+        const allocationRef = doc(collection(firestore, `users/${user.dataOwnerId}/payments/${receiptDocRef.id}/allocations`));
+        batch.set(allocationRef, {
+          transactionId: allocation.transactionId,
+          ledgerDocId: allocation.ledgerDocId,
+          amount: allocation.allocatedAmount,
+          transactionDate: allocation.transactionDate,
+          description: allocation.description,
+          createdAt: now,
+        });
+      }
+
+      // 6. Create allocation subcollections for supplier payment
+      for (const allocation of supplierAllocations) {
+        const allocationRef = doc(collection(firestore, `users/${user.dataOwnerId}/payments/${disbursementDocRef.id}/allocations`));
+        batch.set(allocationRef, {
+          transactionId: allocation.transactionId,
+          ledgerDocId: allocation.ledgerDocId,
+          amount: allocation.allocatedAmount,
+          transactionDate: allocation.transactionDate,
+          description: allocation.description,
+          createdAt: now,
+        });
+      }
+
+      // 7. Update ARAP for all client allocations
+      for (const allocation of clientAllocations) {
+        const ledgerDocRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, allocation.ledgerDocId);
+
+        // We need to read current values - but we already have them in the allocation
+        // Calculate new values
+        const currentTotalPaid = safeSubtract(allocation.totalAmount, allocation.remainingBalance);
+        const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
+        const newRemainingBalance = safeSubtract(allocation.totalAmount, newTotalPaid);
+        const newPaymentStatus: "paid" | "unpaid" | "partial" =
+          newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+        batch.update(ledgerDocRef, {
+          totalPaid: newTotalPaid,
+          remainingBalance: zeroFloor(newRemainingBalance),
+          paymentStatus: newPaymentStatus,
+        });
+      }
+
+      // 8. Update ARAP for all supplier allocations
+      for (const allocation of supplierAllocations) {
+        const ledgerDocRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, allocation.ledgerDocId);
+
+        const currentTotalPaid = safeSubtract(allocation.totalAmount, allocation.remainingBalance);
+        const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
+        const newRemainingBalance = safeSubtract(allocation.totalAmount, newTotalPaid);
+        const newPaymentStatus: "paid" | "unpaid" | "partial" =
+          newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+        batch.update(ledgerDocRef, {
+          totalPaid: newTotalPaid,
+          remainingBalance: zeroFloor(newRemainingBalance),
+          paymentStatus: newPaymentStatus,
+        });
+      }
+
+      // Commit atomically
+      await batch.commit();
+
+      toast({
+        title: "تم التظهير بنجاح",
+        description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName} مع توزيع المبالغ`,
+      });
+
+      // Log activity
+      logActivity(user.dataOwnerId, {
+        action: 'update',
+        module: 'cheques',
+        targetId: cheque.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `تظهير شيك وارد: ${cheque.chequeNumber} → ${supplierName} (توزيع متعدد)`,
+        metadata: {
+          amount: cheque.amount,
+          chequeNumber: cheque.chequeNumber,
+          status: CHEQUE_STATUS_AR.ENDORSED,
+          endorsedTo: supplierName,
+          type: CHEQUE_TYPES.INCOMING,
+          clientAllocationsCount: clientAllocations.length,
+          supplierAllocationsCount: supplierAllocations.length,
+          clientTotalAllocated,
+          supplierTotalAllocated,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Error endorsing cheque with allocations:", error);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تظهير الشيك",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  /**
    * Cancel endorsement with atomic batch operation
+   * Supports both single-allocation and multi-allocation endorsements
    * Ensures outgoing cheque deletion + incoming revert + payments deletion + ARAP reversal succeed or fail together
    */
   const cancelEndorsement = async (cheque: Cheque): Promise<boolean> => {
@@ -601,7 +861,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     try {
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
-      // Query payment records first (before batch) - we need the linkedTransactionId from each
+      // Query payment records first (before batch)
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentsSnapshot = await getDocs(
         query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
@@ -629,54 +889,100 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsedDate: null,
         endorsedToOutgoingId: null,
         endorsedSupplierTransactionId: null,
+        // Clear multi-allocation fields
+        endorsedClientTransactionIds: null,
+        endorsedSupplierTransactionIds: null,
+        isMultiAllocationEndorsement: null,
       });
 
-      // 3. Reverse ARAP for each payment before deleting them
-      // Collect unique transaction IDs to avoid double-reversing
-      const processedTransactionIds = new Set<string>();
-
+      // 3. Process each payment and reverse its ARAP entries
       for (const paymentDoc of paymentsSnapshot.docs) {
         const paymentData = paymentDoc.data();
-        const linkedTransactionId = paymentData.linkedTransactionId;
-        const paymentAmount = paymentData.amount || 0;
+        const isMultiAllocation = paymentData.isMultiAllocation === true;
 
-        // Skip if no linked transaction or already processed
-        if (!linkedTransactionId || processedTransactionIds.has(linkedTransactionId)) {
-          batch.delete(paymentDoc.ref);
-          continue;
-        }
+        if (isMultiAllocation) {
+          // For multi-allocation payments, read from allocations subcollection
+          const allocationsRef = collection(
+            firestore,
+            `users/${user.dataOwnerId}/payments/${paymentDoc.id}/allocations`
+          );
+          const allocationsSnapshot = await getDocs(allocationsRef);
 
-        processedTransactionIds.add(linkedTransactionId);
+          for (const allocationDoc of allocationsSnapshot.docs) {
+            const allocationData = allocationDoc.data();
+            const ledgerDocId = allocationData.ledgerDocId;
+            const allocatedAmount = allocationData.amount || 0;
 
-        // Query ledger entry for this transaction
-        const ledgerQuery = query(
-          ledgerRef,
-          where("transactionId", "==", linkedTransactionId)
-        );
-        const ledgerSnapshot = await getDocs(ledgerQuery);
+            if (ledgerDocId && allocatedAmount > 0) {
+              // Read current ledger data
+              const ledgerDocRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDocId);
+              const ledgerQuery = query(ledgerRef, where("__name__", "==", ledgerDocId));
+              const ledgerSnapshot = await getDocs(ledgerQuery);
 
-        if (!ledgerSnapshot.empty) {
-          const ledgerDoc = ledgerSnapshot.docs[0];
-          const ledgerData = ledgerDoc.data();
+              if (!ledgerSnapshot.empty) {
+                const ledgerData = ledgerSnapshot.docs[0].data();
 
-          if (ledgerData.isARAPEntry) {
-            const currentTotalPaid = ledgerData.totalPaid || 0;
-            const currentDiscount = ledgerData.totalDiscount || 0;
-            const writeoffAmount = ledgerData.writeoffAmount || 0;
-            const transactionAmount = ledgerData.amount || 0;
+                if (ledgerData.isARAPEntry) {
+                  const currentTotalPaid = ledgerData.totalPaid || 0;
+                  const currentDiscount = ledgerData.totalDiscount || 0;
+                  const writeoffAmount = ledgerData.writeoffAmount || 0;
+                  const transactionAmount = ledgerData.amount || 0;
 
-            // Reverse the payment (subtract)
-            const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, paymentAmount));
-            const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
-            const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-            const newPaymentStatus: "paid" | "unpaid" | "partial" =
-              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+                  // Reverse the allocation (subtract)
+                  const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, allocatedAmount));
+                  const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+                  const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+                  const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                    newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
 
-            batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
-              totalPaid: newTotalPaid,
-              remainingBalance: newRemainingBalance,
-              paymentStatus: newPaymentStatus,
-            });
+                  batch.update(ledgerDocRef, {
+                    totalPaid: newTotalPaid,
+                    remainingBalance: zeroFloor(newRemainingBalance),
+                    paymentStatus: newPaymentStatus,
+                  });
+                }
+              }
+            }
+
+            // Delete allocation document
+            batch.delete(allocationDoc.ref);
+          }
+        } else {
+          // For single-allocation payments, use linkedTransactionId
+          const linkedTransactionId = paymentData.linkedTransactionId;
+          const paymentAmount = paymentData.amount || 0;
+
+          if (linkedTransactionId) {
+            const ledgerQuery = query(
+              ledgerRef,
+              where("transactionId", "==", linkedTransactionId)
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+
+            if (!ledgerSnapshot.empty) {
+              const ledgerDoc = ledgerSnapshot.docs[0];
+              const ledgerData = ledgerDoc.data();
+
+              if (ledgerData.isARAPEntry) {
+                const currentTotalPaid = ledgerData.totalPaid || 0;
+                const currentDiscount = ledgerData.totalDiscount || 0;
+                const writeoffAmount = ledgerData.writeoffAmount || 0;
+                const transactionAmount = ledgerData.amount || 0;
+
+                // Reverse the payment (subtract)
+                const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, paymentAmount));
+                const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+                const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+                const newPaymentStatus: "paid" | "unpaid" | "partial" =
+                  newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+
+                batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: zeroFloor(newRemainingBalance),
+                  paymentStatus: newPaymentStatus,
+                });
+              }
+            }
           }
         }
 
@@ -725,6 +1031,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     submitCheque,
     deleteCheque,
     endorseCheque,
+    endorseChequeWithAllocations,
     cancelEndorsement,
   };
 }
+
+// Export types for use in other components
+export type { EndorsementAllocation, EndorsementAllocationData };
