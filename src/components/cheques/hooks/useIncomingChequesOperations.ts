@@ -1047,15 +1047,17 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // 3. Process each payment and reverse its ARAP entries
       for (const paymentDoc of paymentsSnapshot.docs) {
         const paymentData = paymentDoc.data();
-        const isMultiAllocation = paymentData.isMultiAllocation === true;
 
-        if (isMultiAllocation) {
-          // For multi-allocation payments, read from allocations subcollection
-          const allocationsRef = collection(
-            firestore,
-            `users/${user.dataOwnerId}/payments/${paymentDoc.id}/allocations`
-          );
-          const allocationsSnapshot = await getDocs(allocationsRef);
+        // Always check allocations subcollection first (advances may exist even when isMultiAllocation is false)
+        const allocationsRef = collection(
+          firestore,
+          `users/${user.dataOwnerId}/payments/${paymentDoc.id}/allocations`
+        );
+        const allocationsSnapshot = await getDocs(allocationsRef);
+        const hasAllocations = !allocationsSnapshot.empty;
+
+        if (hasAllocations) {
+          // Process all allocations from subcollection
 
           for (const allocationDoc of allocationsSnapshot.docs) {
             const allocationData = allocationDoc.data();
