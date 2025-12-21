@@ -2,7 +2,7 @@
 
 ## Summary
 
-After thorough analysis of the client page components and endorsed cheques implementation, I've identified **6 bugs** and created **10 test scenarios** for Vercel testing.
+After thorough analysis of the client page components and endorsed cheques implementation, I've identified **10 bugs** (6 display bugs + 4 calculation bugs) and created **18 test scenarios** for Vercel testing.
 
 ---
 
@@ -118,6 +118,122 @@ The payment interface loaded in client-detail-page also lacks the endorsement fl
 - A regular expense row
 - No indication it originated from an endorsement
 - Category "سلفة عميل" may confuse users
+
+---
+
+## CALCULATION BUGS (Critical)
+
+### BUG 7: Client Advance (سلفة عميل) Incorrectly Counted as Purchase (HIGH PRIORITY)
+**Location**: [client-detail-page.tsx:236-240](src/components/clients/client-detail-page.tsx#L236-L240)
+
+**Issue**: The code counts ALL "مصروف" type entries as purchases:
+```typescript
+if (entry.type === "دخل" || entry.type === "إيراد") {
+  sales += entry.amount;
+} else if (entry.type === "مصروف") {
+  purchases += entry.amount;  // ❌ Includes سلفة عميل!
+}
+```
+
+**Problem**: When endorsement creates a سلفة عميل (client advance), it's type "مصروف" with category "سلفة عميل". This is NOT a purchase - it's money we owe the client (a liability).
+
+**Impact on Balance Calculation**:
+```typescript
+// Line 352:
+balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade) - totalDiscounts - totalWriteoffs
+```
+
+If client has:
+- Sale: 500
+- Endorsement payment: 800 (creates سلفة عميل of 300)
+
+**Current (WRONG)**:
+```
+totalSales = 500
+totalPurchases = 300 (سلفة عميل counted as purchase!)
+totalPaymentsReceived = 800
+Balance = 500 - 300 - 800 = -600 له  ❌ WRONG!
+```
+
+**Correct**:
+```
+totalSales = 500
+totalPurchases = 0 (سلفة عميل should NOT be counted)
+totalPaymentsReceived = 800
+Balance = 500 - 0 - 800 = -300 له  ✓ Correct!
+```
+
+**Fix needed**: Exclude سلفة عميل and سلفة مورد from purchases calculation:
+```typescript
+else if (entry.type === "مصروف" && entry.category !== "سلفة عميل") {
+  purchases += entry.amount;
+}
+```
+
+---
+
+### BUG 8: Export Functions Missing Discounts and Writeoffs
+**Location**: [client-detail-page.tsx:360-378](src/components/clients/client-detail-page.tsx#L360-L378)
+
+**Issue**: The Excel/PDF export functions only include:
+- Invoice amounts (debit/credit based on type)
+- Payment amounts
+
+But they DON'T include:
+- `totalDiscount` from ledger entries (خصم تسوية)
+- `writeoffAmount` from ledger entries (ديون معدومة)
+
+**The statement tab correctly shows these** (lines 847-866):
+```typescript
+// Row 2: Discount from ledger entry
+if (e.totalDiscount && e.totalDiscount > 0) {
+  rows.push({ ... credit: e.totalDiscount ... });
+}
+// Row 3: Writeoff from ledger entry
+if (e.writeoffAmount && e.writeoffAmount > 0) {
+  rows.push({ ... credit: e.writeoffAmount ... });
+}
+```
+
+**Impact**: Exported statement will show DIFFERENT totals than on-screen statement.
+
+---
+
+### BUG 9: Export "Balance After Cheques" Uses Wrong Formula
+**Location**: [client-detail-page.tsx:416](src/components/clients/client-detail-page.tsx#L416)
+
+**Issue**: Export uses simplified formula:
+```typescript
+expectedBalanceAfterCheques: runningBalance - totalPendingCheques
+```
+
+This subtracts ALL pending cheques, but doesn't consider cheque TYPE!
+
+**Statement tab correctly handles this** (line 1193):
+```typescript
+const balanceAfterCheques = finalBalance - incomingTotal + outgoingTotal;
+```
+
+**Example**:
+- Current balance: 1000 عليه
+- Pending incoming (وارد): 600
+- Pending outgoing (صادر): 200
+
+**Export (WRONG)**: 1000 - (600 + 200) = 200 عليه
+**Statement (CORRECT)**: 1000 - 600 + 200 = 600 عليه
+
+---
+
+### BUG 10: Supplier Advance (سلفة مورد) May Incorrectly Affect Client Balance
+**Location**: [client-detail-page.tsx:236-240](src/components/clients/client-detail-page.tsx#L236-L240)
+
+**Issue**: When endorsing a cheque, a سلفة مورد entry is created with:
+- `type: "دخل"` (income)
+- `associatedParty: supplierName`
+
+If the supplier is ALSO a client in the system, this entry would be fetched for the supplier's client page and counted as a SALE, which is incorrect.
+
+**This is an edge case** but worth testing if suppliers can also be clients.
 
 ---
 
