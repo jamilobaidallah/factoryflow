@@ -191,11 +191,11 @@ service cloud.firestore {
           && isValidString(request.resource.data.clientName)
           && isValidAmount(request.resource.data.amount)
           && request.resource.data.type in ['وارد', 'صادر']
-          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي']
+          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي', 'مجيّر', 'مرفوض', 'تم الصرف']
           && request.resource.data.dueDate is timestamp
           && request.resource.data.createdAt is timestamp;
         allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
-          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي'];
+          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي', 'مجيّر', 'مرفوض', 'تم الصرف'];
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 
