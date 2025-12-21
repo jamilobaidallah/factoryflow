@@ -64,6 +64,8 @@ export interface OwnerEquityData {
 export interface IncomeStatementData {
   totalRevenue: number;
   totalExpenses: number;
+  totalDiscounts: number;
+  totalBadDebt: number;
   netProfit: number;
   profitMargin: number;
   revenueByCategory: { [key: string]: number };
@@ -168,11 +170,14 @@ export function useReportsCalculations({
   }, [ledgerEntries]);
 
   // Calculate Income Statement (EXCLUDING owner equity)
-  // Profit = Revenue - Expenses - Discounts (discounts are contra-revenue)
+  // Profit = Net Revenue - Expenses - Bad Debt
+  // - Discounts are contra-revenue (reduce gross revenue to net revenue)
+  // - Bad debt is treated as expense (ديون معدومة)
   const incomeStatement = useMemo((): IncomeStatementData => {
     let totalRevenue = 0;
     let totalExpenses = 0;
     let totalDiscounts = 0;
+    let totalBadDebt = 0;
     const revenueByCategory: { [key: string]: number } = {};
     const expensesByCategory: { [key: string]: number } = {};
 
@@ -195,6 +200,10 @@ export function useReportsCalculations({
         if (entry.totalDiscount) {
           totalDiscounts = safeAdd(totalDiscounts, entry.totalDiscount);
         }
+        // Track bad debt write-offs (treated as expense, reduces profit)
+        if (entry.writeoffAmount) {
+          totalBadDebt = safeAdd(totalBadDebt, entry.writeoffAmount);
+        }
       } else if (entry.type === "مصروف") {
         totalExpenses = safeAdd(totalExpenses, entry.amount);
         expensesByCategory[entry.category] =
@@ -202,13 +211,17 @@ export function useReportsCalculations({
       }
     });
 
-    // Net profit = Revenue - Expenses - Discounts
-    const netProfit = safeSubtract(safeSubtract(totalRevenue, totalExpenses), totalDiscounts);
+    // Net revenue = Gross Revenue - Discounts
+    const netRevenue = safeSubtract(totalRevenue, totalDiscounts);
+    // Net profit = Net Revenue - Expenses - Bad Debt
+    const netProfit = safeSubtract(safeSubtract(netRevenue, totalExpenses), totalBadDebt);
     const profitMargin = totalRevenue > 0 ? safeMultiply(safeDivide(netProfit, totalRevenue), 100) : 0;
 
     return {
       totalRevenue,
       totalExpenses,
+      totalDiscounts,
+      totalBadDebt,
       netProfit,
       profitMargin,
       revenueByCategory,

@@ -15,6 +15,8 @@ interface LedgerEntry {
   remainingBalance?: number;
   totalPaid?: number;
   isARAPEntry?: boolean;
+  totalDiscount?: number;
+  writeoffAmount?: number;
 }
 
 interface ReportsInlineReportProps {
