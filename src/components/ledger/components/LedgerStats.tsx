@@ -25,22 +25,23 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
     let unpaidAmount = 0;
 
     entries.forEach((entry) => {
-      // Skip equity AND advance transactions - they don't affect P&L
+      // Count unpaid/partial ARAP entries (includes advances like سلفة مورد)
+      // These represent receivables/payables that need collection
+      if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
+        unpaidCount++;
+        unpaidAmount += entry.remainingBalance || 0;
+      }
+
+      // Skip equity AND advance transactions from P&L calculations
       // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not income/expense
       if (isExcludedFromPL(entry.type, entry.category)) {
-        return; // Skip from P&L calculations
+        return;
       }
 
       if (entry.type === "دخل") {
         totalIncome += entry.amount || 0;
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount || 0;
-      }
-
-      // Count unpaid/partial entries (only income/expense, not equity)
-      if (entry.isARAPEntry && entry.paymentStatus !== "paid") {
-        unpaidCount++;
-        unpaidAmount += entry.remainingBalance || 0;
       }
     });
 
