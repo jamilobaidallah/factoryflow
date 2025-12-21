@@ -432,8 +432,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     });
 
     // Get pending cheques and calculate balance after cheques correctly
+    // Get pending cheques, EXCLUDING endorsed cheques (already in statement)
     const pendingCheques = cheques
-      .filter((c) => c.status === "قيد الانتظار")
+      .filter((c) => c.status === "قيد الانتظار" && !c.isEndorsedCheque)
       .map((c) => ({
         chequeNumber: c.chequeNumber,
         bankName: c.bankName,
@@ -580,9 +581,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 return { ...t, balance: runningBalance };
               });
 
-              // Get pending cheques and calculate balance after cheques correctly
+              // Get pending cheques, EXCLUDING endorsed cheques (already in statement)
               const pendingCheques = cheques
-                .filter((c) => c.status === "قيد الانتظار")
+                .filter((c) => c.status === "قيد الانتظار" && !c.isEndorsedCheque)
                 .map((c) => ({
                   chequeNumber: c.chequeNumber,
                   bankName: c.bankName,
@@ -1285,7 +1286,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
                     {/* Pending Cheques Section */}
                     {(() => {
-                      const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
+                      // Filter pending cheques, EXCLUDING endorsed cheques
+                      // Endorsed cheques are already accounted for in the statement as endorsement payments
+                      // Including them here would double-count the amount
+                      const pendingCheques = cheques.filter(c =>
+                        c.status === "قيد الانتظار" && !c.isEndorsedCheque
+                      );
                       if (pendingCheques.length === 0) return null;
 
                       const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);

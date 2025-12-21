@@ -2,9 +2,11 @@
 
 ## Summary
 
-After thorough analysis of the client page components and endorsed cheques implementation, I've identified **11 bugs** (6 display bugs + 5 calculation bugs) and created **18 test scenarios** for Vercel testing.
+After thorough analysis of the client page components and endorsed cheques implementation, I've identified **12 bugs** (6 display bugs + 6 calculation bugs) and created **18 test scenarios** for Vercel testing.
 
-**Latest Fix (Dec 21, 2025)**: Fixed critical Bug 11 - Statement balance mismatch caused by سلفة double-counting.
+**Latest Fixes (Dec 21, 2025)**:
+- Bug 11: Statement balance mismatch caused by سلفة double-counting
+- Bug 12: Endorsed cheques appearing in pending cheques section (double-counting)
 
 ---
 
@@ -269,6 +271,43 @@ This caused سلفة amounts to be counted TWICE:
 - Their debit/credit values are set to 0 (don't affect running balance)
 - Amount is shown in description: `"سلفة مورد (850.00 د.أ - لا يؤثر على الرصيد)"`
 - Same logic applied to Excel/PDF exports
+
+**Status**: ✅ FIXED in commit on branch `fix/client-page-endorsed-cheques-bugs`
+
+---
+
+### BUG 12: Endorsed Cheques Double-Counted in Pending Section (CRITICAL - FIXED)
+**Location**: [client-detail-page.tsx:1288](src/components/clients/client-detail-page.tsx#L1288)
+
+**Issue**: Endorsed cheques were appearing in BOTH:
+1. The statement (as endorsement payments) - CORRECT
+2. The "شيكات قيد الانتظار" section - WRONG (double-counting!)
+
+**Example from موسى's statement**:
+- Statement shows: endorsement payments for cheques 2839, 2840, 2841 (total 7,500)
+- Statement balance: 850 عليه
+- Pending cheques: same cheques 2839, 2840, 2841 showing as صادر (7,500)
+- Balance after cheques: 850 + 7,500 = **8,350 عليه** ❌
+
+**Root Cause**:
+The pending cheques filter only checked `status === "قيد الانتظار"` but didn't exclude cheques with `isEndorsedCheque === true`.
+
+**Before Fix**:
+```typescript
+const pendingCheques = cheques.filter(c => c.status === "قيد الانتظار");
+```
+
+**After Fix**:
+```typescript
+const pendingCheques = cheques.filter(c =>
+  c.status === "قيد الانتظار" && !c.isEndorsedCheque
+);
+```
+
+**Fix Applied**:
+- Statement pending cheques filter now excludes endorsed cheques
+- Excel export filter updated
+- PDF export filter updated
 
 **Status**: ✅ FIXED in commit on branch `fix/client-page-endorsed-cheques-bugs`
 
