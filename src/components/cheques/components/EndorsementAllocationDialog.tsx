@@ -570,10 +570,10 @@ export function EndorsementAllocationDialog({
                         {client.hasBalance && client.balance !== 0 && (
                           <span className={`text-xs px-1.5 py-0.5 rounded ${
                             client.balance && client.balance > 0
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-green-100 text-green-700'
+                              ? 'bg-green-100 text-green-700'  // They owe us = good
+                              : 'bg-red-100 text-red-700'      // We owe them = debt
                           }`}>
-                            {client.balance && client.balance > 0 ? 'له: ' : 'عليه: '}
+                            {client.balance && client.balance > 0 ? 'عليه: ' : 'له: '}
                             {Math.abs(client.balance || 0).toFixed(2)}
                           </span>
                         )}
