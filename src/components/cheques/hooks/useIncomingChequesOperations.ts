@@ -372,7 +372,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
   /**
    * Endorse incoming cheque with atomic batch operation
-   * Ensures all 5 operations (incoming update, outgoing create, link update, 2 payments) succeed or fail together
+   * Ensures all operations (incoming update, outgoing create, 2 payments, 2 ARAP updates) succeed or fail together
    */
   const endorseCheque = async (
     cheque: Cheque,
@@ -407,6 +407,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // Use atomic batch for all operations
       const batch = writeBatch(firestore);
       const now = new Date();
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
       const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
@@ -415,6 +416,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // Pre-generate outgoing cheque document ref (for linking)
       const outgoingChequeRef = doc(chequesRef);
 
+      // Store the supplier's transaction ID for ARAP update
+      const supplierTransactionId = transactionId.trim();
+
       // 1. Update incoming cheque status, type, and outgoing reference
       batch.update(incomingChequeRef, {
         chequeType: "مجير",
@@ -422,6 +426,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsedTo: supplierName,
         endorsedDate: now,
         endorsedToOutgoingId: outgoingChequeRef.id,
+        // Store supplier transaction ID for reversal
+        endorsedSupplierTransactionId: supplierTransactionId,
       });
 
       // 2. Create outgoing cheque entry
@@ -432,7 +438,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         type: CHEQUE_TYPES.OUTGOING,
         chequeType: "مجير",
         status: CHEQUE_STATUS_AR.PENDING,
-        linkedTransactionId: transactionId.trim() || "",
+        linkedTransactionId: supplierTransactionId,
         issueDate: cheque.issueDate,
         dueDate: cheque.dueDate,
         bankName: cheque.bankName,
@@ -463,7 +469,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         clientName: supplierName,
         amount: cheque.amount,
         type: PAYMENT_TYPES.DISBURSEMENT,
-        linkedTransactionId: transactionId.trim() || cheque.linkedTransactionId || "",
+        linkedTransactionId: supplierTransactionId,
         date: now,
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
         createdAt: now,
@@ -472,12 +478,76 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsementChequeId: cheque.id,
       });
 
-      // Commit atomically - all 4 operations succeed or all fail
+      // 5. Update ARAP for original client (if linked to a transaction)
+      if (cheque.linkedTransactionId) {
+        const clientLedgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", cheque.linkedTransactionId.trim())
+        );
+        const clientLedgerSnapshot = await getDocs(clientLedgerQuery);
+
+        if (!clientLedgerSnapshot.empty) {
+          const ledgerDoc = clientLedgerSnapshot.docs[0];
+          const ledgerData = ledgerDoc.data();
+
+          if (ledgerData.isARAPEntry) {
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const currentDiscount = ledgerData.totalDiscount || 0;
+            const writeoffAmount = ledgerData.writeoffAmount || 0;
+            const transactionAmount = ledgerData.amount || 0;
+            const newTotalPaid = safeAdd(currentTotalPaid, cheque.amount);
+            const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+            const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+            const newPaymentStatus: "paid" | "unpaid" | "partial" =
+              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+
+            batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newPaymentStatus,
+            });
+          }
+        }
+      }
+
+      // 6. Update ARAP for supplier (if transaction ID provided)
+      if (supplierTransactionId) {
+        const supplierLedgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", supplierTransactionId)
+        );
+        const supplierLedgerSnapshot = await getDocs(supplierLedgerQuery);
+
+        if (!supplierLedgerSnapshot.empty) {
+          const ledgerDoc = supplierLedgerSnapshot.docs[0];
+          const ledgerData = ledgerDoc.data();
+
+          if (ledgerData.isARAPEntry) {
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const currentDiscount = ledgerData.totalDiscount || 0;
+            const writeoffAmount = ledgerData.writeoffAmount || 0;
+            const transactionAmount = ledgerData.amount || 0;
+            const newTotalPaid = safeAdd(currentTotalPaid, cheque.amount);
+            const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+            const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+            const newPaymentStatus: "paid" | "unpaid" | "partial" =
+              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+
+            batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newPaymentStatus,
+            });
+          }
+        }
+      }
+
+      // Commit atomically - all operations succeed or all fail
       await batch.commit();
 
       toast({
         title: "تم التظهير بنجاح",
-        description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
+        description: `تم تظهير الشيك رقم ${cheque.chequeNumber} إلى ${supplierName} وتحديث أرصدة الذمم`,
       });
 
       // Log activity for endorsement
@@ -494,6 +564,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           status: CHEQUE_STATUS_AR.ENDORSED,
           endorsedTo: supplierName,
           type: CHEQUE_TYPES.INCOMING,
+          clientTransactionId: cheque.linkedTransactionId || null,
+          supplierTransactionId: supplierTransactionId || null,
         },
       });
 
@@ -511,13 +583,15 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
   /**
    * Cancel endorsement with atomic batch operation
-   * Ensures outgoing cheque deletion + incoming revert + payments deletion succeed or fail together
+   * Ensures outgoing cheque deletion + incoming revert + payments deletion + ARAP reversal succeed or fail together
    */
   const cancelEndorsement = async (cheque: Cheque): Promise<boolean> => {
     if (!user) return false;
 
     try {
-      // Query payment records first (before batch)
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+
+      // Query payment records first (before batch) - we need the linkedTransactionId from each
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentsSnapshot = await getDocs(
         query(paymentsRef, where("endorsementChequeId", "==", cheque.id))
@@ -544,19 +618,68 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsedTo: null,
         endorsedDate: null,
         endorsedToOutgoingId: null,
+        endorsedSupplierTransactionId: null,
       });
 
-      // 3. Delete endorsement payment records
-      paymentsSnapshot.docs.forEach((paymentDoc) => {
+      // 3. Reverse ARAP for each payment before deleting them
+      // Collect unique transaction IDs to avoid double-reversing
+      const processedTransactionIds = new Set<string>();
+
+      for (const paymentDoc of paymentsSnapshot.docs) {
+        const paymentData = paymentDoc.data();
+        const linkedTransactionId = paymentData.linkedTransactionId;
+        const paymentAmount = paymentData.amount || 0;
+
+        // Skip if no linked transaction or already processed
+        if (!linkedTransactionId || processedTransactionIds.has(linkedTransactionId)) {
+          batch.delete(paymentDoc.ref);
+          continue;
+        }
+
+        processedTransactionIds.add(linkedTransactionId);
+
+        // Query ledger entry for this transaction
+        const ledgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", linkedTransactionId)
+        );
+        const ledgerSnapshot = await getDocs(ledgerQuery);
+
+        if (!ledgerSnapshot.empty) {
+          const ledgerDoc = ledgerSnapshot.docs[0];
+          const ledgerData = ledgerDoc.data();
+
+          if (ledgerData.isARAPEntry) {
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const currentDiscount = ledgerData.totalDiscount || 0;
+            const writeoffAmount = ledgerData.writeoffAmount || 0;
+            const transactionAmount = ledgerData.amount || 0;
+
+            // Reverse the payment (subtract)
+            const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, paymentAmount));
+            const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
+            const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
+            const newPaymentStatus: "paid" | "unpaid" | "partial" =
+              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+
+            batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newPaymentStatus,
+            });
+          }
+        }
+
+        // Delete the payment record
         batch.delete(paymentDoc.ref);
-      });
+      }
 
       // Commit atomically - all operations succeed or all fail
       await batch.commit();
 
       toast({
         title: "تم إلغاء التظهير",
-        description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} بنجاح`,
+        description: `تم إلغاء تظهير الشيك رقم ${cheque.chequeNumber} واسترجاع أرصدة الذمم`,
       });
 
       // Log activity for cancellation

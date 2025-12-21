@@ -12,6 +12,7 @@ export interface Cheque {
   endorsedTo?: string;
   endorsedDate?: Date;
   endorsedToOutgoingId?: string;
+  endorsedSupplierTransactionId?: string; // Supplier's transaction ID for ARAP reversal
   isEndorsedCheque?: boolean;
   endorsedFromId?: string;
   linkedTransactionId: string;

@@ -400,6 +400,8 @@ export default function IncomingChequesPage() {
         setTransactionId={setEndorseTransactionId}
         loading={loading}
         onEndorse={handleEndorse}
+        clients={clients}
+        clientsLoading={clientsLoading}
       />
 
       <PaymentDateModal
