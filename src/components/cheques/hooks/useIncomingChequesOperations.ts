@@ -43,6 +43,7 @@ interface EndorsementAllocationData {
   supplierName: string;
   clientAllocations: EndorsementAllocation[];
   supplierAllocations: EndorsementAllocation[];
+  endorsementDate?: Date;
 }
 
 interface UseIncomingChequesOperationsReturn {
@@ -56,7 +57,8 @@ interface UseIncomingChequesOperationsReturn {
   endorseCheque: (
     cheque: Cheque,
     supplierName: string,
-    transactionId: string
+    transactionId: string,
+    endorsementDate?: Date
   ) => Promise<boolean>;
   endorseChequeWithAllocations: (
     cheque: Cheque,
@@ -406,7 +408,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
   const endorseCheque = async (
     cheque: Cheque,
     supplierName: string,
-    transactionId: string
+    transactionId: string,
+    endorsementDate?: Date
   ): Promise<boolean> => {
     if (!user || !supplierName.trim()) {
       toast({
@@ -445,7 +448,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     try {
       // Use atomic batch for all operations
       const batch = writeBatch(firestore);
-      const now = new Date();
+      // Use provided endorsement date or default to today
+      const effectiveDate = endorsementDate || new Date();
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
       const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
@@ -463,7 +467,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         chequeType: "مجير",
         status: CHEQUE_STATUS_AR.ENDORSED,
         endorsedTo: supplierName,
-        endorsedDate: now,
+        endorsedDate: effectiveDate,
         endorsedToOutgoingId: outgoingChequeRef.id,
         // Store supplier transaction ID for reversal
         endorsedSupplierTransactionId: supplierTransactionId,
@@ -482,7 +486,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         dueDate: cheque.dueDate,
         bankName: cheque.bankName,
         notes: `شيك مظهر من العميل: ${cheque.clientName}`,
-        createdAt: now,
+        createdAt: new Date(),
         endorsedFromId: cheque.id,
         isEndorsedCheque: true,
       });
@@ -494,9 +498,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         amount: cheque.amount,
         type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: cheque.linkedTransactionId || "",
-        date: now,
+        date: effectiveDate,
         notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
-        createdAt: now,
+        createdAt: new Date(),
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
@@ -509,9 +513,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         amount: cheque.amount,
         type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: supplierTransactionId,
-        date: now,
+        date: effectiveDate,
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
-        createdAt: now,
+        createdAt: new Date(),
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
@@ -638,7 +642,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       return false;
     }
 
-    const { supplierName, clientAllocations, supplierAllocations } = allocationData;
+    const { supplierName, clientAllocations, supplierAllocations, endorsementDate } = allocationData;
+
+    // Use provided endorsement date or default to today
+    const effectiveDate = endorsementDate || new Date();
 
     // Validate at least one allocation exists
     if (clientAllocations.length === 0 && supplierAllocations.length === 0) {
@@ -667,7 +674,6 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
     try {
       const batch = writeBatch(firestore);
-      const now = new Date();
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
@@ -695,7 +701,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         chequeType: "مجير",
         status: CHEQUE_STATUS_AR.ENDORSED,
         endorsedTo: supplierName,
-        endorsedDate: now,
+        endorsedDate: effectiveDate,
         endorsedToOutgoingId: outgoingChequeRef.id,
         endorsedSupplierTransactionId: primarySupplierTransactionId,
         // Store all allocated transaction IDs for reversal
@@ -717,7 +723,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         dueDate: cheque.dueDate,
         bankName: cheque.bankName,
         notes: `شيك مظهر من العميل: ${cheque.clientName}`,
-        createdAt: now,
+        createdAt: new Date(),
         endorsedFromId: cheque.id,
         isEndorsedCheque: true,
       });
@@ -728,9 +734,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         amount: cheque.amount,
         type: PAYMENT_TYPES.RECEIPT,
         linkedTransactionId: primaryClientTransactionId,
-        date: now,
+        date: effectiveDate,
         notes: `تظهير شيك رقم ${cheque.chequeNumber} للمورد: ${supplierName}`,
-        createdAt: now,
+        createdAt: new Date(),
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
@@ -744,9 +750,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         amount: cheque.amount,
         type: PAYMENT_TYPES.DISBURSEMENT,
         linkedTransactionId: primarySupplierTransactionId,
-        date: now,
+        date: effectiveDate,
         notes: `استلام شيك مجيّر رقم ${cheque.chequeNumber} من العميل: ${cheque.clientName}`,
-        createdAt: now,
+        createdAt: new Date(),
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
@@ -763,7 +769,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           allocatedAmount: allocation.allocatedAmount,
           transactionDate: allocation.transactionDate,
           description: allocation.description,
-          createdAt: now,
+          createdAt: new Date(),
         });
       }
 
@@ -776,7 +782,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           allocatedAmount: allocation.allocatedAmount,
           transactionDate: allocation.transactionDate,
           description: allocation.description,
-          createdAt: now,
+          createdAt: new Date(),
         });
       }
 
@@ -833,7 +839,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(clientAdvanceLedgerRef, {
           transactionId: clientAdvanceTransactionId,
           type: "مصروف",  // Liability - we owe the client
-          date: now,
+          date: effectiveDate,
           description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
           category: "سلفة عميل",
           amount: clientUnallocated,
@@ -844,7 +850,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           isARAPEntry: true,
           isClientAdvance: true,
           linkedEndorsementChequeId: cheque.id,
-          createdAt: now,
+          createdAt: new Date(),
           notes: `رصيد دائن للعميل ${cheque.clientName} عبر تظهير شيك رقم ${cheque.chequeNumber} للمورد ${supplierName}`,
         });
 
@@ -854,10 +860,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           transactionId: clientAdvanceTransactionId,
           ledgerDocId: clientAdvanceDocId,
           allocatedAmount: clientUnallocated,
-          transactionDate: now,
+          transactionDate: effectiveDate,
           description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
           isAdvance: true,
-          createdAt: now,
+          createdAt: new Date(),
         });
 
         clientTransactionIds.push(clientAdvanceTransactionId);
@@ -880,7 +886,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         batch.set(advanceLedgerRef, {
           transactionId: advanceTransactionId,
           type: "دخل",  // Asset - supplier owes us goods/services
-          date: now,
+          date: effectiveDate,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
           category: "سلفة مورد",
           amount: supplierUnallocated,
@@ -891,7 +897,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           isARAPEntry: true,
           isSupplierAdvance: true,
           linkedEndorsementChequeId: cheque.id,
-          createdAt: now,
+          createdAt: new Date(),
           notes: `دفعة مقدمة للمورد ${supplierName} عبر تظهير شيك رقم ${cheque.chequeNumber} من العميل ${cheque.clientName}`,
         });
 
@@ -901,10 +907,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           transactionId: advanceTransactionId,
           ledgerDocId: supplierAdvanceDocId,
           allocatedAmount: supplierUnallocated,
-          transactionDate: now,
+          transactionDate: effectiveDate,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
           isAdvance: true,
-          createdAt: now,
+          createdAt: new Date(),
         });
 
         // Update the paidTransactionIds array to include the advance

@@ -79,6 +79,7 @@ interface EndorsementData {
   supplierName: string;
   clientAllocations: AllocationEntry[];
   supplierAllocations: AllocationEntry[];
+  endorsementDate?: Date;
 }
 
 interface EndorsementAllocationDialogProps {
@@ -199,6 +200,11 @@ export function EndorsementAllocationDialog({
   const [supplierName, setSupplierName] = useState("");
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
 
+  // Endorsement date state (defaults to today)
+  const [endorsementDate, setEndorsementDate] = useState(() =>
+    new Date().toISOString().split("T")[0]
+  );
+
   // Transactions state
   const [clientTransactions, setClientTransactions] = useState<UnpaidTransaction[]>([]);
   const [supplierTransactions, setSupplierTransactions] = useState<UnpaidTransaction[]>([]);
@@ -221,6 +227,7 @@ export function EndorsementAllocationDialog({
       setClientAllocations([]);
       setSupplierAllocations([]);
       setShowSupplierDropdown(false);
+      setEndorsementDate(new Date().toISOString().split("T")[0]);
     }
   }, [open]);
 
@@ -469,6 +476,7 @@ export function EndorsementAllocationDialog({
         supplierName: supplierName.trim(),
         clientAllocations: activeClientAllocations,
         supplierAllocations: activeSupplierAllocations,
+        endorsementDate: new Date(endorsementDate),
       });
 
       if (success) {
@@ -532,11 +540,25 @@ export function EndorsementAllocationDialog({
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
-          {/* Supplier Selection */}
-          <div className="space-y-2 relative">
-            <Label htmlFor="supplierName">
-              المورد المظهر له الشيك <span className="text-red-500">*</span>
-            </Label>
+          {/* Endorsement Date and Supplier Selection Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Endorsement Date */}
+            <div className="space-y-2">
+              <Label htmlFor="endorsementDate">تاريخ التظهير</Label>
+              <Input
+                id="endorsementDate"
+                type="date"
+                value={endorsementDate}
+                onChange={(e) => setEndorsementDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Supplier Selection */}
+            <div className="space-y-2 relative md:col-span-2">
+              <Label htmlFor="supplierName">
+                المورد المظهر له الشيك <span className="text-red-500">*</span>
+              </Label>
             <div className="relative">
               <Input
                 id="supplierName"
@@ -595,6 +617,7 @@ export function EndorsementAllocationDialog({
                 )}
               </div>
             )}
+            </div>
           </div>
 
           {/* Two-column layout for allocations */}
