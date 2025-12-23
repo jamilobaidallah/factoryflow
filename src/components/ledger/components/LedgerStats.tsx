@@ -21,6 +21,8 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
   const stats = useMemo(() => {
     let totalIncome = 0;
     let totalExpenses = 0;
+    let totalDiscounts = 0;
+    let totalBadDebt = 0;
     let unpaidCount = 0;
     let unpaidAmount = 0;
 
@@ -41,15 +43,26 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
 
       if (entry.type === "دخل") {
         totalIncome += entry.amount || 0;
+        // Track discounts (contra-revenue, reduces net income)
+        if (entry.totalDiscount) {
+          totalDiscounts += entry.totalDiscount;
+        }
+        // Track bad debt write-offs (reduces profit)
+        if (entry.writeoffAmount) {
+          totalBadDebt += entry.writeoffAmount;
+        }
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount || 0;
       }
     });
 
+    // Net balance formula matches Dashboard: (income - discounts) - expenses - badDebt
+    const netBalance = (totalIncome - totalDiscounts) - totalExpenses - totalBadDebt;
+
     return {
       totalIncome,
       totalExpenses,
-      netBalance: totalIncome - totalExpenses,
+      netBalance,
       unpaidCount,
       unpaidAmount,
     };
