@@ -657,6 +657,31 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       return false;
     }
 
+    // Validate allocation amounts match cheque amount exactly
+    const totalClientAllocated = clientAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
+    const totalSupplierAllocated = supplierAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
+    const isClientBalanced = totalClientAllocated === cheque.amount;
+    const isSupplierBalanced = totalSupplierAllocated === cheque.amount;
+    const hasOverflow = totalClientAllocated > cheque.amount || totalSupplierAllocated > cheque.amount;
+
+    if (hasOverflow) {
+      toast({
+        title: "خطأ",
+        description: "المبلغ المخصص يتجاوز قيمة الشيك",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!isClientBalanced && !isSupplierBalanced) {
+      toast({
+        title: "خطأ",
+        description: "يجب أن يساوي المبلغ المخصص قيمة الشيك بالضبط",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     // Validate state transition: only PENDING cheques can be endorsed
     try {
       validateTransition(cheque.status as ChequeStatusValue, CHEQUE_STATUS_AR.ENDORSED);

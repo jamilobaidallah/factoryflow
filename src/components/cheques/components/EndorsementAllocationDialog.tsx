@@ -439,7 +439,11 @@ export function EndorsementAllocationDialog({
   const clientTotalOutstanding = sumAmounts(clientTransactions.map((t) => t.remainingBalance));
   const supplierTotalOutstanding = sumAmounts(supplierTransactions.map((t) => t.remainingBalance));
 
-  // Validation
+  // Validation: require exact match on at least one side (client or supplier)
+  const isClientBalanced = clientDifference === 0 && totalClientAllocated > 0;
+  const isSupplierBalanced = supplierDifference === 0 && totalSupplierAllocated > 0;
+  const hasOverflow = clientDifference < 0 || supplierDifference < 0;
+
   const canProceed = useMemo(() => {
     if (!supplierName.trim()) {
       return false;
@@ -447,8 +451,16 @@ export function EndorsementAllocationDialog({
     if (totalClientAllocated === 0 && totalSupplierAllocated === 0) {
       return false;
     }
+    // Prevent overflow (allocated > cheque amount)
+    if (hasOverflow) {
+      return false;
+    }
+    // Require exact match on at least one side
+    if (!isClientBalanced && !isSupplierBalanced) {
+      return false;
+    }
     return true;
-  }, [supplierName, totalClientAllocated, totalSupplierAllocated]);
+  }, [supplierName, totalClientAllocated, totalSupplierAllocated, hasOverflow, isClientBalanced, isSupplierBalanced]);
 
   // Handle endorsement
   const handleEndorseClick = async () => {
