@@ -778,6 +778,17 @@ export class LedgerService {
         deletedRelatedCount++;
       });
 
+      // Delete related fixed assets
+      const fixedAssetsQuery = query(
+        this.fixedAssetsRef,
+        where("linkedTransactionId", "==", entry.transactionId)
+      );
+      const fixedAssetsSnapshot = await getDocs(fixedAssetsQuery);
+      fixedAssetsSnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+        deletedRelatedCount++;
+      });
+
       // Revert inventory quantities and delete movements
       const movementsQuery = query(
         this.inventoryMovementsRef,

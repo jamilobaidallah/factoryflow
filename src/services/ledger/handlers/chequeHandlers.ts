@@ -9,6 +9,14 @@ import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import type { HandlerContext } from "../types";
 
 /**
+ * Validates essential cheque data before saving
+ * @returns true if cheque data is valid, false otherwise
+ */
+function isValidChequeData(chequeNumber: string | undefined, amount: number): boolean {
+  return !!chequeNumber?.trim() && !isNaN(amount) && amount > 0;
+}
+
+/**
  * Handle incoming cheque batch operation
  * Supports single cheque or multiple cheques
  *
@@ -23,6 +31,11 @@ export function handleIncomingCheckBatch(
   const { batch, transactionId, formData, entryType, refs } = ctx;
   const accountingType = checkFormData.accountingType || "cashed";
   const chequeAmount = parseFloat(checkFormData.chequeAmount);
+
+  if (!isValidChequeData(checkFormData.chequeNumber, chequeAmount)) {
+    console.warn("Skipping invalid incoming cheque - missing cheque number or invalid amount");
+    return;
+  }
 
   let chequeStatus: string;
   if (accountingType === "cashed") {
@@ -117,6 +130,11 @@ export function handleOutgoingCheckBatch(
   const { batch, transactionId, formData, refs } = ctx;
   const accountingType = outgoingCheckFormData.accountingType || "cashed";
   const chequeAmount = parseFloat(outgoingCheckFormData.chequeAmount);
+
+  if (!isValidChequeData(outgoingCheckFormData.chequeNumber, chequeAmount)) {
+    console.warn("Skipping invalid outgoing cheque - missing cheque number or invalid amount");
+    return;
+  }
 
   let chequeStatus: string;
   if (accountingType === "cashed") {
