@@ -26,8 +26,10 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   query: (...args: unknown[]) => mockQuery(...args),
+  getDocs: jest.fn(() => Promise.resolve({ empty: true, forEach: jest.fn() })),
   orderBy: jest.fn(),
   limit: jest.fn(),
+  where: jest.fn(),
 }));
 
 jest.mock('@/firebase/config', () => ({
