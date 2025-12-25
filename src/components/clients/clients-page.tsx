@@ -44,7 +44,7 @@ import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { formatNumber } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
-import { CHEQUE_STATUS_AR, CHEQUE_TYPES } from "@/lib/constants";
+import { CHEQUE_STATUS_AR, CHEQUE_TYPES, TRANSACTION_TYPES, PAYMENT_TYPES } from "@/lib/constants";
 
 // Import validation utilities
 import {
@@ -189,6 +189,13 @@ function ClientBalanceDisplay({ balance }: { balance: number }) {
   );
 }
 
+/** Get display balance: expectedBalance if available, otherwise currentBalance */
+function getClientDisplayBalance(
+  balanceData: { currentBalance: number; expectedBalance: number | null } | undefined
+): number {
+  return balanceData?.expectedBalance ?? balanceData?.currentBalance ?? 0;
+}
+
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -331,9 +338,12 @@ export default function ClientsPage() {
 
         if (!isAdvance) {
           // Include all income types (sales, loans given, etc.) - they increase what client owes
-          if (entry.type === "دخل" || entry.type === "إيراد" || entry.type === "قرض") {
+          const isIncome = entry.type === TRANSACTION_TYPES.INCOME ||
+                           entry.type === TRANSACTION_TYPES.INCOME_ALT ||
+                           entry.type === TRANSACTION_TYPES.LOAN;
+          if (isIncome) {
             sales += entry.amount || 0;
-          } else if (entry.type === "مصروف") {
+          } else if (entry.type === TRANSACTION_TYPES.EXPENSE) {
             purchases += entry.amount || 0;
           }
         }
@@ -347,9 +357,9 @@ export default function ClientsPage() {
       let paymentsMade = 0;
 
       clientPayments.forEach(payment => {
-        if (payment.type === "قبض") {
+        if (payment.type === PAYMENT_TYPES.RECEIPT) {
           paymentsReceived += payment.amount || 0;
-        } else if (payment.type === "صرف") {
+        } else if (payment.type === PAYMENT_TYPES.DISBURSEMENT) {
           paymentsMade += payment.amount || 0;
         }
       });
@@ -648,12 +658,9 @@ export default function ClientsPage() {
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
-                      {(() => {
-                        const balanceData = clientBalances.get(client.id);
-                        // Use expectedBalance if available, otherwise currentBalance
-                        const displayBalance = balanceData?.expectedBalance ?? balanceData?.currentBalance ?? 0;
-                        return <ClientBalanceDisplay balance={displayBalance} />;
-                      })()}
+                      <ClientBalanceDisplay
+                        balance={getClientDisplayBalance(clientBalances.get(client.id))}
+                      />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group" aria-label="إجراءات العميل">
