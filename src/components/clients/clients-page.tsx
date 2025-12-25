@@ -326,12 +326,12 @@ export default function ClientsPage() {
       let writeoffs = 0;
 
       clientLedger.forEach(entry => {
-        // Exclude advances and loans from balance calculation
+        // Exclude advances from balance calculation (they're informational only)
         const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
-        const isLoan = entry.category?.includes("قروض");
 
-        if (!isAdvance && !isLoan) {
-          if (entry.type === "دخل" || entry.type === "إيراد") {
+        if (!isAdvance) {
+          // Include all income types (sales, loans given, etc.) - they increase what client owes
+          if (entry.type === "دخل" || entry.type === "إيراد" || entry.type === "قرض") {
             sales += entry.amount || 0;
           } else if (entry.type === "مصروف") {
             purchases += entry.amount || 0;
