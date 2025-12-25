@@ -9,6 +9,8 @@ import {
   isCapitalContribution,
   isOwnerDrawing,
   getLoanCashDirection,
+  getLoanType,
+  isInitialLoan,
 } from "@/components/ledger/utils/ledger-helpers";
 
 interface LedgerEntry {
@@ -271,7 +273,7 @@ function IncomeStatementReport({
 }
 
 /**
- * Aging Report - Receivables and Payables by age
+ * Aging Report - Receivables and Payables by age (includes separate Loans section)
  */
 function AgingReport({
   ledgerEntries,
@@ -282,9 +284,12 @@ function AgingReport({
 }) {
   const agingData = useMemo(() => {
     const now = new Date();
+    const emptyBuckets = () => ({ "0-30": { count: 0, amount: 0 }, "31-60": { count: 0, amount: 0 }, "61-90": { count: 0, amount: 0 }, "90+": { count: 0, amount: 0 } });
     const buckets = {
-      receivables: { "0-30": { count: 0, amount: 0 }, "31-60": { count: 0, amount: 0 }, "61-90": { count: 0, amount: 0 }, "90+": { count: 0, amount: 0 } },
-      payables: { "0-30": { count: 0, amount: 0 }, "31-60": { count: 0, amount: 0 }, "61-90": { count: 0, amount: 0 }, "90+": { count: 0, amount: 0 } },
+      receivables: emptyBuckets(),
+      payables: emptyBuckets(),
+      loanReceivables: emptyBuckets(),  // Loans we gave (قروض ممنوحة)
+      loanPayables: emptyBuckets(),     // Loans we received (قروض مستلمة)
     };
 
     // Filter entries by date range and unpaid status
@@ -295,7 +300,7 @@ function AgingReport({
       }
 
       // Skip if fully paid
-      if (entry.paymentStatus === "مدفوع" || entry.paymentStatus === "مكتمل") {
+      if (entry.paymentStatus === "مدفوع" || entry.paymentStatus === "مكتمل" || entry.paymentStatus === "paid") {
         return;
       }
 
@@ -317,14 +322,32 @@ function AgingReport({
         bucket = "90+";
       }
 
-      // Receivables = Income entries (money owed TO us)
-      // Payables = Expense entries (money we OWE)
-      if (entry.type === "دخل") {
-        buckets.receivables[bucket].count++;
-        buckets.receivables[bucket].amount += balance;
-      } else if (entry.type === "مصروف") {
-        buckets.payables[bucket].count++;
-        buckets.payables[bucket].amount += balance;
+      // Check if this is a loan transaction
+      if (isLoanTransaction(entry.type, entry.category)) {
+        // Only count initial loans (not repayments/collections)
+        if (isInitialLoan(entry.subCategory)) {
+          const loanType = getLoanType(entry.category);
+          if (loanType === "receivable") {
+            // Loans Given - they owe us
+            buckets.loanReceivables[bucket].count++;
+            buckets.loanReceivables[bucket].amount += balance;
+          } else if (loanType === "payable") {
+            // Loans Received - we owe them
+            buckets.loanPayables[bucket].count++;
+            buckets.loanPayables[bucket].amount += balance;
+          }
+        }
+      } else {
+        // Regular AR/AP (non-loan entries)
+        // Receivables = Income entries (money owed TO us)
+        // Payables = Expense entries (money we OWE)
+        if (entry.type === "دخل") {
+          buckets.receivables[bucket].count++;
+          buckets.receivables[bucket].amount += balance;
+        } else if (entry.type === "مصروف") {
+          buckets.payables[bucket].count++;
+          buckets.payables[bucket].amount += balance;
+        }
       }
     });
 
@@ -333,6 +356,8 @@ function AgingReport({
 
   const totalReceivables = Object.values(agingData.receivables).reduce((sum, b) => sum + b.amount, 0);
   const totalPayables = Object.values(agingData.payables).reduce((sum, b) => sum + b.amount, 0);
+  const totalLoanReceivables = Object.values(agingData.loanReceivables).reduce((sum, b) => sum + b.amount, 0);
+  const totalLoanPayables = Object.values(agingData.loanPayables).reduce((sum, b) => sum + b.amount, 0);
 
   const bucketLabels = {
     "0-30": "0-30 يوم",
@@ -396,10 +421,10 @@ function AgingReport({
         </div>
       </div>
 
-      {/* Net Position */}
+      {/* Net Position (Trade AR/AP) */}
       <div className={`p-4 rounded-xl ${totalReceivables >= totalPayables ? "bg-blue-100 border-2 border-blue-300" : "bg-purple-100 border-2 border-purple-300"}`}>
         <div className="flex items-center justify-between">
-          <span className="font-bold text-slate-800">صافي المركز</span>
+          <span className="font-bold text-slate-800">صافي المركز (تجاري)</span>
           <span className={`text-xl font-bold ${totalReceivables >= totalPayables ? "text-blue-700" : "text-purple-700"}`}>
             {totalReceivables >= totalPayables ? "+" : "-"}{formatNumber(Math.abs(totalReceivables - totalPayables))} د.أ
           </span>
@@ -410,6 +435,84 @@ function AgingReport({
             : "لديك التزامات أكثر من المستحقات"}
         </p>
       </div>
+
+      {/* Loans Aging Section - Only show if there are loans */}
+      {(totalLoanReceivables > 0 || totalLoanPayables > 0) && (
+        <>
+          {/* Divider */}
+          <div className="border-t-2 border-indigo-200 pt-4">
+            <h3 className="text-base font-bold text-indigo-800 mb-4 flex items-center gap-2">
+              <span className="w-3 h-3 bg-indigo-500 rounded-full" />
+              أعمار القروض
+            </h3>
+          </div>
+
+          {/* Loan Receivables - Loans we gave (قروض ممنوحة) */}
+          {totalLoanReceivables > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-teal-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-teal-500 rounded-full" />
+                قروض ممنوحة - لنا (أموال أقرضناها للغير)
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(Object.entries(agingData.loanReceivables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+                  ([bucket, data]) => (
+                    <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
+                      <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+                      <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
+                      <p className="text-xs opacity-75">{data.count} قرض</p>
+                    </div>
+                  )
+                )}
+              </div>
+              <div className="flex items-center justify-between p-3 bg-teal-200 rounded-lg mt-3">
+                <span className="text-sm font-bold text-teal-800">إجمالي القروض الممنوحة</span>
+                <span className="text-sm font-bold text-teal-800">{formatNumber(totalLoanReceivables)} د.أ</span>
+              </div>
+            </div>
+          )}
+
+          {/* Loan Payables - Loans we received (قروض مستلمة) */}
+          {totalLoanPayables > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-indigo-500 rounded-full" />
+                قروض مستلمة - علينا (أموال اقترضناها من الغير)
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(Object.entries(agingData.loanPayables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+                  ([bucket, data]) => (
+                    <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
+                      <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+                      <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
+                      <p className="text-xs opacity-75">{data.count} قرض</p>
+                    </div>
+                  )
+                )}
+              </div>
+              <div className="flex items-center justify-between p-3 bg-indigo-200 rounded-lg mt-3">
+                <span className="text-sm font-bold text-indigo-800">إجمالي القروض المستلمة</span>
+                <span className="text-sm font-bold text-indigo-800">{formatNumber(totalLoanPayables)} د.أ</span>
+              </div>
+            </div>
+          )}
+
+          {/* Net Loan Position */}
+          <div className={`p-4 rounded-xl ${totalLoanReceivables >= totalLoanPayables ? "bg-teal-100 border-2 border-teal-300" : "bg-indigo-100 border-2 border-indigo-300"}`}>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800">صافي مركز القروض</span>
+              <span className={`text-xl font-bold ${totalLoanReceivables >= totalLoanPayables ? "text-teal-700" : "text-indigo-700"}`}>
+                {totalLoanReceivables >= totalLoanPayables ? "+" : "-"}{formatNumber(Math.abs(totalLoanReceivables - totalLoanPayables))} د.أ
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-1">
+              {totalLoanReceivables >= totalLoanPayables
+                ? "لديك قروض ممنوحة أكثر من القروض المستلمة"
+                : "لديك قروض مستلمة أكثر من القروض الممنوحة"}
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
