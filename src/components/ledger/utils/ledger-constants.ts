@@ -97,6 +97,7 @@ export const CATEGORIES: Category[] = [
             "مصاريف إدارية",
             "اتصالات وإنترنت",
             "مصاريف مكتبية",
+            "مستهلكات",        // Consumables (cleaning supplies, disposables, etc.)
         ]
     },
     {
