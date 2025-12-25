@@ -72,13 +72,16 @@ export function InvoicesFormDialog({
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
+    // Helper to round to 2 decimal places
+    const round2 = (num: number) => Math.round(num * 100) / 100;
+
     if (field === "quantity" || field === "unitPrice") {
-      // Forward calculation: Total = Qty × Price
-      newItems[index].total = newItems[index].quantity * newItems[index].unitPrice;
+      // Forward calculation: Total = Qty × Price (rounded to 2 decimals)
+      newItems[index].total = round2(newItems[index].quantity * newItems[index].unitPrice);
     } else if (field === "total") {
-      // Reverse calculation: Price = Total / Qty
+      // Reverse calculation: Price = Total / Qty (rounded to 2 decimals)
       if (newItems[index].quantity > 0) {
-        newItems[index].unitPrice = newItems[index].total / newItems[index].quantity;
+        newItems[index].unitPrice = round2(newItems[index].total / newItems[index].quantity);
       }
     }
 
@@ -109,7 +112,7 @@ export function InvoicesFormDialog({
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto px-6">
         <DialogHeader>
           <DialogTitle>
             {editingInvoice ? "تعديل الفاتورة" : "فاتورة جديدة"}
@@ -247,15 +250,15 @@ export function InvoicesFormDialog({
               <table className="w-full min-w-[850px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[180px]">الوصف</th>
+                    <th className="px-2 py-2 text-xs font-medium text-right min-w-[140px]">الوصف</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-24">النوع</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-24">الوحدة</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">الطول (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">العرض (سم)</th>
                     <th className="px-2 py-2 text-xs font-medium text-center w-20">السماكة (سم)</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-20">الكمية</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-20">السعر</th>
-                    <th className="px-2 py-2 text-xs font-medium text-center w-24">المجموع</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-24">الكمية</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-28">السعر</th>
+                    <th className="px-2 py-2 text-xs font-medium text-center w-28">المجموع</th>
                     <th className="px-2 py-2 w-10"></th>
                   </tr>
                 </thead>
@@ -354,7 +357,7 @@ export function InvoicesFormDialog({
                           type="number"
                           step="0.01"
                           value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, "unitPrice", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => handleItemChange(index, "unitPrice", Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -365,7 +368,7 @@ export function InvoicesFormDialog({
                           type="number"
                           step="0.01"
                           value={item.total}
-                          onChange={(e) => handleItemChange(index, "total", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => handleItemChange(index, "total", Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>

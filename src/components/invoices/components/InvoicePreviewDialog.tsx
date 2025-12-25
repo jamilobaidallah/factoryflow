@@ -67,7 +67,7 @@ export function InvoicePreviewDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto px-6">
         <DialogHeader>
           <DialogTitle>معاينة الفاتورة</DialogTitle>
           <DialogDescription>
