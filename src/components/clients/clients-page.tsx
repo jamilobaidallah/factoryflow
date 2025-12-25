@@ -240,17 +240,25 @@ export default function ClientsPage() {
   }, [user]);
 
   /**
-   * Calculate expected balance after pending cheques for all clients
+   * Calculate expected balance after pending cheques for clients that have pending cheques.
    * Uses the same formula as client-detail-page:
    * - Incoming (وارد): We receive money → reduces what they owe us
    * - Outgoing (صادر): We pay money → reduces what we owe them
    * Formula: currentBalance - incomingTotal + outgoingTotal
+   *
+   * If client has no pending cheques, returns null (use الرصيد المستحق instead)
    */
   const clientExpectedBalances = useMemo(() => {
-    const balanceMap = new Map<string, number>();
+    const balanceMap = new Map<string, number | null>();
 
     clients.forEach(client => {
       const clientCheques = cheques.filter(c => c.clientName === client.name);
+
+      // If no pending cheques for this client, return null to indicate using الرصيد المستحق
+      if (clientCheques.length === 0) {
+        balanceMap.set(client.id, null);
+        return;
+      }
 
       let incomingTotal = 0;
       let outgoingTotal = 0;
