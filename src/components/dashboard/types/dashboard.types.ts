@@ -146,6 +146,11 @@ export interface UseDashboardDataReturn {
   totalExpenses: number;
   totalDiscounts: number;
   totalBadDebt: number;  // Bad debt write-offs (ديون معدومة)
+  // Loan tracking
+  loansReceivable: number;  // Outstanding loans we gave (assets)
+  loansPayable: number;     // Outstanding loans we owe (liabilities)
+  loanCashIn: number;       // Cash received from loans
+  loanCashOut: number;      // Cash paid for loans
   // Monthly data
   monthlyDataMap: Map<string, MonthlyFinancialData>;
   // Expense categories

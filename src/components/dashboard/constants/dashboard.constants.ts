@@ -3,6 +3,13 @@
  * Centralized configuration values for the dashboard module
  */
 
+// Re-export shared constants from ledger-helpers (single source of truth)
+export {
+  LOAN_CATEGORIES,
+  LOAN_SUBCATEGORIES,
+  EQUITY_SUBCATEGORIES,
+} from "@/components/ledger/utils/ledger-helpers";
+
 /** Core dashboard configuration */
 export const DASHBOARD_CONFIG = {
   /** Number of days to look ahead for cheque due alerts */
@@ -135,7 +142,7 @@ export const DASHBOARD_LABELS = {
 } as const;
 
 /** Categories to exclude from P&L calculations (for backward compatibility with old data) */
-export const EXCLUDED_CATEGORIES = ["رأس المال", "Owner Equity", "سلفة مورد", "سلفة عميل"] as const;
+export const EXCLUDED_CATEGORIES = ["رأس المال", "Owner Equity", "سلفة مورد", "سلفة عميل", "قروض مستلمة", "قروض ممنوحة"] as const;
 
 /** Income type identifiers in Arabic */
 export const INCOME_TYPES = ["دخل", "إيراد"] as const;
@@ -146,11 +153,8 @@ export const EXPENSE_TYPE = "مصروف" as const;
 /** Equity type identifier in Arabic (NOT P&L - affects cash balance only) */
 export const EQUITY_TYPE = "حركة رأس مال" as const;
 
-/** Equity subcategories for cash flow direction */
-export const EQUITY_SUBCATEGORIES = {
-  CAPITAL_IN: "رأس مال مالك",    // Cash IN
-  DRAWINGS_OUT: "سحوبات المالك",  // Cash OUT
-} as const;
+/** Loan type identifier in Arabic (NOT P&L - Balance Sheet item) */
+export const LOAN_TYPE = "قرض" as const;
 
 /** Payment types for cash flow */
 export const PAYMENT_TYPES = {

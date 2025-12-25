@@ -28,6 +28,7 @@ import {
   Calendar as CalendarIcon,
   FileText,
   Download,
+  Landmark,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -54,6 +55,13 @@ import {
   extractPaymentMethod
 } from "@/lib/statement-format";
 import { CHEQUE_STATUS_AR } from "@/lib/constants";
+import {
+  isLoanTransaction,
+  isInitialLoan,
+  getLoanType,
+  LOAN_CATEGORIES,
+  LOAN_SUBCATEGORIES,
+} from "@/components/ledger/utils/ledger-helpers";
 
 // Aliases for backward compatibility with existing code
 const formatNumber = formatCurrency;
@@ -326,6 +334,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [totalDiscounts, setTotalDiscounts] = useState(0);
   const [totalWriteoffs, setTotalWriteoffs] = useState(0);
 
+  // Loan balances
+  const [loansReceivable, setLoansReceivable] = useState(0);  // Loans we gave to this party (they owe us)
+  const [loansPayable, setLoansPayable] = useState(0);        // Loans this party gave us (we owe them)
+
   // Modal state for transaction details
   const [selectedTransaction, setSelectedTransaction] = useState<StatementItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -387,6 +399,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         let purchases = 0;
         let discounts = 0;
         let writeoffs = 0;
+        let loanReceivable = 0;  // Loans we gave (قروض ممنوحة)
+        let loanPayable = 0;     // Loans we received (قروض مستلمة)
 
         snapshot.forEach((doc) => {
           const data = doc.data();
@@ -397,11 +411,26 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           } as LedgerEntry;
           entries.push(entry);
 
-          // Calculate totals (exclude advances - they are informational only)
-          if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvanceEntry(entry)) {
-            sales += entry.amount;
-          } else if (entry.type === "مصروف" && !isAdvanceEntry(entry)) {
-            purchases += entry.amount;
+          // Track loan balances (separate from regular income/expense)
+          if (isLoanTransaction(entry.type, entry.category)) {
+            // Only count initial loans for outstanding balance
+            if (isInitialLoan(entry.subCategory)) {
+              const loanType = getLoanType(entry.category);
+              if (loanType === "receivable") {
+                // Loans Given - we lent money, they owe us
+                loanReceivable += entry.remainingBalance ?? entry.amount ?? 0;
+              } else if (loanType === "payable") {
+                // Loans Received - they lent to us, we owe them
+                loanPayable += entry.remainingBalance ?? entry.amount ?? 0;
+              }
+            }
+          } else {
+            // Calculate regular totals (exclude advances and loans - they are not income/expense)
+            if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvanceEntry(entry)) {
+              sales += entry.amount;
+            } else if (entry.type === "مصروف" && !isAdvanceEntry(entry)) {
+              purchases += entry.amount;
+            }
           }
 
           // Track discounts and writeoffs (for balance calculation)
@@ -417,6 +446,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         setTotalPurchases(purchases);
         setTotalDiscounts(discounts);
         setTotalWriteoffs(writeoffs);
+        setLoansReceivable(loanReceivable);
+        setLoansPayable(loanPayable);
       },
       (error) => {
         console.error("Error loading ledger entries:", error);
@@ -628,7 +659,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       </div>
 
       {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
@@ -700,6 +731,37 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             </p>
           </CardContent>
         </Card>
+
+        {/* Loan Balance Card - Only show if there are loans */}
+        {(loansReceivable > 0 || loansPayable > 0) && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <Landmark className="w-4 h-4" />
+                رصيد القروض
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loansReceivable > 0 && (
+                <div className="text-lg font-semibold text-green-600">
+                  له (قرض ممنوح): {loansReceivable.toFixed(2)} د.أ
+                </div>
+              )}
+              {loansPayable > 0 && (
+                <div className="text-lg font-semibold text-red-600">
+                  عليه (قرض مستلم): {loansPayable.toFixed(2)} د.أ
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                {loansReceivable > 0 && loansPayable > 0
+                  ? "قروض متبادلة"
+                  : loansReceivable > 0
+                  ? "قرض ممنوح للعميل"
+                  : "قرض من العميل"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Client Info Card */}

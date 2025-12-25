@@ -3,11 +3,12 @@
  * Contains: Associated Party, Owner (capital), Payment Status, and Related Records toggles
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
+import { isLoanTransaction } from "../utils/ledger-helpers";
 
 interface ClientOption {
   name: string;
@@ -97,6 +98,16 @@ export function StepPartyARAP({
   // Local state for party dropdown
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
 
+  // Check if this is a loan transaction - loans require party and AR/AP tracking
+  const isLoan = isLoanTransaction(currentEntryType, formData.category);
+
+  // Force AR/AP tracking for loans
+  useEffect(() => {
+    if (isLoan && !formData.trackARAP) {
+      onUpdate({ trackARAP: true });
+    }
+  }, [isLoan, formData.trackARAP, onUpdate]);
+
   // Filter clients based on search input
   const filteredClients = useMemo(() => {
     if (!formData.associatedParty?.trim()) {
@@ -118,7 +129,11 @@ export function StepPartyARAP({
       {/* Associated Party - Not shown for equity transactions (they use Owner dropdown instead) */}
       {formData.category !== "رأس المال" && (
         <div className="space-y-2 relative">
-          <Label htmlFor="associatedParty">الطرف المعني (العميل/المورد) - اختياري</Label>
+          <Label htmlFor="associatedParty">
+            {isLoan
+              ? "الطرف المعني (المُقرض/المُقترض) *"
+              : "الطرف المعني (العميل/المورد) - اختياري"}
+          </Label>
           <div className="relative">
             <Input
               id="associatedParty"
@@ -189,7 +204,9 @@ export function StepPartyARAP({
             </div>
           )}
           <p className="text-xs text-gray-500">
-            اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني
+            {isLoan
+              ? "يجب تحديد الطرف المعني لعمليات القروض (المُقرض أو المُقترض)"
+              : "اترك هذا الحقل فارغاً للمصاريف اليومية التي لا تحتاج طرف معني"}
           </p>
         </div>
       )}
@@ -215,8 +232,8 @@ export function StepPartyARAP({
         </div>
       )}
 
-      {/* Payment Status - Only for new entries with income/expense type */}
-      {!isEditMode && (currentEntryType === "دخل" || currentEntryType === "مصروف") && (
+      {/* Payment Status - Only for new entries with income/expense/loan type */}
+      {!isEditMode && (currentEntryType === "دخل" || currentEntryType === "مصروف" || isLoan) && (
         <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
           <Label className="font-medium">حالة الدفع</Label>
           <div className="space-y-3">

@@ -8,18 +8,25 @@ import {
   endOfMonth,
 } from "date-fns";
 import { LedgerEntry } from "../types/ledger";
-import { isEquityTransaction, isCapitalContribution, isOwnerDrawing } from "../utils/ledger-helpers";
+import {
+  isEquityTransaction,
+  isCapitalContribution,
+  isOwnerDrawing,
+  isLoanTransaction,
+  getLoanType,
+  isInitialLoan,
+} from "../utils/ledger-helpers";
 
 /** Date filter preset options */
 export type DatePreset = "today" | "week" | "month" | "all" | "custom";
-/** Entry type filter options (income/expense/capital) */
-export type EntryType = "all" | "دخل" | "مصروف" | "حركة رأس مال";
+/** Entry type filter options (income/expense/capital/loan) */
+export type EntryType = "all" | "دخل" | "مصروف" | "حركة رأس مال" | "قرض";
 
 /** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
 
 /** View mode for main filter tabs */
-export type ViewMode = "all" | "income" | "expense" | "unpaid";
+export type ViewMode = "all" | "income" | "expense" | "unpaid" | "loans";
 
 /** Current state of all ledger filters */
 export interface LedgerFiltersState {
@@ -40,6 +47,8 @@ export interface FilteredTotals {
   expenses: number;
   equityIn: number;
   equityOut: number;
+  loansReceivable: number;  // Loans given (assets)
+  loansPayable: number;     // Loans received (liabilities)
 }
 
 /** Return type for the useLedgerFilters hook */
@@ -228,6 +237,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         if (filters.viewMode !== "all") {
           if (filters.viewMode === "income" && entry.type !== "دخل") return false;
           if (filters.viewMode === "expense" && entry.type !== "مصروف") return false;
+          if (filters.viewMode === "loans" && !isLoanTransaction(entry.type, entry.category)) return false;
           if (filters.viewMode === "unpaid") {
             // Exclude equity/capital transactions - they don't have AR/AP
             if (isEquityTransaction(entry.type, entry.category)) return false;
@@ -306,6 +316,18 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           } else if (isOwnerDrawing(entry.subCategory)) {
             acc.equityOut += entry.amount || 0;
           }
+        } else if (isLoanTransaction(entry.type, entry.category)) {
+          // Loan entries: track separately as receivables or payables
+          // Only count initial loans (not repayments) for the outstanding balance
+          if (isInitialLoan(entry.subCategory)) {
+            const loanType = getLoanType(entry.category);
+            if (loanType === "receivable") {
+              // Use remaining balance if available, otherwise use full amount
+              acc.loansReceivable += entry.remainingBalance ?? entry.amount ?? 0;
+            } else if (loanType === "payable") {
+              acc.loansPayable += entry.remainingBalance ?? entry.amount ?? 0;
+            }
+          }
         } else if (entry.type === "دخل") {
           acc.income += entry.amount || 0;
         } else if (entry.type === "مصروف") {
@@ -314,7 +336,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         acc.count++;
         return acc;
       },
-      { count: 0, income: 0, expenses: 0, equityIn: 0, equityOut: 0 }
+      { count: 0, income: 0, expenses: 0, equityIn: 0, equityOut: 0, loansReceivable: 0, loansPayable: 0 }
     );
   }, []);
 

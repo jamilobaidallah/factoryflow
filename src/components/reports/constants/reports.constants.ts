@@ -9,6 +9,9 @@ import type {
   QuickReport,
 } from '../types/reports.types';
 
+// Import shared constants from ledger-helpers (single source of truth)
+import { LOAN_CATEGORIES as LOAN_CATEGORIES_OBJ } from "@/components/ledger/utils/ledger-helpers";
+
 // Arabic labels for the reports page
 export const REPORTS_LABELS = {
   // Page header
@@ -146,10 +149,14 @@ export const OWNER_EQUITY_CATEGORIES = ['رأس المال', 'Owner Equity'] as 
 // Advance categories to exclude from P&L (prepaid credits, not actual income/expense)
 export const ADVANCE_CATEGORIES = ['سلفة مورد', 'سلفة عميل'] as const;
 
+// Loan categories to exclude from P&L (derived from shared constants)
+export const LOAN_CATEGORIES = [LOAN_CATEGORIES_OBJ.RECEIVED, LOAN_CATEGORIES_OBJ.GIVEN] as const;
+
 // All categories excluded from P&L calculations
 export const EXCLUDED_FROM_PL_CATEGORIES = [
   ...OWNER_EQUITY_CATEGORIES,
   ...ADVANCE_CATEGORIES,
+  ...LOAN_CATEGORIES,
 ] as const;
 
 // Arabic month names for charts

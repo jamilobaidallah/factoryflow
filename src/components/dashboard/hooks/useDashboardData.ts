@@ -18,6 +18,9 @@ import {
   EQUITY_TYPE,
   EQUITY_SUBCATEGORIES,
   PAYMENT_TYPES,
+  LOAN_TYPE,
+  LOAN_CATEGORIES,
+  LOAN_SUBCATEGORIES,
 } from "../constants/dashboard.constants";
 
 /**
@@ -34,6 +37,12 @@ export function useDashboardData(): UseDashboardDataReturn {
   // Financing cash state (from ledger - capital contributions and owner drawings)
   const [financingCashIn, setFinancingCashIn] = useState(0);
   const [financingCashOut, setFinancingCashOut] = useState(0);
+
+  // Loan tracking state (from ledger - loans received and given)
+  const [loansReceivable, setLoansReceivable] = useState(0);  // Outstanding loans we gave (assets)
+  const [loansPayable, setLoansPayable] = useState(0);        // Outstanding loans we owe (liabilities)
+  const [loanCashIn, setLoanCashIn] = useState(0);            // Cash received from loans
+  const [loanCashOut, setLoanCashOut] = useState(0);          // Cash paid for loans
 
   // Revenue & Expenses state
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -76,6 +85,11 @@ export function useDashboardData(): UseDashboardDataReturn {
       // Financing cash - from equity entries (NOT from payments)
       let finCashIn = 0;
       let finCashOut = 0;
+      // Loan tracking
+      let loanReceivableTotal = 0;  // Outstanding loans we gave (assets)
+      let loanPayableTotal = 0;     // Outstanding loans we owe (liabilities)
+      let loanIn = 0;               // Cash received from loans
+      let loanOut = 0;              // Cash paid for loans
       const transactions: DashboardLedgerEntry[] = [];
       const monthlyMap = new Map<string, MonthlyFinancialData>();
       const categoryMap = new Map<string, { total: number; monthly: Map<string, number> }>();
@@ -99,10 +113,11 @@ export function useDashboardData(): UseDashboardDataReturn {
         };
 
         // Check if entry should be excluded from P&L
-        // Exclude by type (equity) OR by category (backward compatibility)
+        // Exclude by type (equity, loan) OR by category (backward compatibility)
         const isEquity = entry.type === EQUITY_TYPE;
+        const isLoan = entry.type === LOAN_TYPE;
         const isExcludedCategory = EXCLUDED_CATEGORIES.some((cat) => entry.category === cat);
-        const isExcluded = isEquity || isExcludedCategory;
+        const isExcluded = isEquity || isLoan || isExcludedCategory;
 
         if (isExcluded) {
           // FINANCING ACTIVITIES: Equity transactions affect cash balance
@@ -113,6 +128,29 @@ export function useDashboardData(): UseDashboardDataReturn {
             finCashIn += entry.amount;
           } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
             finCashOut += entry.amount;
+          }
+
+          // LOAN TRANSACTIONS: Also in financing activities
+          // Loans received: استلام قرض = cash IN, creates liability
+          // Loan repayment: سداد قرض = cash OUT, reduces liability
+          // Loans given: منح قرض = cash OUT, creates asset
+          // Loan collection: تحصيل قرض = cash IN, reduces asset
+          if (entry.category === LOAN_CATEGORIES.RECEIVED) {
+            if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT) {
+              loanIn += entry.amount;
+              // Track outstanding balance
+              loanPayableTotal += entry.remainingBalance ?? entry.amount ?? 0;
+            } else if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_REPAYMENT) {
+              loanOut += entry.amount;
+            }
+          } else if (entry.category === LOAN_CATEGORIES.GIVEN) {
+            if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN) {
+              loanOut += entry.amount;
+              // Track outstanding balance
+              loanReceivableTotal += entry.remainingBalance ?? entry.amount ?? 0;
+            } else if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_COLLECTION) {
+              loanIn += entry.amount;
+            }
           }
         } else {
           const monthKey = formatMonthKey(entry.date);
@@ -147,6 +185,10 @@ export function useDashboardData(): UseDashboardDataReturn {
       setTotalBadDebt(badDebt);
       setFinancingCashIn(finCashIn);
       setFinancingCashOut(finCashOut);
+      setLoansReceivable(loanReceivableTotal);
+      setLoansPayable(loanPayableTotal);
+      setLoanCashIn(loanIn);
+      setLoanCashOut(loanOut);
       setMonthlyDataMap(monthlyMap);
       setExpensesByCategoryMap(categoryMap);
 
@@ -196,10 +238,10 @@ export function useDashboardData(): UseDashboardDataReturn {
     return () => unsubscribe();
   }, [user]);
 
-  // Total cash = Operating (from payments) + Financing (from ledger equity)
+  // Total cash = Operating (from payments) + Financing (from ledger equity + loans)
   // This matches the Cash Flow Report calculation
-  const totalCashIn = operatingCashIn + financingCashIn;
-  const totalCashOut = operatingCashOut + financingCashOut;
+  const totalCashIn = operatingCashIn + financingCashIn + loanCashIn;
+  const totalCashOut = operatingCashOut + financingCashOut + loanCashOut;
 
   // Combined loading state - wait for both ledger and payments to load
   const isLoading = isLedgerLoading || isPaymentsLoading;
@@ -212,6 +254,10 @@ export function useDashboardData(): UseDashboardDataReturn {
     totalExpenses,
     totalDiscounts,
     totalBadDebt,
+    loansReceivable,
+    loansPayable,
+    loanCashIn,
+    loanCashOut,
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,

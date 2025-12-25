@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { CATEGORIES } from "../utils/ledger-constants";
-import { getCategoryType } from "../utils/ledger-helpers";
+import { getCategoryType, isLoanTransaction } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
 import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
 import { useAllClients } from "@/hooks/useAllClients";
@@ -171,6 +171,11 @@ export function LedgerFormDialog() {
       // Owner is required for capital transactions
       if (formData.category === "رأس المال" && !formData.ownerName) {
         setStepError("اسم الشريك/المالك مطلوب لعمليات رأس المال");
+        return false;
+      }
+      // Party is required for loan transactions
+      if (isLoanTransaction(currentEntryType, formData.category) && !formData.associatedParty?.trim()) {
+        setStepError("الطرف المرتبط (المُقرض أو المُقترض) مطلوب لعمليات القروض");
         return false;
       }
     }

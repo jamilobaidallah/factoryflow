@@ -241,11 +241,13 @@ export const ACCOUNT_CODES = {
   PREPAID_EXPENSES: '1400',
   FIXED_ASSETS: '1500',
   ACCUMULATED_DEPRECIATION: '1510',
+  LOANS_RECEIVABLE: '1600',      // قروض ممنوحة (Loans Given - Asset)
 
   // Liabilities
   ACCOUNTS_PAYABLE: '2000',
   ACCRUED_EXPENSES: '2100',
   NOTES_PAYABLE: '2200',
+  LOANS_PAYABLE: '2300',         // قروض مستلمة (Loans Received - Liability)
 
   // Equity
   OWNER_CAPITAL: '3000',

@@ -6,6 +6,16 @@
 
 import { useMemo } from "react";
 import { safeAdd, safeSubtract, safeDivide, safeMultiply, sumAmounts } from "@/lib/currency";
+import {
+  isEquityTransaction,
+  isAdvanceTransaction,
+  isLoanTransaction,
+  isCapitalContribution,
+  isOwnerDrawing,
+  getLoanCashDirection,
+  LOAN_CATEGORIES,
+  LOAN_SUBCATEGORIES,
+} from "@/components/ledger/utils/ledger-helpers";
 
 interface LedgerEntry {
   id: string;
@@ -81,6 +91,8 @@ export interface CashFlowData {
 export interface FinancingActivitiesData {
   capitalIn: number;      // رأس مال مالك - Cash IN
   capitalOut: number;     // سحوبات المالك - Cash OUT
+  loanCashIn: number;     // Loans received + loan collections - Cash IN
+  loanCashOut: number;    // Loans given + loan repayments - Cash OUT
   netFinancing: number;   // Net financing cash flow
 }
 
@@ -182,17 +194,11 @@ export function useReportsCalculations({
     const expensesByCategory: { [key: string]: number } = {};
 
     ledgerEntries.forEach((entry) => {
-      // EXCLUDE owner equity transactions from profit/loss
-      // Check by type (new data) OR by category (backward compatibility)
-      const isEquity = entry.type === "حركة رأس مال" ||
-                       entry.category === "رأس المال" ||
-                       entry.category === "Owner Equity";
-
-      // EXCLUDE advances from P&L (prepaid expense/credit, not actual income/expense)
-      const isAdvance = entry.category === "سلفة مورد" || entry.category === "سلفة عميل";
-
-      if (isEquity || isAdvance) {
-        return; // Skip owner equity and advance transactions
+      // EXCLUDE non-P&L transactions using helper functions
+      if (isEquityTransaction(entry.type, entry.category) ||
+          isAdvanceTransaction(entry.category) ||
+          isLoanTransaction(entry.type, entry.category)) {
+        return; // Skip owner equity, advance, and loan transactions
       }
 
       if (entry.type === "دخل") {
@@ -258,35 +264,46 @@ export function useReportsCalculations({
     return { cashIn, cashOut, netCashFlow };
   }, [payments]);
 
-  // Calculate Financing Activities (equity transactions from ledger)
+  // Calculate Financing Activities (equity and loan transactions from ledger)
   // These are NOT included in payments collection, so we calculate from ledger
   const financingActivities = useMemo((): FinancingActivitiesData => {
     let capitalIn = 0;   // رأس مال مالك
     let capitalOut = 0;  // سحوبات المالك
+    let loanCashIn = 0;  // Loans received + loan collections
+    let loanCashOut = 0; // Loans given + loan repayments
 
     ledgerEntries.forEach((entry) => {
-      // Check for equity transactions (by type or category for backward compatibility)
-      const isEquity = entry.type === "حركة رأس مال" ||
-                       entry.category === "رأس المال" ||
-                       entry.category === "Owner Equity";
-
-      if (isEquity) {
+      // Check for equity transactions using helper function
+      if (isEquityTransaction(entry.type, entry.category)) {
         // Direction determined by subcategory
-        if (entry.subCategory === "رأس مال مالك") {
+        if (isCapitalContribution(entry.subCategory)) {
           capitalIn = safeAdd(capitalIn, entry.amount);
-        } else if (entry.subCategory === "سحوبات المالك") {
+        } else if (isOwnerDrawing(entry.subCategory)) {
           capitalOut = safeAdd(capitalOut, entry.amount);
+        }
+      }
+
+      // Check for loan transactions using helper function
+      if (isLoanTransaction(entry.type, entry.category)) {
+        const cashDirection = getLoanCashDirection(entry.subCategory);
+        if (cashDirection === "in") {
+          loanCashIn = safeAdd(loanCashIn, entry.amount);
+        } else if (cashDirection === "out") {
+          loanCashOut = safeAdd(loanCashOut, entry.amount);
         }
       }
     });
 
-    const netFinancing = safeSubtract(capitalIn, capitalOut);
+    const netFinancing = safeSubtract(
+      safeAdd(capitalIn, loanCashIn),
+      safeAdd(capitalOut, loanCashOut)
+    );
 
-    return { capitalIn, capitalOut, netFinancing };
+    return { capitalIn, capitalOut, loanCashIn, loanCashOut, netFinancing };
   }, [ledgerEntries]);
 
   // Calculate AR/AP Aging
-  // Excludes equity entries - they are not receivables/payables
+  // Excludes equity and loan entries - they are tracked separately
   const arapAging = useMemo((): ARAPAgingData => {
     const receivables: LedgerEntry[] = [];
     const payables: LedgerEntry[] = [];
@@ -294,12 +311,11 @@ export function useReportsCalculations({
     let totalPayables = 0;
 
     ledgerEntries.forEach((entry) => {
-      // Exclude equity entries from AR/AP
-      const isEquity = entry.type === "حركة رأس مال" ||
-                       entry.category === "رأس المال" ||
-                       entry.category === "Owner Equity";
+      // Exclude equity and loan entries from regular AR/AP (they have their own tracking)
+      const excludeFromARAP = isEquityTransaction(entry.type, entry.category) ||
+                              isLoanTransaction(entry.type, entry.category);
 
-      if (entry.isARAPEntry && entry.paymentStatus !== "paid" && !isEquity) {
+      if (entry.isARAPEntry && entry.paymentStatus !== "paid" && !excludeFromARAP) {
         if (entry.type === "دخل") {
           receivables.push(entry);
           totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);

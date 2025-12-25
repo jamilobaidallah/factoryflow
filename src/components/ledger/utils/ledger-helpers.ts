@@ -1,21 +1,37 @@
+import { CATEGORIES } from "./ledger-constants";
+
+/**
+ * Loan category constants - Single source of truth for loan-related values
+ */
+export const LOAN_CATEGORIES = {
+    RECEIVED: "قروض مستلمة",     // Liability - money borrowed
+    GIVEN: "قروض ممنوحة",        // Asset - money lent
+} as const;
+
+export const LOAN_SUBCATEGORIES = {
+    // Loans Received (Liability)
+    LOAN_RECEIPT: "استلام قرض",      // Creates liability, cash IN
+    LOAN_REPAYMENT: "سداد قرض",       // Reduces liability, cash OUT
+    // Loans Given (Asset)
+    LOAN_GIVEN: "منح قرض",           // Creates asset, cash OUT
+    LOAN_COLLECTION: "تحصيل قرض",    // Reduces asset, cash IN
+} as const;
+
+/**
+ * Equity subcategory constants
+ */
+export const EQUITY_SUBCATEGORIES = {
+    CAPITAL_IN: "رأس مال مالك",      // Cash IN - increases equity
+    DRAWINGS_OUT: "سحوبات المالك",    // Cash OUT - decreases equity
+} as const;
+
 /**
  * Helper function to get category type
- * Returns: "دخل" (income), "مصروف" (expense), or "حركة رأس مال" (equity)
+ * Uses CATEGORIES from ledger-constants.ts as single source of truth
+ * Returns: "دخل" (income), "مصروف" (expense), "حركة رأس مال" (equity), or "قرض" (loan)
  */
 export function getCategoryType(categoryName: string, _subCategory?: string): string {
-    // Find category and return its type
-    const categories = [
-        { name: "إيرادات المبيعات", type: "دخل" },
-        { name: "رأس المال", type: "حركة رأس مال" },  // Equity - not P&L
-        { name: "إيرادات أخرى", type: "دخل" },
-        { name: "تكلفة البضاعة المباعة (COGS)", type: "مصروف" },
-        { name: "مصاريف تشغيلية", type: "مصروف" },
-        { name: "أصول ثابتة", type: "مصروف" },
-        { name: "التزامات مالية", type: "مصروف" },
-        { name: "مصاريف أخرى", type: "مصروف" },
-    ];
-
-    const category = categories.find(cat => cat.name === categoryName);
+    const category = CATEGORIES.find(cat => cat.name === categoryName);
     return category?.type || "دخل";
 }
 
@@ -54,15 +70,85 @@ export function isAdvanceTransaction(category?: string): boolean {
 }
 
 /**
+ * Helper function to check if a transaction is a loan transaction
+ * Loan transactions are NOT counted in P&L - they are balance sheet items
+ *
+ * - قروض مستلمة (Loans Received): Liability - money we borrowed
+ * - قروض ممنوحة (Loans Given): Asset - money we lent
+ *
+ * @param type - Transaction type ("قرض" for loans)
+ * @param category - Transaction category name
+ * @returns true if this is a loan transaction
+ */
+export function isLoanTransaction(type?: string, category?: string): boolean {
+    return type === "قرض" ||
+           category === LOAN_CATEGORIES.RECEIVED ||
+           category === LOAN_CATEGORIES.GIVEN;
+}
+
+/**
+ * Get loan type: receivable (asset) or payable (liability)
+ * @param category - Loan category
+ * @returns "receivable" for loans given, "payable" for loans received, null if not a loan
+ */
+export function getLoanType(category?: string): "receivable" | "payable" | null {
+    if (category === LOAN_CATEGORIES.GIVEN) return "receivable";
+    if (category === LOAN_CATEGORIES.RECEIVED) return "payable";
+    return null;
+}
+
+/**
+ * Check if this is an initial loan transaction (creates the loan)
+ * vs a repayment/collection (reduces the loan)
+ * @param subCategory - The loan subcategory
+ * @returns true if this creates a new loan
+ */
+export function isInitialLoan(subCategory?: string): boolean {
+    return subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT ||
+           subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN;
+}
+
+/**
+ * Check if this is a loan repayment/collection transaction
+ * @param subCategory - The loan subcategory
+ * @returns true if this reduces an existing loan
+ */
+export function isLoanRepayment(subCategory?: string): boolean {
+    return subCategory === LOAN_SUBCATEGORIES.LOAN_REPAYMENT ||
+           subCategory === LOAN_SUBCATEGORIES.LOAN_COLLECTION;
+}
+
+/**
+ * Determine cash flow direction for loan transactions
+ * @param subCategory - The loan subcategory
+ * @returns "in" for cash received, "out" for cash paid, null if not a loan subcategory
+ */
+export function getLoanCashDirection(subCategory?: string): "in" | "out" | null {
+    // Cash IN: receiving a loan, or collecting loan repayment from someone
+    if (subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT ||
+        subCategory === LOAN_SUBCATEGORIES.LOAN_COLLECTION) {
+        return "in";
+    }
+    // Cash OUT: giving a loan, or repaying a loan we owe
+    if (subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN ||
+        subCategory === LOAN_SUBCATEGORIES.LOAN_REPAYMENT) {
+        return "out";
+    }
+    return null;
+}
+
+/**
  * Helper function to check if a transaction should be excluded from P&L
- * Combines equity and advance checks
+ * Combines equity, advance, and loan checks
  *
  * @param type - Transaction type
  * @param category - Transaction category name
  * @returns true if this transaction should be excluded from P&L
  */
 export function isExcludedFromPL(type?: string, category?: string): boolean {
-    return isEquityTransaction(type, category) || isAdvanceTransaction(category);
+    return isEquityTransaction(type, category) ||
+           isAdvanceTransaction(category) ||
+           isLoanTransaction(type, category);
 }
 
 /**

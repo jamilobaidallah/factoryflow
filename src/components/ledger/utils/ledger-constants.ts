@@ -5,7 +5,7 @@ export interface LedgerEntry {
     id: string;
     transactionId: string;
     description: string;
-    type: string; // "دخل" (income), "مصروف" (expense), or "حركة رأس مال" (equity)
+    type: string; // "دخل" (income), "مصروف" (expense), "حركة رأس مال" (equity), or "قرض" (loan)
     amount: number;
     category: string;
     subCategory: string;
@@ -69,6 +69,7 @@ export const CATEGORIES: Category[] = [
             "فوائد بنكية",
             "بيع أصول",
             "إيرادات متنوعة",
+            "فوائد قروض محصلة",  // Interest income on loans given
         ]
     },
     // Expense Categories
@@ -125,6 +126,23 @@ export const CATEGORIES: Category[] = [
             "مصاريف قانونية",
             "تأمينات",
             "مصاريف متنوعة",
+        ]
+    },
+    // Loan Categories (NOT P&L - Balance Sheet items)
+    {
+        name: "قروض مستلمة",  // Loans Received - Liability (money we borrowed)
+        type: "قرض",
+        subcategories: [
+            "استلام قرض",     // Loan Receipt - creates liability, cash IN
+            "سداد قرض",       // Loan Repayment - reduces liability, cash OUT
+        ]
+    },
+    {
+        name: "قروض ممنوحة",  // Loans Given - Asset (money we lent)
+        type: "قرض",
+        subcategories: [
+            "منح قرض",       // Loan Given - creates asset, cash OUT
+            "تحصيل قرض",     // Loan Collection - reduces asset, cash IN
         ]
     },
 ];
