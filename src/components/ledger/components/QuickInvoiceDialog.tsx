@@ -23,6 +23,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { createLedgerService } from "@/services/ledgerService";
+import { roundCurrency, safeMultiply, safeDivide } from "@/lib/currency";
 
 // وحدات القياس للمصنع - Unit types for manufacturing
 type InvoiceItemUnit = 'm' | 'm2' | 'piece';
@@ -144,17 +145,12 @@ export function QuickInvoiceDialog({
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
 
-    // Helper to round to 2 decimal places
-    const round2 = (num: number) => Math.round(num * 100) / 100;
-
     if (field === "quantity" || field === "unitPrice") {
-      // Forward calculation: Total = Qty × Price (rounded to 2 decimals)
-      newItems[index].total = round2(newItems[index].quantity * newItems[index].unitPrice);
+      // Forward calculation: Total = Qty × Price
+      newItems[index].total = safeMultiply(newItems[index].quantity, newItems[index].unitPrice);
     } else if (field === "total") {
-      // Reverse calculation: Price = Total / Qty (rounded to 2 decimals)
-      if (newItems[index].quantity > 0) {
-        newItems[index].unitPrice = round2(newItems[index].total / newItems[index].quantity);
-      }
+      // Reverse calculation: Price = Total / Qty
+      newItems[index].unitPrice = safeDivide(newItems[index].total, newItems[index].quantity);
     }
 
     setItems(newItems);
@@ -533,7 +529,7 @@ export function QuickInvoiceDialog({
                           type="number"
                           step="0.01"
                           value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, "unitPrice", Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
+                          onChange={(e) => handleItemChange(index, "unitPrice", roundCurrency(parseFloat(e.target.value)) || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -544,7 +540,7 @@ export function QuickInvoiceDialog({
                           type="number"
                           step="0.01"
                           value={item.total}
-                          onChange={(e) => handleItemChange(index, "total", Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
+                          onChange={(e) => handleItemChange(index, "total", roundCurrency(parseFloat(e.target.value)) || 0)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>
