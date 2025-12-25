@@ -98,6 +98,7 @@ export const CATEGORIES: Category[] = [
             "اتصالات وإنترنت",
             "مصاريف مكتبية",
             "مستهلكات",        // Consumables (cleaning supplies, disposables, etc.)
+            "أدوات ومعدات صغيرة",  // Small tools & equipment (below capitalization threshold)
         ]
     },
     {
