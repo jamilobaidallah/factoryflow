@@ -229,16 +229,44 @@ function buildExportData(
     ...ledgerEntries.flatMap((e) => {
       const rows: ExportTransaction[] = [];
       const isAdvance = isAdvanceEntry(e);
+      const isLoan = isLoanTransaction(e.type, e.category);
 
-      // Row 1: The invoice itself
+      // Calculate debit/credit based on transaction type
+      let debit = 0;
+      let credit = 0;
+      if (isAdvance) {
+        debit = 0;
+        credit = 0;
+      } else if (isLoan) {
+        const loanType = getLoanType(e.category);
+        if (isInitialLoan(e.subCategory)) {
+          if (loanType === "receivable") {
+            debit = e.amount;
+          } else if (loanType === "payable") {
+            credit = e.amount;
+          }
+        } else {
+          if (loanType === "receivable") {
+            credit = e.amount;
+          } else if (loanType === "payable") {
+            debit = e.amount;
+          }
+        }
+      } else if (e.type === "دخل" || e.type === "إيراد") {
+        debit = e.amount;
+      } else if (e.type === "مصروف") {
+        credit = e.amount;
+      }
+
+      // Row 1: The invoice/loan itself
       rows.push({
         date: e.date,
         type: "Invoice" as const,
         description: isAdvance
           ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)`
           : e.description,
-        debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
-        credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
+        debit,
+        credit,
         balance: 0,
       });
 
@@ -988,11 +1016,47 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   ...ledgerEntries.flatMap((e) => {
                     const rows: StatementItem[] = [];
                     const isAdvance = isAdvanceEntry(e);
+                    const isLoan = isLoanTransaction(e.type, e.category);
 
                     // For advances: show amount in description since debit/credit are 0
                     const advanceDescription = isAdvance
                       ? `${e.description} (${e.amount.toFixed(2)} د.أ - لا يؤثر على الرصيد)`
                       : e.description;
+
+                    // Determine debit/credit for loans based on cash direction
+                    let debit = 0;
+                    let credit = 0;
+                    if (isAdvance) {
+                      // Advances: no debit/credit (informational only)
+                      debit = 0;
+                      credit = 0;
+                    } else if (isLoan) {
+                      // Loans: direction based on subcategory
+                      const loanType = getLoanType(e.category);
+                      if (isInitialLoan(e.subCategory)) {
+                        // Initial loans:
+                        // - Loan Given (قروض ممنوحة / منح قرض): We lent money → debit (they owe us)
+                        // - Loan Received (قروض مستلمة / استلام قرض): We borrowed → credit (we owe them)
+                        if (loanType === "receivable") {
+                          debit = e.amount; // We lent money, they owe us
+                        } else if (loanType === "payable") {
+                          credit = e.amount; // We borrowed, we owe them
+                        }
+                      } else {
+                        // Loan repayments/collections:
+                        // - Loan Collection (تحصيل قرض): They paid us back → credit (reduces what they owe)
+                        // - Loan Repayment (سداد قرض): We paid back → debit (reduces what we owe)
+                        if (loanType === "receivable") {
+                          credit = e.amount; // They paid back
+                        } else if (loanType === "payable") {
+                          debit = e.amount; // We paid back
+                        }
+                      }
+                    } else if (e.type === "دخل" || e.type === "إيراد") {
+                      debit = e.amount;
+                    } else if (e.type === "مصروف") {
+                      credit = e.amount;
+                    }
 
                     rows.push({
                       id: e.id,
@@ -1000,12 +1064,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       source: 'ledger' as const,
                       date: e.date,
                       isPayment: false,
-                      entryType: isAdvance ? 'سلفة' : e.type,
+                      entryType: isAdvance ? 'سلفة' : (isLoan ? 'قرض' : e.type),
                       description: advanceDescription,
                       category: e.category,
                       subCategory: e.subCategory,
-                      debit: isAdvance ? 0 : (e.type === "دخل" || e.type === "إيراد" ? e.amount : 0),
-                      credit: isAdvance ? 0 : (e.type === "مصروف" ? e.amount : 0),
+                      debit,
+                      credit,
                     });
 
                     // Row 2: Discount from ledger entry (if any) - reduces what client owes
@@ -1276,13 +1340,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
                                       transaction.entryType === 'سلفة'
                                         ? 'bg-orange-100 text-orange-800'
+                                        : transaction.entryType === 'قرض'
+                                        ? 'bg-indigo-100 text-indigo-800'
                                         : transaction.isEndorsement
                                         ? 'bg-purple-100 text-purple-800'
                                         : transaction.isPayment
                                         ? 'bg-green-100 text-green-800'
                                         : 'bg-blue-100 text-blue-800'
                                     }`}>
-                                      {transaction.entryType === 'سلفة' ? 'سلفة' : transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                      {transaction.entryType === 'سلفة' ? 'سلفة' : transaction.entryType === 'قرض' ? 'قرض' : transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
                                     </span>
                                     <span>
                                       {transaction.isPayment

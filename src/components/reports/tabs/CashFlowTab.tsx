@@ -32,6 +32,8 @@ interface CashFlowData {
 interface FinancingActivitiesData {
   capitalIn: number;
   capitalOut: number;
+  loanCashIn: number;
+  loanCashOut: number;
   netFinancing: number;
 }
 
@@ -87,25 +89,50 @@ export function CashFlowTab({ cashFlow, financingActivities, payments, onExportC
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-3 bg-green-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-1">رأس مال مالك (وارد)</p>
-              <p className="text-xl font-bold text-green-600">
-                {financingActivities.capitalIn.toFixed(2)} د.أ
-              </p>
+          {/* Owner's Capital Section */}
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-500 mb-2">رأس المال</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">رأس مال مالك (وارد)</p>
+                <p className="text-xl font-bold text-green-600">
+                  {financingActivities.capitalIn.toFixed(2)} د.أ
+                </p>
+              </div>
+              <div className="p-3 bg-red-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">سحوبات المالك (صادر)</p>
+                <p className="text-xl font-bold text-red-600">
+                  {financingActivities.capitalOut.toFixed(2)} د.أ
+                </p>
+              </div>
             </div>
-            <div className="p-3 bg-red-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-1">سحوبات المالك (صادر)</p>
-              <p className="text-xl font-bold text-red-600">
-                {financingActivities.capitalOut.toFixed(2)} د.أ
-              </p>
+          </div>
+
+          {/* Loans Section */}
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-500 mb-2">القروض</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">قروض مستلمة + تحصيلات (وارد)</p>
+                <p className="text-xl font-bold text-green-600">
+                  {financingActivities.loanCashIn.toFixed(2)} د.أ
+                </p>
+              </div>
+              <div className="p-3 bg-red-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">قروض ممنوحة + سداد (صادر)</p>
+                <p className="text-xl font-bold text-red-600">
+                  {financingActivities.loanCashOut.toFixed(2)} د.أ
+                </p>
+              </div>
             </div>
-            <div className={`p-3 rounded-lg ${financingActivities.netFinancing >= 0 ? "bg-purple-50" : "bg-red-50"}`}>
-              <p className="text-sm text-gray-600 mb-1">صافي التدفق التمويلي</p>
-              <p className={`text-xl font-bold ${financingActivities.netFinancing >= 0 ? "text-purple-600" : "text-red-600"}`}>
-                {financingActivities.netFinancing.toFixed(2)} د.أ
-              </p>
-            </div>
+          </div>
+
+          {/* Net Financing */}
+          <div className={`p-3 rounded-lg ${financingActivities.netFinancing >= 0 ? "bg-purple-50" : "bg-red-50"}`}>
+            <p className="text-sm text-gray-600 mb-1">صافي التدفق التمويلي</p>
+            <p className={`text-xl font-bold ${financingActivities.netFinancing >= 0 ? "text-purple-600" : "text-red-600"}`}>
+              {financingActivities.netFinancing.toFixed(2)} د.أ
+            </p>
           </div>
         </CardContent>
       </Card>

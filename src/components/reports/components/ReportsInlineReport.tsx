@@ -3,6 +3,13 @@
 import { memo, useMemo } from "react";
 import { X, TrendingUp, TrendingDown, Clock, DollarSign, PieChart, BarChart3 } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
+import {
+  isEquityTransaction,
+  isLoanTransaction,
+  isCapitalContribution,
+  isOwnerDrawing,
+  getLoanCashDirection,
+} from "@/components/ledger/utils/ledger-helpers";
 
 interface LedgerEntry {
   id: string;
@@ -533,7 +540,7 @@ function ExpenseAnalysisReport({
 /**
  * Cash Flow Report - Includes Operating and Financing Activities
  * Operating cash is calculated from PAYMENTS (excludes endorsements with noCashMovement)
- * Financing activities are calculated from LEDGER (equity transactions)
+ * Financing activities are calculated from LEDGER (equity + loan transactions)
  */
 function CashFlowReport({
   ledgerEntries,
@@ -568,9 +575,11 @@ function CashFlowReport({
       }
     });
 
-    // Financing Activities (equity - capital and drawings) - from LEDGER
+    // Financing Activities (equity + loans) - from LEDGER
     let capitalIn = 0;    // رأس مال مالك
     let capitalOut = 0;   // سحوبات المالك
+    let loanCashIn = 0;   // Loans received + loan collections
+    let loanCashOut = 0;  // Loans given + loan repayments
 
     ledgerEntries.forEach((entry) => {
       const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
@@ -578,23 +587,29 @@ function CashFlowReport({
         return;
       }
 
-      // Check if this is an equity transaction
-      const isEquity = entry.type === "حركة رأس مال" ||
-                       entry.category === "رأس المال" ||
-                       entry.category === "Owner Equity";
-
-      if (isEquity) {
+      // Check for equity transactions using helper function
+      if (isEquityTransaction(entry.type, entry.category)) {
         // Financing activities - direction by subcategory
-        if (entry.subCategory === "رأس مال مالك") {
+        if (isCapitalContribution(entry.subCategory)) {
           capitalIn += entry.amount;
-        } else if (entry.subCategory === "سحوبات المالك") {
+        } else if (isOwnerDrawing(entry.subCategory)) {
           capitalOut += entry.amount;
+        }
+      }
+
+      // Check for loan transactions using helper function
+      if (isLoanTransaction(entry.type, entry.category)) {
+        const cashDirection = getLoanCashDirection(entry.subCategory);
+        if (cashDirection === "in") {
+          loanCashIn += entry.amount;
+        } else if (cashDirection === "out") {
+          loanCashOut += entry.amount;
         }
       }
     });
 
     const netOperating = operatingIn - operatingOut;
-    const netFinancing = capitalIn - capitalOut;
+    const netFinancing = (capitalIn + loanCashIn) - (capitalOut + loanCashOut);
     const totalCashFlow = netOperating + netFinancing;
 
     return {
@@ -603,6 +618,8 @@ function CashFlowReport({
       netOperating,
       capitalIn,
       capitalOut,
+      loanCashIn,
+      loanCashOut,
       netFinancing,
       totalCashFlow,
     };
@@ -636,21 +653,39 @@ function CashFlowReport({
       {/* Financing Activities Section */}
       <div className="bg-purple-50 rounded-xl p-4">
         <h4 className="text-sm font-semibold text-purple-700 mb-3">الأنشطة التمويلية</h4>
-        <div className="grid grid-cols-3 gap-3">
+
+        {/* Owner's Capital */}
+        <p className="text-xs font-medium text-slate-500 mb-2">رأس المال</p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="p-3 bg-emerald-100 rounded-lg">
-            <p className="text-xs text-emerald-600 mb-1">رأس مال مالك</p>
+            <p className="text-xs text-emerald-600 mb-1">رأس مال مالك (وارد)</p>
             <p className="text-lg font-bold text-emerald-700">{formatNumber(cashFlowData.capitalIn)} د.أ</p>
           </div>
           <div className="p-3 bg-rose-100 rounded-lg">
-            <p className="text-xs text-rose-600 mb-1">سحوبات المالك</p>
+            <p className="text-xs text-rose-600 mb-1">سحوبات المالك (صادر)</p>
             <p className="text-lg font-bold text-rose-700">{formatNumber(cashFlowData.capitalOut)} د.أ</p>
           </div>
-          <div className={`p-3 rounded-lg ${cashFlowData.netFinancing >= 0 ? "bg-purple-100" : "bg-amber-100"}`}>
-            <p className={`text-xs ${cashFlowData.netFinancing >= 0 ? "text-purple-600" : "text-amber-600"} mb-1`}>صافي التمويلي</p>
-            <p className={`text-lg font-bold ${cashFlowData.netFinancing >= 0 ? "text-purple-700" : "text-amber-700"}`}>
-              {formatNumber(cashFlowData.netFinancing)} د.أ
-            </p>
+        </div>
+
+        {/* Loans */}
+        <p className="text-xs font-medium text-slate-500 mb-2">القروض</p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="p-3 bg-emerald-100 rounded-lg">
+            <p className="text-xs text-emerald-600 mb-1">قروض مستلمة + تحصيلات (وارد)</p>
+            <p className="text-lg font-bold text-emerald-700">{formatNumber(cashFlowData.loanCashIn)} د.أ</p>
           </div>
+          <div className="p-3 bg-rose-100 rounded-lg">
+            <p className="text-xs text-rose-600 mb-1">قروض ممنوحة + سداد (صادر)</p>
+            <p className="text-lg font-bold text-rose-700">{formatNumber(cashFlowData.loanCashOut)} د.أ</p>
+          </div>
+        </div>
+
+        {/* Net Financing */}
+        <div className={`p-3 rounded-lg ${cashFlowData.netFinancing >= 0 ? "bg-purple-100" : "bg-amber-100"}`}>
+          <p className={`text-xs ${cashFlowData.netFinancing >= 0 ? "text-purple-600" : "text-amber-600"} mb-1`}>صافي التمويلي</p>
+          <p className={`text-lg font-bold ${cashFlowData.netFinancing >= 0 ? "text-purple-700" : "text-amber-700"}`}>
+            {formatNumber(cashFlowData.netFinancing)} د.أ
+          </p>
         </div>
       </div>
 
