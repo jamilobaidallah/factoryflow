@@ -21,16 +21,20 @@ import {
   UnpaidTransaction,
   AllocationEntry,
   FIFODistributionResult,
+  ChequePaymentData,
 } from '../types';
 import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
 import { createJournalEntryForPayment } from '@/services/journalService';
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from '@/lib/constants';
 
 /** Result from savePaymentWithAllocations */
 export interface SavePaymentResult {
   paymentId: string;
   /** True if journal entry failed (payment still saved) */
   journalFailed?: boolean;
+  /** ID of the created cheque (if payment method was cheque) */
+  chequeId?: string;
 }
 
 interface UsePaymentAllocationsResult {
@@ -46,6 +50,8 @@ interface UsePaymentAllocationsResult {
       type: string;
       /** Optional: Link to cheque when cashing a cheque */
       linkedChequeId?: string;
+      /** Optional: Create a new cheque record when payment method is cheque */
+      chequePaymentData?: ChequePaymentData;
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
@@ -118,6 +124,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
   /**
    * Save payment document and all allocations, update ledger entries
    * Uses Firestore transaction for atomicity - all operations succeed or all fail
+   * If chequePaymentData is provided, also creates an incoming cheque record
    */
   const savePaymentWithAllocations = async (
     paymentData: {
@@ -128,6 +135,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       type: string;
       /** Optional: Link to cheque when cashing a cheque */
       linkedChequeId?: string;
+      /** Optional: Create a new cheque record when payment method is cheque */
+      chequePaymentData?: ChequePaymentData;
     },
     allocations: AllocationEntry[],
     allocationMethod: 'fifo' | 'manual'
@@ -161,6 +170,13 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentDocRef = doc(paymentsRef);
 
+      // Create cheque document reference if cheque payment data is provided
+      let chequeDocRef: ReturnType<typeof doc> | null = null;
+      if (paymentData.chequePaymentData) {
+        const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
+        chequeDocRef = doc(chequesRef);
+      }
+
       // Use a transaction for atomic read-modify-write
       await runTransaction(firestore, async (transaction) => {
         // 1. Read all ledger entries first (required before writes in transaction)
@@ -182,6 +198,9 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         }
 
         // 2. Create the payment document
+        // Determine the linked cheque ID (either from cashing an existing cheque or from creating a new cheque)
+        const linkedChequeId = paymentData.linkedChequeId || (chequeDocRef ? chequeDocRef.id : undefined);
+
         transaction.set(paymentDocRef, {
           clientName: paymentData.clientName,
           amount: paymentData.amount,
@@ -195,8 +214,32 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           allocationCount: activeAllocations.length,
           allocationTransactionIds,
           linkedTransactionId: '',
-          ...(paymentData.linkedChequeId && { linkedChequeId: paymentData.linkedChequeId }),
+          ...(linkedChequeId && { linkedChequeId }),
+          // Mark as cheque payment if creating a new cheque
+          ...(paymentData.chequePaymentData && { paymentMethod: 'cheque' }),
         });
+
+        // 2.5. Create the cheque document if cheque payment data is provided
+        if (chequeDocRef && paymentData.chequePaymentData) {
+          const { chequeNumber, bankName, issueDate, dueDate } = paymentData.chequePaymentData;
+
+          transaction.set(chequeDocRef, {
+            chequeNumber,
+            clientName: paymentData.clientName,
+            amount: paymentData.amount,
+            type: CHEQUE_TYPES.INCOMING, // Incoming cheque (received from client)
+            status: CHEQUE_STATUS_AR.CASHED, // Already cashed since payment is being made
+            bankName,
+            issueDate,
+            dueDate,
+            clearedDate: paymentData.date, // Date when it was cashed
+            notes: paymentData.notes || `شيك مستلم ومحصل - ${chequeNumber}`,
+            linkedPaymentId: paymentDocRef.id, // Link to the payment
+            paidTransactionIds: allocationTransactionIds, // Link to the transactions that were paid
+            linkedTransactionId: '', // No single linked transaction since it's multi-allocation
+            createdAt: new Date(),
+          });
+        }
 
         // 3. Create allocation documents and update ledger entries
         for (const { ref: ledgerRef, data: ledgerData, allocation } of ledgerReads) {
@@ -296,6 +339,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       return {
         paymentId: paymentDocRef.id,
         journalFailed: !journalCreated,
+        ...(chequeDocRef && { chequeId: chequeDocRef.id }),
       };
     } catch (err) {
       console.error('Error saving payment with allocations:', err);

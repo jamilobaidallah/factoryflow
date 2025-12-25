@@ -32,15 +32,115 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle2, Loader2, Banknote, CreditCard } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useClientTransactions } from "./hooks/useClientTransactions";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
-import { AllocationEntry, initialMultiAllocationFormData } from "./types";
+import { AllocationEntry, initialMultiAllocationFormData, MultiAllocationFormData, ChequePaymentData } from "./types";
 import { formatShortDate } from "@/lib/date-utils";
+
+/** Payment type constants */
+const PAYMENT_TYPES = {
+  RECEIPT: "قبض",
+  PAYMENT: "صرف",
+} as const;
+
+/** Payment method constants */
+const PAYMENT_METHODS = {
+  CASH: "cash",
+  CHEQUE: "cheque",
+} as const;
+
+/** Validation error types */
+interface ValidationResult {
+  isValid: boolean;
+  errorMessage?: string;
+}
+
+/**
+ * Validates the payment form data
+ */
+function validatePaymentForm(
+  formData: MultiAllocationFormData,
+  paymentAmount: number,
+  activeAllocationsCount: number,
+  isChequeCashing: boolean
+): ValidationResult {
+  if (!formData.clientName) {
+    return { isValid: false, errorMessage: "يرجى اختيار العميل" };
+  }
+
+  if (paymentAmount <= 0) {
+    return { isValid: false, errorMessage: "يرجى إدخال مبلغ صحيح" };
+  }
+
+  // Validate cheque fields if payment method is cheque
+  if (formData.paymentMethod === PAYMENT_METHODS.CHEQUE && !isChequeCashing) {
+    if (!formData.chequeNumber?.trim()) {
+      return { isValid: false, errorMessage: "يرجى إدخال رقم الشيك" };
+    }
+    if (!formData.bankName?.trim()) {
+      return { isValid: false, errorMessage: "يرجى إدخال اسم البنك" };
+    }
+  }
+
+  if (activeAllocationsCount === 0) {
+    return { isValid: false, errorMessage: "يرجى تخصيص المبلغ على معاملة واحدة على الأقل" };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Generates success message based on payment type
+ */
+function getSuccessMessage(
+  isChequeCashing: boolean,
+  isChequePayment: boolean,
+  chequeNumber: string | undefined,
+  allocationsCount: number
+): { title: string; description: string } {
+  if (isChequeCashing) {
+    return {
+      title: "تم تحصيل الشيك",
+      description: `تم تحصيل الشيك رقم ${chequeNumber} وتوزيع المبلغ على ${allocationsCount} معاملة`,
+    };
+  }
+
+  if (isChequePayment) {
+    return {
+      title: "تم تسجيل الشيك وتوزيعه",
+      description: `تم تسجيل الشيك رقم ${chequeNumber} وتوزيع مبلغه على ${allocationsCount} معاملة`,
+    };
+  }
+
+  return {
+    title: "تمت الإضافة بنجاح",
+    description: `تم توزيع الدفعة على ${allocationsCount} معاملة`,
+  };
+}
+
+/**
+ * Prepares cheque payment data from form data
+ */
+function prepareChequePaymentData(
+  formData: MultiAllocationFormData,
+  isChequeCashing: boolean
+): ChequePaymentData | undefined {
+  if (formData.paymentMethod !== PAYMENT_METHODS.CHEQUE || isChequeCashing) {
+    return undefined;
+  }
+
+  return {
+    chequeNumber: formData.chequeNumber!.trim(),
+    bankName: formData.bankName!.trim(),
+    issueDate: new Date(formData.issueDate || formData.date),
+    dueDate: new Date(formData.chequeDueDate || formData.date),
+  };
+}
 
 interface PartyWithDebt {
   name: string;
@@ -99,11 +199,12 @@ export function MultiAllocationDialog({
       setFormData({
         clientName: chequeData.clientName,
         amount: chequeData.amount.toString(),
-        date: new Date().toISOString().split("T")[0], // Today's date for cashing
+        date: new Date().toISOString().split("T")[0],
         notes: `تحصيل شيك رقم ${chequeData.chequeNumber}`,
-        type: chequeData.chequeType === "incoming" ? "قبض" : "صرف",
+        type: chequeData.chequeType === "incoming" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.PAYMENT,
         allocations: [],
         allocationMethod: "fifo",
+        paymentMethod: PAYMENT_METHODS.CASH,
       });
     }
   }, [chequeData, open]);
@@ -113,7 +214,6 @@ export function MultiAllocationDialog({
     transactions,
     loading: transactionsLoading,
     totalOutstanding,
-    refetch: refetchTransactions,
   } = useClientTransactions(formData.clientName);
 
   // Payment allocations hook
@@ -265,35 +365,29 @@ export function MultiAllocationDialog({
 
   // Handle save
   const handleSave = async () => {
-    if (!formData.clientName) {
-      toast({
-        title: "خطأ",
-        description: "يرجى اختيار العميل",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (paymentAmount <= 0) {
-      toast({
-        title: "خطأ",
-        description: "يرجى إدخال مبلغ صحيح",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const activeAllocations = allocations.filter((a) => a.allocatedAmount > 0);
-    if (activeAllocations.length === 0) {
+
+    // Validate form
+    const validation = validatePaymentForm(
+      formData,
+      paymentAmount,
+      activeAllocations.length,
+      isChequeCashing
+    );
+
+    if (!validation.isValid) {
       toast({
         title: "خطأ",
-        description: "يرجى تخصيص المبلغ على معاملة واحدة على الأقل",
+        description: validation.errorMessage,
         variant: "destructive",
       });
       return;
     }
 
     setSaving(true);
+
+    // Prepare cheque data if payment method is cheque
+    const chequePaymentData = prepareChequePaymentData(formData, isChequeCashing);
 
     const result = await savePaymentWithAllocations(
       {
@@ -302,8 +396,8 @@ export function MultiAllocationDialog({
         date: new Date(formData.date),
         notes: formData.notes,
         type: formData.type,
-        // Link to cheque if this payment is from cashing a cheque
         linkedChequeId: chequeData?.chequeId,
+        chequePaymentData,
       },
       allocations,
       formData.allocationMethod
@@ -312,7 +406,7 @@ export function MultiAllocationDialog({
     setSaving(false);
 
     if (result) {
-      // Show appropriate toast based on journal entry result
+      // Show appropriate toast based on result
       if (result.journalFailed) {
         toast({
           title: "تحذير",
@@ -320,19 +414,17 @@ export function MultiAllocationDialog({
           variant: "destructive",
         });
       } else {
-        toast({
-          title: isChequeCashing ? "تم تحصيل الشيك" : "تمت الإضافة بنجاح",
-          description: isChequeCashing
-            ? `تم تحصيل الشيك رقم ${chequeData?.chequeNumber} وتوزيع المبلغ على ${activeAllocations.length} معاملة`
-            : `تم توزيع الدفعة على ${activeAllocations.length} معاملة`,
-        });
+        const isChequePayment = formData.paymentMethod === PAYMENT_METHODS.CHEQUE && !isChequeCashing;
+        const chequeNumber = isChequeCashing ? chequeData?.chequeNumber : formData.chequeNumber;
+        const message = getSuccessMessage(isChequeCashing, isChequePayment, chequeNumber, activeAllocations.length);
+        toast(message);
       }
+
       resetForm();
       onOpenChange(false);
 
       // Call appropriate success callback
       if (isChequeCashing && onChequeSuccess) {
-        // Extract the transaction IDs that were paid
         const paidTransactionIds = activeAllocations.map((a) => a.transactionId);
         onChequeSuccess(result.paymentId, paidTransactionIds);
       } else {
@@ -459,11 +551,90 @@ export function MultiAllocationDialog({
                 }
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="قبض">قبض</option>
-                <option value="صرف">صرف</option>
+                <option value={PAYMENT_TYPES.RECEIPT}>{PAYMENT_TYPES.RECEIPT}</option>
+                <option value={PAYMENT_TYPES.PAYMENT}>{PAYMENT_TYPES.PAYMENT}</option>
               </select>
             </div>
           </div>
+
+          {/* Payment Method Selector - Only show when not in cheque cashing mode */}
+          {!isChequeCashing && (
+            <div className="space-y-2">
+              <Label>طريقة الدفع</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={formData.paymentMethod === PAYMENT_METHODS.CASH ? 'default' : 'outline'}
+                  className="flex-1 gap-2"
+                  onClick={() => setFormData((prev) => ({ ...prev, paymentMethod: PAYMENT_METHODS.CASH }))}
+                >
+                  <Banknote className="w-4 h-4" />
+                  نقدي
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.paymentMethod === PAYMENT_METHODS.CHEQUE ? 'default' : 'outline'}
+                  className="flex-1 gap-2"
+                  onClick={() => setFormData((prev) => ({ ...prev, paymentMethod: PAYMENT_METHODS.CHEQUE }))}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  شيك
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Cheque Fields - Only show when payment method is cheque and not in cheque cashing mode */}
+          {formData.paymentMethod === PAYMENT_METHODS.CHEQUE && !isChequeCashing && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="space-y-2">
+                <Label htmlFor="chequeNumber">رقم الشيك *</Label>
+                <Input
+                  id="chequeNumber"
+                  value={formData.chequeNumber || ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, chequeNumber: e.target.value }))
+                  }
+                  placeholder="أدخل رقم الشيك"
+                  required={formData.paymentMethod === PAYMENT_METHODS.CHEQUE}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bankName">اسم البنك *</Label>
+                <Input
+                  id="bankName"
+                  value={formData.bankName || ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, bankName: e.target.value }))
+                  }
+                  placeholder="أدخل اسم البنك"
+                  required={formData.paymentMethod === PAYMENT_METHODS.CHEQUE}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="issueDate">تاريخ الإصدار</Label>
+                <Input
+                  id="issueDate"
+                  type="date"
+                  value={formData.issueDate || formData.date}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, issueDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="chequeDueDate">تاريخ الاستحقاق</Label>
+                <Input
+                  id="chequeDueDate"
+                  type="date"
+                  value={formData.chequeDueDate || formData.date}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, chequeDueDate: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

@@ -93,6 +93,23 @@ export interface MultiAllocationFormData {
   type: string;
   allocations: AllocationEntry[];
   allocationMethod: 'fifo' | 'manual';
+  /** Payment method: cash or cheque */
+  paymentMethod: 'cash' | 'cheque';
+  /** Cheque-specific fields (only used when paymentMethod is 'cheque') */
+  chequeNumber?: string;
+  bankName?: string;
+  issueDate?: string;
+  chequeDueDate?: string;
+}
+
+/**
+ * Cheque data to be created when payment method is cheque
+ */
+export interface ChequePaymentData {
+  chequeNumber: string;
+  bankName: string;
+  issueDate: Date;
+  dueDate: Date;
 }
 
 /**
@@ -106,6 +123,11 @@ export const initialMultiAllocationFormData: MultiAllocationFormData = {
   type: 'قبض',
   allocations: [],
   allocationMethod: 'fifo',
+  paymentMethod: 'cash',
+  chequeNumber: '',
+  bankName: '',
+  issueDate: new Date().toISOString().split('T')[0],
+  chequeDueDate: new Date().toISOString().split('T')[0],
 };
 
 /**
