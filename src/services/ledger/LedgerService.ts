@@ -11,6 +11,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -626,6 +627,7 @@ export class LedgerService {
   /**
    * Update an existing ledger entry
    * Also syncs associated party changes to linked payments
+   * Recalculates AR/AP fields when amount changes
    */
   async updateLedgerEntry(
     entryId: string,
@@ -637,11 +639,13 @@ export class LedgerService {
       const entryRef = this.getLedgerDocRef(entryId);
       const batch = writeBatch(firestore);
 
-      // Update the ledger entry
-      batch.update(entryRef, {
+      const newAmount = parseFloat(formData.amount);
+
+      // Build update data
+      const updateData: Record<string, unknown> = {
         description: formData.description,
         type: entryType,
-        amount: parseFloat(formData.amount),
+        amount: newAmount,
         category: formData.category,
         subCategory: formData.subCategory,
         associatedParty: formData.associatedParty,
@@ -649,7 +653,37 @@ export class LedgerService {
         date: new Date(formData.date),
         reference: formData.reference,
         notes: formData.notes,
-      });
+      };
+
+      // Fetch current entry to check if AR/AP recalculation is needed
+      const currentEntrySnap = await getDoc(entryRef);
+      if (currentEntrySnap.exists()) {
+        const currentData = currentEntrySnap.data();
+        const oldAmount = currentData.amount || 0;
+
+        // Recalculate AR/AP fields if this is an AR/AP entry and amount changed
+        if (currentData.isARAPEntry && oldAmount !== newAmount) {
+          const totalPaid = currentData.totalPaid || 0;
+          const totalDiscount = currentData.totalDiscount || 0;
+          const writeoffAmount = currentData.writeoffAmount || 0;
+
+          updateData.remainingBalance = calculateRemainingBalance(
+            newAmount,
+            totalPaid,
+            totalDiscount,
+            writeoffAmount
+          );
+          updateData.paymentStatus = calculatePaymentStatus(
+            totalPaid,
+            newAmount,
+            totalDiscount,
+            writeoffAmount
+          );
+        }
+      }
+
+      // Update the ledger entry
+      batch.update(entryRef, updateData);
 
       // If there's a transaction ID, sync associated party to linked payments
       // Sync even when removing the associated party (set to empty)
