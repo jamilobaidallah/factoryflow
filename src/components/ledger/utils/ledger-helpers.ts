@@ -1,4 +1,8 @@
 import { CATEGORIES } from "./ledger-constants";
+import { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR } from "@/lib/constants";
+
+// Re-export for convenience
+export { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR };
 
 /**
  * Loan category constants - Single source of truth for loan-related values
@@ -149,6 +153,40 @@ export function isExcludedFromPL(type?: string, category?: string): boolean {
     return isEquityTransaction(type, category) ||
            isAdvanceTransaction(category) ||
            isLoanTransaction(type, category);
+}
+
+/**
+ * Helper function to check if a transaction type is income
+ * Handles both "دخل" and "إيراد" variants
+ *
+ * @param type - Transaction type
+ * @returns true if this is an income transaction
+ */
+export function isIncomeType(type?: string): boolean {
+    return type === TRANSACTION_TYPES.INCOME || type === TRANSACTION_TYPES.INCOME_ALT;
+}
+
+/**
+ * Helper function to check if a transaction type is expense
+ *
+ * @param type - Transaction type
+ * @returns true if this is an expense transaction
+ */
+export function isExpenseType(type?: string): boolean {
+    return type === TRANSACTION_TYPES.EXPENSE;
+}
+
+/**
+ * Helper function to check if a payment status indicates fully paid
+ * Handles both English and Arabic status values
+ *
+ * @param status - Payment status
+ * @returns true if the payment is fully paid
+ */
+export function isPaidStatus(status?: string): boolean {
+    return status === PAYMENT_STATUSES.PAID ||
+           status === PAYMENT_STATUS_AR.PAID ||
+           status === PAYMENT_STATUS_AR.PAID_ALT;
 }
 
 /**

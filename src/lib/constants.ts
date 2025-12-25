@@ -8,8 +8,10 @@
 // Payment and Transaction Types
 export const TRANSACTION_TYPES = {
   INCOME: 'دخل',
+  INCOME_ALT: 'إيراد',  // Alternative income label used in some contexts
   EXPENSE: 'مصروف',
   EQUITY: 'حركة رأس مال',
+  LOAN: 'قرض',
 } as const;
 
 export const PAYMENT_TYPES = {
@@ -29,6 +31,14 @@ export const PAYMENT_STATUSES = {
   PAID: 'paid',
   UNPAID: 'unpaid',
   PARTIAL: 'partial',
+} as const;
+
+// Arabic payment status values (as stored in database)
+export const PAYMENT_STATUS_AR = {
+  PAID: 'مدفوع',
+  PAID_ALT: 'مكتمل',
+  UNPAID: 'غير مدفوع',
+  PARTIAL: 'مدفوع جزئياً',
 } as const;
 
 export const PAYMENT_STATUS_LABELS = {

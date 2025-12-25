@@ -11,7 +11,29 @@ import {
   getLoanCashDirection,
   getLoanType,
   isInitialLoan,
+  isIncomeType,
+  isExpenseType,
+  isPaidStatus,
+  TRANSACTION_TYPES,
 } from "@/components/ledger/utils/ledger-helpers";
+
+// Aging bucket labels - moved outside component for performance
+const AGING_BUCKET_LABELS = {
+  "0-30": "0-30 يوم",
+  "31-60": "31-60 يوم",
+  "61-90": "61-90 يوم",
+  "90+": "90+ يوم",
+} as const;
+
+// Aging bucket color classes - moved outside component for performance
+const AGING_BUCKET_COLORS = {
+  "0-30": "bg-emerald-100 text-emerald-700",
+  "31-60": "bg-amber-100 text-amber-700",
+  "61-90": "bg-orange-100 text-orange-700",
+  "90+": "bg-rose-100 text-rose-700",
+} as const;
+
+type AgingBucket = keyof typeof AGING_BUCKET_LABELS;
 
 interface LedgerEntry {
   id: string;
@@ -300,7 +322,7 @@ function AgingReport({
       }
 
       // Skip if fully paid
-      if (entry.paymentStatus === "مدفوع" || entry.paymentStatus === "مكتمل" || entry.paymentStatus === "paid") {
+      if (isPaidStatus(entry.paymentStatus)) {
         return;
       }
 
@@ -341,10 +363,10 @@ function AgingReport({
         // Regular AR/AP (non-loan entries)
         // Receivables = Income entries (money owed TO us)
         // Payables = Expense entries (money we OWE)
-        if (entry.type === "دخل") {
+        if (isIncomeType(entry.type)) {
           buckets.receivables[bucket].count++;
           buckets.receivables[bucket].amount += balance;
-        } else if (entry.type === "مصروف") {
+        } else if (isExpenseType(entry.type)) {
           buckets.payables[bucket].count++;
           buckets.payables[bucket].amount += balance;
         }
@@ -359,20 +381,6 @@ function AgingReport({
   const totalLoanReceivables = Object.values(agingData.loanReceivables).reduce((sum, b) => sum + b.amount, 0);
   const totalLoanPayables = Object.values(agingData.loanPayables).reduce((sum, b) => sum + b.amount, 0);
 
-  const bucketLabels = {
-    "0-30": "0-30 يوم",
-    "31-60": "31-60 يوم",
-    "61-90": "61-90 يوم",
-    "90+": "90+ يوم",
-  };
-
-  const bucketColors = {
-    "0-30": "bg-emerald-100 text-emerald-700",
-    "31-60": "bg-amber-100 text-amber-700",
-    "61-90": "bg-orange-100 text-orange-700",
-    "90+": "bg-rose-100 text-rose-700",
-  };
-
   return (
     <div className="space-y-6">
       {/* Receivables */}
@@ -382,10 +390,10 @@ function AgingReport({
           ذمم مدينة - لنا (مبالغ مستحقة من العملاء)
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {(Object.entries(agingData.receivables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+          {(Object.entries(agingData.receivables) as [AgingBucket, { count: number; amount: number }][]).map(
             ([bucket, data]) => (
-              <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
-                <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+              <div key={bucket} className={`p-3 rounded-lg ${AGING_BUCKET_COLORS[bucket]}`}>
+                <p className="text-xs font-medium mb-1">{AGING_BUCKET_LABELS[bucket]}</p>
                 <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
                 <p className="text-xs opacity-75">{data.count} معاملة</p>
               </div>
@@ -405,10 +413,10 @@ function AgingReport({
           ذمم دائنة - علينا (مبالغ مستحقة للموردين)
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {(Object.entries(agingData.payables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+          {(Object.entries(agingData.payables) as [AgingBucket, { count: number; amount: number }][]).map(
             ([bucket, data]) => (
-              <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
-                <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+              <div key={bucket} className={`p-3 rounded-lg ${AGING_BUCKET_COLORS[bucket]}`}>
+                <p className="text-xs font-medium mb-1">{AGING_BUCKET_LABELS[bucket]}</p>
                 <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
                 <p className="text-xs opacity-75">{data.count} معاملة</p>
               </div>
@@ -455,10 +463,10 @@ function AgingReport({
                 قروض ممنوحة - لنا (أموال أقرضناها للغير)
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {(Object.entries(agingData.loanReceivables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+                {(Object.entries(agingData.loanReceivables) as [AgingBucket, { count: number; amount: number }][]).map(
                   ([bucket, data]) => (
-                    <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
-                      <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+                    <div key={bucket} className={`p-3 rounded-lg ${AGING_BUCKET_COLORS[bucket]}`}>
+                      <p className="text-xs font-medium mb-1">{AGING_BUCKET_LABELS[bucket]}</p>
                       <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
                       <p className="text-xs opacity-75">{data.count} قرض</p>
                     </div>
@@ -480,10 +488,10 @@ function AgingReport({
                 قروض مستلمة - علينا (أموال اقترضناها من الغير)
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {(Object.entries(agingData.loanPayables) as [keyof typeof bucketLabels, { count: number; amount: number }][]).map(
+                {(Object.entries(agingData.loanPayables) as [AgingBucket, { count: number; amount: number }][]).map(
                   ([bucket, data]) => (
-                    <div key={bucket} className={`p-3 rounded-lg ${bucketColors[bucket]}`}>
-                      <p className="text-xs font-medium mb-1">{bucketLabels[bucket]}</p>
+                    <div key={bucket} className={`p-3 rounded-lg ${AGING_BUCKET_COLORS[bucket]}`}>
+                      <p className="text-xs font-medium mb-1">{AGING_BUCKET_LABELS[bucket]}</p>
                       <p className="text-lg font-bold">{formatNumber(data.amount)} د.أ</p>
                       <p className="text-xs opacity-75">{data.count} قرض</p>
                     </div>
@@ -537,10 +545,10 @@ function ExpenseAnalysisReport({
       if (entryDate < dateRange.start || entryDate > dateRange.end) {
         return;
       }
-      if (entry.type !== "مصروف") {
+      if (!isExpenseType(entry.type)) {
         return;
       }
-      if (entry.category === "رأس المال" || entry.category === "Owner Equity") {
+      if (isEquityTransaction(entry.type, entry.category)) {
         return;
       }
 
