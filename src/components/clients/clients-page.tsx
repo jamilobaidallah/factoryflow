@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useReducer } from "react";
+import { useState, useEffect, useReducer, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,11 +38,13 @@ import {
   query,
   orderBy,
   limit,
+  where,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { formatNumber } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
+import { CHEQUE_STATUS_AR, CHEQUE_TYPES } from "@/lib/constants";
 
 // Import validation utilities
 import {
@@ -68,6 +70,15 @@ interface Client {
   address: string;
   balance: number;
   createdAt: Date;
+}
+
+interface Cheque {
+  id: string;
+  amount: number;
+  status: string;
+  type: string;
+  clientName?: string;
+  isEndorsedCheque?: boolean;
 }
 
 // Form data type
@@ -149,6 +160,18 @@ function uiReducer(state: UIState, action: UIAction): UIState {
   }
 }
 
+/** Displays client balance with appropriate styling */
+function ClientBalanceDisplay({ balance }: { balance: number }) {
+  const colorClass = balance > 0 ? 'text-red-600' : balance < 0 ? 'text-green-600' : '';
+  const suffix = balance > 0 ? ' عليه' : balance < 0 ? ' له' : '';
+
+  return (
+    <span className={`font-semibold ${colorClass}`}>
+      {formatNumber(Math.abs(balance))} دينار{suffix}
+    </span>
+  );
+}
+
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -157,6 +180,7 @@ export default function ClientsPage() {
 
   // Data state (kept separate as it's set by onSnapshot)
   const [clients, setClients] = useState<Client[]>([]);
+  const [cheques, setCheques] = useState<Cheque[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // UI state - consolidated with useReducer
@@ -185,6 +209,66 @@ export default function ClientsPage() {
 
     return () => unsubscribe();
   }, [user]);
+
+  // Fetch pending cheques for expected balance calculation
+  useEffect(() => {
+    if (!user) { return; }
+
+    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
+    const q = query(chequesRef, where("status", "==", CHEQUE_STATUS_AR.PENDING));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const chequesList: Cheque[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        // Exclude endorsed cheques (same logic as client-detail-page)
+        if (!data.isEndorsedCheque) {
+          chequesList.push({
+            id: doc.id,
+            amount: data.amount || 0,
+            status: data.status,
+            type: data.type,
+            clientName: data.clientName,
+            isEndorsedCheque: data.isEndorsedCheque,
+          });
+        }
+      });
+      setCheques(chequesList);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  /**
+   * Calculate expected balance after pending cheques for all clients
+   * Uses the same formula as client-detail-page:
+   * - Incoming (وارد): We receive money → reduces what they owe us
+   * - Outgoing (صادر): We pay money → reduces what we owe them
+   * Formula: currentBalance - incomingTotal + outgoingTotal
+   */
+  const clientExpectedBalances = useMemo(() => {
+    const balanceMap = new Map<string, number>();
+
+    clients.forEach(client => {
+      const clientCheques = cheques.filter(c => c.clientName === client.name);
+
+      let incomingTotal = 0;
+      let outgoingTotal = 0;
+
+      clientCheques.forEach(cheque => {
+        if (cheque.type === CHEQUE_TYPES.INCOMING) {
+          incomingTotal += cheque.amount || 0;
+        } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
+          outgoingTotal += cheque.amount || 0;
+        }
+      });
+
+      const expectedBalance = (client.balance || 0) - incomingTotal + outgoingTotal;
+      balanceMap.set(client.id, expectedBalance);
+    });
+
+    return balanceMap;
+  }, [clients, cheques]);
 
   // Validate form data in real-time
   const validateForm = (data: FormData): boolean => {
@@ -448,10 +532,9 @@ export default function ClientsPage() {
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
-                      <span className={`font-semibold ${(client.balance || 0) > 0 ? 'text-red-600' : (client.balance || 0) < 0 ? 'text-green-600' : ''}`}>
-                        {formatNumber(Math.abs(client.balance || 0))} دينار
-                        {(client.balance || 0) > 0 ? ' عليه' : (client.balance || 0) < 0 ? ' له' : ''}
-                      </span>
+                      <ClientBalanceDisplay
+                        balance={clientExpectedBalances.get(client.id) ?? client.balance ?? 0}
+                      />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group" aria-label="إجراءات العميل">
