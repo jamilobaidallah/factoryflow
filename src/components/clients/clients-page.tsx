@@ -81,6 +81,23 @@ interface Cheque {
   isEndorsedCheque?: boolean;
 }
 
+interface LedgerEntry {
+  id: string;
+  type: string;
+  amount: number;
+  category: string;
+  associatedParty?: string;
+  totalDiscount?: number;
+  writeoffAmount?: number;
+}
+
+interface Payment {
+  id: string;
+  type: string;
+  amount: number;
+  clientName?: string;
+}
+
 // Form data type
 interface FormData {
   name: string;
@@ -181,6 +198,8 @@ export default function ClientsPage() {
   // Data state (kept separate as it's set by onSnapshot)
   const [clients, setClients] = useState<Client[]>([]);
   const [cheques, setCheques] = useState<Cheque[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // UI state - consolidated with useReducer
@@ -239,44 +258,133 @@ export default function ClientsPage() {
     return () => unsubscribe();
   }, [user]);
 
+  // Fetch ledger entries for balance calculation
+  useEffect(() => {
+    if (!user) { return; }
+
+    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+    const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
+      const entries: LedgerEntry[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        entries.push({
+          id: doc.id,
+          type: data.type,
+          amount: data.amount || 0,
+          category: data.category,
+          associatedParty: data.associatedParty,
+          totalDiscount: data.totalDiscount || 0,
+          writeoffAmount: data.writeoffAmount || 0,
+        });
+      });
+      setLedgerEntries(entries);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Fetch payments for balance calculation
+  useEffect(() => {
+    if (!user) { return; }
+
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+    const unsubscribe = onSnapshot(paymentsRef, (snapshot) => {
+      const paymentsList: Payment[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        paymentsList.push({
+          id: doc.id,
+          type: data.type,
+          amount: data.amount || 0,
+          clientName: data.clientName,
+        });
+      });
+      setPayments(paymentsList);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
   /**
-   * Calculate expected balance after pending cheques for clients that have pending cheques.
-   * Uses the same formula as client-detail-page:
-   * - Incoming (وارد): We receive money → reduces what they owe us
-   * - Outgoing (صادر): We pay money → reduces what we owe them
-   * Formula: currentBalance - incomingTotal + outgoingTotal
+   * Calculate client balances using the same formula as client-detail-page:
+   * currentBalance = sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs
    *
-   * If client has no pending cheques, returns null (use الرصيد المستحق instead)
+   * Then for expected balance after cheques:
+   * expectedBalance = currentBalance - incomingCheques + outgoingCheques
+   *
+   * Returns: { currentBalance, expectedBalance (or null if no pending cheques) }
    */
-  const clientExpectedBalances = useMemo(() => {
-    const balanceMap = new Map<string, number | null>();
+  const clientBalances = useMemo(() => {
+    const balanceMap = new Map<string, { currentBalance: number; expectedBalance: number | null }>();
 
     clients.forEach(client => {
-      const clientCheques = cheques.filter(c => c.clientName === client.name);
+      // Calculate current balance from ledger entries
+      const clientLedger = ledgerEntries.filter(e => e.associatedParty === client.name);
+      let sales = 0;
+      let purchases = 0;
+      let discounts = 0;
+      let writeoffs = 0;
 
-      // If no pending cheques for this client, return null to indicate using الرصيد المستحق
-      if (clientCheques.length === 0) {
-        balanceMap.set(client.id, null);
-        return;
-      }
+      clientLedger.forEach(entry => {
+        // Exclude advances and loans from balance calculation
+        const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
+        const isLoan = entry.category?.includes("قروض");
 
-      let incomingTotal = 0;
-      let outgoingTotal = 0;
+        if (!isAdvance && !isLoan) {
+          if (entry.type === "دخل" || entry.type === "إيراد") {
+            sales += entry.amount || 0;
+          } else if (entry.type === "مصروف") {
+            purchases += entry.amount || 0;
+          }
+        }
+        discounts += entry.totalDiscount || 0;
+        writeoffs += entry.writeoffAmount || 0;
+      });
 
-      clientCheques.forEach(cheque => {
-        if (cheque.type === CHEQUE_TYPES.INCOMING) {
-          incomingTotal += cheque.amount || 0;
-        } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
-          outgoingTotal += cheque.amount || 0;
+      // Calculate payments
+      const clientPayments = payments.filter(p => p.clientName === client.name);
+      let paymentsReceived = 0;
+      let paymentsMade = 0;
+
+      clientPayments.forEach(payment => {
+        if (payment.type === "قبض") {
+          paymentsReceived += payment.amount || 0;
+        } else if (payment.type === "صرف") {
+          paymentsMade += payment.amount || 0;
         }
       });
 
-      const expectedBalance = (client.balance || 0) - incomingTotal + outgoingTotal;
-      balanceMap.set(client.id, expectedBalance);
+      // Current balance formula (same as client-detail-page)
+      // Include opening balance (client.balance) which represents pre-existing balance
+      const openingBalance = client.balance || 0;
+      const currentBalance = openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs;
+
+      // Calculate expected balance after cheques
+      const clientCheques = cheques.filter(c => c.clientName === client.name);
+
+      if (clientCheques.length === 0) {
+        // No pending cheques - use current balance (الرصيد المستحق)
+        balanceMap.set(client.id, { currentBalance, expectedBalance: null });
+      } else {
+        let incomingTotal = 0;
+        let outgoingTotal = 0;
+
+        clientCheques.forEach(cheque => {
+          if (cheque.type === CHEQUE_TYPES.INCOMING) {
+            incomingTotal += cheque.amount || 0;
+          } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
+            outgoingTotal += cheque.amount || 0;
+          }
+        });
+
+        // Expected balance formula
+        const expectedBalance = currentBalance - incomingTotal + outgoingTotal;
+        balanceMap.set(client.id, { currentBalance, expectedBalance });
+      }
     });
 
     return balanceMap;
-  }, [clients, cheques]);
+  }, [clients, ledgerEntries, payments, cheques]);
 
   // Validate form data in real-time
   const validateForm = (data: FormData): boolean => {
@@ -540,9 +648,12 @@ export default function ClientsPage() {
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.address}</TableCell>
                     <TableCell>
-                      <ClientBalanceDisplay
-                        balance={clientExpectedBalances.get(client.id) ?? client.balance ?? 0}
-                      />
+                      {(() => {
+                        const balanceData = clientBalances.get(client.id);
+                        // Use expectedBalance if available, otherwise currentBalance
+                        const displayBalance = balanceData?.expectedBalance ?? balanceData?.currentBalance ?? 0;
+                        return <ClientBalanceDisplay balance={displayBalance} />;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group" aria-label="إجراءات العميل">
