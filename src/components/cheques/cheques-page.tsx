@@ -143,6 +143,7 @@ export default function ChequesPage() {
   const { clients, loading: clientsLoading } = useAllClients();
 
   // Filter cheques based on URL params
+  // Shows pending non-endorsed cheques due within X days (including overdue)
   const filteredCheques = useMemo(() => {
     if (!dueSoonDays) return cheques;
 
@@ -154,11 +155,18 @@ export default function ChequesPage() {
 
     return cheques.filter((cheque) => {
       // Only pending cheques
-      if (cheque.status !== CHEQUE_STATUS_AR.PENDING) return false;
+      if (cheque.status !== CHEQUE_STATUS_AR.PENDING) {
+        return false;
+      }
 
-      // Due within X days
+      // Exclude endorsed cheques (transferred to someone else)
+      if (cheque.isEndorsedCheque === true) {
+        return false;
+      }
+
+      // Due within X days (including overdue cheques)
       const dueDate = cheque.dueDate instanceof Date ? cheque.dueDate : new Date(cheque.dueDate);
-      return dueDate >= now && dueDate <= futureDate;
+      return dueDate <= futureDate;
     });
   }, [cheques, dueSoonDays]);
 
