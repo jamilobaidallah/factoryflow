@@ -90,7 +90,9 @@ function LedgerFiltersComponent({
 
   // Get available subcategories based on selected category
   const availableSubcategories = useMemo(() => {
-    if (filters.category === "all") return [];
+    if (filters.category === "all") {
+      return [];
+    }
     const category = CATEGORIES.find((cat) => cat.name === filters.category);
     return category?.subcategories || [];
   }, [filters.category]);

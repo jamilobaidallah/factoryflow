@@ -145,10 +145,14 @@ export default function ChequesPage() {
   // Filter cheques based on URL params
   // Shows pending non-endorsed cheques due within X days (including overdue)
   const filteredCheques = useMemo(() => {
-    if (!dueSoonDays) return cheques;
+    if (!dueSoonDays) {
+      return cheques;
+    }
 
     const days = parseInt(dueSoonDays);
-    if (isNaN(days)) return cheques;
+    if (isNaN(days)) {
+      return cheques;
+    }
 
     const now = new Date();
     const futureDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
