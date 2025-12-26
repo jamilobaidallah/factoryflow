@@ -451,7 +451,7 @@ export default function ClientsPage() {
       // Check for duplicate name
       const isDuplicate = await checkDuplicateClient(
         ui.formData.name,
-        user.uid,
+        user.dataOwnerId,
         ui.editingClient?.id
       );
 

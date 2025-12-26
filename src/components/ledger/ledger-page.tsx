@@ -409,11 +409,11 @@ export default function LedgerPage() {
                         href="#"
                         onClick={(e) => {
                           e.preventDefault();
-                          if (state.pagination.currentPage < totalPages) {
-                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage + 1 });
+                          if (state.pagination.currentPage > 1) {
+                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage - 1 });
                           }
                         }}
-                        className={state.pagination.currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                        className={state.pagination.currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                     {[...Array(Math.min(5, totalPages))].map((_, i) => (
@@ -435,11 +435,11 @@ export default function LedgerPage() {
                         href="#"
                         onClick={(e) => {
                           e.preventDefault();
-                          if (state.pagination.currentPage > 1) {
-                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage - 1 });
+                          if (state.pagination.currentPage < totalPages) {
+                            dispatch({ type: "SET_CURRENT_PAGE", payload: state.pagination.currentPage + 1 });
                           }
                         }}
-                        className={state.pagination.currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                        className={state.pagination.currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                   </PaginationContent>
