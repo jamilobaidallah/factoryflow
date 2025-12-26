@@ -37,7 +37,7 @@ import type {
   InventoryItemData,
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { getCategoryType, generateTransactionId, getLoanCashDirection } from "@/components/ledger/utils/ledger-helpers";
+import { getCategoryType, generateTransactionId, LOAN_CATEGORIES } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import {
   parseAmount,
@@ -1006,14 +1006,17 @@ export class LedgerService {
         };
       }
 
-      // Determine payment type based on entry type and subcategory
+      // Determine payment type based on entry type and category
       let paymentType: string;
       if (data.entryType === "دخل") {
         paymentType = PAYMENT_TYPES.RECEIPT;
       } else if (data.entryType === "قرض") {
-        // For loan entries, check subcategory to determine cash direction
-        const loanDirection = getLoanCashDirection(data.entrySubCategory);
-        paymentType = loanDirection === "in" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+        // For loan entries, use CATEGORY to determine payment direction:
+        // - قروض ممنوحة (Loans Given): payments = collecting = cash IN (قبض)
+        // - قروض مستلمة (Loans Received): payments = repaying = cash OUT (صرف)
+        paymentType = data.entryCategory === LOAN_CATEGORIES.GIVEN
+          ? PAYMENT_TYPES.RECEIPT
+          : PAYMENT_TYPES.DISBURSEMENT;
       } else {
         paymentType = PAYMENT_TYPES.DISBURSEMENT;
       }
@@ -1159,14 +1162,17 @@ export class LedgerService {
 
       // Create payment record for the writeoff (so it appears in payments page)
       const paymentDocRef = doc(this.paymentsRef);
-      // Determine payment type based on entry type and subcategory
+      // Determine payment type based on entry type and category
       let paymentType: string;
       if (data.entryType === "دخل") {
         paymentType = PAYMENT_TYPES.RECEIPT;
       } else if (data.entryType === "قرض") {
-        // For loan entries, check subcategory to determine cash direction
-        const loanDirection = getLoanCashDirection(data.entrySubCategory);
-        paymentType = loanDirection === "in" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+        // For loan entries, use CATEGORY to determine payment direction:
+        // - قروض ممنوحة (Loans Given): payments = collecting = cash IN (قبض)
+        // - قروض مستلمة (Loans Received): payments = repaying = cash OUT (صرف)
+        paymentType = data.entryCategory === LOAN_CATEGORIES.GIVEN
+          ? PAYMENT_TYPES.RECEIPT
+          : PAYMENT_TYPES.DISBURSEMENT;
       } else {
         paymentType = PAYMENT_TYPES.DISBURSEMENT;
       }
