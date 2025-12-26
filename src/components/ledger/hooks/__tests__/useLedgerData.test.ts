@@ -7,9 +7,36 @@
  */
 
 import { renderHook } from '@testing-library/react';
+import type { DocumentSnapshot } from 'firebase/firestore';
+
+// Types for mock data
+interface MockEntry {
+  id: string;
+  description?: string;
+  amount?: number;
+  date?: Date;
+  createdAt?: Date;
+}
+
+interface MockNamedEntity {
+  id: string;
+  name: string;
+}
+
+interface MockLedgerPageData {
+  entries: MockEntry[];
+  allEntriesForStats: MockEntry[];
+  clients: MockNamedEntity[];
+  partners: MockNamedEntity[];
+  totalCount: number;
+  totalPages: number;
+  lastDoc: DocumentSnapshot | null;
+  loading: boolean;
+  statsLoading: boolean;
+}
 
 // Default mock data
-const defaultMockData = {
+const defaultMockData: MockLedgerPageData = {
   entries: [],
   allEntriesForStats: [],
   clients: [],
@@ -22,10 +49,10 @@ const defaultMockData = {
 };
 
 // Mock the useLedgerPageData hook from firebase-query
-const mockUseLedgerPageData = jest.fn(() => defaultMockData);
+const mockUseLedgerPageData = jest.fn<MockLedgerPageData, [{ pageSize?: number; currentPage?: number }?]>(() => defaultMockData);
 
 jest.mock('@/hooks/firebase-query', () => ({
-  useLedgerPageData: (options: { pageSize?: number; currentPage?: number }) =>
+  useLedgerPageData: (options?: { pageSize?: number; currentPage?: number }) =>
     mockUseLedgerPageData(options),
 }));
 
@@ -188,7 +215,7 @@ describe('useLedgerData', () => {
     });
 
     it('should return last document for pagination', () => {
-      const mockLastDoc = { id: 'last-doc' };
+      const mockLastDoc = { id: 'last-doc' } as unknown as DocumentSnapshot;
 
       mockUseLedgerPageData.mockReturnValue({
         ...defaultMockData,
