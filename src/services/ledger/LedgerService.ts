@@ -37,7 +37,7 @@ import type {
   InventoryItemData,
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { getCategoryType, generateTransactionId } from "@/components/ledger/utils/ledger-helpers";
+import { getCategoryType, generateTransactionId, getLoanCashDirection } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import {
   parseAmount,
@@ -1006,7 +1006,17 @@ export class LedgerService {
         };
       }
 
-      const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      // Determine payment type based on entry type and subcategory
+      let paymentType: string;
+      if (data.entryType === "دخل") {
+        paymentType = PAYMENT_TYPES.RECEIPT;
+      } else if (data.entryType === "قرض") {
+        // For loan entries, check subcategory to determine cash direction
+        const loanDirection = getLoanCashDirection(data.entrySubCategory);
+        paymentType = loanDirection === "in" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      } else {
+        paymentType = PAYMENT_TYPES.DISBURSEMENT;
+      }
       const batch = writeBatch(firestore);
 
       // Create payment record (if there's cash payment OR discount)
@@ -1149,7 +1159,17 @@ export class LedgerService {
 
       // Create payment record for the writeoff (so it appears in payments page)
       const paymentDocRef = doc(this.paymentsRef);
-      const paymentType = data.entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      // Determine payment type based on entry type and subcategory
+      let paymentType: string;
+      if (data.entryType === "دخل") {
+        paymentType = PAYMENT_TYPES.RECEIPT;
+      } else if (data.entryType === "قرض") {
+        // For loan entries, check subcategory to determine cash direction
+        const loanDirection = getLoanCashDirection(data.entrySubCategory);
+        paymentType = loanDirection === "in" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      } else {
+        paymentType = PAYMENT_TYPES.DISBURSEMENT;
+      }
       batch.set(paymentDocRef, {
         clientName: data.associatedParty || "غير محدد",
         amount: 0,  // No actual cash payment

@@ -84,6 +84,8 @@ export interface WriteOffData {
   entryAmount: number;
   entryType: string;
   entryDescription: string;
+  entryCategory?: string;
+  entrySubCategory?: string;
   associatedParty: string;
   totalPaid: number;
   totalDiscount: number;
