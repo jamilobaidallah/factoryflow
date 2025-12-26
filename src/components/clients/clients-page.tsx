@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useReducer, useMemo } from "react";
+import { useReducer } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import {
@@ -28,23 +27,15 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-  where,
-} from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
-import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { formatNumber } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
-import { CHEQUE_STATUS_AR, CHEQUE_TYPES, TRANSACTION_TYPES, PAYMENT_TYPES } from "@/lib/constants";
+import {
+  useClientsPageData,
+  type Client,
+  type ClientBalance,
+} from "@/hooks/firebase-query/useClientsQueries";
 
 // Import validation utilities
 import {
@@ -61,42 +52,6 @@ import {
   logError,
 } from "@/lib/error-handling";
 import { z } from "zod";
-
-interface Client {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  address: string;
-  balance: number;
-  createdAt: Date;
-}
-
-interface Cheque {
-  id: string;
-  amount: number;
-  status: string;
-  type: string;
-  clientName?: string;
-  isEndorsedCheque?: boolean;
-}
-
-interface LedgerEntry {
-  id: string;
-  type: string;
-  amount: number;
-  category: string;
-  associatedParty?: string;
-  totalDiscount?: number;
-  writeoffAmount?: number;
-}
-
-interface Payment {
-  id: string;
-  type: string;
-  amount: number;
-  clientName?: string;
-}
 
 // Form data type
 interface FormData {
@@ -190,9 +145,7 @@ function ClientBalanceDisplay({ balance }: { balance: number }) {
 }
 
 /** Get display balance: expectedBalance if available, otherwise currentBalance */
-function getClientDisplayBalance(
-  balanceData: { currentBalance: number; expectedBalance: number | null } | undefined
-): number {
+function getClientDisplayBalance(balanceData: ClientBalance | undefined): number {
   return balanceData?.expectedBalance ?? balanceData?.currentBalance ?? 0;
 }
 
@@ -202,199 +155,11 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
-  // Data state (kept separate as it's set by onSnapshot)
-  const [clients, setClients] = useState<Client[]>([]);
-  const [cheques, setCheques] = useState<Cheque[]>([]);
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  // Data from React Query hooks (4 subscriptions + balance calculation)
+  const { clients, clientBalances, isLoading: dataLoading } = useClientsPageData();
 
   // UI state - consolidated with useReducer
   const [ui, dispatch] = useReducer(uiReducer, initialUIState);
-
-  // Real-time data fetching
-  useEffect(() => {
-    if (!user) { return; }
-
-    const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
-    // Limit to 500 most recent clients to prevent performance issues
-    const q = query(clientsRef, orderBy("createdAt", "desc"), limit(500));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const clientsData: Client[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        clientsData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-        } as Client);
-      });
-      setClients(clientsData);
-      setDataLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Fetch pending cheques for expected balance calculation
-  useEffect(() => {
-    if (!user) { return; }
-
-    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
-    const q = query(chequesRef, where("status", "==", CHEQUE_STATUS_AR.PENDING));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chequesList: Cheque[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        // Exclude endorsed cheques (same logic as client-detail-page)
-        if (!data.isEndorsedCheque) {
-          chequesList.push({
-            id: doc.id,
-            amount: data.amount || 0,
-            status: data.status,
-            type: data.type,
-            clientName: data.clientName,
-            isEndorsedCheque: data.isEndorsedCheque,
-          });
-        }
-      });
-      setCheques(chequesList);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Fetch ledger entries for balance calculation
-  useEffect(() => {
-    if (!user) { return; }
-
-    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
-      const entries: LedgerEntry[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        entries.push({
-          id: doc.id,
-          type: data.type,
-          amount: data.amount || 0,
-          category: data.category,
-          associatedParty: data.associatedParty,
-          totalDiscount: data.totalDiscount || 0,
-          writeoffAmount: data.writeoffAmount || 0,
-        });
-      });
-      setLedgerEntries(entries);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Fetch payments for balance calculation
-  useEffect(() => {
-    if (!user) { return; }
-
-    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-    const unsubscribe = onSnapshot(paymentsRef, (snapshot) => {
-      const paymentsList: Payment[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        paymentsList.push({
-          id: doc.id,
-          type: data.type,
-          amount: data.amount || 0,
-          clientName: data.clientName,
-        });
-      });
-      setPayments(paymentsList);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  /**
-   * Calculate client balances using the same formula as client-detail-page:
-   * currentBalance = sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs
-   *
-   * Then for expected balance after cheques:
-   * expectedBalance = currentBalance - incomingCheques + outgoingCheques
-   *
-   * Returns: { currentBalance, expectedBalance (or null if no pending cheques) }
-   */
-  const clientBalances = useMemo(() => {
-    const balanceMap = new Map<string, { currentBalance: number; expectedBalance: number | null }>();
-
-    clients.forEach(client => {
-      // Calculate current balance from ledger entries
-      const clientLedger = ledgerEntries.filter(e => e.associatedParty === client.name);
-      let sales = 0;
-      let purchases = 0;
-      let discounts = 0;
-      let writeoffs = 0;
-
-      clientLedger.forEach(entry => {
-        // Exclude advances from balance calculation (they're informational only)
-        const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
-
-        if (!isAdvance) {
-          // Include all income types (sales, loans given, etc.) - they increase what client owes
-          const isIncome = entry.type === TRANSACTION_TYPES.INCOME ||
-                           entry.type === TRANSACTION_TYPES.INCOME_ALT ||
-                           entry.type === TRANSACTION_TYPES.LOAN;
-          if (isIncome) {
-            sales += entry.amount || 0;
-          } else if (entry.type === TRANSACTION_TYPES.EXPENSE) {
-            purchases += entry.amount || 0;
-          }
-        }
-        discounts += entry.totalDiscount || 0;
-        writeoffs += entry.writeoffAmount || 0;
-      });
-
-      // Calculate payments
-      const clientPayments = payments.filter(p => p.clientName === client.name);
-      let paymentsReceived = 0;
-      let paymentsMade = 0;
-
-      clientPayments.forEach(payment => {
-        if (payment.type === PAYMENT_TYPES.RECEIPT) {
-          paymentsReceived += payment.amount || 0;
-        } else if (payment.type === PAYMENT_TYPES.DISBURSEMENT) {
-          paymentsMade += payment.amount || 0;
-        }
-      });
-
-      // Current balance formula (same as client-detail-page)
-      // Include opening balance (client.balance) which represents pre-existing balance
-      const openingBalance = client.balance || 0;
-      const currentBalance = openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs;
-
-      // Calculate expected balance after cheques
-      const clientCheques = cheques.filter(c => c.clientName === client.name);
-
-      if (clientCheques.length === 0) {
-        // No pending cheques - use current balance (الرصيد المستحق)
-        balanceMap.set(client.id, { currentBalance, expectedBalance: null });
-      } else {
-        let incomingTotal = 0;
-        let outgoingTotal = 0;
-
-        clientCheques.forEach(cheque => {
-          if (cheque.type === CHEQUE_TYPES.INCOMING) {
-            incomingTotal += cheque.amount || 0;
-          } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
-            outgoingTotal += cheque.amount || 0;
-          }
-        });
-
-        // Expected balance formula
-        const expectedBalance = currentBalance - incomingTotal + outgoingTotal;
-        balanceMap.set(client.id, { currentBalance, expectedBalance });
-      }
-    });
-
-    return balanceMap;
-  }, [clients, ledgerEntries, payments, cheques]);
 
   // Validate form data in real-time
   const validateForm = (data: FormData): boolean => {

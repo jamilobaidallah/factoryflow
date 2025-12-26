@@ -58,6 +58,19 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: jest.fn() }),
 }));
 
+// Mock React Query
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    setQueryData: jest.fn(),
+    getQueryData: jest.fn().mockReturnValue([]),
+  }),
+  useQuery: () => ({ data: [], isLoading: false }),
+  useMutation: () => ({ mutate: jest.fn(), isLoading: false }),
+  useInfiniteQuery: () => ({ data: undefined, isLoading: false }),
+  QueryClient: jest.fn(),
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 // Import page components
 import DashboardPage from '@/components/dashboard/dashboard-page';
 

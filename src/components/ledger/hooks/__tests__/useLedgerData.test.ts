@@ -1,34 +1,32 @@
 /**
  * Unit Tests for useLedgerData Hook
  * Tests ledger data fetching with pagination
+ *
+ * NOTE: useLedgerData now uses React Query hooks internally via useLedgerPageData.
+ * These tests mock the useLedgerPageData hook directly.
  */
 
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 
-// Mock Firebase
-const mockOnSnapshot = jest.fn();
-const mockUnsubscribe = jest.fn();
-const mockGetCountFromServer = jest.fn();
+// Default mock data
+const defaultMockData = {
+  entries: [],
+  allEntriesForStats: [],
+  clients: [],
+  partners: [],
+  totalCount: 0,
+  totalPages: 0,
+  lastDoc: null,
+  loading: false,
+  statsLoading: false,
+};
 
-jest.mock('@/firebase/config', () => ({
-  firestore: {},
-}));
+// Mock the useLedgerPageData hook from firebase-query
+const mockUseLedgerPageData = jest.fn(() => defaultMockData);
 
-jest.mock('@/firebase/provider', () => ({
-  useUser: () => ({ user: { uid: 'test-user-id' } }),
-}));
-
-jest.mock('firebase/firestore', () => ({
-  collection: jest.fn(),
-  onSnapshot: jest.fn((query, callback) => {
-    mockOnSnapshot(query, callback);
-    return mockUnsubscribe;
-  }),
-  query: jest.fn(),
-  orderBy: jest.fn(),
-  limit: jest.fn(),
-  startAfter: jest.fn(),
-  getCountFromServer: jest.fn(() => mockGetCountFromServer()),
+jest.mock('@/hooks/firebase-query', () => ({
+  useLedgerPageData: (options: { pageSize?: number; currentPage?: number }) =>
+    mockUseLedgerPageData(options),
 }));
 
 // Import after mocks
@@ -37,21 +35,7 @@ import { useLedgerData } from '../useLedgerData';
 describe('useLedgerData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-
-    // Default mock for count
-    mockGetCountFromServer.mockResolvedValue({
-      data: () => ({ count: 100 }),
-    });
-
-    // Default mock for onSnapshot
-    mockOnSnapshot.mockImplementation((query, callback) => {
-      setTimeout(() => {
-        callback({
-          forEach: (cb: Function) => {},
-          docs: [],
-        });
-      }, 0);
-    });
+    mockUseLedgerPageData.mockReturnValue(defaultMockData);
   });
 
   describe('Initial State', () => {
@@ -78,147 +62,88 @@ describe('useLedgerData', () => {
 
       expect(result.current.totalCount).toBe(0);
     });
+
+    it('should return totalPages of 0 initially', () => {
+      const { result } = renderHook(() => useLedgerData());
+
+      expect(result.current.totalPages).toBe(0);
+    });
+
+    it('should return loading as false when data is available', () => {
+      const { result } = renderHook(() => useLedgerData());
+
+      expect(result.current.loading).toBe(false);
+    });
   });
 
   describe('Data Fetching', () => {
-    it('should fetch ledger entries on mount', async () => {
+    it('should return ledger entries from the hook', () => {
       const mockEntries = [
         {
           id: 'entry1',
           description: 'Test Entry',
           amount: 1000,
-          date: { toDate: () => new Date('2024-01-15') },
-          createdAt: { toDate: () => new Date() },
+          date: new Date('2024-01-15'),
+          createdAt: new Date(),
         },
       ];
 
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        setTimeout(() => {
-          callback({
-            forEach: (cb: Function) => {
-              mockEntries.forEach((entry) =>
-                cb({ id: entry.id, data: () => entry })
-              );
-            },
-            docs: mockEntries.map((entry) => ({
-              id: entry.id,
-              data: () => entry,
-            })),
-          });
-        }, 0);
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        entries: mockEntries,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(result.current.entries.length).toBeGreaterThanOrEqual(0);
-      });
+      expect(result.current.entries).toEqual(mockEntries);
     });
 
-    it('should fetch clients for dropdown', async () => {
+    it('should return clients for dropdown', () => {
       const mockClients = [
         { id: 'client1', name: 'محمد أحمد' },
         { id: 'client2', name: 'علي حسن' },
       ];
 
-      let callCount = 0;
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        callCount++;
-        setTimeout(() => {
-          // Second call is for clients
-          if (callCount === 2) {
-            callback({
-              forEach: (cb: Function) => {
-                mockClients.forEach((client) =>
-                  cb({ id: client.id, data: () => client })
-                );
-              },
-            });
-          } else {
-            callback({
-              forEach: (cb: Function) => {},
-              docs: [],
-            });
-          }
-        }, 0);
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        clients: mockClients,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(mockOnSnapshot).toHaveBeenCalled();
-      });
+      expect(result.current.clients).toEqual(mockClients);
     });
 
-    it('should fetch partners for dropdown', async () => {
+    it('should return partners for dropdown', () => {
       const mockPartners = [
-        { id: 'partner1', name: 'شركة الأمل', active: true },
-        { id: 'partner2', name: 'مؤسسة النور', active: true },
-        { id: 'partner3', name: 'شركة غير نشطة', active: false },
+        { id: 'partner1', name: 'شركة الأمل' },
+        { id: 'partner2', name: 'مؤسسة النور' },
       ];
 
-      let callCount = 0;
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        callCount++;
-        setTimeout(() => {
-          // Third call is for partners
-          if (callCount === 3) {
-            callback({
-              forEach: (cb: Function) => {
-                mockPartners.forEach((partner) =>
-                  cb({ id: partner.id, data: () => partner })
-                );
-              },
-            });
-          } else {
-            callback({
-              forEach: (cb: Function) => {},
-              docs: [],
-            });
-          }
-        }, 0);
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        partners: mockPartners,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(mockOnSnapshot).toHaveBeenCalled();
-      });
+      expect(result.current.partners).toEqual(mockPartners);
     });
 
-    it('should only include active partners', async () => {
-      const mockPartners = [
-        { id: 'partner1', name: 'Active Partner', active: true },
-        { id: 'partner2', name: 'Inactive Partner', active: false },
+    it('should return allEntriesForStats for stats calculation', () => {
+      const mockStats = [
+        { id: 'entry1', amount: 1000 },
+        { id: 'entry2', amount: 2000 },
       ];
 
-      let callCount = 0;
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        callCount++;
-        setTimeout(() => {
-          if (callCount === 3) {
-            callback({
-              forEach: (cb: Function) => {
-                mockPartners.forEach((partner) =>
-                  cb({ id: partner.id, data: () => partner })
-                );
-              },
-            });
-          } else {
-            callback({
-              forEach: (cb: Function) => {},
-              docs: [],
-            });
-          }
-        }, 0);
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        allEntriesForStats: mockStats,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        // Partners should be filtered to only include active ones
-        expect(mockOnSnapshot).toHaveBeenCalled();
-      });
+      expect(result.current.allEntriesForStats).toEqual(mockStats);
     });
   });
 
@@ -226,180 +151,102 @@ describe('useLedgerData', () => {
     it('should use default page size of 50', () => {
       renderHook(() => useLedgerData());
 
-      expect(mockOnSnapshot).toHaveBeenCalled();
+      expect(mockUseLedgerPageData).toHaveBeenCalledWith({
+        pageSize: 50,
+        currentPage: 1,
+      });
     });
 
     it('should accept custom page size', () => {
       renderHook(() => useLedgerData({ pageSize: 25 }));
 
-      expect(mockOnSnapshot).toHaveBeenCalled();
+      expect(mockUseLedgerPageData).toHaveBeenCalledWith({
+        pageSize: 25,
+        currentPage: 1,
+      });
     });
 
     it('should accept current page', () => {
       renderHook(() => useLedgerData({ currentPage: 2 }));
 
-      expect(mockOnSnapshot).toHaveBeenCalled();
+      expect(mockUseLedgerPageData).toHaveBeenCalledWith({
+        pageSize: 50,
+        currentPage: 2,
+      });
     });
 
-    it('should calculate total pages correctly', async () => {
-      mockGetCountFromServer.mockResolvedValue({
-        data: () => ({ count: 125 }),
+    it('should return total pages from the hook', () => {
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        totalCount: 125,
+        totalPages: 3,
       });
 
       const { result } = renderHook(() => useLedgerData({ pageSize: 50 }));
 
-      await waitFor(() => {
-        // 125 / 50 = 2.5, ceil = 3 pages
-        expect(result.current.totalPages).toBe(3);
-      });
+      expect(result.current.totalPages).toBe(3);
     });
 
-    it('should track last document for pagination', async () => {
-      const mockDocs = [
-        { id: 'entry1', data: () => ({ amount: 100 }) },
-        { id: 'entry2', data: () => ({ amount: 200 }) },
-      ];
+    it('should return last document for pagination', () => {
+      const mockLastDoc = { id: 'last-doc' };
 
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        setTimeout(() => {
-          callback({
-            forEach: (cb: Function) => {
-              mockDocs.forEach((doc) => cb(doc));
-            },
-            docs: mockDocs,
-          });
-        }, 0);
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        lastDoc: mockLastDoc,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(result.current.lastDoc).toBeDefined();
-      });
+      expect(result.current.lastDoc).toBe(mockLastDoc);
     });
   });
 
-  describe('Date Conversion', () => {
-    it('should convert Firestore timestamps to Date objects', async () => {
-      const mockDate = new Date('2024-01-15');
-      const mockEntry = {
-        id: 'entry1',
-        data: () => ({
-          description: 'Test',
-          amount: 1000,
-          date: { toDate: () => mockDate },
-          createdAt: { toDate: () => new Date() },
-        }),
-      };
-
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        setTimeout(() => {
-          callback({
-            forEach: (cb: Function) => cb(mockEntry),
-            docs: [mockEntry],
-          });
-        }, 0);
+  describe('Loading States', () => {
+    it('should return loading state', () => {
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        loading: true,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(result.current.entries.length).toBeGreaterThanOrEqual(0);
-      });
+      expect(result.current.loading).toBe(true);
     });
 
-    it('should handle missing date field', async () => {
-      const mockEntry = {
-        id: 'entry1',
-        data: () => ({
-          description: 'Test',
-          amount: 1000,
-          // No date field
-        }),
-      };
-
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        setTimeout(() => {
-          callback({
-            forEach: (cb: Function) => cb(mockEntry),
-            docs: [mockEntry],
-          });
-        }, 0);
+    it('should return stats loading state', () => {
+      mockUseLedgerPageData.mockReturnValue({
+        ...defaultMockData,
+        statsLoading: true,
       });
 
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        // Should handle gracefully without throwing
-        expect(result.current.entries.length).toBeGreaterThanOrEqual(0);
+      expect(result.current.statsLoading).toBe(true);
+    });
+  });
+
+  describe('Hook Interface', () => {
+    it('should pass options to useLedgerPageData', () => {
+      renderHook(() => useLedgerData({ pageSize: 100, currentPage: 5 }));
+
+      expect(mockUseLedgerPageData).toHaveBeenCalledWith({
+        pageSize: 100,
+        currentPage: 5,
       });
     });
-  });
 
-  describe('User Context', () => {
-    it('should not fetch data when user is null', () => {
-      // Override the useUser mock for this test
-      jest.doMock('@/firebase/provider', () => ({
-        useUser: () => ({ user: null }),
-      }));
-
-      // The hook should handle null user gracefully
-      expect(mockOnSnapshot).toBeDefined();
-    });
-  });
-
-  describe('Cleanup', () => {
-    it('should unsubscribe on unmount', () => {
-      const { unmount } = renderHook(() => useLedgerData());
-
-      unmount();
-
-      expect(mockUnsubscribe).toHaveBeenCalled();
-    });
-  });
-
-  describe('Real-time Updates', () => {
-    it('should update entries when snapshot changes', async () => {
-      let snapshotCallback: Function;
-
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        snapshotCallback = callback;
-        // Initial empty data
-        setTimeout(() => {
-          callback({
-            forEach: (cb: Function) => {},
-            docs: [],
-          });
-        }, 0);
-        return mockUnsubscribe;
-      });
-
+    it('should return all required fields', () => {
       const { result } = renderHook(() => useLedgerData());
 
-      await waitFor(() => {
-        expect(result.current.entries.length).toBe(0);
-      });
-
-      // Simulate real-time update
-      act(() => {
-        snapshotCallback({
-          forEach: (cb: Function) => {
-            cb({
-              id: 'new-entry',
-              data: () => ({
-                description: 'New Entry',
-                amount: 500,
-                date: { toDate: () => new Date() },
-                createdAt: { toDate: () => new Date() },
-              }),
-            });
-          },
-          docs: [{ id: 'new-entry' }],
-        });
-      });
-
-      // Entries should be updated
-      expect(result.current.entries.length).toBeGreaterThanOrEqual(0);
+      expect(result.current).toHaveProperty('entries');
+      expect(result.current).toHaveProperty('allEntriesForStats');
+      expect(result.current).toHaveProperty('clients');
+      expect(result.current).toHaveProperty('partners');
+      expect(result.current).toHaveProperty('totalCount');
+      expect(result.current).toHaveProperty('lastDoc');
+      expect(result.current).toHaveProperty('totalPages');
+      expect(result.current).toHaveProperty('loading');
+      expect(result.current).toHaveProperty('statsLoading');
     });
   });
 });

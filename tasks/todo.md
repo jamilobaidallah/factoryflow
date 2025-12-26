@@ -333,3 +333,361 @@ if (remainingBalance <= 0) {
 
 ### Notes:
 - TBD
+
+---
+
+# Phase 2: React Query Migration
+
+## Executive Summary
+
+**Goal:** Migrate FactoryFlow from raw `onSnapshot` listeners to TanStack Query (React Query) for better caching, deduplication, and data management.
+
+**Current State:**
+- 4+ onSnapshot listeners on some pages (performance debt)
+- Manual 5-minute cache in `useAllClients`
+- No request deduplication
+- No centralized loading/error states
+
+**Target State:**
+- Centralized query management with React Query
+- Automatic caching and background refetching
+- Request deduplication
+- Consistent loading/error patterns
+- Real-time updates via `onSnapshot` integrated with React Query
+
+---
+
+## Branch: `feature/react-query-migration`
+
+---
+
+## Task 2.1: Add React Query Foundation
+
+### 2.1.1 Install Dependencies
+- [ ] Run `npm install @tanstack/react-query @tanstack/react-query-devtools`
+
+### 2.1.2 Create QueryClientProvider Wrapper
+- [ ] Create `src/lib/query-client.ts` - Configure QueryClient with defaults:
+  ```typescript
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5 * 60 * 1000,        // 5 minutes (match existing cache)
+        gcTime: 30 * 60 * 1000,          // 30 minutes garbage collection
+        retry: 1,                         // Single retry on failure
+        refetchOnWindowFocus: false,      // Prevent aggressive refetching
+      },
+    },
+  });
+  ```
+
+### 2.1.3 Create Provider Component
+- [ ] Create `src/components/providers/QueryProvider.tsx`:
+  - Wrap with `QueryClientProvider`
+  - Add `ReactQueryDevtools` in development only
+  - Export as client component
+
+### 2.1.4 Update App Layout
+- [ ] Update `src/app/layout.tsx`:
+  - Import and wrap with `QueryProvider`
+  - Place inside `FirebaseClientProvider` (needs auth context)
+
+### 2.1.5 Create Base Query Hooks Pattern
+- [ ] Create `src/hooks/firebase-query/useFirestoreQuery.ts`:
+  - Generic hook for one-time Firestore queries
+  - Accepts query constraints
+  - Returns React Query result object
+
+- [ ] Create `src/hooks/firebase-query/useFirestoreSubscription.ts`:
+  - Hook for real-time subscriptions with React Query
+  - Uses `onSnapshot` but integrates with queryClient cache
+  - Handles cleanup on unmount
+
+- [ ] Create `src/hooks/firebase-query/keys.ts`:
+  - Query key factory for consistent key management:
+    ```typescript
+    export const queryKeys = {
+      clients: (ownerId: string) => ['clients', ownerId] as const,
+      ledger: (ownerId: string, filters?: object) => ['ledger', ownerId, filters] as const,
+      dashboard: (ownerId: string) => ['dashboard', ownerId] as const,
+      // etc.
+    };
+    ```
+
+- [ ] Create `src/hooks/firebase-query/index.ts` - Export all hooks
+
+---
+
+## Task 2.2: Migrate Critical Pages to React Query
+
+### 2.2.1 Dashboard Data Fetching
+**File:** `src/components/dashboard/hooks/useDashboardData.ts`
+
+Current issues:
+- Two separate `onSnapshot` listeners (ledger + payments)
+- limit(5000) hardcoded
+- Manual aggregation on every snapshot
+
+Migration plan:
+- [ ] Create `src/hooks/firebase-query/useDashboardQueries.ts`:
+  - `useLedgerStats()` - Aggregated stats with subscription
+  - `usePaymentStats()` - Payment aggregations
+  - Combine with `useQueries` for parallel fetching
+- [ ] Update `useDashboardData.ts` to use new hooks
+- [ ] Verify loading/error states work correctly
+- [ ] Test that real-time updates still function
+
+### 2.2.2 Clients List Fetching
+**File:** `src/components/clients/clients-page.tsx`
+
+Current issues:
+- 4 separate `onSnapshot` listeners (clients, ledger, cheques, payments, partners)
+- O(n²) balance calculation per client
+- Duplicated data loading logic
+
+Migration plan:
+- [ ] Create `src/hooks/firebase-query/useClientsQueries.ts`:
+  - `useClients()` - Client list with subscription
+  - `useClientBalances()` - Pre-calculated balances (optional optimization)
+- [ ] Create `src/hooks/firebase-query/useChequesQuery.ts`:
+  - `usePendingCheques()` - For balance calculations
+- [ ] Refactor `clients-page.tsx`:
+  - Replace inline `onSnapshot` calls with hooks
+  - Use `useQueries` for parallel data needs
+- [ ] Verify balance calculations still work
+- [ ] Test pagination if implemented
+
+### 2.2.3 Ledger Entries Fetching
+**Files:**
+- `src/components/ledger/hooks/useLedgerData.ts`
+- `src/services/ledger/LedgerService.ts`
+
+Current issues:
+- Complex cursor-based pagination
+- Service-based subscription pattern
+- 3 separate subscriptions (entries, clients, partners)
+
+Migration plan:
+- [ ] Create `src/hooks/firebase-query/useLedgerQueries.ts`:
+  - `useLedgerEntries()` - Paginated with cursor support
+  - `useLedgerClients()` - Client dropdown data
+  - `useLedgerPartners()` - Partner dropdown data
+- [ ] Support infinite query pattern for pagination:
+  ```typescript
+  useInfiniteQuery({
+    queryKey: queryKeys.ledger(ownerId, filters),
+    queryFn: ({ pageParam }) => fetchLedgerPage(pageParam),
+    getNextPageParam: (lastPage) => lastPage.lastDoc,
+  });
+  ```
+- [ ] Update `useLedgerData.ts` to use new hooks
+- [ ] Verify filtering works with query keys
+- [ ] Test cursor pagination
+
+---
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/lib/query-client.ts` | QueryClient configuration |
+| `src/components/providers/QueryProvider.tsx` | Provider component |
+| `src/hooks/firebase-query/keys.ts` | Query key factory |
+| `src/hooks/firebase-query/useFirestoreQuery.ts` | Base one-time query hook |
+| `src/hooks/firebase-query/useFirestoreSubscription.ts` | Base subscription hook |
+| `src/hooks/firebase-query/useDashboardQueries.ts` | Dashboard-specific hooks |
+| `src/hooks/firebase-query/useClientsQueries.ts` | Clients-specific hooks |
+| `src/hooks/firebase-query/useLedgerQueries.ts` | Ledger-specific hooks |
+| `src/hooks/firebase-query/useChequesQuery.ts` | Cheques-specific hooks |
+| `src/hooks/firebase-query/index.ts` | Barrel export |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/app/layout.tsx` | Add QueryProvider wrapper |
+| `src/components/dashboard/hooks/useDashboardData.ts` | Use React Query hooks |
+| `src/components/clients/clients-page.tsx` | Replace onSnapshot with hooks |
+| `src/components/ledger/hooks/useLedgerData.ts` | Use React Query hooks |
+
+---
+
+## Key Design Decisions
+
+### 1. Real-time Updates Strategy
+Use `onSnapshot` inside React Query's `queryFn` with manual cache updates:
+```typescript
+useEffect(() => {
+  const unsubscribe = onSnapshot(ref, (snapshot) => {
+    queryClient.setQueryData(queryKey, transformData(snapshot));
+  });
+  return () => unsubscribe();
+}, [queryKey]);
+```
+
+### 2. Query Key Structure
+Hierarchical keys for proper invalidation:
+- `['clients', ownerId]` - All clients
+- `['clients', ownerId, clientId]` - Single client
+- `['ledger', ownerId, { filters }]` - Filtered ledger
+
+### 3. Stale Time
+Match existing 5-minute cache in `useAllClients`:
+- `staleTime: 5 * 60 * 1000`
+
+### 4. Error Handling
+Use React Query's built-in error states + existing toast pattern.
+
+---
+
+## Testing Checklist
+
+- [ ] Dashboard loads with correct stats
+- [ ] Dashboard updates in real-time
+- [ ] Clients list loads correctly
+- [ ] Client balances calculate correctly
+- [ ] Ledger entries paginate correctly
+- [ ] Filters work on ledger page
+- [ ] No memory leaks (check cleanup)
+- [ ] DevTools show correct cache state
+- [ ] Multiple tabs don't cause duplicate requests
+
+---
+
+## Self-Review Checklist
+
+- [ ] No `console.log` in production code
+- [ ] All listeners have cleanup functions
+- [ ] Uses `user.dataOwnerId`, not `user.uid`
+- [ ] Error messages in Arabic
+- [ ] Loading states handled
+- [ ] TypeScript types are correct (no `any`)
+
+---
+
+## Notes
+- Keep existing hooks working during migration (don't break anything)
+- Add React Query DevTools for debugging
+- Consider incremental rollout: migrate one page at a time
+
+---
+
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] Checked for user.uid vs dataOwnerId — PASS (all hooks use `user?.dataOwnerId`)
+- [x] Checked money calculations use Decimal.js — N/A (no money math in new code)
+- [x] Checked listener cleanup — PASS (all 11 onSnapshot calls have cleanup returns)
+- [x] Verified RTL spacing — N/A (no UI changes in hooks)
+- [x] Checked all queries have limits — PASS (all queries use limit())
+- [x] No `any` types — PASS (all types are properly defined)
+- [x] No console.log in production — PASS (only console.error for actual errors)
+- [x] Ran npm test — PASS (1154 passed, 3 skipped pre-existing)
+- [x] Ran npm run lint — PASS (only pre-existing warnings)
+
+### Edge Cases Verified:
+- [x] Empty client list shows empty state (test added and passing)
+- [x] Empty entries return empty arrays, not undefined
+- [x] Null user.dataOwnerId prevents subscription (early return in all hooks)
+- [x] Loading states correctly track data availability
+
+### Files Created:
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/lib/query-client.ts` | 25 | QueryClient configuration |
+| `src/components/providers/QueryProvider.tsx` | 25 | Provider with DevTools |
+| `src/hooks/firebase-query/keys.ts` | 50 | Query key factory |
+| `src/hooks/firebase-query/useFirestoreSubscription.ts` | 130 | Base subscription hook |
+| `src/hooks/firebase-query/useDashboardQueries.ts` | 336 | Dashboard hooks |
+| `src/hooks/firebase-query/useClientsQueries.ts` | 422 | Clients hooks with balance calc |
+| `src/hooks/firebase-query/useLedgerQueries.ts` | 403 | Ledger hooks with pagination |
+| `src/hooks/firebase-query/index.ts` | 49 | Barrel export |
+
+### Files Modified:
+| File | Before | After | Change |
+|------|--------|-------|--------|
+| `src/app/layout.tsx` | 50 lines | 52 lines | Added QueryProvider |
+| `src/components/dashboard/hooks/useDashboardData.ts` | 305 lines | 62 lines | -79% |
+| `src/components/clients/clients-page.tsx` | 803 lines | 567 lines | -29% |
+| `src/components/ledger/hooks/useLedgerData.ts` | 148 lines | 41 lines | -72% |
+
+### Potential Issues Found:
+- None. All hooks follow established patterns.
+
+---
+
+## 📋 Human Testing Plan
+
+### Feature: React Query Migration (Phase 2)
+### Test URL: [Vercel preview URL after PR]
+### Time Estimate: 15 minutes
+
+---
+
+### 🟢 Happy Path Tests (Normal Usage)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 1 | Dashboard loads | 1. Log in<br>2. Go to dashboard | Stats cards show correct totals, charts render | |
+| 2 | Dashboard real-time | 1. Open dashboard<br>2. In another tab, add a ledger entry | Dashboard updates automatically without refresh | |
+| 3 | Clients page loads | 1. Go to /clients | Client list displays with correct balances | |
+| 4 | Client balances | 1. Check a client with pending cheques | Shows الرصيد المتوقع بعد صرف الشيكات | |
+| 5 | Ledger page loads | 1. Go to /ledger | Entries display with pagination | |
+| 6 | Ledger pagination | 1. Click next page arrow | Next 50 entries load correctly | |
+
+---
+
+### 🟡 Edge Case Tests (Unusual but Valid)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 7 | Empty clients | 1. New account with no clients | Shows "لا يوجد عملاء حالياً" | |
+| 8 | Empty ledger | 1. New account with no entries | Shows empty state message | |
+| 9 | Many entries | 1. Account with 100+ ledger entries | Pagination works, no performance issues | |
+
+---
+
+### 🔴 Error Handling Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 10 | Network offline | 1. Disable network<br>2. Refresh page | Shows loading then cached data (if any) | |
+| 11 | Quick navigation | 1. Rapidly switch between pages | No console errors, no duplicate subscriptions | |
+
+---
+
+### 📱 Mobile Tests (Resize browser to 375px)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 12 | Dashboard mobile | View dashboard on mobile | Cards stack, no horizontal scroll | |
+| 13 | Clients mobile | View clients on mobile | Table scrolls horizontally if needed | |
+
+---
+
+### 🔐 Permission Tests
+
+| # | Role | Test | Expected Result | ✅/❌ |
+|---|------|------|-----------------|-------|
+| 14 | Owner | Access all pages | Full access, data loads correctly | |
+| 15 | Accountant | Access dashboard/ledger | Sees owner's data via dataOwnerId | |
+
+---
+
+### 🛠️ DevTools Verification (Development only)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 16 | Query cache | 1. Open React Query DevTools (bottom-left flower icon)<br>2. Navigate pages | See queries being cached/reused | |
+| 17 | No duplicates | 1. Check DevTools query list | No duplicate keys for same data | |
+
+---
+
+### ✍️ Test Results Summary
+
+| Total | Passed | Failed |
+|-------|--------|--------|
+| 17 | | |
+
+### Issues Found:
+- [ ] (To be filled during testing)

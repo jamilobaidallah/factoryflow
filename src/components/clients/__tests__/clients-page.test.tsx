@@ -59,7 +59,28 @@ jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-// Sample client data
+// Configurable mock state for useClientsPageData
+// This allows tests to change the mock return value per test
+const mockClientsPageDataState = {
+  clients: [] as Array<{
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+    address: string;
+    balance: number;
+    createdAt: Date;
+  }>,
+  clientBalances: new Map<string, { currentBalance: number; expectedBalance: number | null }>(),
+  isLoading: false,
+};
+
+// Mock useClientsPageData hook with configurable state
+jest.mock('@/hooks/firebase-query/useClientsQueries', () => ({
+  useClientsPageData: () => mockClientsPageDataState,
+}));
+
+// Sample client data (for tests that reference it)
 const mockClients = [
   {
     id: 'client-1',
@@ -68,7 +89,7 @@ const mockClients = [
     email: 'ahmed@example.com',
     address: 'عمان - الأردن',
     balance: 1000,
-    createdAt: { toDate: () => new Date('2024-01-15') },
+    createdAt: new Date('2024-01-15'),
   },
   {
     id: 'client-2',
@@ -77,9 +98,28 @@ const mockClients = [
     email: 'sara@example.com',
     address: 'إربد - الأردن',
     balance: 2500,
-    createdAt: { toDate: () => new Date('2024-01-10') },
+    createdAt: new Date('2024-01-10'),
   },
 ];
+
+// Mock client balances
+const mockClientBalances = new Map([
+  ['client-1', { currentBalance: 1000, expectedBalance: null }],
+  ['client-2', { currentBalance: 2500, expectedBalance: null }],
+]);
+
+// Mock React Query
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    setQueryData: jest.fn(),
+    getQueryData: jest.fn().mockReturnValue([]),
+  }),
+  useQuery: () => ({ data: [], isLoading: false }),
+  useMutation: () => ({ mutate: jest.fn(), isLoading: false }),
+  useInfiniteQuery: () => ({ data: undefined, isLoading: false }),
+  QueryClient: jest.fn(),
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 describe('ClientsPage', () => {
   let unsubscribeMock: jest.Mock;
@@ -88,7 +128,15 @@ describe('ClientsPage', () => {
     jest.clearAllMocks();
     unsubscribeMock = jest.fn();
 
-    // Setup onSnapshot to return mock data
+    // Reset mock state to default (2 clients) before each test
+    mockClientsPageDataState.clients = [...mockClients];
+    mockClientsPageDataState.clientBalances = new Map([
+      ['client-1', { currentBalance: 1000, expectedBalance: null }],
+      ['client-2', { currentBalance: 2500, expectedBalance: null }],
+    ]);
+    mockClientsPageDataState.isLoading = false;
+
+    // Setup onSnapshot for any remaining direct Firestore calls (e.g., for CRUD operations)
     mockOnSnapshot.mockImplementation((query, callback) => {
       callback({
         forEach: (fn: (doc: { id: string; data: () => typeof mockClients[0] }) => void) => {
@@ -338,30 +386,17 @@ describe('ClientsPage', () => {
     });
   });
 
-  describe('Real-time Updates', () => {
-    it('subscribes to Firestore on mount', () => {
-      render(<ClientsPage />);
-
-      expect(mockOnSnapshot).toHaveBeenCalled();
-    });
-
-    it('unsubscribes from Firestore on unmount', () => {
-      const { unmount } = render(<ClientsPage />);
-
-      unmount();
-
-      expect(unsubscribeMock).toHaveBeenCalled();
-    });
-  });
+  // Real-time Updates tests removed:
+  // The tests "subscribes to Firestore on mount" and "unsubscribes from Firestore on unmount"
+  // were testing internal implementation details (onSnapshot calls). With React Query,
+  // subscriptions are now encapsulated in the useClientsPageData hook. These implementation
+  // details are tested at the hook level, not the component level.
 
   describe('Empty State', () => {
     it('shows message when no clients', async () => {
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        callback({
-          forEach: () => {},
-        });
-        return unsubscribeMock;
-      });
+      // Set mock state to empty
+      mockClientsPageDataState.clients = [];
+      mockClientsPageDataState.clientBalances = new Map();
 
       render(<ClientsPage />);
 
@@ -371,12 +406,9 @@ describe('ClientsPage', () => {
     });
 
     it('shows client count as 0 when no clients', async () => {
-      mockOnSnapshot.mockImplementation((query, callback) => {
-        callback({
-          forEach: () => {},
-        });
-        return unsubscribeMock;
-      });
+      // Set mock state to empty
+      mockClientsPageDataState.clients = [];
+      mockClientsPageDataState.clientBalances = new Map();
 
       render(<ClientsPage />);
 

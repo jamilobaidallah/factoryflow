@@ -1,8 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { useUser } from "@/firebase/provider";
-import { LedgerEntry } from "../utils/ledger-constants";
-import { createLedgerService } from "@/services/ledgerService";
-import { DocumentSnapshot } from "firebase/firestore";
+import { useLedgerPageData } from "@/hooks/firebase-query";
 
 interface UseLedgerDataOptions {
     pageSize?: number;
@@ -11,137 +7,34 @@ interface UseLedgerDataOptions {
 
 /**
  * Custom hook to fetch and manage ledger data with cursor-based pagination
- * Uses LedgerService for all Firestore operations
+ * Uses React Query with Firestore subscriptions for real-time updates
  *
  * Returns both paginated entries (for table display) and all entries (for stats calculation)
  */
 export function useLedgerData(options: UseLedgerDataOptions = {}) {
     const { pageSize = 50, currentPage = 1 } = options;
-    const { user } = useUser();
-    const [entries, setEntries] = useState<LedgerEntry[]>([]);
-    const [allEntriesForStats, setAllEntriesForStats] = useState<LedgerEntry[]>([]);
-    const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-    const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
-    const [totalCount, setTotalCount] = useState(0);
-    const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [statsLoading, setStatsLoading] = useState(true);
-    // Store page cursors for cursor-based pagination (using ref to avoid re-renders)
-    const pageCursorsRef = useRef<Map<number, DocumentSnapshot>>(new Map());
 
-    // Load total count of entries
-    useEffect(() => {
-        if (!user) { return; }
-
-        const service = createLedgerService(user.dataOwnerId);
-        service.getTotalCount().then((count) => {
-            setTotalCount(count);
-        });
-    }, [user]);
-
-    // Subscribe to ALL entries for stats calculation (not paginated)
-    // This ensures LedgerStats shows accurate totals across all entries
-    useEffect(() => {
-        if (!user) { return; }
-
-        const service = createLedgerService(user.dataOwnerId);
-        setStatsLoading(true);
-
-        // Subscribe to all entries without pagination limit
-        const unsubscribe = service.subscribeLedgerEntries(
-            10000, // Large limit to get all entries
-            (entriesData) => {
-                setAllEntriesForStats(entriesData);
-                setStatsLoading(false);
-            },
-            (error) => {
-                console.error("Error fetching all entries for stats:", error);
-                setStatsLoading(false);
-            },
-            null // No cursor - start from beginning
-        );
-
-        return () => unsubscribe();
-    }, [user]);
-
-    // Load ledger entries with cursor-based pagination
-    useEffect(() => {
-        if (!user) { return; }
-
-        const service = createLedgerService(user.dataOwnerId);
-
-        // Get cursor for current page (from previous page)
-        const startAfterDoc = currentPage > 1
-            ? pageCursorsRef.current.get(currentPage - 1) || null
-            : null;
-
-        const unsubscribe = service.subscribeLedgerEntries(
-            pageSize,
-            (entriesData, lastVisible) => {
-                setEntries(entriesData);
-                setLastDoc(lastVisible);
-
-                // Store cursor for this page (to enable navigating to next page)
-                if (lastVisible) {
-                    pageCursorsRef.current.set(currentPage, lastVisible);
-                }
-
-                setLoading(false);
-            },
-            (error) => {
-                console.error("Error fetching ledger entries:", error);
-                setLoading(false);
-            },
-            startAfterDoc
-        );
-
-        return () => unsubscribe();
-    }, [user, pageSize, currentPage]);
-
-    // Load clients list for dropdown
-    useEffect(() => {
-        if (!user) { return; }
-
-        const service = createLedgerService(user.dataOwnerId);
-
-        const unsubscribe = service.subscribeClients(
-            (clientsData) => {
-                setClients(clientsData);
-            },
-            (error) => {
-                console.error("Error fetching clients:", error);
-            }
-        );
-
-        return () => unsubscribe();
-    }, [user]);
-
-    // Load partners list for dropdown
-    useEffect(() => {
-        if (!user) { return; }
-
-        const service = createLedgerService(user.dataOwnerId);
-
-        const unsubscribe = service.subscribePartners(
-            (partnersData) => {
-                setPartners(partnersData);
-            },
-            (error) => {
-                console.error("Error fetching partners:", error);
-            }
-        );
-
-        return () => unsubscribe();
-    }, [user]);
+    // Use the combined React Query hook for all ledger page data
+    const {
+        entries,
+        allEntriesForStats,
+        clients,
+        partners,
+        totalCount,
+        totalPages,
+        lastDoc,
+        loading,
+        statsLoading,
+    } = useLedgerPageData({ pageSize, currentPage });
 
     return {
         entries,
-        allEntriesForStats, // All entries for stats calculation (not paginated)
+        allEntriesForStats,
         clients,
         partners,
         totalCount,
         lastDoc,
-        totalPages: Math.ceil(totalCount / pageSize),
+        totalPages,
         loading,
         statsLoading,
     };
