@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { Firestore, doc, getDoc, setDoc, collection, getDocs, limit, query } from 'firebase/firestore';
+import * as Sentry from '@sentry/nextjs';
 import { auth, firestore, storage } from './config';
 import { User } from '@/lib/definitions';
 import { FirebaseStorage } from 'firebase/storage';
@@ -152,6 +153,12 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
 
           setUser(user);
           setRole(userRole);
+
+          // Set Sentry user context for error tracking
+          Sentry.setUser({
+            id: user.uid,
+            email: user.email || undefined,
+          });
         } catch (error) {
           console.error('Error fetching user role:', error);
           // On error, set null to prevent unauthorized access
@@ -169,6 +176,8 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
       } else {
         setUser(null);
         setRole(null);
+        // Clear Sentry user context on logout
+        Sentry.setUser(null);
       }
       setLoading(false);
     });
@@ -181,6 +190,8 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
       await firebaseSignOut(auth);
       setUser(null);
       setRole(null);
+      // Clear Sentry user context on sign out
+      Sentry.setUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
