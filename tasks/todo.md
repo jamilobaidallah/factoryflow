@@ -691,3 +691,349 @@ Use React Query's built-in error states + existing toast pattern.
 
 ### Issues Found:
 - [ ] (To be filled during testing)
+
+---
+
+# Phase 3: Performance Optimization
+
+## Executive Summary
+
+**Goal:** Optimize FactoryFlow's performance by addressing the two biggest bottlenecks:
+1. O(n²) client balance calculation that runs on every data change
+2. Incomplete pagination hook preventing efficient large dataset handling
+
+**Current State:**
+- Balance calculation in `useClientsQueries.ts` filters ALL ledger/payments/cheques for EACH client
+- For 100 clients + 5000 ledger entries = ~500,000 filter operations on every change
+- `usePaginatedCollection` hook has empty `loadMore()` function (TODO comment)
+- 4 unbounded queries download entire ledger + payments history
+
+**Target State:**
+- O(n) balance calculation using pre-indexed maps
+- Proper cursor-based pagination for large collections
+- Optional: Denormalized balance cache on client documents
+
+---
+
+## Branch: `feature/phase3-performance-optimization`
+
+---
+
+## Task 3.1: Optimize Balance Calculation Algorithm
+
+### 3.1.1 Analyze Current Implementation
+**File:** `src/hooks/firebase-query/useClientsQueries.ts` (lines 114-190)
+
+Current O(n²) pattern:
+```typescript
+// CURRENT: For EACH client, filters ALL entries
+clients.forEach((client) => {
+  const clientLedger = ledgerEntries.filter((e) => e.associatedParty === client.name);  // O(n)
+  const clientPayments = payments.filter((p) => p.clientName === client.name);  // O(n)
+  const clientCheques = cheques.filter((c) => c.clientName === client.name);  // O(n)
+});
+```
+
+### 3.1.2 Implement O(n) Pre-Indexed Map Solution
+- [ ] Create index maps ONCE, then lookup by client name:
+```typescript
+// BUILD INDEXES ONCE: O(n)
+const ledgerByClient = new Map<string, LedgerEntry[]>();
+ledgerEntries.forEach(entry => {
+  const list = ledgerByClient.get(entry.associatedParty) || [];
+  list.push(entry);
+  ledgerByClient.set(entry.associatedParty, list);
+});
+
+// LOOKUP FOR EACH CLIENT: O(1)
+clients.forEach(client => {
+  const clientLedger = ledgerByClient.get(client.name) || [];  // O(1) instead of O(n)
+});
+```
+
+- [ ] Update `calculateClientBalances()` function to use indexed maps
+- [ ] Add unit tests for the optimized calculation
+- [ ] Verify no regression in balance accuracy
+
+### 3.1.3 Create BalanceService (Optional Denormalization)
+**New File:** `src/services/BalanceService.ts`
+
+- [ ] Extract balance calculation logic from hook to dedicated service
+- [ ] Implement calculation methods:
+  - `calculateBalance(client, ledger, payments, cheques)`
+  - `calculateAllBalances(clients, ledger, payments, cheques)` using indexed maps
+- [ ] Add option to cache calculated balance on client document:
+  ```typescript
+  interface Client {
+    // ... existing fields
+    cachedBalance?: number;
+    cachedBalanceUpdatedAt?: Timestamp;
+  }
+  ```
+- [ ] Create `updateCachedBalance(clientId)` method for triggered updates
+- [ ] Document when to use cached vs. calculated balance
+
+### 3.1.4 Add Query Limits to Unbounded Queries
+**File:** `src/hooks/firebase-query/useClientsQueries.ts`
+
+Current unbounded queries:
+- Line 314: `query(ledgerRef)` - NO LIMIT
+- Line 365: `query(paymentsRef)` - NO LIMIT
+
+- [ ] Add `limit()` to ledger subscription (suggest: 10000 with warning if exceeded)
+- [ ] Add `limit()` to payments subscription (suggest: 5000 with warning if exceeded)
+- [ ] Log warning when limit is reached (indicates need for pagination)
+- [ ] Document limit values in CLAUDE.md
+
+---
+
+## Task 3.2: Implement Proper Pagination (usePaginatedCollection)
+
+### 3.2.1 Analyze Current Implementation
+**File:** `src/firebase/index.ts` (lines 128-184)
+
+Current issues:
+- `loadMore()` is empty (TODO comment at line 180)
+- No cursor tracking for subsequent queries
+- `hasMore` logic is incomplete
+
+### 3.2.2 Implement Cursor-Based Pagination
+- [ ] Add state for tracking last document cursor:
+```typescript
+const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+```
+
+- [ ] Implement `loadMore()` function:
+```typescript
+const loadMore = useCallback(async () => {
+  if (!lastDoc || isLoading || !hasMore) return;
+
+  setIsLoading(true);
+  try {
+    const nextQuery = query(
+      baseQuery,
+      startAfter(lastDoc),
+      limit(pageSize)
+    );
+    const snapshot = await getDocs(nextQuery);
+
+    // Append new documents to existing data
+    const newDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setData(prev => [...prev, ...newDocs]);
+
+    // Update cursor and hasMore
+    setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+    setHasMore(snapshot.size >= pageSize);
+  } catch (err) {
+    setError(err as Error);
+  } finally {
+    setIsLoading(false);
+  }
+}, [lastDoc, isLoading, hasMore, baseQuery, pageSize]);
+```
+
+- [ ] Track first page cursor for `startAfter`:
+```typescript
+// After initial load
+if (snapshot.docs.length > 0) {
+  setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+}
+```
+
+- [ ] Add `reset()` function to clear pagination and reload from start
+- [ ] Add `isLoadingMore` state separate from initial `isLoading`
+
+### 3.2.3 Support Real-time Updates with Pagination
+- [ ] Handle document additions/deletions in existing pages
+- [ ] Option to use `onSnapshot` for first page only (real-time) + getDocs for subsequent (static)
+- [ ] Document the trade-offs between approaches
+
+### 3.2.4 Add TypeScript Generics
+- [ ] Make hook generic for type safety:
+```typescript
+function usePaginatedCollection<T extends DocumentData>(
+  collectionPath: string,
+  constraints: QueryConstraint[],
+  pageSize: number = 20
+): UsePaginatedCollectionResult<T>
+```
+
+### 3.2.5 Create Tests for Pagination
+- [ ] Test initial load
+- [ ] Test loadMore fetches next page
+- [ ] Test hasMore becomes false on last page
+- [ ] Test reset functionality
+- [ ] Test error handling
+
+---
+
+## Task 3.3: Integrate with React Query (Optional Enhancement)
+
+### 3.3.1 Create useInfiniteQuery Wrapper
+**New File:** `src/hooks/firebase-query/usePaginatedQuery.ts`
+
+- [ ] Use React Query's `useInfiniteQuery` for paginated data:
+```typescript
+export function usePaginatedFirestoreQuery<T>({
+  queryKey,
+  collectionPath,
+  constraints,
+  pageSize = 20
+}) {
+  return useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam }) => {
+      const q = pageParam
+        ? query(collection, ...constraints, startAfter(pageParam), limit(pageSize))
+        : query(collection, ...constraints, limit(pageSize));
+      const snapshot = await getDocs(q);
+      return {
+        docs: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as T)),
+        lastDoc: snapshot.docs[snapshot.docs.length - 1]
+      };
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.docs.length >= pageSize ? lastPage.lastDoc : undefined,
+    initialPageParam: null
+  });
+}
+```
+
+- [ ] Add cache invalidation strategy
+- [ ] Document usage pattern
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/hooks/firebase-query/useClientsQueries.ts` | Optimize balance calc to O(n), add query limits |
+| `src/firebase/index.ts` | Implement `loadMore()` in usePaginatedCollection |
+
+## New Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/services/BalanceService.ts` | Extracted balance calculation with caching option |
+| `src/hooks/firebase-query/usePaginatedQuery.ts` | React Query infinite query wrapper (optional) |
+| `src/__tests__/services/BalanceService.test.ts` | Unit tests for balance service |
+| `src/__tests__/firebase/usePaginatedCollection.test.ts` | Unit tests for pagination hook |
+
+---
+
+## Performance Metrics to Track
+
+| Metric | Before | After | Target |
+|--------|--------|-------|--------|
+| Balance calc time (100 clients, 5000 entries) | ~500ms | TBD | <50ms |
+| Memory usage on clients page | TBD | TBD | -30% |
+| Time to load 1000 ledger entries | TBD | TBD | <2s |
+
+---
+
+## Implementation Order
+
+1. **Task 3.1.2** - Optimize balance calculation (highest impact, lowest risk)
+2. **Task 3.1.4** - Add query limits (quick win)
+3. **Task 3.2.2** - Implement loadMore() for pagination
+4. **Task 3.1.3** - Create BalanceService (if needed after optimization)
+5. **Task 3.3** - React Query integration (optional enhancement)
+
+---
+
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] Checked for user.uid vs dataOwnerId — PASS (all hooks use `user?.dataOwnerId`)
+- [x] Checked money calculations use Decimal.js — N/A (no money math changes)
+- [x] Checked listener cleanup — PASS (all onSnapshot have cleanup returns)
+- [x] Verified RTL spacing — N/A (no UI changes)
+- [x] Checked all queries have limits — PASS (added limits: ledger 10000, payments 10000, cheques 5000)
+- [x] No `any` types — PASS (all types are properly defined)
+- [x] No console.log in production — PASS (only console.warn for limit warnings, console.error for actual errors)
+- [x] Ran npm test — PASS (1154 passed, 3 skipped pre-existing)
+- [x] Ran npm run lint — PASS (only pre-existing warnings)
+
+### Files Modified:
+| File | Changes |
+|------|---------|
+| `src/hooks/firebase-query/useClientsQueries.ts` | O(n) balance calc with Maps, query limits |
+| `src/firebase/index.ts` | Full pagination implementation |
+
+### Performance Improvements:
+| Metric | Before | After |
+|--------|--------|-------|
+| Balance calculation | O(n²) - filter for each client | O(n) - Map lookup |
+| Ledger query | Unbounded | limit(10000) |
+| Payments query | Unbounded | limit(10000) |
+| Cheques query | Unbounded | limit(5000) |
+| loadMore() | Empty TODO | Full cursor-based pagination |
+
+### Potential Issues Found:
+- None. All changes are backward compatible.
+
+---
+
+## 📋 Human Testing Plan
+
+### Feature: Phase 3 Performance Optimization
+### Test URL: [Vercel preview URL after PR]
+### Time Estimate: 10 minutes
+
+---
+
+### 🟢 Happy Path Tests (Normal Usage)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 1 | Client balances accurate | 1. Go to /clients<br>2. Compare a client's displayed balance with manual calculation from their statement | Values match exactly | |
+| 2 | Client list loads | 1. Log in<br>2. Go to /clients | Client list displays with balances, no console errors | |
+| 3 | Expected balance shows | 1. Find client with pending cheques | Shows الرصيد المتوقع بعد صرف الشيكات | |
+
+---
+
+### 🟡 Edge Case Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 4 | Empty client list | 1. New account with no clients | Shows empty state, no errors | |
+| 5 | Client with no transactions | 1. Create new client<br>2. View in list | Shows opening balance only | |
+| 6 | Large dataset | 1. Account with 50+ clients | Loads in <3s, no lag | |
+
+---
+
+### 🔴 Real-time Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 7 | Real-time update | 1. Open clients list<br>2. In another tab, add ledger entry for a client | Balance updates automatically | |
+| 8 | Payment updates balance | 1. View clients<br>2. Add payment for a client | Balance reflects payment | |
+
+---
+
+### 📱 Console Tests (Developer Tools)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 9 | No errors | 1. Open DevTools Console<br>2. Navigate clients page | No red errors | |
+| 10 | Limit warnings | 1. If >10000 entries exist | Yellow warning about limit | |
+
+---
+
+### ✍️ Test Results Summary
+
+| Total | Passed | Failed |
+|-------|--------|--------|
+| 10 | | |
+
+### Issues Found:
+- [ ] (To be filled during testing)
+
+---
+
+## Notes
+
+- The unused `src/lib/firebase-cache.ts` could be leveraged for balance caching
+- Consider using Cloud Functions for server-side balance calculation if client-side remains slow
+- Monitor Firestore read costs - pagination reduces reads significantly

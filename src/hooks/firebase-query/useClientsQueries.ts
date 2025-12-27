@@ -105,11 +105,65 @@ function transformPayments(docs: DocumentData[]): Payment[] {
 }
 
 /**
+ * Build index maps for O(1) lookups by client name
+ * This transforms O(n²) filtering into O(n) indexing + O(1) lookups
+ */
+function buildClientIndexes(
+  ledgerEntries: LedgerEntry[],
+  payments: Payment[],
+  cheques: Cheque[]
+) {
+  // Index ledger entries by associatedParty (client name)
+  const ledgerByClient = new Map<string, LedgerEntry[]>();
+  for (const entry of ledgerEntries) {
+    if (entry.associatedParty) {
+      const list = ledgerByClient.get(entry.associatedParty);
+      if (list) {
+        list.push(entry);
+      } else {
+        ledgerByClient.set(entry.associatedParty, [entry]);
+      }
+    }
+  }
+
+  // Index payments by clientName
+  const paymentsByClient = new Map<string, Payment[]>();
+  for (const payment of payments) {
+    if (payment.clientName) {
+      const list = paymentsByClient.get(payment.clientName);
+      if (list) {
+        list.push(payment);
+      } else {
+        paymentsByClient.set(payment.clientName, [payment]);
+      }
+    }
+  }
+
+  // Index cheques by clientName
+  const chequesByClient = new Map<string, Cheque[]>();
+  for (const cheque of cheques) {
+    if (cheque.clientName) {
+      const list = chequesByClient.get(cheque.clientName);
+      if (list) {
+        list.push(cheque);
+      } else {
+        chequesByClient.set(cheque.clientName, [cheque]);
+      }
+    }
+  }
+
+  return { ledgerByClient, paymentsByClient, chequesByClient };
+}
+
+/**
  * Calculate client balances using the same formula as client-detail-page:
  * currentBalance = openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs
  *
  * Then for expected balance after cheques:
  * expectedBalance = currentBalance - incomingCheques + outgoingCheques
+ *
+ * OPTIMIZED: Uses pre-indexed Maps for O(1) lookups instead of O(n) filtering per client.
+ * Total complexity: O(n) where n = max(clients, ledgerEntries, payments, cheques)
  */
 function calculateClientBalances(
   clients: Client[],
@@ -119,15 +173,23 @@ function calculateClientBalances(
 ): Map<string, ClientBalance> {
   const balanceMap = new Map<string, ClientBalance>();
 
-  clients.forEach((client) => {
-    // Calculate current balance from ledger entries
-    const clientLedger = ledgerEntries.filter((e) => e.associatedParty === client.name);
+  // Build indexes once: O(n) for each collection
+  const { ledgerByClient, paymentsByClient, chequesByClient } = buildClientIndexes(
+    ledgerEntries,
+    payments,
+    cheques
+  );
+
+  // Process each client with O(1) lookups
+  for (const client of clients) {
+    // O(1) lookup instead of O(n) filter
+    const clientLedger = ledgerByClient.get(client.name) || [];
     let sales = 0;
     let purchases = 0;
     let discounts = 0;
     let writeoffs = 0;
 
-    clientLedger.forEach((entry) => {
+    for (const entry of clientLedger) {
       // Exclude advances from balance calculation
       const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
 
@@ -144,28 +206,28 @@ function calculateClientBalances(
       }
       discounts += entry.totalDiscount || 0;
       writeoffs += entry.writeoffAmount || 0;
-    });
+    }
 
-    // Calculate payments
-    const clientPayments = payments.filter((p) => p.clientName === client.name);
+    // O(1) lookup instead of O(n) filter
+    const clientPayments = paymentsByClient.get(client.name) || [];
     let paymentsReceived = 0;
     let paymentsMade = 0;
 
-    clientPayments.forEach((payment) => {
+    for (const payment of clientPayments) {
       if (payment.type === PAYMENT_TYPES.RECEIPT) {
         paymentsReceived += payment.amount || 0;
       } else if (payment.type === PAYMENT_TYPES.DISBURSEMENT) {
         paymentsMade += payment.amount || 0;
       }
-    });
+    }
 
     // Current balance formula
     const openingBalance = client.balance || 0;
     const currentBalance =
       openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs;
 
-    // Calculate expected balance after cheques
-    const clientCheques = cheques.filter((c) => c.clientName === client.name);
+    // O(1) lookup instead of O(n) filter
+    const clientCheques = chequesByClient.get(client.name) || [];
 
     if (clientCheques.length === 0) {
       balanceMap.set(client.id, { currentBalance, expectedBalance: null });
@@ -173,18 +235,18 @@ function calculateClientBalances(
       let incomingTotal = 0;
       let outgoingTotal = 0;
 
-      clientCheques.forEach((cheque) => {
+      for (const cheque of clientCheques) {
         if (cheque.type === CHEQUE_TYPES.INCOMING) {
           incomingTotal += cheque.amount || 0;
         } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
           outgoingTotal += cheque.amount || 0;
         }
-      });
+      }
 
       const expectedBalance = currentBalance - incomingTotal + outgoingTotal;
       balanceMap.set(client.id, { currentBalance, expectedBalance });
     }
-  });
+  }
 
   return balanceMap;
 }
@@ -260,7 +322,8 @@ export function usePendingChequesSubscription() {
     }
 
     const chequesRef = collection(firestore, `users/${ownerId}/cheques`);
-    const q = query(chequesRef, where('status', '==', CHEQUE_STATUS_AR.PENDING));
+    // Limit to 5000 pending cheques to prevent unbounded queries
+    const q = query(chequesRef, where('status', '==', CHEQUE_STATUS_AR.PENDING), limit(5000));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -269,6 +332,10 @@ export function usePendingChequesSubscription() {
           id: doc.id,
           ...doc.data(),
         }));
+        // Warn if we hit the limit - indicates need for pagination
+        if (snapshot.size >= 5000) {
+          console.warn('Pending cheques limit reached (5000). Some cheques may not be included in balance calculations.');
+        }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
       },
@@ -312,14 +379,20 @@ export function useLedgerEntriesSubscription() {
     }
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
+    // Limit to 10000 entries to prevent unbounded queries
+    const q = query(ledgerRef, limit(10000));
 
     unsubscribeRef.current = onSnapshot(
-      ledgerRef,
+      q,
       (snapshot) => {
         const docs = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
+        // Warn if we hit the limit - indicates need for pagination or archiving
+        if (snapshot.size >= 10000) {
+          console.warn('Ledger entries limit reached (10000). Some entries may not be included in balance calculations.');
+        }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
       },
@@ -363,14 +436,20 @@ export function usePaymentsSubscription() {
     }
 
     const paymentsRef = collection(firestore, `users/${ownerId}/payments`);
+    // Limit to 10000 payments to prevent unbounded queries
+    const q = query(paymentsRef, limit(10000));
 
     unsubscribeRef.current = onSnapshot(
-      paymentsRef,
+      q,
       (snapshot) => {
         const docs = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
+        // Warn if we hit the limit - indicates need for pagination or archiving
+        if (snapshot.size >= 10000) {
+          console.warn('Payments limit reached (10000). Some payments may not be included in balance calculations.');
+        }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
       },
