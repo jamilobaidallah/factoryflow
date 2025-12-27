@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,6 @@ import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
-import { exportLedgerToHTML } from "@/lib/export-utils";
-import { exportLedgerToExcelProfessional } from "@/lib/export-ledger-excel";
-import { createLedgerService } from "@/services/ledgerService";
 import { useUser } from "@/firebase/provider";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 
@@ -36,14 +34,16 @@ import { useLedgerOperations } from "./hooks/useLedgerOperations";
 // Reducer
 import { ledgerPageReducer, initialLedgerPageState } from "./reducers/ledgerPageReducer";
 
-// Components
-import { QuickPayDialog } from "./components/QuickPayDialog";
-import { WriteOffDialog } from "./components/WriteOffDialog";
+// Core components (loaded immediately)
 import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
-import { LedgerFormDialog } from "./components/LedgerFormDialog";
-import { RelatedRecordsDialog } from "./components/RelatedRecordsDialog";
-import { QuickInvoiceDialog } from "./components/QuickInvoiceDialog";
+
+// Lazy-loaded components (dialogs - only loaded when needed)
+const LedgerFormDialog = dynamic(() => import("./components/LedgerFormDialog").then(m => ({ default: m.LedgerFormDialog })), { ssr: false });
+const RelatedRecordsDialog = dynamic(() => import("./components/RelatedRecordsDialog").then(m => ({ default: m.RelatedRecordsDialog })), { ssr: false });
+const QuickPayDialog = dynamic(() => import("./components/QuickPayDialog").then(m => ({ default: m.QuickPayDialog })), { ssr: false });
+const WriteOffDialog = dynamic(() => import("./components/WriteOffDialog").then(m => ({ default: m.WriteOffDialog })), { ssr: false });
+const QuickInvoiceDialog = dynamic(() => import("./components/QuickInvoiceDialog").then(m => ({ default: m.QuickInvoiceDialog })), { ssr: false });
 
 // Context
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
@@ -57,6 +57,11 @@ import {
   ViewMode,
 } from "./filters";
 import { isEquityTransaction } from "./utils/ledger-helpers";
+
+// Lazy load export utilities (only needed when user exports)
+const loadExportUtils = () => import("@/lib/export-utils");
+const loadExportExcel = () => import("@/lib/export-ledger-excel");
+const loadLedgerService = () => import("@/services/ledgerService");
 
 export default function LedgerPage() {
   const { toast } = useToast();
@@ -146,9 +151,14 @@ export default function LedgerPage() {
   } = formHook;
 
   // Export handlers - fetch ALL entries, not just current page
+  // Uses lazy-loaded modules to reduce initial bundle size
   const handleExportExcel = useCallback(async () => {
     if (!user) return;
     try {
+      const [{ createLedgerService }, { exportLedgerToExcelProfessional }] = await Promise.all([
+        loadLedgerService(),
+        loadExportExcel(),
+      ]);
       const service = createLedgerService(user.dataOwnerId);
       const allEntries = await service.getAllLedgerEntries();
       // Apply current filters to all entries
@@ -167,6 +177,10 @@ export default function LedgerPage() {
   const handleExportPDF = useCallback(async () => {
     if (!user) return;
     try {
+      const [{ createLedgerService }, { exportLedgerToHTML }] = await Promise.all([
+        loadLedgerService(),
+        loadExportUtils(),
+      ]);
       const service = createLedgerService(user.dataOwnerId);
       const allEntries = await service.getAllLedgerEntries();
       // Apply current filters to all entries
