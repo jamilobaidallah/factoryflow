@@ -1037,3 +1037,140 @@ export function usePaginatedFirestoreQuery<T>({
 - The unused `src/lib/firebase-cache.ts` could be leveraged for balance caching
 - Consider using Cloud Functions for server-side balance calculation if client-side remains slow
 - Monitor Firestore read costs - pagination reduces reads significantly
+
+---
+
+# Phase 4: Observability
+
+## Executive Summary
+
+**Goal:** Add production error monitoring and observability to FactoryFlow using Sentry.
+
+**Current State:**
+- Console-only error logging
+- No production error tracking
+- Error boundary exists but no external reporting
+
+**Target State:**
+- All errors captured and sent to Sentry dashboard
+- User context attached to errors (for debugging)
+- Privacy-preserving session replays
+- Real-time error alerts
+
+---
+
+## Branch: `feature/sentry-error-monitoring`
+
+---
+
+## Task 4.1: Add Sentry Error Monitoring - COMPLETED ✅
+
+### 4.1.1 Install and Configure
+- [x] Install `@sentry/nextjs` package
+- [x] Create `sentry.client.config.ts` with:
+  - `tracesSampleRate: 0.1` (10% performance sampling)
+  - `replaysSessionSampleRate: 0.1` (10% session replays)
+  - `replaysOnErrorSampleRate: 1.0` (100% replay on errors)
+  - `maskAllText: true` (privacy for Arabic financial data)
+  - `blockAllMedia: true` (privacy for images)
+- [x] Create `sentry.server.config.ts` for server-side errors
+- [x] Create `sentry.edge.config.ts` for edge runtime
+- [x] Create `instrumentation.ts` for Next.js instrumentation hook
+- [x] Wrap `next.config.js` with `withSentryConfig`
+
+### 4.1.2 Integrate with Error Handling
+- [x] Update `src/lib/error-handling.ts`:
+  - Add `Sentry.captureException` in `logError()` function
+  - Include error context (type, code, field, details)
+- [x] Update `src/components/error-boundary.tsx`:
+  - Add Sentry capture in `componentDidCatch`
+  - Include React component stack in error context
+
+### 4.1.3 Add User Context
+- [x] Update `src/firebase/provider.tsx`:
+  - Call `Sentry.setUser({ id, email })` on login
+  - Call `Sentry.setUser(null)` on logout
+
+### 4.1.4 Environment Variables
+- [x] Add `NEXT_PUBLIC_SENTRY_DSN` to `.env.local`
+- [x] Add placeholder to `.env.example`
+
+---
+
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] Build passed successfully
+- [x] All unit tests pass
+- [x] Lint passes (only pre-existing warnings)
+- [x] Sentry DSN stored in environment variable, not hardcoded
+- [x] Privacy settings enabled (maskAllText: true, blockAllMedia: true)
+- [x] User context set on login, cleared on logout
+- [x] Error boundaries capture to Sentry with component stack
+
+### Files Created:
+| File | Purpose |
+|------|---------|
+| `sentry.client.config.ts` | Client-side Sentry initialization |
+| `sentry.server.config.ts` | Server-side Sentry initialization |
+| `sentry.edge.config.ts` | Edge runtime Sentry initialization |
+| `instrumentation.ts` | Next.js instrumentation hook |
+
+### Files Modified:
+| File | Changes |
+|------|---------|
+| `next.config.js` | Wrapped with `withSentryConfig` |
+| `src/lib/error-handling.ts` | Added `Sentry.captureException` |
+| `src/components/error-boundary.tsx` | Added Sentry in `componentDidCatch` |
+| `src/firebase/provider.tsx` | Added `Sentry.setUser` on login/logout |
+| `.env.example` | Added Sentry DSN placeholder |
+| `package.json` | Added `@sentry/nextjs` dependency |
+
+---
+
+## Known Issues
+
+### Sentry Deprecation Warnings (Non-Breaking)
+The following config options are deprecated and will be moved in future Sentry versions:
+1. `disableLogger` → use `webpack.treeshake.removeDebugLogging`
+2. `automaticVercelMonitors` → use `webpack.automaticVercelMonitors`
+3. `reactComponentAnnotation` → use `webpack.reactComponentAnnotation`
+4. `sentry.client.config.ts` → recommended to move to `instrumentation-client.ts` for Turbopack
+
+**Impact:** None. Current configuration works correctly. Can be updated when upgrading Sentry in the future.
+
+---
+
+## 📋 Human Testing Plan
+
+### Feature: Sentry Error Monitoring Integration
+### Time Estimate: 5 minutes
+
+---
+
+### Happy Path Tests
+
+| # | Test | Steps | Expected Result |
+|---|------|-------|-----------------|
+| 1 | Error capture | 1. Open browser console<br>2. Run: `throw new Error("Test Sentry")` | Error appears in Sentry dashboard |
+| 2 | User context | 1. Login to app<br>2. Trigger an error | Sentry error shows user ID and email |
+
+---
+
+### Verification in Sentry Dashboard
+
+| # | Test | Steps | Expected Result |
+|---|------|-------|-----------------|
+| 3 | Dashboard access | Go to sentry.io dashboard | Project visible |
+| 4 | Error received | Check Issues tab | Test error appears with stack trace |
+| 5 | User context | Click on error | User section shows logged-in user info |
+
+---
+
+## Task 4.2: Add Error Monitoring (Future)
+- [ ] Set up Sentry alerts for error spikes
+- [ ] Configure release tracking for deploys
+- [ ] Add custom breadcrumbs for important actions
+- [ ] Add performance monitoring for slow pages
+
+---
