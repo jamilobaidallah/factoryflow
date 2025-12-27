@@ -117,7 +117,11 @@ export function useLedgerPartnersSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.partners.all(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.partners.all(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformPartners(docs), []);
 
@@ -169,7 +173,11 @@ export function useLedgerStatsSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.ledger.stats(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.ledger.stats(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformLedgerEntries(docs), []);
 
