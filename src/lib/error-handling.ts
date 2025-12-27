@@ -200,12 +200,13 @@ export function logError(error: AppError, context?: Record<string, any>, userId?
     userId,
   };
 
-  // In development, log to console
+  // In development, log to console only
   if (process.env.NODE_ENV === 'development') {
     console.error('Error logged:', errorLog);
+    return;
   }
 
-  // Send to Sentry for error tracking
+  // In production, send to Sentry for error tracking
   Sentry.captureException(error, {
     extra: {
       ...context,

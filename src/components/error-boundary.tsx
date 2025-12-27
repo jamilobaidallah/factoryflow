@@ -42,11 +42,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // Log error to console
     console.error('Error Boundary caught an error:', error, errorInfo);
 
-    // Send to Sentry with React component stack
-    Sentry.withScope((scope) => {
-      scope.setExtras({ componentStack: errorInfo.componentStack });
-      Sentry.captureException(error);
-    });
+    // Send to Sentry in production only
+    if (process.env.NODE_ENV === 'production') {
+      Sentry.withScope((scope) => {
+        scope.setExtras({ componentStack: errorInfo.componentStack });
+        Sentry.captureException(error);
+      });
+    }
 
     // Call custom error handler if provided
     if (this.props.onError) {
