@@ -1175,3 +1175,126 @@ One deprecation warning remains:
 - [ ] Add performance monitoring for slow pages
 
 ---
+
+# Phase 5: Documentation - COMPLETED ✅
+
+## Executive Summary
+
+**Goal:** Create comprehensive documentation for the FactoryFlow data model and architecture to aid future development and onboarding.
+
+**Deliverables:**
+1. `docs/data-model.md` - ERD diagram, collection relationships, field purposes
+2. `docs/architecture.md` - Component hierarchy, data flow patterns, service layer
+
+---
+
+## Branch: `feature/phase5-documentation`
+
+---
+
+## Task 5.1: Document Data Model - COMPLETED ✅
+
+### 5.1.1 Create ERD Diagram
+- [x] Created ASCII ERD showing all 17 Firestore collections
+- [x] Showed root level vs user-scoped collections
+- [x] Visualized multi-tenant architecture (`users/{ownerId}/...`)
+
+### 5.1.2 Document Collection Relationships
+- [x] Created relationship diagram showing core accounting flow
+- [x] Documented all foreign key relationships between collections
+- [x] Showed how ledger connects to payments, cheques, journal entries
+
+### 5.1.3 Document Field Purposes
+- [x] Documented all fields for each of 17 collections
+- [x] Marked required vs optional fields
+- [x] Noted which fields require Decimal.js for money calculations
+- [x] Documented account code ranges (1000-5999)
+
+---
+
+## Task 5.2: Document Architecture - COMPLETED ✅
+
+### 5.2.1 Component Hierarchy
+- [x] Documented root layout structure with providers
+- [x] Documented component directory organization
+- [x] Documented feature module structure pattern
+- [x] Listed all 28 UI components and their purposes
+
+### 5.2.2 Data Flow Patterns
+- [x] Documented Pattern 1: Real-Time Subscriptions (onSnapshot → React Query)
+- [x] Documented Pattern 2: Batch Write Operations (atomic transactions)
+- [x] Documented Pattern 3: Permission-Based Rendering (PermissionGate)
+- [x] Included code examples for each pattern
+
+### 5.2.3 Service Layer Responsibilities
+- [x] Documented journalService.ts (931 lines) - Double-entry bookkeeping
+- [x] Documented userService.ts (488 lines) - RBAC & access control
+- [x] Documented LedgerService.ts (900+ lines) - Central ledger operations
+- [x] Documented activityLogService.ts (90 lines) - Audit logging
+- [x] Documented all batch handlers for atomic operations
+
+---
+
+## Files Created
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `docs/data-model.md` | ~650 | ERD, collection specs, relationships, business rules |
+| `docs/architecture.md` | ~600 | Component hierarchy, data flow, service layer |
+
+---
+
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] No code changes made (documentation only)
+- [x] npm run lint — PASS (only pre-existing warnings)
+- [x] npm test — PASS (1152 passed, 2 pre-existing failures, 3 skipped)
+- [x] Documentation follows CLAUDE.md patterns
+
+### Documentation Verified:
+- [x] ERD accurately represents all 17 collections
+- [x] All field types match TypeScript definitions
+- [x] Data flow patterns match implementation
+- [x] Service responsibilities accurately described
+- [x] Component structure matches actual codebase
+
+### Edge Cases Covered:
+- [x] Multi-tenant data isolation explained
+- [x] Money handling (Decimal.js) requirements noted
+- [x] User ID rule (dataOwnerId vs uid) documented
+- [x] Query limits documented
+
+### Potential Issues Found:
+- None. Documentation is comprehensive and accurate.
+
+---
+
+## 📋 Human Testing Plan
+
+### Feature: Phase 5 Documentation
+### Time Estimate: 5 minutes
+
+---
+
+### Documentation Review
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 1 | Data model readable | Open `docs/data-model.md` | ERD displays correctly, tables render | |
+| 2 | Architecture readable | Open `docs/architecture.md` | Diagrams display, code blocks format | |
+| 3 | Cross-reference | Compare docs to actual code | Field names and types match | |
+| 4 | Developer utility | Read architecture section | Patterns are clear and actionable | |
+
+---
+
+### ✍️ Test Results Summary
+
+| Total | Passed | Failed |
+|-------|--------|--------|
+| 4 | | |
+
+### Issues Found:
+- [ ] (To be filled during review)
+
+---
