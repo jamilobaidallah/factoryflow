@@ -261,7 +261,11 @@ export function useClientsSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.clients.all(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.clients.all(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformClients(docs), []);
 
@@ -312,7 +316,11 @@ export function usePendingChequesSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.cheques.pending(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.cheques.pending(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformCheques(docs), []);
 
@@ -368,7 +376,11 @@ export function useLedgerEntriesSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.ledger.all(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.ledger.all(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformLedgerEntries(docs), []);
 
@@ -424,7 +436,11 @@ export function usePaymentsSubscription() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const ownerId = user?.dataOwnerId;
-  const queryKey = queryKeys.payments.all(ownerId || '');
+  // Memoize queryKey to prevent subscription churn on re-renders
+  const queryKey = useMemo(
+    () => queryKeys.payments.all(ownerId || ''),
+    [ownerId]
+  );
 
   const transform = useCallback((docs: DocumentData[]) => transformPayments(docs), []);
 
