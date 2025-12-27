@@ -1130,14 +1130,15 @@ export function usePaginatedFirestoreQuery<T>({
 
 ## Known Issues
 
-### Sentry Deprecation Warnings (Non-Breaking)
-The following config options are deprecated and will be moved in future Sentry versions:
-1. `disableLogger` → use `webpack.treeshake.removeDebugLogging`
-2. `automaticVercelMonitors` → use `webpack.automaticVercelMonitors`
-3. `reactComponentAnnotation` → use `webpack.reactComponentAnnotation`
-4. `sentry.client.config.ts` → recommended to move to `instrumentation-client.ts` for Turbopack
+### Sentry File Naming (Non-Breaking)
+One deprecation warning remains:
+- `sentry.client.config.ts` → recommended to move to `instrumentation-client.ts` for Turbopack compatibility
 
-**Impact:** None. Current configuration works correctly. Can be updated when upgrading Sentry in the future.
+**Impact:** None for Webpack builds. Only needed if switching to Turbopack in the future.
+
+### Clean Code Applied
+- ✅ Errors only sent to Sentry in production (not development)
+- ✅ Fixed deprecated config options (moved to `webpack` namespace)
 
 ---
 
