@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   collection,
   query,
@@ -295,11 +295,17 @@ export function useClientsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<Client[]>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<Client[]>({
+    queryKey,
+    queryFn: () => Promise.resolve([]),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data: data ?? [],
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
 
@@ -352,11 +358,17 @@ export function usePendingChequesSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<Cheque[]>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<Cheque[]>({
+    queryKey,
+    queryFn: () => Promise.resolve([]),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data: data ?? [],
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
 
@@ -409,11 +421,17 @@ export function useLedgerEntriesSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<LedgerEntry[]>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<LedgerEntry[]>({
+    queryKey,
+    queryFn: () => Promise.resolve([]),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data: data ?? [],
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
 
@@ -466,11 +484,17 @@ export function usePaymentsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<Payment[]>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<Payment[]>({
+    queryKey,
+    queryFn: () => Promise.resolve([]),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data: data ?? [],
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
 

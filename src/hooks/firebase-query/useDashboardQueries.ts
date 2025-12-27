@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   collection,
   query,
@@ -269,11 +269,30 @@ export function useLedgerDashboardData() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<LedgerDashboardData>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<LedgerDashboardData>({
+    queryKey,
+    queryFn: () => Promise.resolve({
+      entries: [],
+      totalIncome: 0,
+      totalExpenses: 0,
+      paidIncome: 0,
+      paidExpenses: 0,
+      unpaidIncome: 0,
+      unpaidExpenses: 0,
+      partiallyPaidIncome: 0,
+      partiallyPaidExpenses: 0,
+      netProfit: 0,
+      monthlyData: [],
+      recentTransactions: [],
+    }),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data,
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
 
@@ -326,10 +345,19 @@ export function usePaymentsDashboardData() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  const data = queryClient.getQueryData<PaymentsDashboardData>(queryKey);
+  // Use useQuery with enabled:false for reactive cache access
+  const { data } = useQuery<PaymentsDashboardData>({
+    queryKey,
+    queryFn: () => Promise.resolve({
+      operatingCashIn: 0,
+      operatingCashOut: 0,
+    }),
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   return {
     data,
-    isLoading: !data && !!ownerId,
+    isLoading: data === undefined && !!ownerId,
   };
 }
