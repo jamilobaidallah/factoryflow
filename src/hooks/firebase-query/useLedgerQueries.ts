@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   collection,
   query,
@@ -17,6 +17,8 @@ import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
 import { queryKeys } from './keys';
+import { useReactiveQueryData } from './useReactiveQueryData';
+import { QUERY_LIMITS } from '@/lib/constants';
 import type { LedgerEntry } from '@/components/ledger/utils/ledger-constants';
 
 // Simple name+id type for dropdowns
@@ -74,7 +76,7 @@ export function useLedgerClientsSubscription() {
     }
 
     const clientsRef = collection(firestore, `users/${ownerId}/clients`);
-    const q = query(clientsRef, orderBy('name', 'asc'), limit(500));
+    const q = query(clientsRef, orderBy('name', 'asc'), limit(QUERY_LIMITS.CLIENTS));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -99,19 +101,11 @@ export function useLedgerClientsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  // This ensures re-render when setQueryData is called
-  const { data } = useQuery<NamedEntity[]>({
+  return useReactiveQueryData<NamedEntity[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -133,7 +127,7 @@ export function useLedgerPartnersSubscription() {
     }
 
     const partnersRef = collection(firestore, `users/${ownerId}/partners`);
-    const q = query(partnersRef, orderBy('name', 'asc'), limit(100));
+    const q = query(partnersRef, orderBy('name', 'asc'), limit(QUERY_LIMITS.PARTNERS));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -158,18 +152,11 @@ export function useLedgerPartnersSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<NamedEntity[]>({
+  return useReactiveQueryData<NamedEntity[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -192,8 +179,7 @@ export function useLedgerStatsSubscription() {
     }
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
-    // Large limit to get all entries for stats (same as existing 10000 limit)
-    const q = query(ledgerRef, orderBy('date', 'desc'), limit(10000));
+    const q = query(ledgerRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.LEDGER_ENTRIES));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -218,18 +204,11 @@ export function useLedgerStatsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<LedgerEntry[]>({
+  return useReactiveQueryData<LedgerEntry[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -303,17 +282,15 @@ export function useLedgerEntriesSubscription(options: {
     };
   }, [ownerId, pageSize, currentPage, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<LedgerEntry[]>({
+  const { data, isLoading } = useReactiveQueryData<LedgerEntry[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
 
   return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
+    data,
+    isLoading,
     lastDoc: lastDocRef.current,
   };
 }
@@ -358,17 +335,15 @@ export function useLedgerTotalCount() {
     fetchedRef.current = false;
   }, [ownerId]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<number>({
+  const { data, isLoading } = useReactiveQueryData<number>({
     queryKey,
-    queryFn: () => Promise.resolve(0),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: 0,
+    enabled: !!ownerId,
   });
 
   return {
-    count: data ?? 0,
-    isLoading: data === undefined && !!ownerId,
+    count: data,
+    isLoading: isLoading && !!ownerId,
   };
 }
 

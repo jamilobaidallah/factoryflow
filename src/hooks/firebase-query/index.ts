@@ -40,6 +40,9 @@ export {
   type NamedEntity,
 } from './useLedgerQueries';
 
+// Reactive query data utility
+export { useReactiveQueryData } from './useReactiveQueryData';
+
 // Re-export React Query utilities for convenience
 export {
   useQuery,

@@ -291,3 +291,22 @@ export const USER_ROLE_LABELS = {
 } as const;
 
 export type UserRoleKey = typeof USER_ROLES[keyof typeof USER_ROLES];
+
+// Firestore Query Limits
+// These prevent unbounded queries and control memory usage
+export const QUERY_LIMITS = {
+  /** Maximum clients to fetch for list views */
+  CLIENTS: 500,
+  /** Maximum ledger entries for balance calculations */
+  LEDGER_ENTRIES: 10000,
+  /** Maximum payments for balance calculations */
+  PAYMENTS: 10000,
+  /** Maximum pending cheques for balance calculations */
+  PENDING_CHEQUES: 5000,
+  /** Maximum entries for dashboard stats */
+  DASHBOARD_ENTRIES: 5000,
+  /** Default page size for paginated lists */
+  DEFAULT_PAGE_SIZE: 50,
+  /** Maximum partners for dropdown */
+  PARTNERS: 100,
+} as const;

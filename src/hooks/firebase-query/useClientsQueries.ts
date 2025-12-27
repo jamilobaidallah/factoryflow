@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   collection,
   query,
@@ -15,7 +15,8 @@ import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
 import { queryKeys } from './keys';
-import { CHEQUE_STATUS_AR, CHEQUE_TYPES, TRANSACTION_TYPES, PAYMENT_TYPES } from '@/lib/constants';
+import { CHEQUE_STATUS_AR, CHEQUE_TYPES, TRANSACTION_TYPES, PAYMENT_TYPES, QUERY_LIMITS } from '@/lib/constants';
+import { useReactiveQueryData } from './useReactiveQueryData';
 
 // Types matching clients-page.tsx
 export interface Client {
@@ -270,7 +271,7 @@ export function useClientsSubscription() {
     }
 
     const clientsRef = collection(firestore, `users/${ownerId}/clients`);
-    const q = query(clientsRef, orderBy('createdAt', 'desc'), limit(500));
+    const q = query(clientsRef, orderBy('createdAt', 'desc'), limit(QUERY_LIMITS.CLIENTS));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -295,18 +296,11 @@ export function useClientsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<Client[]>({
+  return useReactiveQueryData<Client[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -328,8 +322,8 @@ export function usePendingChequesSubscription() {
     }
 
     const chequesRef = collection(firestore, `users/${ownerId}/cheques`);
-    // Limit to 5000 pending cheques to prevent unbounded queries
-    const q = query(chequesRef, where('status', '==', CHEQUE_STATUS_AR.PENDING), limit(5000));
+    // Limit pending cheques to prevent unbounded queries
+    const q = query(chequesRef, where('status', '==', CHEQUE_STATUS_AR.PENDING), limit(QUERY_LIMITS.PENDING_CHEQUES));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -339,8 +333,8 @@ export function usePendingChequesSubscription() {
           ...doc.data(),
         }));
         // Warn if we hit the limit - indicates need for pagination
-        if (snapshot.size >= 5000) {
-          console.warn('Pending cheques limit reached (5000). Some cheques may not be included in balance calculations.');
+        if (snapshot.size >= QUERY_LIMITS.PENDING_CHEQUES) {
+          console.warn(`Pending cheques limit reached (${QUERY_LIMITS.PENDING_CHEQUES}). Some cheques may not be included in balance calculations.`);
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
@@ -358,18 +352,11 @@ export function usePendingChequesSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<Cheque[]>({
+  return useReactiveQueryData<Cheque[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -391,8 +378,8 @@ export function useLedgerEntriesSubscription() {
     }
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
-    // Limit to 10000 entries to prevent unbounded queries
-    const q = query(ledgerRef, limit(10000));
+    // Limit entries to prevent unbounded queries
+    const q = query(ledgerRef, limit(QUERY_LIMITS.LEDGER_ENTRIES));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -402,8 +389,8 @@ export function useLedgerEntriesSubscription() {
           ...doc.data(),
         }));
         // Warn if we hit the limit - indicates need for pagination or archiving
-        if (snapshot.size >= 10000) {
-          console.warn('Ledger entries limit reached (10000). Some entries may not be included in balance calculations.');
+        if (snapshot.size >= QUERY_LIMITS.LEDGER_ENTRIES) {
+          console.warn(`Ledger entries limit reached (${QUERY_LIMITS.LEDGER_ENTRIES}). Some entries may not be included in balance calculations.`);
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
@@ -421,18 +408,11 @@ export function useLedgerEntriesSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<LedgerEntry[]>({
+  return useReactiveQueryData<LedgerEntry[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**
@@ -454,8 +434,8 @@ export function usePaymentsSubscription() {
     }
 
     const paymentsRef = collection(firestore, `users/${ownerId}/payments`);
-    // Limit to 10000 payments to prevent unbounded queries
-    const q = query(paymentsRef, limit(10000));
+    // Limit payments to prevent unbounded queries
+    const q = query(paymentsRef, limit(QUERY_LIMITS.PAYMENTS));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -465,8 +445,8 @@ export function usePaymentsSubscription() {
           ...doc.data(),
         }));
         // Warn if we hit the limit - indicates need for pagination or archiving
-        if (snapshot.size >= 10000) {
-          console.warn('Payments limit reached (10000). Some payments may not be included in balance calculations.');
+        if (snapshot.size >= QUERY_LIMITS.PAYMENTS) {
+          console.warn(`Payments limit reached (${QUERY_LIMITS.PAYMENTS}). Some payments may not be included in balance calculations.`);
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
@@ -484,18 +464,11 @@ export function usePaymentsSubscription() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<Payment[]>({
+  return useReactiveQueryData<Payment[]>({
     queryKey,
-    queryFn: () => Promise.resolve([]),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: [],
+    enabled: !!ownerId,
   });
-
-  return {
-    data: data ?? [],
-    isLoading: data === undefined && !!ownerId,
-  };
 }
 
 /**

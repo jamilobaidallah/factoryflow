@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   collection,
   query,
@@ -14,6 +14,8 @@ import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { toDate } from '@/lib/firestore-utils';
 import { queryKeys } from './keys';
+import { useReactiveQueryData } from './useReactiveQueryData';
+import { QUERY_LIMITS } from '@/lib/constants';
 import type {
   DashboardLedgerEntry,
   MonthlyFinancialData,
@@ -244,7 +246,7 @@ export function useLedgerDashboardData() {
     }
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
-    const ledgerQuery = query(ledgerRef, orderBy("date", "desc"), limit(5000));
+    const ledgerQuery = query(ledgerRef, orderBy("date", "desc"), limit(QUERY_LIMITS.DASHBOARD_ENTRIES));
 
     unsubscribeRef.current = onSnapshot(
       ledgerQuery,
@@ -269,31 +271,29 @@ export function useLedgerDashboardData() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<LedgerDashboardData>({
+  const defaultData: LedgerDashboardData = {
+    totalRevenue: 0,
+    totalExpenses: 0,
+    totalDiscounts: 0,
+    totalBadDebt: 0,
+    financingCashIn: 0,
+    financingCashOut: 0,
+    loansReceivable: 0,
+    loansPayable: 0,
+    loanCashIn: 0,
+    loanCashOut: 0,
+    monthlyDataMap: new Map(),
+    expensesByCategoryMap: new Map(),
+    recentTransactions: [],
+  };
+
+  const { data, isLoading } = useReactiveQueryData<LedgerDashboardData>({
     queryKey,
-    queryFn: () => Promise.resolve({
-      entries: [],
-      totalIncome: 0,
-      totalExpenses: 0,
-      paidIncome: 0,
-      paidExpenses: 0,
-      unpaidIncome: 0,
-      unpaidExpenses: 0,
-      partiallyPaidIncome: 0,
-      partiallyPaidExpenses: 0,
-      netProfit: 0,
-      monthlyData: [],
-      recentTransactions: [],
-    }),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: defaultData,
+    enabled: !!ownerId,
   });
 
-  return {
-    data,
-    isLoading: data === undefined && !!ownerId,
-  };
+  return { data, isLoading };
 }
 
 /**
@@ -320,7 +320,7 @@ export function usePaymentsDashboardData() {
     }
 
     const paymentsRef = collection(firestore, `users/${ownerId}/payments`);
-    const paymentsQuery = query(paymentsRef, orderBy("date", "desc"), limit(5000));
+    const paymentsQuery = query(paymentsRef, orderBy("date", "desc"), limit(QUERY_LIMITS.DASHBOARD_ENTRIES));
 
     unsubscribeRef.current = onSnapshot(
       paymentsQuery,
@@ -345,19 +345,16 @@ export function usePaymentsDashboardData() {
     };
   }, [ownerId, queryKey, queryClient, transform]);
 
-  // Use useQuery with enabled:false for reactive cache access
-  const { data } = useQuery<PaymentsDashboardData>({
+  const defaultData: PaymentsDashboardData = {
+    operatingCashIn: 0,
+    operatingCashOut: 0,
+  };
+
+  const { data, isLoading } = useReactiveQueryData<PaymentsDashboardData>({
     queryKey,
-    queryFn: () => Promise.resolve({
-      operatingCashIn: 0,
-      operatingCashOut: 0,
-    }),
-    enabled: false,
-    staleTime: Infinity,
+    defaultValue: defaultData,
+    enabled: !!ownerId,
   });
 
-  return {
-    data,
-    isLoading: data === undefined && !!ownerId,
-  };
+  return { data, isLoading };
 }
