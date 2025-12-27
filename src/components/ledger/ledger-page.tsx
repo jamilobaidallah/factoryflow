@@ -88,7 +88,8 @@ export default function LedgerPage() {
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
 
   // Data and operations hooks
-  const { entries, allEntriesForStats, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
+  // Separate loading states: dataLoading for table (fast), statsLoading for stats cards (slower)
+  const { entries, allEntriesForStats, clients, partners, totalCount, totalPages, loading: dataLoading, statsLoading } = useLedgerData({
     pageSize: state.pagination.pageSize,
     currentPage: state.pagination.currentPage,
   });
@@ -343,8 +344,8 @@ export default function LedgerPage() {
         </PermissionGate>
       </div>
 
-      {/* Summary Cards */}
-      {dataLoading ? (
+      {/* Summary Cards - uses statsLoading to load independently from table */}
+      {statsLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCardSkeleton />
           <StatCardSkeleton />
