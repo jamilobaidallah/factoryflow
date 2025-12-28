@@ -150,3 +150,10 @@ export const CATEGORIES: Category[] = [
         ]
     },
 ];
+
+/**
+ * Non-cash expense subcategories
+ * These expenses don't involve cash transactions (wastage, free samples, etc.)
+ * Used to auto-select the non-cash expense payment option
+ */
+export const NON_CASH_SUBCATEGORIES = ["هدر وتالف", "عينات مجانية"] as const;

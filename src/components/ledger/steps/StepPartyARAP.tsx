@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
 import { isLoanTransaction } from "../utils/ledger-helpers";
+import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
 
 interface ClientOption {
   name: string;
@@ -101,12 +102,25 @@ export function StepPartyARAP({
   // Check if this is a loan transaction - loans require party and AR/AP tracking
   const isLoan = isLoanTransaction(currentEntryType, formData.category);
 
+  // Check if subcategory is a non-cash expense (wastage, free samples, etc.)
+  const isNonCashSubcategory = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
+
   // Force AR/AP tracking for loans
   useEffect(() => {
     if (isLoan && !formData.trackARAP) {
       onUpdate({ trackARAP: true });
     }
   }, [isLoan, formData.trackARAP, onUpdate]);
+
+  // Auto-select non-cash expense option for wastage/samples subcategories
+  useEffect(() => {
+    if (isNonCashSubcategory && currentEntryType === "مصروف") {
+      // Auto-set to non-cash expense (no AR/AP, no immediate settlement)
+      if (formData.trackARAP || formData.immediateSettlement) {
+        onUpdate({ trackARAP: false, immediateSettlement: false });
+      }
+    }
+  }, [isNonCashSubcategory, currentEntryType, formData.trackARAP, formData.immediateSettlement, onUpdate]);
 
   // Filter clients based on search input
   const filteredClients = useMemo(() => {
@@ -298,6 +312,25 @@ export function StepPartyARAP({
                 />
               )}
             </div>
+
+            {/* Option 4: Non-cash expense (for wastage, free samples, etc.) */}
+            {currentEntryType === "مصروف" && (
+              <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+                <input
+                  type="radio"
+                  name="paymentStatus"
+                  value="non-cash"
+                  checked={!formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment}
+                  onChange={() => {
+                    onUpdate({ trackARAP: false, immediateSettlement: false });
+                    setHasInitialPayment(false);
+                    setInitialPaymentAmount("");
+                  }}
+                  className="h-4 w-4"
+                />
+                <span>مصروف غير نقدي (هدر، عينات، إهلاك)</span>
+              </label>
+            )}
           </div>
 
           {/* Helper text */}
@@ -305,6 +338,7 @@ export function StepPartyARAP({
             {formData.immediateSettlement && !hasInitialPayment && "سيتم تسجيل المبلغ كمدفوع بالكامل"}
             {formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment && "سيتم إنشاء ذمة (مدين/دائن) لمتابعة الدفع"}
             {hasInitialPayment && "سيتم تسجيل الدفعة الجزئية وإنشاء ذمة للمبلغ المتبقي"}
+            {!formData.trackARAP && !formData.immediateSettlement && !hasInitialPayment && currentEntryType === "مصروف" && "سيتم تسجيل المصروف فقط بدون حركة نقدية أو ذمم"}
           </p>
         </div>
       )}
