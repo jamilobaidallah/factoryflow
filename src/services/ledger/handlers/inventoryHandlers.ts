@@ -30,6 +30,7 @@ import {
   isInsufficientQuantityError,
 } from "@/lib/errors";
 import type { HandlerContext, InventoryUpdateResult, COGSResult, CollectionRefs } from "../types";
+import { NON_CASH_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
 
 // Path helper
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -44,7 +45,13 @@ export async function handleInventoryUpdate(
   inventoryFormData: InventoryFormData
 ): Promise<InventoryUpdateResult> {
   const { batch, transactionId, formData, entryType, userId, refs } = ctx;
-  const movementType = entryType === "مصروف" ? "دخول" : "خروج";
+
+  // Determine movement direction:
+  // - Expense (مصروف) for purchasing → inventory IN (دخول)
+  // - Income (إيراد/دخل) for selling → inventory OUT (خروج)
+  // - Non-cash expenses (wastage, samples) → inventory OUT (خروج) even though they're expenses
+  const isNonCashExpense = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
+  const movementType = (entryType === "مصروف" && !isNonCashExpense) ? "دخول" : "خروج";
   let cogsCreated = false;
   let cogsAmount = 0;
   let cogsDescription = "";
