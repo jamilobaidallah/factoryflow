@@ -125,7 +125,14 @@ export default function LedgerPage() {
   });
 
   // Apply filters to entries
-  const filteredEntries = useMemo(() => filterEntries(entries), [filterEntries, entries]);
+  // When filters are active, search ALL entries (allEntriesForStats)
+  // When no filters, show paginated entries for performance
+  const filteredEntries = useMemo(() => {
+    if (hasActiveFilters) {
+      return filterEntries(allEntriesForStats);
+    }
+    return filterEntries(entries);
+  }, [filterEntries, entries, allEntriesForStats, hasActiveFilters]);
 
   // Calculate totals for filtered entries
   const filteredTotals = useMemo(() => calculateTotals(filteredEntries), [calculateTotals, filteredEntries]);
@@ -411,8 +418,8 @@ export default function LedgerPage() {
               isFiltered={hasActiveFilters}
             />
 
-            {/* Pagination */}
-            {totalPages > 1 && filteredEntries.length > 0 && (
+            {/* Pagination - hidden when filters are active (showing all filtered results) */}
+            {!hasActiveFilters && totalPages > 1 && filteredEntries.length > 0 && (
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
                 <p className="text-sm text-slate-500">
                   عرض {filteredEntries.length} من {totalCount} حركة
@@ -459,6 +466,15 @@ export default function LedgerPage() {
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>
+              </div>
+            )}
+
+            {/* Filter results count - shown when filters are active */}
+            {hasActiveFilters && filteredEntries.length > 0 && (
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
+                <p className="text-sm text-slate-500">
+                  نتائج البحث: {filteredEntries.length} حركة من إجمالي {allEntriesForStats.length}
+                </p>
               </div>
             )}
           </>
