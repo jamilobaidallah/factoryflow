@@ -1,3 +1,154 @@
+# Fix: Ledger Filter Searches All Entries (Not Just Current Page)
+
+## Problem
+
+When using advanced filters on the ledger page, only the current page's 50 entries are searched, not all ledger transactions.
+
+**Root Cause:** Line 128 in `ledger-page.tsx`:
+```typescript
+const filteredEntries = useMemo(() => filterEntries(entries), [filterEntries, entries]);
+```
+
+- `entries` = paginated data (50 items from current page)
+- `allEntriesForStats` = all entries (up to 10,000)
+
+The filter is applied to `entries` (current page only) instead of `allEntriesForStats` (all data).
+
+---
+
+## Solution
+
+When filters are active, filter `allEntriesForStats` instead of `entries`. When no filters are active, show paginated `entries`.
+
+---
+
+## Implementation Plan
+
+### Task 1: Update filteredEntries logic
+**File:** `src/components/ledger/ledger-page.tsx`
+
+- [ ] Change filtering source based on whether filters are active:
+```typescript
+// When filters are active, search ALL entries
+// When no filters, show paginated entries for performance
+const filteredEntries = useMemo(() => {
+  if (hasActiveFilters) {
+    return filterEntries(allEntriesForStats);
+  }
+  return filterEntries(entries);
+}, [filterEntries, entries, allEntriesForStats, hasActiveFilters]);
+```
+
+### Task 2: Hide pagination when filtering
+- [ ] Hide pagination controls when `hasActiveFilters` is true (showing filtered results from all entries)
+- [ ] Show count of filtered results vs total
+
+### Task 3: Update loading state
+- [ ] When filtering all entries, use `statsLoading` instead of `dataLoading`
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/ledger/ledger-page.tsx` | Update filteredEntries source, hide pagination when filtering |
+
+---
+
+## Testing Checklist
+
+- [ ] Filter by date range → shows matching entries from ALL pages
+- [ ] Filter by entry type → shows all matching entries
+- [ ] Search text → searches entire ledger
+- [ ] Clear filters → returns to paginated view
+- [ ] Pagination hidden when filters active
+- [ ] Pagination shows when no filters
+
+---
+
+## Branch: `fix/ledger-filter-all-entries`
+
+---
+
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] Checked for user.uid vs dataOwnerId — N/A (no user ID changes)
+- [x] Checked money calculations use Decimal.js — N/A (no money math)
+- [x] Checked listener cleanup — N/A (no new listeners)
+- [x] Verified RTL spacing — N/A (no new UI elements with icons)
+- [x] Checked all queries have limits — N/A (using existing queries)
+- [x] No `any` types — PASS
+- [x] No console.log in production — PASS
+- [x] Ran npm test — PASS (1154 passed)
+- [x] Ran npm run lint — PASS (no errors)
+
+### Edge Cases Verified:
+- [x] No filters → shows paginated entries (50 per page)
+- [x] Filters active → searches all entries (allEntriesForStats)
+- [x] Pagination hidden when filtering
+- [x] Filter count shown when filtering
+
+### Files Modified:
+| File | Changes |
+|------|---------|
+| `src/components/ledger/ledger-page.tsx` | Updated filteredEntries to use allEntriesForStats when filters active, hide pagination when filtering, show filter count |
+
+### Potential Issues Found:
+- None
+
+---
+
+## 📋 Human Testing Plan
+
+### Feature: Ledger Filter Searches All Entries
+### Test URL: [Vercel preview URL]
+### Time Estimate: 5 minutes
+
+---
+
+### 🟢 Happy Path Tests (Normal Usage)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 1 | No filter pagination | 1. Go to /ledger<br>2. Don't apply any filters | Shows paginated entries (50 per page) with pagination controls | |
+| 2 | Search all entries | 1. Enter search text in search box<br>2. Observe results | Shows ALL matching entries from entire ledger, not just current page | |
+| 3 | Date filter | 1. Select "هذا الأسبوع" date filter | Shows all entries from this week across all pages | |
+| 4 | Entry type filter | 1. Select "دخل" filter | Shows all income entries from entire ledger | |
+
+---
+
+### 🟡 Edge Case Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 5 | Clear filters | 1. Apply a filter<br>2. Click "مسح الفلاتر" | Returns to paginated view with pagination controls | |
+| 6 | No results | 1. Search for non-existent text | Shows empty state, no errors | |
+| 7 | Filter count | 1. Apply any filter | Shows "نتائج البحث: X حركة من إجمالي Y" | |
+
+---
+
+### 🔴 Pagination Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 8 | Pagination visible | 1. No filters active<br>2. More than 50 entries | Pagination controls visible | |
+| 9 | Pagination hidden | 1. Apply any filter | Pagination controls hidden, filter count visible | |
+
+---
+
+### ✍️ Test Results Summary
+
+| Total | Passed | Failed |
+|-------|--------|--------|
+| 9 | | |
+
+### Issues Found:
+- [ ] (To be filled during testing)
+
+---
+
 # FactoryFlow: Settlement Discounts & Bad Debt Implementation
 
 ## Executive Summary
