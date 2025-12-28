@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
 import { isLoanTransaction } from "../utils/ledger-helpers";
+import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
 
 interface ClientOption {
   name: string;
@@ -101,9 +102,8 @@ export function StepPartyARAP({
   // Check if this is a loan transaction - loans require party and AR/AP tracking
   const isLoan = isLoanTransaction(currentEntryType, formData.category);
 
-  // Non-cash expense subcategories (wastage, free samples, depreciation, etc.)
-  const NON_CASH_SUBCATEGORIES = ["هدر وتالف", "عينات مجانية"];
-  const isNonCashSubcategory = NON_CASH_SUBCATEGORIES.includes(formData.subCategory);
+  // Check if subcategory is a non-cash expense (wastage, free samples, etc.)
+  const isNonCashSubcategory = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
 
   // Force AR/AP tracking for loans
   useEffect(() => {
