@@ -94,6 +94,8 @@ export const CATEGORIES: Category[] = [
             "رحلة عمل",
             "نقل بضاعة",
             "تسويق وإعلان",
+            "عينات مجانية",       // Free samples for marketing
+            "هدر وتالف",          // Wastage and spoilage
             "مصاريف إدارية",
             "اتصالات وإنترنت",
             "مصاريف مكتبية",
