@@ -31,6 +31,7 @@ interface UseEmployeesOperationsReturn {
     payrollData: {[key: string]: {overtime: string, notes: string}}
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
+  markAllAsPaid: (unpaidEntries: PayrollEntry[]) => Promise<boolean>;
   deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
 }
 
@@ -393,6 +394,102 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
   };
 
+  const markAllAsPaid = async (unpaidEntries: PayrollEntry[]): Promise<boolean> => {
+    if (!user) return false;
+    if (unpaidEntries.length === 0) {
+      toast({
+        title: "لا يوجد رواتب",
+        description: "جميع الرواتب مدفوعة بالفعل",
+        variant: "default",
+      });
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(firestore);
+      let totalAmount = 0;
+
+      for (const payrollEntry of unpaidEntries) {
+        // Generate transaction ID for each
+        const now = new Date();
+        const transactionId = `SAL-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+
+        // Update payroll entry
+        const payrollRef = doc(firestore, `users/${user.dataOwnerId}/payroll`, payrollEntry.id);
+        batch.update(payrollRef, {
+          isPaid: true,
+          paidDate: new Date(),
+          linkedTransactionId: transactionId,
+        });
+
+        // Create ledger entry
+        const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+        const ledgerDocRef = doc(ledgerRef);
+        batch.set(ledgerDocRef, {
+          transactionId: transactionId,
+          description: `راتب ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+          type: "مصروف",
+          amount: payrollEntry.totalSalary,
+          category: "مصاريف تشغيلية",
+          subCategory: "رواتب وأجور",
+          associatedParty: payrollEntry.employeeName,
+          date: new Date(),
+          reference: `Payroll-${payrollEntry.month}`,
+          notes: `راتب شهر ${payrollEntry.month}${payrollEntry.overtimeHours > 0 ? ` - ساعات إضافية: ${payrollEntry.overtimeHours}` : ""}`,
+          createdAt: new Date(),
+        });
+
+        // Create payment entry
+        const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+        const paymentDocRef = doc(paymentsRef);
+        batch.set(paymentDocRef, {
+          clientName: payrollEntry.employeeName,
+          amount: payrollEntry.totalSalary,
+          type: "صرف",
+          linkedTransactionId: transactionId,
+          date: new Date(),
+          notes: `دفع راتب ${payrollEntry.month}`,
+          category: "مصاريف تشغيلية",
+          subCategory: "رواتب وأجور",
+          createdAt: new Date(),
+        });
+
+        totalAmount += payrollEntry.totalSalary;
+      }
+
+      await batch.commit();
+
+      // Log activity
+      logActivity(user.dataOwnerId, {
+        action: 'create',
+        module: 'employees',
+        targetId: unpaidEntries[0]?.month || '',
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `دفع جميع الرواتب: ${unpaidEntries.length} موظف - ${totalAmount.toFixed(2)} دينار`,
+        metadata: {
+          employeeCount: unpaidEntries.length,
+          totalAmount,
+          month: unpaidEntries[0]?.month,
+        },
+      });
+
+      toast({
+        title: "تم الدفع",
+        description: `تم دفع رواتب ${unpaidEntries.length} موظف بإجمالي ${totalAmount.toFixed(2)} دينار`,
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const deletePayrollEntry = async (payrollEntry: PayrollEntry): Promise<boolean> => {
     if (!user) return false;
 
@@ -441,5 +538,5 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
   };
 
-  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry };
+  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid, markAllAsPaid, deletePayrollEntry };
 }

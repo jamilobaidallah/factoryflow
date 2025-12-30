@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Edit, Trash2, History } from "lucide-react";
+import { Edit, Trash2, History, Banknote } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { Employee } from "../types/employees";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
@@ -19,6 +19,7 @@ interface EmployeesTableProps {
   onEdit: (employee: Employee) => void;
   onDelete: (employeeId: string) => void;
   onViewHistory: (employeeId: string) => void;
+  onViewPaymentHistory: (employeeId: string) => void;
 }
 
 export function EmployeesTable({
@@ -26,6 +27,7 @@ export function EmployeesTable({
   onEdit,
   onDelete,
   onViewHistory,
+  onViewPaymentHistory,
 }: EmployeesTableProps) {
   if (employees.length === 0) {
     return (
@@ -79,9 +81,20 @@ export function EmployeesTable({
                     size="icon"
                     className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                     onClick={() => onViewHistory(employee.id)}
-                    aria-label={`عرض سجل رواتب ${employee.name}`}
+                    aria-label={`عرض سجل تعديلات الراتب ${employee.name}`}
+                    title="سجل تعديلات الراتب"
                   >
                     <History className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                    onClick={() => onViewPaymentHistory(employee.id)}
+                    aria-label={`عرض سجل المدفوعات ${employee.name}`}
+                    title="سجل المدفوعات"
+                  >
+                    <Banknote className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <PermissionGate action="update" module="employees">
                     <Button

@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, Trash2 } from "lucide-react";
+import { DollarSign, Trash2, CheckCircle } from "lucide-react";
 import { Employee, PayrollEntry } from "../types/employees";
 
 interface PayrollTableProps {
@@ -24,6 +24,7 @@ interface PayrollTableProps {
   loading: boolean;
   onProcessPayroll: () => void;
   onMarkAsPaid: (entry: PayrollEntry) => void;
+  onMarkAllAsPaid: () => void;
   onDeletePayrollEntry: (entry: PayrollEntry) => void;
 }
 
@@ -37,6 +38,7 @@ export function PayrollTable({
   loading,
   onProcessPayroll,
   onMarkAsPaid,
+  onMarkAllAsPaid,
   onDeletePayrollEntry,
 }: PayrollTableProps) {
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
@@ -49,6 +51,18 @@ export function PayrollTable({
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">معالجة الرواتب الشهرية</h3>
         <div className="flex items-center gap-4">
+          {/* Pay All Button - only show if there are unpaid entries */}
+          {monthPayroll.filter(p => !p.isPaid).length > 0 && (
+            <Button
+              onClick={onMarkAllAsPaid}
+              disabled={loading}
+              variant="default"
+              className="gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="w-4 h-4" />
+              دفع الكل ({monthPayroll.filter(p => !p.isPaid).length})
+            </Button>
+          )}
           <Label htmlFor="month">الشهر:</Label>
           <Input
             id="month"
@@ -125,6 +139,33 @@ export function PayrollTable({
                 </TableRow>
               ))}
             </TableBody>
+            <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+              <TableRow>
+                <TableCell className="font-bold text-gray-700">الإجمالي</TableCell>
+                <TableCell className="font-bold">
+                  {monthPayroll.reduce((sum, e) => sum + e.baseSalary, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell className="font-bold">
+                  {monthPayroll.reduce((sum, e) => sum + e.overtimeHours, 0)} ساعة
+                </TableCell>
+                <TableCell className="font-bold">
+                  {monthPayroll.reduce((sum, e) => sum + e.overtimePay, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell className="font-bold text-blue-700">
+                  {monthPayroll.reduce((sum, e) => sum + e.totalSalary, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell>
+                  <span className="text-green-600 font-medium">
+                    {monthPayroll.filter(e => e.isPaid).length} مدفوع
+                  </span>
+                  {" / "}
+                  <span className="text-orange-600 font-medium">
+                    {monthPayroll.filter(e => !e.isPaid).length} غير مدفوع
+                  </span>
+                </TableCell>
+                <TableCell></TableCell>
+              </TableRow>
+            </tfoot>
           </Table>
         </div>
       ) : employees.length > 0 ? (
@@ -201,6 +242,29 @@ export function PayrollTable({
                 );
               })}
             </TableBody>
+            <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+              <TableRow>
+                <TableCell className="font-bold text-gray-700">الإجمالي</TableCell>
+                <TableCell className="font-bold">
+                  {employees.reduce((sum, e) => sum + e.currentSalary, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell></TableCell>
+                <TableCell className="font-bold">
+                  {employees.reduce((sum, e) => {
+                    const overtime = parseFloat(payrollData[e.id]?.overtime || "0");
+                    return sum + (e.overtimeEligible ? calculateOvertimePay(e.currentSalary, overtime) : 0);
+                  }, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell className="font-bold text-blue-700">
+                  {employees.reduce((sum, e) => {
+                    const overtime = parseFloat(payrollData[e.id]?.overtime || "0");
+                    const overtimePay = e.overtimeEligible ? calculateOvertimePay(e.currentSalary, overtime) : 0;
+                    return sum + e.currentSalary + overtimePay;
+                  }, 0).toFixed(2)} دينار
+                </TableCell>
+                <TableCell></TableCell>
+              </TableRow>
+            </tfoot>
           </Table>
           <div className="mt-4 flex justify-end">
             <Button

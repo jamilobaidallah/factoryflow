@@ -19,13 +19,14 @@ import { EmployeesTable } from "./components/EmployeesTable";
 import { PayrollTable } from "./components/PayrollTable";
 import { EmployeeFormDialog } from "./components/EmployeeFormDialog";
 import { SalaryHistoryDialog } from "./components/SalaryHistoryDialog";
+import { EmployeePaymentHistoryDialog } from "./components/EmployeePaymentHistoryDialog";
 
 export default function EmployeesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   // Data and operations hooks
   const { employees, salaryHistory, payrollEntries, loading: dataLoading } = useEmployeesData();
-  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
+  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, markAllAsPaid, deletePayrollEntry } = useEmployeesOperations();
 
   // UI state
   const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
@@ -34,6 +35,13 @@ export default function EmployeesPage() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<typeof salaryHistory>([]);
   const [loading, setLoading] = useState(false);
+
+  // Payment history dialog state
+  const [isPaymentHistoryOpen, setIsPaymentHistoryOpen] = useState(false);
+  const [selectedEmployeeForPaymentHistory, setSelectedEmployeeForPaymentHistory] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Payroll state
   const [selectedMonth, setSelectedMonth] = useState(
@@ -97,6 +105,19 @@ export default function EmployeesPage() {
     setIsHistoryDialogOpen(true);
   };
 
+  const viewPaymentHistory = (employeeId: string) => {
+    const employee = employees.find(e => e.id === employeeId);
+    if (employee) {
+      setSelectedEmployeeForPaymentHistory({ id: employeeId, name: employee.name });
+      setIsPaymentHistoryOpen(true);
+    }
+  };
+
+  // Get payroll history for selected employee
+  const selectedEmployeePayrollHistory = selectedEmployeeForPaymentHistory
+    ? payrollEntries.filter(p => p.employeeId === selectedEmployeeForPaymentHistory.id)
+    : [];
+
   const handleProcessPayroll = () => {
     confirm(
       "معالجة الرواتب",
@@ -141,6 +162,22 @@ export default function EmployeesPage() {
 
   const monthPayroll = payrollEntries.filter(p => p.month === selectedMonth);
 
+  const handleMarkAllAsPaid = () => {
+    const unpaidEntries = monthPayroll.filter(p => !p.isPaid);
+    const totalAmount = unpaidEntries.reduce((sum, p) => sum + p.totalSalary, 0);
+
+    confirm(
+      "تأكيد دفع جميع الرواتب",
+      `هل تريد دفع رواتب ${unpaidEntries.length} موظف بإجمالي ${totalAmount.toFixed(2)} دينار؟`,
+      async () => {
+        setLoading(true);
+        await markAllAsPaid(unpaidEntries);
+        setLoading(false);
+      },
+      "info"
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -150,14 +187,20 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {dataLoading ? (
           <>
             <StatCardSkeleton />
             <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
           </>
         ) : (
-          <EmployeesStatsCards employees={employees} />
+          <EmployeesStatsCards
+            employees={employees}
+            monthPayroll={monthPayroll}
+            selectedMonth={selectedMonth}
+          />
         )}
       </div>
 
@@ -216,6 +259,7 @@ export default function EmployeesPage() {
                 onEdit={handleEditEmployee}
                 onDelete={handleDeleteEmployee}
                 onViewHistory={viewSalaryHistory}
+                onViewPaymentHistory={viewPaymentHistory}
               />
             )}
           </CardContent>
@@ -239,6 +283,7 @@ export default function EmployeesPage() {
               loading={loading}
               onProcessPayroll={handleProcessPayroll}
               onMarkAsPaid={handleMarkAsPaid}
+              onMarkAllAsPaid={handleMarkAllAsPaid}
               onDeletePayrollEntry={handleDeletePayrollEntry}
             />
           </CardContent>
@@ -259,6 +304,13 @@ export default function EmployeesPage() {
         isOpen={isHistoryDialogOpen}
         onClose={() => setIsHistoryDialogOpen(false)}
         history={selectedEmployeeHistory}
+      />
+
+      <EmployeePaymentHistoryDialog
+        isOpen={isPaymentHistoryOpen}
+        onClose={() => setIsPaymentHistoryOpen(false)}
+        employeeName={selectedEmployeeForPaymentHistory?.name || ""}
+        payrollHistory={selectedEmployeePayrollHistory}
       />
 
       {confirmationDialog}
