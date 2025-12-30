@@ -25,7 +25,7 @@ export default function EmployeesPage() {
 
   // Data and operations hooks
   const { employees, salaryHistory, payrollEntries, loading: dataLoading } = useEmployeesData();
-  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid } = useEmployeesOperations();
+  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
 
   // UI state
   const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
@@ -123,6 +123,19 @@ export default function EmployeesPage() {
         setLoading(false);
       },
       "info"
+    );
+  };
+
+  const handleDeletePayrollEntry = (payrollEntry: typeof payrollEntries[0]) => {
+    confirm(
+      "حذف سجل الراتب",
+      `هل أنت متأكد من حذف سجل راتب ${payrollEntry.employeeName} لشهر ${payrollEntry.month}؟`,
+      async () => {
+        setLoading(true);
+        await deletePayrollEntry(payrollEntry);
+        setLoading(false);
+      },
+      "destructive"
     );
   };
 
@@ -226,6 +239,7 @@ export default function EmployeesPage() {
               loading={loading}
               onProcessPayroll={handleProcessPayroll}
               onMarkAsPaid={handleMarkAsPaid}
+              onDeletePayrollEntry={handleDeletePayrollEntry}
             />
           </CardContent>
         </Card>

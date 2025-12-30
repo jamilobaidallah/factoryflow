@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign } from "lucide-react";
+import { DollarSign, Trash2 } from "lucide-react";
 import { Employee, PayrollEntry } from "../types/employees";
 
 interface PayrollTableProps {
@@ -24,6 +24,7 @@ interface PayrollTableProps {
   loading: boolean;
   onProcessPayroll: () => void;
   onMarkAsPaid: (entry: PayrollEntry) => void;
+  onDeletePayrollEntry: (entry: PayrollEntry) => void;
 }
 
 export function PayrollTable({
@@ -36,6 +37,7 @@ export function PayrollTable({
   loading,
   onProcessPayroll,
   onMarkAsPaid,
+  onDeletePayrollEntry,
 }: PayrollTableProps) {
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
     const hourlyRate = currentSalary / 208;
@@ -98,15 +100,26 @@ export function PayrollTable({
                   </TableCell>
                   <TableCell>
                     {!entry.isPaid && (
-                      <Button
-                        size="sm"
-                        onClick={() => onMarkAsPaid(entry)}
-                        disabled={loading}
-                        aria-label={`تسجيل دفع راتب ${entry.employeeName}`}
-                      >
-                        <DollarSign className="w-4 h-4 mr-1" aria-hidden="true" />
-                        تسجيل دفع
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => onMarkAsPaid(entry)}
+                          disabled={loading}
+                          aria-label={`تسجيل دفع راتب ${entry.employeeName}`}
+                        >
+                          <DollarSign className="w-4 h-4 mr-1" aria-hidden="true" />
+                          تسجيل دفع
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => onDeletePayrollEntry(entry)}
+                          disabled={loading}
+                          aria-label={`حذف سجل راتب ${entry.employeeName}`}
+                        >
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

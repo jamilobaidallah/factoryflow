@@ -31,6 +31,7 @@ interface UseEmployeesOperationsReturn {
     payrollData: {[key: string]: {overtime: string, notes: string}}
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
+  deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
 }
 
 export function useEmployeesOperations(): UseEmployeesOperationsReturn {
@@ -226,9 +227,31 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         return false;
       }
 
+      // Filter employees by hire date - only include those hired before or during the selected month
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const monthEndDate = new Date(year, month, 0); // Last day of selected month
+
+      const eligibleEmployees = employees.filter(employee => {
+        const hireDate = employee.hireDate instanceof Date
+          ? employee.hireDate
+          : new Date(employee.hireDate);
+        return hireDate <= monthEndDate;
+      });
+
+      const skippedCount = employees.length - eligibleEmployees.length;
+
+      if (eligibleEmployees.length === 0) {
+        toast({
+          title: "لا يوجد موظفين مؤهلين",
+          description: `جميع الموظفين تم تعيينهم بعد شهر ${selectedMonth}`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
       const batch = writeBatch(firestore);
 
-      for (const employee of employees) {
+      for (const employee of eligibleEmployees) {
         const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
         const overtimePay = employee.overtimeEligible
           ? calculateOvertimePay(employee.currentSalary, overtimeHours)
@@ -262,13 +285,18 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         description: `معالجة رواتب شهر ${selectedMonth}`,
         metadata: {
           month: selectedMonth,
-          employeeCount: employees.length,
+          employeeCount: eligibleEmployees.length,
+          skippedCount,
         },
       });
 
+      const skippedMessage = skippedCount > 0
+        ? ` (تم تخطي ${skippedCount} موظف لم يتم تعيينهم بعد)`
+        : '';
+
       toast({
         title: "تمت المعالجة",
-        description: `تم إنشاء كشف رواتب ${selectedMonth} بنجاح`,
+        description: `تم إنشاء كشف رواتب ${selectedMonth} لـ ${eligibleEmployees.length} موظف${skippedMessage}`,
       });
       return true;
     } catch (error) {
@@ -365,5 +393,53 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
   };
 
-  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid };
+  const deletePayrollEntry = async (payrollEntry: PayrollEntry): Promise<boolean> => {
+    if (!user) return false;
+
+    // Only allow deleting unpaid entries
+    if (payrollEntry.isPaid) {
+      toast({
+        title: "لا يمكن الحذف",
+        description: "لا يمكن حذف سجل راتب تم دفعه. يرجى عكس الدفع أولاً.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const payrollRef = doc(firestore, `users/${user.dataOwnerId}/payroll`, payrollEntry.id);
+      await deleteDoc(payrollRef);
+
+      // Log activity for delete
+      logActivity(user.dataOwnerId, {
+        action: 'delete',
+        module: 'employees',
+        targetId: payrollEntry.id,
+        userId: user.uid,
+        userEmail: user.email || '',
+        description: `حذف سجل راتب: ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+        metadata: {
+          employeeName: payrollEntry.employeeName,
+          month: payrollEntry.month,
+          totalSalary: payrollEntry.totalSalary,
+        },
+      });
+
+      toast({
+        title: "تم الحذف",
+        description: `تم حذف سجل راتب ${payrollEntry.employeeName}`,
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry };
 }
