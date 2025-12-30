@@ -211,6 +211,21 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     try {
       const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
 
+      // Check if selected month is in the future
+      const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // getMonth() is 0-indexed
+
+      if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonthNum > currentMonth)) {
+        toast({
+          title: "لا يمكن معالجة شهر مستقبلي",
+          description: `لا يمكن معالجة رواتب شهر ${selectedMonth} لأنه في المستقبل. يمكنك فقط معالجة الشهر الحالي أو الأشهر السابقة.`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
       // Check for existing payroll entries for this month
       const existingQuery = query(
         payrollRef,
