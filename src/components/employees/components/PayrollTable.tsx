@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +46,21 @@ export function PayrollTable({
     const hourlyRate = currentSalary / 208;
     return overtimeHours * hourlyRate * 1.5;
   };
+
+  // Filter employees by hire date - only include those hired before or during the selected month
+  const eligibleEmployees = useMemo(() => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const monthEndDate = new Date(year, month, 0); // Last day of selected month
+
+    return employees.filter(employee => {
+      const hireDate = employee.hireDate instanceof Date
+        ? employee.hireDate
+        : new Date(employee.hireDate);
+      return hireDate <= monthEndDate;
+    });
+  }, [employees, selectedMonth]);
+
+  const skippedCount = employees.length - eligibleEmployees.length;
 
   return (
     <div className="space-y-6">
@@ -168,11 +184,16 @@ export function PayrollTable({
             </tfoot>
           </Table>
         </div>
-      ) : employees.length > 0 ? (
+      ) : eligibleEmployees.length > 0 ? (
         <div>
           <p className="text-sm text-gray-600 mb-4">
             أدخل ساعات العمل الإضافية (إن وجدت) لكل موظف:
           </p>
+          {skippedCount > 0 && (
+            <p className="text-sm text-orange-600 mb-4">
+              ملاحظة: {skippedCount} موظف لم يتم تعيينهم بعد في هذا الشهر ولن يتم إدراجهم.
+            </p>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
@@ -185,7 +206,7 @@ export function PayrollTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.map((employee) => {
+              {eligibleEmployees.map((employee) => {
                 const overtime = parseFloat(payrollData[employee.id]?.overtime || "0");
                 const overtimePay = employee.overtimeEligible
                   ? calculateOvertimePay(employee.currentSalary, overtime)
@@ -246,17 +267,17 @@ export function PayrollTable({
               <TableRow>
                 <TableCell className="font-bold text-gray-700">الإجمالي</TableCell>
                 <TableCell className="font-bold">
-                  {employees.reduce((sum, e) => sum + e.currentSalary, 0).toFixed(2)} دينار
+                  {eligibleEmployees.reduce((sum, e) => sum + e.currentSalary, 0).toFixed(2)} دينار
                 </TableCell>
                 <TableCell></TableCell>
                 <TableCell className="font-bold">
-                  {employees.reduce((sum, e) => {
+                  {eligibleEmployees.reduce((sum, e) => {
                     const overtime = parseFloat(payrollData[e.id]?.overtime || "0");
                     return sum + (e.overtimeEligible ? calculateOvertimePay(e.currentSalary, overtime) : 0);
                   }, 0).toFixed(2)} دينار
                 </TableCell>
                 <TableCell className="font-bold text-blue-700">
-                  {employees.reduce((sum, e) => {
+                  {eligibleEmployees.reduce((sum, e) => {
                     const overtime = parseFloat(payrollData[e.id]?.overtime || "0");
                     const overtimePay = e.overtimeEligible ? calculateOvertimePay(e.currentSalary, overtime) : 0;
                     return sum + e.currentSalary + overtimePay;
@@ -269,7 +290,7 @@ export function PayrollTable({
           <div className="mt-4 flex justify-end">
             <Button
               onClick={onProcessPayroll}
-              disabled={loading}
+              disabled={loading || eligibleEmployees.length === 0}
               size="lg"
               className="gap-2"
               aria-label={`معالجة رواتب شهر ${selectedMonth}`}
@@ -279,6 +300,10 @@ export function PayrollTable({
             </Button>
           </div>
         </div>
+      ) : employees.length > 0 ? (
+        <p className="text-gray-500 text-center py-12">
+          لا يوجد موظفين مؤهلين لهذا الشهر. جميع الموظفين تم تعيينهم بعد شهر {selectedMonth}.
+        </p>
       ) : (
         <p className="text-gray-500 text-center py-12">
           لا يوجد موظفين. قم بإضافة موظفين أولاً.
