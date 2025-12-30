@@ -228,15 +228,30 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         return false;
       }
 
+      // Helper to safely convert any date-like value to a Date object
+      const toSafeDate = (value: Date | { toDate?: () => Date } | string | number | null | undefined): Date | null => {
+        if (!value) return null;
+        if (value instanceof Date) return value;
+        // Handle Firestore Timestamp
+        if (typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
+          return value.toDate();
+        }
+        if (typeof value === 'string' || typeof value === 'number') {
+          const date = new Date(value);
+          return isNaN(date.getTime()) ? null : date;
+        }
+        return null;
+      };
+
       // Filter employees by hire date - only include those hired before or during the selected month
       const [year, month] = selectedMonth.split('-').map(Number);
       const monthEndDate = new Date(year, month, 0); // Last day of selected month
+      monthEndDate.setHours(23, 59, 59, 999); // End of day
 
       const eligibleEmployees = employees.filter(employee => {
-        const hireDate = employee.hireDate instanceof Date
-          ? employee.hireDate
-          : new Date(employee.hireDate);
-        return hireDate <= monthEndDate;
+        const hireDate = toSafeDate(employee.hireDate);
+        if (!hireDate) return false; // If no valid hire date, exclude
+        return hireDate.getTime() <= monthEndDate.getTime();
       });
 
       const skippedCount = employees.length - eligibleEmployees.length;
