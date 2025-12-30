@@ -10,6 +10,10 @@ import {
   deleteDoc,
   doc,
   writeBatch,
+  getDocs,
+  query,
+  where,
+  limit,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Employee, EmployeeFormData, PayrollEntry } from "../types/employees";
@@ -203,8 +207,26 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     if (!user) return false;
 
     try {
-      const batch = writeBatch(firestore);
       const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
+
+      // Check for existing payroll entries for this month
+      const existingQuery = query(
+        payrollRef,
+        where("month", "==", selectedMonth),
+        limit(1)
+      );
+      const existingSnapshot = await getDocs(existingQuery);
+
+      if (!existingSnapshot.empty) {
+        toast({
+          title: "تم المعالجة مسبقاً",
+          description: `تم معالجة رواتب شهر ${selectedMonth} مسبقاً. لا يمكن المعالجة مرة أخرى.`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      const batch = writeBatch(firestore);
 
       for (const employee of employees) {
         const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
@@ -305,6 +327,8 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         linkedTransactionId: transactionId,
         date: new Date(),
         notes: `دفع راتب ${payrollEntry.month}`,
+        category: "مصاريف تشغيلية",
+        subCategory: "رواتب وأجور",
         createdAt: new Date(),
       });
 

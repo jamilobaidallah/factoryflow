@@ -80,11 +80,12 @@ export default function EmployeesPage() {
   };
 
   const handleDeleteEmployee = (employeeId: string) => {
+    const employee = employees.find(e => e.id === employeeId);
     confirm(
       "حذف الموظف",
-      "هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن هذا الإجراء.",
+      `هل أنت متأكد من حذف الموظف "${employee?.name || ''}"؟ لا يمكن التراجع عن هذا الإجراء.`,
       async () => {
-        await deleteEmployee(employeeId);
+        await deleteEmployee(employeeId, employee);
       },
       "destructive"
     );
@@ -112,10 +113,17 @@ export default function EmployeesPage() {
     );
   };
 
-  const handleMarkAsPaid = async (payrollEntry: typeof payrollEntries[0]) => {
-    setLoading(true);
-    await markAsPaid(payrollEntry);
-    setLoading(false);
+  const handleMarkAsPaid = (payrollEntry: typeof payrollEntries[0]) => {
+    confirm(
+      "تأكيد دفع الراتب",
+      `هل تريد تسجيل دفع راتب ${payrollEntry.employeeName} بقيمة ${payrollEntry.totalSalary.toFixed(2)} دينار؟`,
+      async () => {
+        setLoading(true);
+        await markAsPaid(payrollEntry);
+        setLoading(false);
+      },
+      "info"
+    );
   };
 
   const monthPayroll = payrollEntries.filter(p => p.month === selectedMonth);

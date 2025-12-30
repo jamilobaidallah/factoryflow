@@ -77,7 +77,8 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     if (!user) return;
 
     const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
-    const q = query(payrollRef, orderBy("month", "desc"), limit(24));
+    // Increased limit to support ~50 employees × 12 months of history
+    const q = query(payrollRef, orderBy("month", "desc"), limit(600));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const payrollData: PayrollEntry[] = [];
