@@ -311,4 +311,57 @@ export const QUERY_LIMITS = {
   DEFAULT_PAGE_SIZE: 50,
   /** Maximum partners for dropdown */
   PARTNERS: 100,
+  /** Maximum advances to fetch */
+  ADVANCES: 500,
 } as const;
+
+// Employee Advances
+export const ADVANCE_STATUS = {
+  ACTIVE: 'active',
+  FULLY_DEDUCTED: 'fully_deducted',
+  CANCELLED: 'cancelled',
+} as const;
+
+export const ADVANCE_STATUS_LABELS = {
+  [ADVANCE_STATUS.ACTIVE]: 'نشطة',
+  [ADVANCE_STATUS.FULLY_DEDUCTED]: 'مخصومة بالكامل',
+  [ADVANCE_STATUS.CANCELLED]: 'ملغاة',
+} as const;
+
+export type AdvanceStatus = typeof ADVANCE_STATUS[keyof typeof ADVANCE_STATUS];
+
+// Payroll Deduction Types
+export const PAYROLL_DEDUCTION_TYPES = {
+  ABSENCE: 'absence',
+  PENALTY: 'penalty',
+  INSURANCE: 'insurance',
+  TAX: 'tax',
+  OTHER: 'other',
+} as const;
+
+export const PAYROLL_DEDUCTION_LABELS = {
+  [PAYROLL_DEDUCTION_TYPES.ABSENCE]: 'غياب',
+  [PAYROLL_DEDUCTION_TYPES.PENALTY]: 'جزاء',
+  [PAYROLL_DEDUCTION_TYPES.INSURANCE]: 'تأمين',
+  [PAYROLL_DEDUCTION_TYPES.TAX]: 'ضريبة',
+  [PAYROLL_DEDUCTION_TYPES.OTHER]: 'أخرى',
+} as const;
+
+export type PayrollDeductionType = typeof PAYROLL_DEDUCTION_TYPES[keyof typeof PAYROLL_DEDUCTION_TYPES];
+
+// Payroll Bonus Types
+export const PAYROLL_BONUS_TYPES = {
+  PERFORMANCE: 'performance',
+  EID: 'eid',
+  ANNUAL: 'annual',
+  OTHER: 'other',
+} as const;
+
+export const PAYROLL_BONUS_LABELS = {
+  [PAYROLL_BONUS_TYPES.PERFORMANCE]: 'حافز أداء',
+  [PAYROLL_BONUS_TYPES.EID]: 'مكافأة عيد',
+  [PAYROLL_BONUS_TYPES.ANNUAL]: 'مكافأة سنوية',
+  [PAYROLL_BONUS_TYPES.OTHER]: 'أخرى',
+} as const;
+
+export type PayrollBonusType = typeof PAYROLL_BONUS_TYPES[keyof typeof PAYROLL_BONUS_TYPES];

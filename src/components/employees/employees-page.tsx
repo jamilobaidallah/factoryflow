@@ -10,8 +10,11 @@ import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleto
 
 // Types and hooks
 import { Employee, initialEmployeeFormData } from "./types/employees";
+import { initialAdvanceFormData } from "./types/advances";
 import { useEmployeesData } from "./hooks/useEmployeesData";
 import { useEmployeesOperations } from "./hooks/useEmployeesOperations";
+import { useAdvancesData } from "./hooks/useAdvancesData";
+import { useAdvancesOperations } from "./hooks/useAdvancesOperations";
 
 // Components
 import { EmployeesStatsCards } from "./components/EmployeesStatsCards";
@@ -19,6 +22,8 @@ import { EmployeesTable } from "./components/EmployeesTable";
 import { PayrollTable } from "./components/PayrollTable";
 import { EmployeeFormDialog } from "./components/EmployeeFormDialog";
 import { SalaryHistoryDialog } from "./components/SalaryHistoryDialog";
+import { AdvancesTable } from "./components/AdvancesTable";
+import { AdvanceFormDialog } from "./components/AdvanceFormDialog";
 
 export default function EmployeesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -26,11 +31,14 @@ export default function EmployeesPage() {
   // Data and operations hooks
   const { employees, salaryHistory, payrollEntries, loading: dataLoading } = useEmployeesData();
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
+  const { advances, loading: advancesLoading, getTotalOutstandingAdvances } = useAdvancesData();
+  const { createAdvance, cancelAdvance } = useAdvancesOperations();
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
+  const [activeTab, setActiveTab] = useState<"employees" | "payroll" | "advances">("employees");
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [isAdvanceDialogOpen, setIsAdvanceDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<typeof salaryHistory>([]);
   const [loading, setLoading] = useState(false);
@@ -39,10 +47,11 @@ export default function EmployeesPage() {
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7) // "2025-11"
   );
-  const [payrollData, setPayrollData] = useState<{[key: string]: {overtime: string, notes: string}}>({});
+  const [payrollData, setPayrollData] = useState<{[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}>({});
 
   // Form state
   const [employeeFormData, setEmployeeFormData] = useState(initialEmployeeFormData);
+  const [advanceFormData, setAdvanceFormData] = useState(initialAdvanceFormData);
 
   const resetEmployeeForm = () => {
     setEmployeeFormData(initialEmployeeFormData);
@@ -141,6 +150,38 @@ export default function EmployeesPage() {
 
   const monthPayroll = payrollEntries.filter(p => p.month === selectedMonth);
 
+  // Advance handlers
+  const openAddAdvanceDialog = () => {
+    setAdvanceFormData(initialAdvanceFormData);
+    setIsAdvanceDialogOpen(true);
+  };
+
+  const handleAdvanceSubmit = async () => {
+    const employee = employees.find((e) => e.id === advanceFormData.employeeId);
+    if (!employee) return;
+
+    setLoading(true);
+    const success = await createAdvance(advanceFormData, employee);
+    if (success) {
+      setAdvanceFormData(initialAdvanceFormData);
+      setIsAdvanceDialogOpen(false);
+    }
+    setLoading(false);
+  };
+
+  const handleCancelAdvance = (advance: typeof advances[0]) => {
+    confirm(
+      "إلغاء السلفة",
+      `هل أنت متأكد من إلغاء سلفة ${advance.employeeName}؟`,
+      async () => {
+        setLoading(true);
+        await cancelAdvance(advance);
+        setLoading(false);
+      },
+      "destructive"
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -150,14 +191,18 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {dataLoading ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {dataLoading || advancesLoading ? (
           <>
+            <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
           </>
         ) : (
-          <EmployeesStatsCards employees={employees} />
+          <EmployeesStatsCards
+            employees={employees}
+            outstandingAdvances={getTotalOutstandingAdvances()}
+          />
         )}
       </div>
 
@@ -191,6 +236,20 @@ export default function EmployeesPage() {
             id="payroll-tab"
           >
             💰 الرواتب الشهرية
+          </button>
+          <button
+            onClick={() => setActiveTab("advances")}
+            className={`pb-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === "advances"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+            role="tab"
+            aria-selected={activeTab === "advances"}
+            aria-controls="advances-panel"
+            id="advances-tab"
+          >
+            💵 السلف
           </button>
         </nav>
       </div>
@@ -245,6 +304,33 @@ export default function EmployeesPage() {
         </Card>
       )}
 
+      {/* Advances Tab */}
+      {activeTab === "advances" && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>السلف ({advances.length})</CardTitle>
+            <PermissionGate action="create" module="employees">
+              <Button onClick={openAddAdvanceDialog} className="gap-2" aria-label="صرف سلفة جديدة">
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                صرف سلفة
+              </Button>
+            </PermissionGate>
+          </CardHeader>
+          <CardContent>
+            {advancesLoading ? (
+              <TableSkeleton rows={5} />
+            ) : (
+              <AdvancesTable
+                advances={advances}
+                employees={employees}
+                loading={loading}
+                onCancelAdvance={handleCancelAdvance}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <EmployeeFormDialog
         isOpen={isEmployeeDialogOpen}
         onClose={() => setIsEmployeeDialogOpen(false)}
@@ -259,6 +345,16 @@ export default function EmployeesPage() {
         isOpen={isHistoryDialogOpen}
         onClose={() => setIsHistoryDialogOpen(false)}
         history={selectedEmployeeHistory}
+      />
+
+      <AdvanceFormDialog
+        isOpen={isAdvanceDialogOpen}
+        onClose={() => setIsAdvanceDialogOpen(false)}
+        employees={employees}
+        formData={advanceFormData}
+        setFormData={setAdvanceFormData}
+        onSubmit={handleAdvanceSubmit}
+        loading={loading}
       />
 
       {confirmationDialog}

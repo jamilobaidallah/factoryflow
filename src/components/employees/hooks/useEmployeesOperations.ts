@@ -18,6 +18,13 @@ import {
 import { firestore } from "@/firebase/config";
 import { Employee, EmployeeFormData, PayrollEntry } from "../types/employees";
 import { logActivity } from "@/services/activityLogService";
+import {
+  safeAdd,
+  safeSubtract,
+  safeMultiply,
+  safeDivide,
+  parseAmount,
+} from "@/lib/currency";
 
 interface UseEmployeesOperationsReturn {
   submitEmployee: (
@@ -28,7 +35,7 @@ interface UseEmployeesOperationsReturn {
   processPayroll: (
     selectedMonth: string,
     employees: Employee[],
-    payrollData: {[key: string]: {overtime: string, notes: string}}
+    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
   deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
@@ -61,7 +68,10 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
         // If salary changed, record history and log activity
         if (oldSalary !== newSalary) {
-          const incrementPercentage = ((newSalary - oldSalary) / oldSalary) * 100;
+          const incrementPercentage = safeMultiply(
+            safeDivide(safeSubtract(newSalary, oldSalary), oldSalary),
+            100
+          );
           const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
           await addDoc(historyRef, {
             employeeId: editingEmployee.id,
@@ -195,15 +205,15 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
     // Calculate hourly rate: monthly salary ÷ 208 hours (26 days × 8 hours)
-    const hourlyRate = currentSalary / 208;
+    const hourlyRate = safeDivide(currentSalary, 208);
     // Overtime at 1.5x
-    return overtimeHours * hourlyRate * 1.5;
+    return safeMultiply(safeMultiply(overtimeHours, hourlyRate), 1.5);
   };
 
   const processPayroll = async (
     selectedMonth: string,
     employees: Employee[],
-    payrollData: {[key: string]: {overtime: string, notes: string}}
+    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -252,11 +262,19 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       const batch = writeBatch(firestore);
 
       for (const employee of eligibleEmployees) {
-        const overtimeHours = parseFloat(payrollData[employee.id]?.overtime || "0");
+        const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
+        const overtimeHours = parseAmount(empData.overtime || "0");
+        const bonusAmount = parseAmount(empData.bonus || "0");
+        const deductionAmount = parseAmount(empData.deduction || "0");
         const overtimePay = employee.overtimeEligible
           ? calculateOvertimePay(employee.currentSalary, overtimeHours)
           : 0;
-        const totalSalary = employee.currentSalary + overtimePay;
+
+        // Total = Base + Overtime + Bonus - Deduction
+        const totalSalary = safeSubtract(
+          safeAdd(safeAdd(employee.currentSalary, overtimePay), bonusAmount),
+          deductionAmount
+        );
 
         const payrollDocRef = doc(payrollRef);
         batch.set(payrollDocRef, {
@@ -266,9 +284,11 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           baseSalary: employee.currentSalary,
           overtimeHours: overtimeHours,
           overtimePay: overtimePay,
+          bonuses: bonusAmount > 0 ? [{ id: "1", type: "other", description: "مكافأة", amount: bonusAmount }] : [],
+          deductions: deductionAmount > 0 ? [{ id: "1", type: "other", description: "خصم", amount: deductionAmount }] : [],
           totalSalary: totalSalary,
           isPaid: false,
-          notes: payrollData[employee.id]?.notes || "",
+          notes: empData.notes || "",
           createdAt: new Date(),
         });
       }

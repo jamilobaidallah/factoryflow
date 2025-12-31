@@ -1,3 +1,5 @@
+import { PayrollDeductionType, PayrollBonusType } from "@/lib/constants";
+
 export interface Employee {
   id: string;
   name: string;
@@ -20,6 +22,20 @@ export interface SalaryHistory {
   createdAt: Date;
 }
 
+export interface PayrollDeduction {
+  id: string;
+  type: PayrollDeductionType;
+  description: string;
+  amount: number;
+}
+
+export interface PayrollBonus {
+  id: string;
+  type: PayrollBonusType;
+  description: string;
+  amount: number;
+}
+
 export interface PayrollEntry {
   id: string;
   employeeId: string;
@@ -28,6 +44,9 @@ export interface PayrollEntry {
   baseSalary: number;
   overtimeHours: number;
   overtimePay: number;
+  deductions?: PayrollDeduction[];
+  bonuses?: PayrollBonus[];
+  advanceDeduction?: number;
   totalSalary: number;
   isPaid: boolean;
   paidDate?: Date;
