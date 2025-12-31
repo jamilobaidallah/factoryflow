@@ -1,0 +1,449 @@
+# FactoryFlow Development Guide
+
+> **This file is automatically read by Claude Code at the start of every session.**
+
+FactoryFlow is a bilingual Arabic-first factory management system with double-entry bookkeeping.
+Built with Next.js 14, TypeScript, Firebase, Tailwind CSS, and shadcn/ui.
+
+---
+
+## 🚨 MANDATORY WORKFLOW
+
+### 1. Git Branching (CRITICAL)
+- **NEVER** commit directly to `master` or `main`
+- Create feature branch BEFORE any code: `feature/description` or `fix/issue-description`
+- This enables Vercel preview deployments
+
+### 2. Planning
+1. Read relevant codebase files
+2. Write plan in `tasks/todo.md` with checkable items
+3. **STOP** — ask for approval before coding
+
+### 3. Execution
+- Work through todo items systematically
+- Mark complete in `tasks/todo.md`
+- Explain each change
+
+### 4. 🔍 SELF-REVIEW & BUG HUNTING (MANDATORY)
+
+**Before saying "done", Claude MUST perform these steps automatically:**
+
+#### Step A: Generate Test Plan
+Create a mental checklist covering:
+- Happy path (normal usage)
+- Edge cases (empty data, zero values, max values)
+- Error scenarios (network failure, permission denied)
+- Arabic/RTL correctness
+- Mobile responsiveness
+- Permission levels (owner vs accountant vs viewer)
+
+#### Step B: Code Review Against Bug Patterns
+Go through ALL changed files and check for:
+
+| Check | What to Look For |
+|-------|------------------|
+| User ID | Any `user.uid` that should be `user.dataOwnerId`? |
+| Money Math | Any `+`, `-`, `*`, `/` on money without Decimal.js? |
+| Listeners | Any `onSnapshot` without cleanup in useEffect return? |
+| RTL | Any `mr-` that should be `ml-` for icons? |
+| Queries | Any unbounded queries missing `limit()`? |
+| Types | Any `any` types that should be properly typed? |
+| Console | Any `console.log` left in production code? |
+| Error Handling | Any try/catch without user feedback (toast)? |
+| Loading States | Any async operation without loading indicator? |
+| Empty States | What happens when data array is empty? |
+
+#### Step C: Trace Data Flow
+For each new/modified feature:
+1. Trace where data comes FROM (Firestore query? Props? State?)
+2. Trace where data goes TO (Firestore write? State update? UI?)
+3. Check: What if the source is null/undefined?
+4. Check: What if the write fails?
+
+#### Step D: Run Automated Checks
+```bash
+npm run lint          # Check for lint errors
+npm test              # Run unit tests
+```
+
+#### Step E: Report Findings
+After self-review, report:
+```markdown
+## 🔍 Self-Review Complete
+
+### Tests Performed:
+- [x] Checked for user.uid vs dataOwnerId — PASS
+- [x] Checked money calculations use Decimal.js — PASS
+- [x] Checked listener cleanup — PASS
+- [x] Verified RTL spacing — PASS
+- [x] Ran npm test — All tests pass
+
+### Edge Cases Verified:
+- [x] Empty client list shows empty state
+- [x] Zero amount is rejected by validation
+- [x] Network error shows Arabic error message
+
+### Potential Issues Found:
+- None / OR list any concerns
+```
+
+### 5. 📋 HUMAN TESTING PLAN (REQUIRED)
+
+**After self-review, Claude MUST generate a clear step-by-step testing plan:**
+
+```markdown
+## 📋 Human Testing Plan
+
+### Feature: [Name of feature/fix]
+### Test URL: [Vercel preview URL]
+### Time Estimate: [X minutes]
+
+---
+
+### 🟢 Happy Path Tests (Normal Usage)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 1 | [Test name] | 1. Go to [page]<br>2. Click [button]<br>3. Enter [data] | [What should happen] | |
+| 2 | [Test name] | 1. [Step]<br>2. [Step] | [Expected result] | |
+
+---
+
+### 🟡 Edge Case Tests (Unusual but Valid)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 3 | Empty state | Go to [page] with no data | Shows "لا توجد بيانات" message | |
+| 4 | Zero amount | Enter 0 in amount field | Validation error appears | |
+| 5 | Max value | Enter 999,999,999 | Accepted or shows limit error | |
+| 6 | Arabic text | Enter Arabic characters | Displays correctly RTL | |
+
+---
+
+### 🔴 Error Handling Tests
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 7 | Required field | Leave [field] empty, submit | Arabic error: "هذا الحقل مطلوب" | |
+| 8 | Invalid input | Enter [invalid data] | Appropriate error message | |
+
+---
+
+### 📱 Mobile Tests (Resize browser to 375px or use phone)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 9 | Layout | View [page] on mobile | No horizontal scroll, readable | |
+| 10 | Touch | Tap buttons and inputs | Responsive, no missed taps | |
+| 11 | Navigation | Use mobile menu | Works correctly | |
+
+---
+
+### 🔐 Permission Tests (If feature has RBAC)
+
+| # | Role | Test | Expected Result | ✅/❌ |
+|---|------|------|-----------------|-------|
+| 12 | Owner | Access feature | Full access | |
+| 13 | Accountant | Access feature | [Expected access level] | |
+| 14 | Viewer | Access feature | Read-only or hidden | |
+
+---
+
+### 💰 Accounting Tests (If feature affects money/ledger)
+
+| # | Test | Steps | Expected Result | ✅/❌ |
+|---|------|-------|-----------------|-------|
+| 15 | Journal entry | Create transaction | Debits = Credits in journal | |
+| 16 | Balance update | After transaction | Client/account balance correct | |
+
+---
+
+### ✍️ Test Results Summary
+
+| Total | Passed | Failed |
+|-------|--------|--------|
+| X | X | X |
+
+### Issues Found:
+- [ ] Issue 1: [Description]
+- [ ] Issue 2: [Description]
+```
+
+### 6. Finalization
+1. Add "Self-Review" section to `tasks/todo.md`
+2. Add "Human Testing Plan" to `tasks/todo.md`
+3. Push branch, create PR
+4. **STOP** — Output the Human Testing Plan and say: "PR created. Self-review complete. Please follow this testing plan:"
+
+---
+
+## 🐛 CRITICAL BUG PATTERNS TO AVOID
+
+### User ID Confusion (CRITICAL)
+```typescript
+// ❌ WRONG — breaks for non-owner users
+const path = `users/${user.uid}/ledger`;
+
+// ✅ CORRECT — always use dataOwnerId
+const path = `users/${user.dataOwnerId}/ledger`;
+```
+
+### Money Calculations
+```typescript
+// ❌ WRONG — floating point errors
+const total = amount1 + amount2;
+
+// ✅ CORRECT — use Decimal.js
+import Decimal from 'decimal.js-light';
+const total = new Decimal(amount1).plus(amount2).toNumber();
+```
+
+### Listener Memory Leaks
+```typescript
+// ❌ WRONG — no cleanup
+useEffect(() => {
+  onSnapshot(ref, callback);
+}, []);
+
+// ✅ CORRECT — always cleanup
+useEffect(() => {
+  const unsubscribe = onSnapshot(ref, callback);
+  return () => unsubscribe();
+}, []);
+```
+
+### RTL Icon Spacing
+```typescript
+// ❌ WRONG for Arabic RTL
+<Icon className="mr-2" />
+
+// ✅ CORRECT for Arabic RTL
+<Icon className="ml-2" />
+```
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+src/
+├── app/           # Next.js App Router pages
+├── components/
+│   ├── ui/        # shadcn/ui base components (DON'T MODIFY)
+│   └── [feature]/ # Feature components
+├── lib/           # Utilities, constants
+├── services/      # Business logic
+├── hooks/         # Custom React hooks
+├── types/         # TypeScript types
+└── firebase/      # Firebase config
+```
+
+## 🔒 DO NOT TOUCH (Working Well)
+
+| File | Why It's Protected |
+|------|-------------------|
+| `chequeStateMachine.ts` | 275+ lines of tests, enforces business rules for cheque lifecycle |
+| `journalService.ts` | Debits=Credits validation — breaks accounting if changed wrong |
+| `permissions.ts` | Complete RBAC matrix — extend only, don't restructure |
+| `src/components/ui/*` | shadcn/ui components — stable, well-tested |
+
+---
+
+## ⚠️ KNOWN ISSUES (Don't Make Worse)
+
+### Performance Debt
+- **Client balance calculation is O(n²)** — calculated client-side from ledger + payments + cheques every render. Don't add complexity.
+- **Some pages have 4+ onSnapshot listeners** — consolidate if possible, don't add more.
+- **`usePaginatedCollection` is incomplete** — the `loadMore()` function is a TODO. Don't rely on it.
+
+### N+1 Query Pattern (AVOID)
+```typescript
+// ❌ WRONG — N+1 queries, very slow
+for (const client of clients) {
+  client.balance = await getBalance(client.id); // One query per client!
+}
+
+// ✅ CORRECT — fetch all data once, calculate in memory
+const [clients, ledger, payments] = await Promise.all([...]);
+// Calculate balances from loaded data
+```
+
+### Hardcoded Limits
+- `journalService.ts` has `limit(5000)` — will silently truncate for large datasets
+- Be aware when business grows
+
+---
+
+## 📊 DATABASE SCHEMA RULES
+
+### Adding New Fields
+When adding new fields to Firestore documents, **always make them optional with defaults**:
+```typescript
+// ❌ WRONG — existing documents will break
+interface Client {
+  name: string;
+  newRequiredField: string; // Existing docs don't have this!
+}
+
+// ✅ CORRECT — backward compatible
+interface Client {
+  name: string;
+  newOptionalField?: string; // Safe for existing docs
+}
+```
+
+### Reading Data Safely
+```typescript
+// Always handle missing fields
+const value = doc.data()?.newField ?? defaultValue;
+```
+
+---
+
+## 🧪 TESTING REQUIREMENTS
+
+### New Business Logic Needs Tests
+- Check `src/__tests__/` and `src/lib/__tests__/` for patterns
+- Accounting logic MUST have tests (debits = credits)
+- State machine transitions MUST have tests
+
+### Test File Location
+```
+src/
+├── lib/
+│   ├── chequeStateMachine.ts
+│   └── __tests__/
+│       └── chequeStateMachine.test.ts  ← Tests next to code
+```
+
+### Run Tests Before PR
+```bash
+npm test             # Run all tests
+npm test -- --watch  # Watch mode during development
+```
+
+---
+
+## 💰 ACCOUNTING RULES
+
+### Golden Rule
+**Debits MUST equal Credits** in every journal entry.
+
+### Common Journal Entries
+
+| Transaction | Debit | Credit |
+|-------------|-------|--------|
+| Cash Sale | Cash (1100) | Revenue (4100) |
+| Credit Sale | AR (1200) | Revenue (4100) |
+| Cash Expense | Expense (5XXX) | Cash (1100) |
+| Payment Received | Cash (1100) | AR (1200) |
+| Owner Capital | Cash (1100) | Owner's Capital (3100) |
+| Owner Withdrawal | Drawings (3200) | Cash (1100) |
+
+### Post-Dated Cheques
+- **PENDING**: No journal entry (not yet cashed)
+- **CASHED**: DR Cash, CR AR
+- **BOUNCED after cashing**: Reverse the entry
+
+### Equity ≠ Income/Expense
+Owner capital movements affect Balance Sheet, NOT Income Statement.
+
+---
+
+## 🎨 UI PATTERNS
+
+### Colors
+- Primary: `primary-50` to `primary-950` (blue)
+- Success: `success-50` to `success-900` (green) — income, paid
+- Danger: `danger-50` to `danger-900` (red) — expense, unpaid
+- Warning: `warning-50` to `warning-900` (amber) — pending
+
+### Cards
+```tsx
+<Card className="rounded-xl border border-slate-200/60 shadow-card hover:shadow-card-hover transition-shadow">
+```
+
+### Stats Card with Gradient
+```tsx
+<div className="rounded-xl p-6 bg-gradient-to-br from-success-50 to-success-100/50 border border-success-200/50">
+  <div className="text-sm text-success-600 font-medium">إجمالي المبيعات</div>
+  <div className="text-2xl font-bold text-success-900 mt-1">٥٠,٠٠٠ دينار</div>
+</div>
+```
+
+### Button with Icon (RTL)
+```tsx
+<Button>
+  <Plus className="ml-2 h-4 w-4" />  {/* ml-2 not mr-2 for RTL */}
+  إضافة جديد
+</Button>
+```
+
+### Status Badges
+```tsx
+<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700">مدفوع</span>
+<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger-100 text-danger-700">غير مدفوع</span>
+<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700">معلق</span>
+```
+
+### Responsive Grid
+```tsx
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+```
+
+---
+
+## 🔥 FIRESTORE PATTERNS
+
+### Collection Path
+```typescript
+// Always scope to dataOwnerId
+`users/${user.dataOwnerId}/clients`
+`users/${user.dataOwnerId}/ledger`
+```
+
+### Always Use Limits
+```typescript
+// ❌ WRONG — unbounded
+query(ref, orderBy('date'));
+
+// ✅ CORRECT — bounded
+query(ref, orderBy('date', 'desc'), limit(100));
+```
+
+### Batch for Atomic Operations
+```typescript
+const batch = writeBatch(firestore);
+batch.set(docRef1, data1);
+batch.set(docRef2, data2);
+await batch.commit(); // All succeed or all fail
+```
+
+---
+
+## ✅ PRE-COMMIT CHECKLIST
+
+Before saying a task is complete:
+
+- [ ] No `console.log` in production code
+- [ ] No TypeScript `any` — use proper types
+- [ ] Money uses `Decimal.js`, not `parseFloat`
+- [ ] Uses `user.dataOwnerId`, not `user.uid`
+- [ ] All listeners have cleanup functions
+- [ ] Error messages in Arabic
+- [ ] Loading and error states handled
+- [ ] Mobile responsive tested
+- [ ] RTL layout correct
+
+---
+
+## 📚 KEY FILES REFERENCE
+
+| Purpose | File |
+|---------|------|
+| Constants | `src/lib/constants.ts` |
+| Error handling | `src/lib/error-handling.ts` |
+| Permissions | `src/lib/permissions.ts` |
+| Journal entries | `src/services/journalService.ts` |
+| Cheque states | `src/lib/chequeStateMachine.ts` |
+| Types | `src/types/*.ts` |

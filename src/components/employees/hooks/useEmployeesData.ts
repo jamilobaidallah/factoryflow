@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@/firebase/provider";
 import {
   collection,
@@ -12,12 +12,15 @@ import {
 import { firestore } from "@/firebase/config";
 import { Employee, SalaryHistory, PayrollEntry } from "../types/employees";
 import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
+import { sumAmounts } from "@/lib/currency";
 
 interface UseEmployeesDataReturn {
   employees: Employee[];
   salaryHistory: SalaryHistory[];
   payrollEntries: PayrollEntry[];
   loading: boolean;
+  getEmployeeUnpaidSalaries: (employeeId: string) => number;
+  getTotalUnpaidSalaries: () => number;
 }
 
 export function useEmployeesData(): UseEmployeesDataReturn {
@@ -96,5 +99,39 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     return () => unsubscribe();
   }, [user]);
 
-  return { employees, salaryHistory, payrollEntries, loading };
+  // Calculate unpaid salaries for a specific employee
+  const getEmployeeUnpaidSalaries = useCallback(
+    (employeeId: string): number => {
+      const unpaidEntries = payrollEntries.filter(
+        (p) => p.employeeId === employeeId && !p.isPaid
+      );
+      return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
+    },
+    [payrollEntries]
+  );
+
+  // Calculate total unpaid salaries across all employees
+  const getTotalUnpaidSalaries = useCallback((): number => {
+    const unpaidEntries = payrollEntries.filter((p) => !p.isPaid);
+    return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
+  }, [payrollEntries]);
+
+  return useMemo(
+    () => ({
+      employees,
+      salaryHistory,
+      payrollEntries,
+      loading,
+      getEmployeeUnpaidSalaries,
+      getTotalUnpaidSalaries,
+    }),
+    [
+      employees,
+      salaryHistory,
+      payrollEntries,
+      loading,
+      getEmployeeUnpaidSalaries,
+      getTotalUnpaidSalaries,
+    ]
+  );
 }

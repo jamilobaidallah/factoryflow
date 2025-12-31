@@ -9,7 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { XCircle, Banknote } from "lucide-react";
+import { XCircle, Banknote, Calendar, Wallet, MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Advance } from "../types/advances";
 import { Employee } from "../types/employees";
 import { ADVANCE_STATUS, ADVANCE_STATUS_LABELS } from "@/lib/constants";
@@ -65,14 +71,107 @@ export function AdvancesTable({
           <Banknote className="w-8 h-8 text-slate-400" />
         </div>
         <p className="text-lg font-medium">لا توجد سلف مسجلة</p>
-        <p className="text-sm text-slate-400 mt-1">اضغط "صرف سلفة" لإضافة سلفة جديدة</p>
+        <p className="text-sm text-slate-400 mt-1">اضغط &quot;صرف سلفة&quot; لإضافة سلفة جديدة</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table>
+    <div className="space-y-4">
+      {/* Mobile Cards - shown only on small screens */}
+      <div className="md:hidden space-y-3">
+        {advances.map((advance) => {
+          const progressPercent = ((advance.amount - advance.remainingAmount) / advance.amount) * 100;
+
+          return (
+            <div
+              key={advance.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{advance.employeeName}</p>
+                  <p className="text-sm text-slate-500">{formatShortDate(advance.date)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(advance.status)}
+                  {advance.status === ADVANCE_STATUS.ACTIVE && (
+                    <PermissionGate action="delete" module="employees">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => onCancelAdvance(advance)}
+                            className="text-danger-600"
+                            disabled={loading}
+                          >
+                            <XCircle className="h-4 w-4 ml-2" />
+                            إلغاء السلفة
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </PermissionGate>
+                  )}
+                </div>
+              </div>
+
+              {/* Amount Info */}
+              <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <span className="text-slate-500">المبلغ:</span>
+                    <span className="font-semibold text-slate-900 mr-1">
+                      {formatNumber(advance.amount)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-warning-500" />
+                  <div>
+                    <span className="text-slate-500">المتبقي:</span>
+                    <span className={`font-semibold mr-1 ${advance.remainingAmount > 0 ? "text-warning-600" : "text-success-600"}`}>
+                      {formatNumber(advance.remainingAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              {advance.status === ADVANCE_STATUS.ACTIVE && (
+                <div className="pt-3 border-t border-slate-100">
+                  <div className="flex justify-between text-xs text-slate-500 mb-1">
+                    <span>تم السداد</span>
+                    <span>{progressPercent.toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-success-500 transition-all"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              {advance.notes && (
+                <p className="text-sm text-slate-500 mt-3 pt-3 border-t border-slate-100">
+                  {advance.notes}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Table - hidden on mobile */}
+      <div className="overflow-x-auto hidden md:block">
+        <Table>
         <TableHeader>
           <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
             <TableHead className="text-right font-semibold text-slate-700">الموظف</TableHead>
@@ -135,6 +234,7 @@ export function AdvancesTable({
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

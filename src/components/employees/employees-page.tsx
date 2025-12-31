@@ -29,9 +29,9 @@ export default function EmployeesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   // Data and operations hooks
-  const { employees, salaryHistory, payrollEntries, loading: dataLoading } = useEmployeesData();
+  const { employees, salaryHistory, payrollEntries, loading: dataLoading, getEmployeeUnpaidSalaries, getTotalUnpaidSalaries } = useEmployeesData();
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
-  const { advances, loading: advancesLoading, getTotalOutstandingAdvances } = useAdvancesData();
+  const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
   const { createAdvance, cancelAdvance } = useAdvancesOperations();
 
   // UI state
@@ -199,9 +199,10 @@ export default function EmployeesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {dataLoading || advancesLoading ? (
           <>
+            <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
@@ -210,6 +211,7 @@ export default function EmployeesPage() {
           <EmployeesStatsCards
             employees={employees}
             outstandingAdvances={getTotalOutstandingAdvances()}
+            totalUnpaidSalaries={getTotalUnpaidSalaries()}
           />
         )}
       </div>
@@ -265,6 +267,8 @@ export default function EmployeesPage() {
                 onEdit={handleEditEmployee}
                 onDelete={handleDeleteEmployee}
                 onViewHistory={viewSalaryHistory}
+                getEmployeeUnpaidSalaries={getEmployeeUnpaidSalaries}
+                getEmployeeOutstandingAdvances={getEmployeeOutstandingBalance}
               />
             )}
           </CardContent>

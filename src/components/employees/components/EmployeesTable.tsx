@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,10 +19,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Edit, Trash2, History, Search, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Edit, Trash2, History, Search, ChevronUp, ChevronDown, ChevronsUpDown, MoreVertical, Wallet, Calendar, Clock } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PermissionGate } from "@/components/auth";
 import { Employee } from "../types/employees";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
+import { EmployeeBalanceDisplay } from "./EmployeeBalanceDisplay";
+import { safeSubtract } from "@/lib/currency";
 
 type SortField = "name" | "currentSalary" | "hireDate";
 type SortDirection = "asc" | "desc";
@@ -31,6 +40,8 @@ interface EmployeesTableProps {
   onEdit: (employee: Employee) => void;
   onDelete: (employeeId: string) => void;
   onViewHistory: (employeeId: string) => void;
+  getEmployeeUnpaidSalaries: (employeeId: string) => number;
+  getEmployeeOutstandingAdvances: (employeeId: string) => number;
 }
 
 export function EmployeesTable({
@@ -38,7 +49,10 @@ export function EmployeesTable({
   onEdit,
   onDelete,
   onViewHistory,
+  getEmployeeUnpaidSalaries,
+  getEmployeeOutstandingAdvances,
 }: EmployeesTableProps) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -165,8 +179,113 @@ export function EmployeesTable({
         </p>
       )}
 
-      {/* Table */}
-      <div className="card-modern overflow-hidden">
+      {/* Mobile Cards - shown only on small screens */}
+      <div className="md:hidden space-y-3">
+        {paginatedEmployees.length === 0 ? (
+          <p className="text-center py-8 text-slate-500">لا توجد نتائج مطابقة للبحث</p>
+        ) : (
+          paginatedEmployees.map((employee) => {
+            const unpaidSalaries = getEmployeeUnpaidSalaries(employee.id);
+            const outstandingAdvances = getEmployeeOutstandingAdvances(employee.id);
+            const netBalance = safeSubtract(unpaidSalaries, outstandingAdvances);
+
+            return (
+              <div
+                key={employee.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <button
+                      onClick={() => router.push(`/employees/${employee.id}`)}
+                      className="font-semibold text-primary-600 hover:text-primary-700 hover:underline text-right"
+                    >
+                      {employee.name}
+                    </button>
+                    <p className="text-sm text-slate-500">{employee.position || "موظف"}</p>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onViewHistory(employee.id)}>
+                        <History className="h-4 w-4 ml-2" />
+                        سجل الرواتب
+                      </DropdownMenuItem>
+                      <PermissionGate action="update" module="employees">
+                        <DropdownMenuItem onClick={() => onEdit(employee)}>
+                          <Edit className="h-4 w-4 ml-2" />
+                          تعديل
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate action="delete" module="employees">
+                        <DropdownMenuItem
+                          onClick={() => onDelete(employee.id)}
+                          className="text-danger-600"
+                        >
+                          <Trash2 className="h-4 w-4 ml-2" />
+                          حذف
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <span className="text-slate-500">الراتب:</span>
+                      <span className="font-semibold text-slate-900 mr-1">
+                        {formatNumber(employee.currentSalary)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <span className="text-slate-500">إضافي:</span>
+                      <span className={`font-medium mr-1 ${employee.overtimeEligible ? "text-success-600" : "text-slate-400"}`}>
+                        {employee.overtimeEligible ? "مؤهل" : "غير مؤهل"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Balance and Status */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <EmployeeBalanceDisplay
+                    unpaidSalaries={unpaidSalaries}
+                    outstandingAdvances={outstandingAdvances}
+                    netBalance={netBalance}
+                    size="sm"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {unpaidSalaries > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-100 text-warning-700">
+                        راتب معلق
+                      </span>
+                    )}
+                    {outstandingAdvances > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-danger-100 text-danger-700">
+                        سلفة نشطة
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Table - hidden on mobile */}
+      <div className="card-modern overflow-hidden hidden md:block">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -192,6 +311,9 @@ export function EmployeesTable({
                     <SortIcon field="currentSalary" />
                   </button>
                 </TableHead>
+                <TableHead className="text-right font-semibold text-slate-700 hidden sm:table-cell">
+                  الرصيد
+                </TableHead>
                 <TableHead className="text-right font-semibold text-slate-700 hidden md:table-cell">
                   الوقت الإضافي
                 </TableHead>
@@ -204,6 +326,9 @@ export function EmployeesTable({
                     <SortIcon field="hireDate" />
                   </button>
                 </TableHead>
+                <TableHead className="text-right font-semibold text-slate-700 hidden xl:table-cell">
+                  الحالة
+                </TableHead>
                 <TableHead className="text-right font-semibold text-slate-700">
                   الإجراءات
                 </TableHead>
@@ -212,7 +337,7 @@ export function EmployeesTable({
             <TableBody>
               {paginatedEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                     لا توجد نتائج مطابقة للبحث
                   </TableCell>
                 </TableRow>
@@ -221,10 +346,28 @@ export function EmployeesTable({
                   <TableRow key={employee.id} className="table-row-hover">
                     <TableCell>
                       <div>
-                        <span className="font-medium">{employee.name}</span>
+                        <button
+                          onClick={() => router.push(`/employees/${employee.id}`)}
+                          className="font-medium text-primary-600 hover:text-primary-700 hover:underline text-right"
+                        >
+                          {employee.name}
+                        </button>
                         <span className="block sm:hidden text-xs text-slate-500">
                           {employee.position || ""}
                         </span>
+                        {/* Status indicators on mobile */}
+                        <div className="flex flex-wrap gap-1 mt-1 sm:hidden">
+                          {getEmployeeUnpaidSalaries(employee.id) > 0 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-100 text-warning-700">
+                              راتب معلق
+                            </span>
+                          )}
+                          {getEmployeeOutstandingAdvances(employee.id) > 0 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-danger-100 text-danger-700">
+                              سلفة نشطة
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
@@ -235,6 +378,21 @@ export function EmployeesTable({
                         {formatNumber(employee.currentSalary)}
                       </span>
                       <span className="hidden sm:inline"> دينار</span>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      {(() => {
+                        const unpaidSalaries = getEmployeeUnpaidSalaries(employee.id);
+                        const outstandingAdvances = getEmployeeOutstandingAdvances(employee.id);
+                        const netBalance = safeSubtract(unpaidSalaries, outstandingAdvances);
+                        return (
+                          <EmployeeBalanceDisplay
+                            unpaidSalaries={unpaidSalaries}
+                            outstandingAdvances={outstandingAdvances}
+                            netBalance={netBalance}
+                            size="sm"
+                          />
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {employee.overtimeEligible ? (
@@ -249,6 +407,25 @@ export function EmployeesTable({
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {formatShortDate(employee.hireDate)}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {getEmployeeUnpaidSalaries(employee.id) > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700">
+                            راتب معلق
+                          </span>
+                        )}
+                        {getEmployeeOutstandingAdvances(employee.id) > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-danger-100 text-danger-700">
+                            سلفة نشطة
+                          </span>
+                        )}
+                        {getEmployeeUnpaidSalaries(employee.id) === 0 && getEmployeeOutstandingAdvances(employee.id) === 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                            لا توجد مستحقات
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" role="group">
