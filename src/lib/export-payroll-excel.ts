@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { formatNumber, formatShortDate } from './date-utils';
-import { sumAmounts, roundCurrency } from './currency';
+import { sumAmounts } from './currency';
 
 interface PayrollExportEntry {
   employeeName: string;

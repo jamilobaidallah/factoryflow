@@ -54,7 +54,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     try {
       if (editingEmployee) {
         const oldSalary = editingEmployee.currentSalary;
-        const newSalary = parseFloat(formData.currentSalary);
+        const newSalary = parseAmount(formData.currentSalary);
 
         // Update employee
         const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, editingEmployee.id);
@@ -125,7 +125,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
         const docRef = await addDoc(employeesRef, {
           name: formData.name,
-          currentSalary: parseFloat(formData.currentSalary),
+          currentSalary: parseAmount(formData.currentSalary),
           overtimeEligible: formData.overtimeEligible,
           position: formData.position,
           hireDate: new Date(formData.hireDate),
@@ -141,7 +141,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           userEmail: user.email || '',
           description: `إضافة موظف: ${formData.name}`,
           metadata: {
-            salary: parseFloat(formData.currentSalary),
+            salary: parseAmount(formData.currentSalary),
             position: formData.position,
             name: formData.name,
           },
