@@ -7,6 +7,7 @@ import { Plus, Users, Wallet, Banknote } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
+import { formatNumber } from "@/lib/date-utils";
 
 // Types and hooks
 import { Employee, initialEmployeeFormData } from "./types/employees";
@@ -125,7 +126,7 @@ export default function EmployeesPage() {
   const handleMarkAsPaid = (payrollEntry: typeof payrollEntries[0]) => {
     confirm(
       "تأكيد دفع الراتب",
-      `هل تريد تسجيل دفع راتب ${payrollEntry.employeeName} بقيمة ${payrollEntry.totalSalary.toFixed(2)} دينار؟`,
+      `هل تريد تسجيل دفع راتب ${payrollEntry.employeeName} بقيمة ${formatNumber(payrollEntry.totalSalary)} دينار؟`,
       async () => {
         setLoading(true);
         await markAsPaid(payrollEntry);

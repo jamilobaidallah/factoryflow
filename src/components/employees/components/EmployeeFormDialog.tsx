@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Employee, EmployeeFormData } from "../types/employees";
+import { formatNumber } from "@/lib/date-utils";
+import { safeDivide, safeSubtract, safeMultiply, parseAmount } from "@/lib/currency";
 
 interface EmployeeFormDialogProps {
   isOpen: boolean;
@@ -84,11 +86,11 @@ export function EmployeeFormDialog({
                 }
                 required
               />
-              {editingEmployee && parseFloat(formData.currentSalary) !== editingEmployee.currentSalary && (
+              {editingEmployee && parseAmount(formData.currentSalary) !== editingEmployee.currentSalary && (
                 <p className="text-sm text-blue-600">
-                  التغيير: {editingEmployee.currentSalary} ← {formData.currentSalary} دينار
+                  التغيير: {formatNumber(editingEmployee.currentSalary)} ← {formData.currentSalary} دينار
                   {" "}
-                  ({(((parseFloat(formData.currentSalary) - editingEmployee.currentSalary) / editingEmployee.currentSalary) * 100).toFixed(2)}%)
+                  ({safeMultiply(safeDivide(safeSubtract(parseAmount(formData.currentSalary), editingEmployee.currentSalary), editingEmployee.currentSalary), 100).toFixed(2)}%)
                 </p>
               )}
             </div>

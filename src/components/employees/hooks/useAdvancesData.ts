@@ -42,18 +42,25 @@ export function useAdvancesData(): UseAdvancesDataReturn {
       limit(QUERY_LIMITS.ADVANCES)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const advancesData: Advance[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        advancesData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-        } as Advance);
-      });
-      setAdvances(advancesData);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const advancesData: Advance[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          advancesData.push({
+            id: doc.id,
+            ...convertFirestoreDates(data),
+          } as Advance);
+        });
+        setAdvances(advancesData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error loading advances:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);

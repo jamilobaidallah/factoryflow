@@ -13,6 +13,7 @@ import { firestore } from "@/firebase/config";
 import { Employee, SalaryHistory, PayrollEntry } from "../types/employees";
 import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 import { sumAmounts } from "@/lib/currency";
+import { useToast } from "@/hooks/use-toast";
 
 interface UseEmployeesDataReturn {
   employees: Employee[];
@@ -25,6 +26,7 @@ interface UseEmployeesDataReturn {
 
 export function useEmployeesData(): UseEmployeesDataReturn {
   const { user } = useUser();
+  const { toast } = useToast();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([]);
   const [payrollEntries, setPayrollEntries] = useState<PayrollEntry[]>([]);
@@ -37,21 +39,33 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
     const q = query(employeesRef, orderBy("name", "asc"), limit(500));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const employeesData: Employee[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        employeesData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-        } as Employee);
-      });
-      setEmployees(employeesData);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const employeesData: Employee[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          employeesData.push({
+            id: doc.id,
+            ...convertFirestoreDates(data),
+          } as Employee);
+        });
+        setEmployees(employeesData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error loading employees:", error);
+        toast({
+          title: "خطأ في تحميل البيانات",
+          description: "فشل تحميل قائمة الموظفين",
+          variant: "destructive",
+        });
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, toast]);
 
   // Load salary history
   useEffect(() => {
@@ -60,17 +74,23 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
     const q = query(historyRef, orderBy("effectiveDate", "desc"), limit(1000));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const historyData: SalaryHistory[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        historyData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-        } as SalaryHistory);
-      });
-      setSalaryHistory(historyData);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const historyData: SalaryHistory[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          historyData.push({
+            id: doc.id,
+            ...convertFirestoreDates(data),
+          } as SalaryHistory);
+        });
+        setSalaryHistory(historyData);
+      },
+      (error) => {
+        console.error("Error loading salary history:", error);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);
@@ -83,18 +103,24 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     // Increased limit to support ~50 employees × 12 months of history
     const q = query(payrollRef, orderBy("month", "desc"), limit(600));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const payrollData: PayrollEntry[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        payrollData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-          paidDate: toDateOptional(data.paidDate),
-        } as PayrollEntry);
-      });
-      setPayrollEntries(payrollData);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const payrollData: PayrollEntry[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          payrollData.push({
+            id: doc.id,
+            ...convertFirestoreDates(data),
+            paidDate: toDateOptional(data.paidDate),
+          } as PayrollEntry);
+        });
+        setPayrollEntries(payrollData);
+      },
+      (error) => {
+        console.error("Error loading payroll entries:", error);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Employee } from "../types/employees";
 import { AdvanceFormData, initialAdvanceFormData } from "../types/advances";
+import { formatNumber } from "@/lib/date-utils";
 
 interface AdvanceFormDialogProps {
   isOpen: boolean;
@@ -79,7 +80,7 @@ export function AdvanceFormDialog({
             {selectedEmployee && (
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-blue-700 font-medium">
-                  الراتب الحالي: {selectedEmployee.currentSalary.toFixed(2)} دينار
+                  الراتب الحالي: {formatNumber(selectedEmployee.currentSalary)} دينار
                 </p>
               </div>
             )}

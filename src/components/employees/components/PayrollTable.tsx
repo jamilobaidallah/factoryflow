@@ -269,15 +269,15 @@ export function PayrollTable({
                     <TableRow key={entry.id}>
                       <TableCell className="font-medium">{entry.employeeName}</TableCell>
                       <TableCell>{entry.baseSalary} دينار</TableCell>
-                      <TableCell>{entry.overtimePay > 0 ? `${entry.overtimePay.toFixed(2)} دينار` : "-"}</TableCell>
+                      <TableCell>{entry.overtimePay > 0 ? `${formatNumber(entry.overtimePay)} دينار` : "-"}</TableCell>
                       <TableCell className="text-green-600">
-                        {bonusTotal > 0 ? `+${bonusTotal.toFixed(2)}` : "-"}
+                        {bonusTotal > 0 ? `+${formatNumber(bonusTotal)}` : "-"}
                       </TableCell>
                       <TableCell className="text-red-600">
-                        {deductionTotal > 0 ? `-${deductionTotal.toFixed(2)}` : "-"}
+                        {deductionTotal > 0 ? `-${formatNumber(deductionTotal)}` : "-"}
                       </TableCell>
                       <TableCell className="font-bold">
-                        {entry.totalSalary.toFixed(2)} دينار
+                        {formatNumber(entry.totalSalary)} دينار
                       </TableCell>
                       <TableCell>
                         {entry.isPaid ? (
@@ -450,7 +450,7 @@ export function PayrollTable({
                           className="w-24 border-red-200 focus:border-red-400"
                         />
                       </TableCell>
-                      <TableCell className="font-bold">{total.toFixed(2)} دينار</TableCell>
+                      <TableCell className="font-bold">{formatNumber(total)} دينار</TableCell>
                       <TableCell>
                         <Input
                           value={empData.notes || ""}
