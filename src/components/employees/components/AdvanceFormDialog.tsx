@@ -49,12 +49,12 @@ export function AdvanceFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>صرف سلفة جديدة</DialogTitle>
+      <DialogContent className="sm:max-w-[500px] p-6">
+        <DialogHeader className="pb-4">
+          <DialogTitle className="text-xl">صرف سلفة جديدة</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-5 py-4 px-2">
             <div className="grid gap-2">
               <Label htmlFor="employee">الموظف *</Label>
               <Select
@@ -77,8 +77,8 @@ export function AdvanceFormDialog({
             </div>
 
             {selectedEmployee && (
-              <div className="p-3 bg-blue-50 rounded-lg text-sm">
-                <p className="text-blue-700">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-blue-700 font-medium">
                   الراتب الحالي: {selectedEmployee.currentSalary.toFixed(2)} دينار
                 </p>
               </div>
@@ -126,7 +126,7 @@ export function AdvanceFormDialog({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 px-2 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
               إلغاء
             </Button>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Users, Wallet, Banknote } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -182,15 +182,23 @@ export default function EmployeesPage() {
     );
   };
 
+  const tabs = [
+    { id: "employees" as const, label: "الموظفين", icon: Users },
+    { id: "payroll" as const, label: "الرواتب الشهرية", icon: Wallet },
+    { id: "advances" as const, label: "السلف", icon: Banknote },
+  ];
+
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">الموظفين والرواتب</h1>
-          <p className="text-gray-600 mt-2">إدارة الموظفين والرواتب الشهرية</p>
+          <h1 className="text-3xl font-bold text-slate-900">الموظفين والرواتب</h1>
+          <p className="text-slate-500 mt-1">إدارة الموظفين والرواتب الشهرية والسلف</p>
         </div>
       </div>
 
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {dataLoading || advancesLoading ? (
           <>
@@ -207,66 +215,48 @@ export default function EmployeesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-4" role="tablist" aria-label="أقسام الموظفين والرواتب">
-          <button
-            onClick={() => setActiveTab("employees")}
-            className={`pb-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "employees"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-            role="tab"
-            aria-selected={activeTab === "employees"}
-            aria-controls="employees-panel"
-            id="employees-tab"
-          >
-            📋 الموظفين
-          </button>
-          <button
-            onClick={() => setActiveTab("payroll")}
-            className={`pb-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "payroll"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-            role="tab"
-            aria-selected={activeTab === "payroll"}
-            aria-controls="payroll-panel"
-            id="payroll-tab"
-          >
-            💰 الرواتب الشهرية
-          </button>
-          <button
-            onClick={() => setActiveTab("advances")}
-            className={`pb-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "advances"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-            role="tab"
-            aria-selected={activeTab === "advances"}
-            aria-controls="advances-panel"
-            id="advances-tab"
-          >
-            💵 السلف
-          </button>
+      <div className="border-b border-slate-200">
+        <nav className="flex gap-1" role="tablist" aria-label="أقسام الموظفين والرواتب">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === tab.id
+                    ? "border-primary-500 text-primary-600 bg-primary-50/50"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                }`}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`${tab.id}-panel`}
+                id={`${tab.id}-tab`}
+              >
+                <Icon className="w-4 h-4" aria-hidden="true" />
+                {tab.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
       {/* Employees Tab */}
       {activeTab === "employees" && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>قائمة الموظفين ({employees.length})</CardTitle>
+        <Card className="rounded-xl border border-slate-200/60 shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <CardTitle className="text-lg font-semibold text-slate-800">قائمة الموظفين</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">{employees.length} موظف مسجل</p>
+            </div>
             <PermissionGate action="create" module="employees">
               <Button onClick={openAddEmployeeDialog} className="gap-2" aria-label="إضافة موظف جديد">
-                <Plus className="w-4 h-4" aria-hidden="true" />
+                <Plus className="w-4 h-4 ml-1" aria-hidden="true" />
                 إضافة موظف
               </Button>
             </PermissionGate>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {dataLoading ? (
               <TableSkeleton rows={10} />
             ) : (
@@ -283,11 +273,12 @@ export default function EmployeesPage() {
 
       {/* Payroll Tab */}
       {activeTab === "payroll" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>الرواتب الشهرية</CardTitle>
+        <Card className="rounded-xl border border-slate-200/60 shadow-card">
+          <CardHeader className="border-b border-slate-100 pb-4">
+            <CardTitle className="text-lg font-semibold text-slate-800">الرواتب الشهرية</CardTitle>
+            <p className="text-sm text-slate-500 mt-1">معالجة ودفع الرواتب الشهرية للموظفين</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <PayrollTable
               employees={employees}
               selectedMonth={selectedMonth}
@@ -306,17 +297,20 @@ export default function EmployeesPage() {
 
       {/* Advances Tab */}
       {activeTab === "advances" && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>السلف ({advances.length})</CardTitle>
+        <Card className="rounded-xl border border-slate-200/60 shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <CardTitle className="text-lg font-semibold text-slate-800">السلف</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">{advances.length} سلفة مسجلة</p>
+            </div>
             <PermissionGate action="create" module="employees">
               <Button onClick={openAddAdvanceDialog} className="gap-2" aria-label="صرف سلفة جديدة">
-                <Plus className="w-4 h-4" aria-hidden="true" />
+                <Plus className="w-4 h-4 ml-1" aria-hidden="true" />
                 صرف سلفة
               </Button>
             </PermissionGate>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {advancesLoading ? (
               <TableSkeleton rows={5} />
             ) : (

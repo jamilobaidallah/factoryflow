@@ -9,11 +9,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { XCircle } from "lucide-react";
+import { XCircle, Banknote } from "lucide-react";
 import { Advance } from "../types/advances";
 import { Employee } from "../types/employees";
 import { ADVANCE_STATUS, ADVANCE_STATUS_LABELS } from "@/lib/constants";
-import { formatShortDate } from "@/lib/date-utils";
+import { formatShortDate, formatNumber } from "@/lib/date-utils";
 import { PermissionGate } from "@/components/auth";
 
 interface AdvancesTableProps {
@@ -29,91 +29,112 @@ export function AdvancesTable({
   loading,
   onCancelAdvance,
 }: AdvancesTableProps) {
-  const getStatusBadgeClass = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case ADVANCE_STATUS.ACTIVE:
-        return "bg-blue-100 text-blue-700";
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700">
+            {ADVANCE_STATUS_LABELS[status as keyof typeof ADVANCE_STATUS_LABELS]}
+          </span>
+        );
       case ADVANCE_STATUS.FULLY_DEDUCTED:
-        return "bg-green-100 text-green-700";
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700">
+            {ADVANCE_STATUS_LABELS[status as keyof typeof ADVANCE_STATUS_LABELS]}
+          </span>
+        );
       case ADVANCE_STATUS.CANCELLED:
-        return "bg-gray-100 text-gray-700";
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+            {ADVANCE_STATUS_LABELS[status as keyof typeof ADVANCE_STATUS_LABELS]}
+          </span>
+        );
       default:
-        return "bg-gray-100 text-gray-700";
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+            غير معروف
+          </span>
+        );
     }
   };
 
   if (advances.length === 0) {
     return (
-      <p className="text-gray-500 text-center py-12">
-        لا توجد سلف مسجلة
-      </p>
+      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+          <Banknote className="w-8 h-8 text-slate-400" />
+        </div>
+        <p className="text-lg font-medium">لا توجد سلف مسجلة</p>
+        <p className="text-sm text-slate-400 mt-1">اضغط "صرف سلفة" لإضافة سلفة جديدة</p>
+      </div>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>الموظف</TableHead>
-          <TableHead>المبلغ</TableHead>
-          <TableHead>المتبقي</TableHead>
-          <TableHead>التاريخ</TableHead>
-          <TableHead>الحالة</TableHead>
-          <TableHead>ملاحظات</TableHead>
-          <TableHead>الإجراء</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {advances.map((advance) => (
-          <TableRow key={advance.id}>
-            <TableCell className="font-medium">
-              {advance.employeeName}
-            </TableCell>
-            <TableCell>{advance.amount.toFixed(2)} دينار</TableCell>
-            <TableCell
-              className={
-                advance.remainingAmount > 0
-                  ? "text-orange-600 font-medium"
-                  : "text-green-600"
-              }
-            >
-              {advance.remainingAmount.toFixed(2)} دينار
-            </TableCell>
-            <TableCell>
-              {formatShortDate(advance.date)}
-            </TableCell>
-            <TableCell>
-              <span
-                className={`px-2 py-1 rounded-full text-xs ${getStatusBadgeClass(
-                  advance.status
-                )}`}
-              >
-                {ADVANCE_STATUS_LABELS[advance.status as keyof typeof ADVANCE_STATUS_LABELS]}
-              </span>
-            </TableCell>
-            <TableCell className="text-gray-500 text-sm max-w-[200px] truncate">
-              {advance.notes || "-"}
-            </TableCell>
-            <TableCell>
-              {advance.status === ADVANCE_STATUS.ACTIVE && (
-                <PermissionGate action="delete" module="employees">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onCancelAdvance(advance)}
-                    disabled={loading}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    aria-label={`إلغاء سلفة ${advance.employeeName}`}
-                  >
-                    <XCircle className="w-4 h-4 ml-1" aria-hidden="true" />
-                    إلغاء
-                  </Button>
-                </PermissionGate>
-              )}
-            </TableCell>
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+            <TableHead className="text-right font-semibold text-slate-700">الموظف</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">المتبقي</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700 hidden sm:table-cell">التاريخ</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700 hidden md:table-cell">ملاحظات</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">الإجراء</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {advances.map((advance) => (
+            <TableRow key={advance.id} className="hover:bg-slate-50/50">
+              <TableCell className="font-medium text-slate-900">
+                {advance.employeeName}
+              </TableCell>
+              <TableCell className="font-semibold text-slate-800">
+                {formatNumber(advance.amount)} <span className="text-slate-500 font-normal">دينار</span>
+              </TableCell>
+              <TableCell>
+                <span
+                  className={`font-semibold ${
+                    advance.remainingAmount > 0
+                      ? "text-warning-600"
+                      : "text-success-600"
+                  }`}
+                >
+                  {formatNumber(advance.remainingAmount)}
+                </span>
+                <span className="text-slate-500 font-normal mr-1">دينار</span>
+              </TableCell>
+              <TableCell className="hidden sm:table-cell text-slate-600">
+                {formatShortDate(advance.date)}
+              </TableCell>
+              <TableCell>
+                {getStatusBadge(advance.status)}
+              </TableCell>
+              <TableCell className="hidden md:table-cell text-slate-500 text-sm max-w-[200px] truncate">
+                {advance.notes || "-"}
+              </TableCell>
+              <TableCell>
+                {advance.status === ADVANCE_STATUS.ACTIVE && (
+                  <PermissionGate action="delete" module="employees">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onCancelAdvance(advance)}
+                      disabled={loading}
+                      className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
+                      aria-label={`إلغاء سلفة ${advance.employeeName}`}
+                    >
+                      <XCircle className="w-4 h-4 ml-1" aria-hidden="true" />
+                      إلغاء
+                    </Button>
+                  </PermissionGate>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

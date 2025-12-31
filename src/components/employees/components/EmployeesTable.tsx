@@ -238,11 +238,11 @@ export function EmployeesTable({
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {employee.overtimeEligible ? (
-                        <span className="badge-success" role="status">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700" role="status">
                           مؤهل
                         </span>
                       ) : (
-                        <span className="badge-neutral" role="status">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600" role="status">
                           غير مؤهل
                         </span>
                       )}

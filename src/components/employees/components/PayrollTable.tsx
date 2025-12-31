@@ -126,11 +126,11 @@ export function PayrollTable({
                       </TableCell>
                       <TableCell>
                         {entry.isPaid ? (
-                          <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700" role="status" aria-label="حالة الدفع: تم الدفع">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700" role="status" aria-label="حالة الدفع: تم الدفع">
                             تم الدفع
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700" role="status" aria-label="حالة الدفع: لم يتم الدفع">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700" role="status" aria-label="حالة الدفع: لم يتم الدفع">
                             لم يتم الدفع
                           </span>
                         )}
