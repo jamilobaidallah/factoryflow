@@ -43,7 +43,7 @@ export function EmployeeAdvancesHistory({
             نشطة
           </span>
         );
-      case ADVANCE_STATUS.PAID:
+      case ADVANCE_STATUS.FULLY_DEDUCTED:
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700">
             مسددة
