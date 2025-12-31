@@ -30,8 +30,21 @@ jest.mock('@/firebase/config', () => ({
   firestore: {},
 }));
 
+// Mock Next.js router
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+  }),
+  usePathname: () => '/employees',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Mock useUser
-const mockUser = { uid: 'test-user-123', email: 'test@example.com' };
+const mockUser = { uid: 'test-user-123', dataOwnerId: 'test-user-123', email: 'test@example.com' };
 jest.mock('@/firebase/provider', () => ({
   useUser: () => ({ user: mockUser }),
 }));
@@ -82,18 +95,32 @@ describe('EmployeesPage', () => {
     jest.clearAllMocks();
     unsubscribeMock = jest.fn();
 
-    // Setup onSnapshot to return mock data
+    // Track which collection is being subscribed to
+    let collectionIndex = 0;
+
+    // Setup onSnapshot to return mock data based on collection
     mockOnSnapshot.mockImplementation((query, callback) => {
-      callback({
-        forEach: (fn: (doc: { id: string; data: () => typeof mockEmployees[0] }) => void) => {
-          mockEmployees.forEach((emp) => {
-            fn({
-              id: emp.id,
-              data: () => emp,
+      const currentIndex = collectionIndex++;
+
+      // First call is employees, second is salary_history, third is payroll
+      if (currentIndex === 0) {
+        // Employees collection
+        callback({
+          forEach: (fn: (doc: { id: string; data: () => typeof mockEmployees[0] }) => void) => {
+            mockEmployees.forEach((emp) => {
+              fn({
+                id: emp.id,
+                data: () => emp,
+              });
             });
-          });
-        },
-      });
+          },
+        });
+      } else {
+        // salary_history and payroll collections - return empty
+        callback({
+          forEach: () => {},
+        });
+      }
       return unsubscribeMock;
     });
 
@@ -128,7 +155,8 @@ describe('EmployeesPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('الاسم')).toBeInTheDocument();
-        expect(screen.getByText(/الراتب/)).toBeInTheDocument();
+        // Use getAllByText since الراتب appears in multiple places (table header and employee cards)
+        expect(screen.getAllByText(/الراتب/).length).toBeGreaterThan(0);
       });
     });
   });
@@ -138,8 +166,9 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('محمد علي')).toBeInTheDocument();
-        expect(screen.getByText('أحمد حسن')).toBeInTheDocument();
+        // Names appear in both mobile and desktop views
+        expect(screen.getAllByText('محمد علي').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('أحمد حسن').length).toBeGreaterThan(0);
       });
     });
 
@@ -147,8 +176,9 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/500/)).toBeInTheDocument();
-        expect(screen.getByText(/450/)).toBeInTheDocument();
+        // Salaries appear multiple times - use getAllByText
+        expect(screen.getAllByText(/500/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/450/).length).toBeGreaterThan(0);
       });
     });
 
@@ -156,8 +186,9 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('مهندس')).toBeInTheDocument();
-        expect(screen.getByText('فني')).toBeInTheDocument();
+        // Positions may appear in multiple views
+        expect(screen.getAllByText(/مهندس/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/فني/).length).toBeGreaterThan(0);
       });
     });
   });
@@ -172,19 +203,20 @@ describe('EmployeesPage', () => {
     it('has payroll tab button', () => {
       render(<EmployeesPage />);
 
-      // Find the tab button specifically (💰 emoji prefix)
-      expect(screen.getByText('💰 الرواتب الشهرية')).toBeInTheDocument();
+      // Find the tab button (no emoji prefix in current UI)
+      expect(screen.getByRole('tab', { name: /الرواتب الشهرية/ })).toBeInTheDocument();
     });
 
     it('can switch to payroll tab', async () => {
       render(<EmployeesPage />);
 
-      // Find the tab button specifically (💰 emoji prefix)
-      const payrollTab = screen.getByText('💰 الرواتب الشهرية');
+      // Find the tab button using role
+      const payrollTab = screen.getByRole('tab', { name: /الرواتب الشهرية/ });
       await userEvent.click(payrollTab);
 
       await waitFor(() => {
-        expect(screen.getByText(/معالجة الرواتب الشهرية/)).toBeInTheDocument();
+        // Look for the card description that appears in the payroll tab
+        expect(screen.getByText(/معالجة ودفع الرواتب/)).toBeInTheDocument();
       });
     });
   });
@@ -301,15 +333,12 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('محمد علي')).toBeInTheDocument();
+        expect(screen.getAllByText('محمد علي').length).toBeGreaterThan(0);
       });
 
-      // Find all buttons and click the edit one
-      const rows = screen.getAllByRole('row');
-      const dataRow = rows[1]; // First data row
-      const buttons = dataRow.querySelectorAll('button');
-      // Button 0: history, Button 1: edit, Button 2: delete
-      await userEvent.click(buttons[1]);
+      // Find edit buttons using aria-label (there may be multiple due to mobile/desktop views)
+      const editButtons = screen.getAllByLabelText('تعديل محمد علي');
+      await userEvent.click(editButtons[0]);
 
       await waitFor(() => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -324,13 +353,12 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('محمد علي')).toBeInTheDocument();
+        expect(screen.getAllByText('محمد علي').length).toBeGreaterThan(0);
       });
 
-      const rows = screen.getAllByRole('row');
-      const dataRow = rows[1];
-      const buttons = dataRow.querySelectorAll('button');
-      await userEvent.click(buttons[2]); // Delete button
+      // Find delete buttons using aria-label (there may be multiple due to mobile/desktop views)
+      const deleteButtons = screen.getAllByLabelText('حذف محمد علي');
+      await userEvent.click(deleteButtons[0]);
 
       // Wait for confirmation dialog to appear
       await waitFor(() => {
@@ -366,6 +394,7 @@ describe('EmployeesPage', () => {
   describe('Empty State', () => {
     it('shows zero employee count when no employees', async () => {
       mockOnSnapshot.mockImplementation((query, callback) => {
+        // Return empty data for all collections
         callback({
           forEach: () => {},
         });
@@ -375,12 +404,14 @@ describe('EmployeesPage', () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('قائمة الموظفين (0)')).toBeInTheDocument();
+        // Current UI shows "X موظف مسجل" in the header
+        expect(screen.getByText(/0 موظف مسجل/)).toBeInTheDocument();
       });
     });
 
     it('shows empty message when no employees', async () => {
       mockOnSnapshot.mockImplementation((query, callback) => {
+        // Return empty data for all collections
         callback({
           forEach: () => {},
         });
