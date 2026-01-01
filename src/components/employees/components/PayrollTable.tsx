@@ -40,6 +40,22 @@ interface PayrollTableProps {
   onMarkAllAsPaid?: () => void;
 }
 
+/**
+ * Check if employee is eligible for payroll in the selected month
+ * Employee must be hired on or before the first day of the month
+ */
+function isEmployeeEligibleForMonth(employee: Employee, selectedMonth: string): boolean {
+  const [year, month] = selectedMonth.split('-').map(Number);
+  // First day of the selected month
+  const monthStartDate = new Date(year, month - 1, 1);
+
+  const hireDate = employee.hireDate instanceof Date
+    ? employee.hireDate
+    : new Date(employee.hireDate);
+
+  return hireDate <= monthStartDate;
+}
+
 export function PayrollTable({
   employees,
   selectedMonth,
@@ -57,6 +73,22 @@ export function PayrollTable({
     const hourlyRate = safeDivide(currentSalary, 208);
     return safeMultiply(safeMultiply(overtimeHours, hourlyRate), 1.5);
   };
+
+  // Filter employees by eligibility for the selected month
+  const { eligibleEmployees, ineligibleEmployees } = useMemo(() => {
+    const eligible: Employee[] = [];
+    const ineligible: Employee[] = [];
+
+    employees.forEach(employee => {
+      if (isEmployeeEligibleForMonth(employee, selectedMonth)) {
+        eligible.push(employee);
+      } else {
+        ineligible.push(employee);
+      }
+    });
+
+    return { eligibleEmployees: eligible, ineligibleEmployees: ineligible };
+  }, [employees, selectedMonth]);
 
   const handleExportToExcel = async () => {
     if (monthPayroll.length === 0) return;
@@ -92,9 +124,9 @@ export function PayrollTable({
     };
   }, [monthPayroll]);
 
-  // Calculate preview totals for unprocessed payroll
+  // Calculate preview totals for unprocessed payroll (only eligible employees)
   const previewSummary = useMemo(() => {
-    if (monthPayroll.length > 0 || employees.length === 0) return null;
+    if (monthPayroll.length > 0 || eligibleEmployees.length === 0) return null;
 
     let totalBase = 0;
     let totalOvertime = 0;
@@ -102,7 +134,7 @@ export function PayrollTable({
     let totalDeductions = 0;
     let grandTotal = 0;
 
-    employees.forEach(employee => {
+    eligibleEmployees.forEach(employee => {
       const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
       const overtime = parseAmount(empData.overtime || "0");
       const bonus = parseAmount(empData.bonus || "0");
@@ -128,9 +160,9 @@ export function PayrollTable({
       totalBonuses,
       totalDeductions,
       grandTotal,
-      employeeCount: employees.length,
+      employeeCount: eligibleEmployees.length,
     };
-  }, [employees, payrollData, monthPayroll.length]);
+  }, [eligibleEmployees, payrollData, monthPayroll.length]);
 
   return (
     <div className="space-y-6">
@@ -323,6 +355,28 @@ export function PayrollTable({
         </div>
       ) : employees.length > 0 ? (
         <div className="space-y-6">
+          {/* Ineligible employees warning */}
+          {ineligibleEmployees.length > 0 && (
+            <div className="p-4 rounded-lg bg-warning-50 border border-warning-200">
+              <h4 className="font-medium text-warning-800 mb-2">
+                موظفون غير مؤهلين لهذا الشهر ({ineligibleEmployees.length})
+              </h4>
+              <p className="text-sm text-warning-700 mb-2">
+                الموظفون التالية أسماؤهم تم تعيينهم بعد بداية الشهر المحدد:
+              </p>
+              <ul className="text-sm text-warning-600 list-disc list-inside">
+                {ineligibleEmployees.map(emp => {
+                  const hireDate = emp.hireDate instanceof Date ? emp.hireDate : new Date(emp.hireDate);
+                  return (
+                    <li key={emp.id}>
+                      {emp.name} - تاريخ التعيين: {hireDate.toLocaleDateString('ar-EG')}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
           {/* Preview Summary */}
           {previewSummary && (
             <div className="p-4 rounded-lg bg-primary-50 border border-primary-100">
@@ -355,9 +409,11 @@ export function PayrollTable({
             </div>
           )}
 
-          <p className="text-sm text-gray-600">
-            أدخل بيانات الراتب لكل موظف (ساعات إضافية، مكافآت، خصومات):
-          </p>
+          {eligibleEmployees.length > 0 ? (
+            <>
+              <p className="text-sm text-gray-600">
+                أدخل بيانات الراتب لكل موظف (ساعات إضافية، مكافآت، خصومات):
+              </p>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -372,7 +428,7 @@ export function PayrollTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees.map((employee) => {
+                {eligibleEmployees.map((employee) => {
                   const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
                   const overtime = parseAmount(empData.overtime || "0");
                   const bonus = parseAmount(empData.bonus || "0");
@@ -485,6 +541,12 @@ export function PayrollTable({
               معالجة الرواتب
             </Button>
           </div>
+            </>
+          ) : (
+            <p className="text-gray-500 text-center py-8">
+              جميع الموظفين تم تعيينهم بعد بداية الشهر المحدد. اختر شهراً آخر.
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-gray-500 text-center py-12">

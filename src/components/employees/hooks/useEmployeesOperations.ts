@@ -237,15 +237,15 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         return false;
       }
 
-      // Filter employees by hire date - only include those hired before or during the selected month
+      // Filter employees by hire date - only include those hired on or before the first day of selected month
       const [year, month] = selectedMonth.split('-').map(Number);
-      const monthEndDate = new Date(year, month, 0); // Last day of selected month
+      const monthStartDate = new Date(year, month - 1, 1); // First day of selected month
 
       const eligibleEmployees = employees.filter(employee => {
         const hireDate = employee.hireDate instanceof Date
           ? employee.hireDate
           : new Date(employee.hireDate);
-        return hireDate <= monthEndDate;
+        return hireDate <= monthStartDate;
       });
 
       const skippedCount = employees.length - eligibleEmployees.length;
