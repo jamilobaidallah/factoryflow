@@ -47,11 +47,18 @@ interface PayrollTableProps {
  */
 function isEmployeeEligibleForMonth(employee: Employee, selectedMonth: string): boolean {
   const [year, month] = selectedMonth.split('-').map(Number);
-  // First day of the selected month
-  const monthStartDate = new Date(year, month - 1, 1);
   const hireDate = toDate(employee.hireDate);
 
-  return hireDate <= monthStartDate;
+  // Compare year, month, day only (ignore time component)
+  const hireYear = hireDate.getFullYear();
+  const hireMonth = hireDate.getMonth() + 1; // getMonth() is 0-indexed
+  const hireDay = hireDate.getDate();
+
+  // Employee is eligible if hired in a previous month, OR hired on day 1 of selected month
+  if (hireYear < year) return true;
+  if (hireYear === year && hireMonth < month) return true;
+  if (hireYear === year && hireMonth === month && hireDay === 1) return true;
+  return false;
 }
 
 export function PayrollTable({
