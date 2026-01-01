@@ -50,7 +50,9 @@ export interface PayrollEntry {
   overtimePay: number;
   deductions?: PayrollDeduction[];
   bonuses?: PayrollBonus[];
-  advanceDeduction?: number;
+  advanceDeduction?: number; // Total advances to be deducted from salary
+  advanceIds?: string[]; // IDs of advances that were deducted
+  netSalary?: number; // Net amount to pay (totalSalary - advanceDeduction)
   totalSalary: number;
   isPaid: boolean;
   paidDate?: Date;

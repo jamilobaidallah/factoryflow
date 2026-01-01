@@ -17,7 +17,9 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Employee, EmployeeFormData, PayrollEntry } from "../types/employees";
+import { Advance } from "../types/advances";
 import { logActivity } from "@/services/activityLogService";
+import { ADVANCE_STATUS } from "@/lib/constants";
 import {
   safeAdd,
   safeSubtract,
@@ -36,7 +38,8 @@ interface UseEmployeesOperationsReturn {
   processPayroll: (
     selectedMonth: string,
     employees: Employee[],
-    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}
+    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}},
+    advances?: Advance[]
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
   deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
@@ -246,7 +249,8 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   const processPayroll = async (
     selectedMonth: string,
     employees: Employee[],
-    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}
+    payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}},
+    advances?: Advance[]
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -336,6 +340,23 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           deductionAmount
         );
 
+        // Calculate advance deductions for this employee
+        // Find active advances for this employee
+        const employeeActiveAdvances = advances?.filter(
+          (a) => a.employeeId === employee.id && a.status === ADVANCE_STATUS.ACTIVE
+        ) || [];
+
+        // Sum up remaining amounts from active advances
+        let advanceDeduction = 0;
+        const advanceIds: string[] = [];
+        for (const advance of employeeActiveAdvances) {
+          advanceDeduction = safeAdd(advanceDeduction, advance.remainingAmount);
+          advanceIds.push(advance.id);
+        }
+
+        // Net salary = Total - Advance deductions (what employee actually receives)
+        const netSalary = safeSubtract(totalSalary, advanceDeduction);
+
         const payrollDocRef = doc(payrollRef);
         batch.set(payrollDocRef, {
           employeeId: employee.id,
@@ -350,6 +371,9 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           overtimePay: overtimePay,
           bonuses: bonusAmount > 0 ? [{ id: "1", type: "other", description: "مكافأة", amount: bonusAmount }] : [],
           deductions: deductionAmount > 0 ? [{ id: "1", type: "other", description: "خصم", amount: deductionAmount }] : [],
+          advanceDeduction: advanceDeduction,
+          advanceIds: advanceIds,
+          netSalary: netSalary,
           totalSalary: totalSalary,
           isPaid: false,
           notes: isProrated ? `راتب جزئي: ${daysWorked} يوم من ${daysInMonth}${empData.notes ? ' - ' + empData.notes : ''}` : empData.notes || "",
@@ -404,6 +428,13 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       const now = new Date();
       const transactionId = `SAL-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
 
+      // Calculate actual amount to pay (net salary after advance deductions)
+      // Use netSalary if available, otherwise fall back to totalSalary for backward compatibility
+      const advanceDeduction = payrollEntry.advanceDeduction || 0;
+      const amountToPay = payrollEntry.netSalary !== undefined
+        ? payrollEntry.netSalary
+        : safeSubtract(payrollEntry.totalSalary, advanceDeduction);
+
       // Update payroll entry
       const payrollRef = doc(firestore, `users/${user.dataOwnerId}/payroll`, payrollEntry.id);
       batch.update(payrollRef, {
@@ -412,33 +443,59 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         linkedTransactionId: transactionId,
       });
 
-      // Create ledger entry
+      // Mark all advances as FULLY_DEDUCTED
+      if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
+        for (const advanceId of payrollEntry.advanceIds) {
+          const advanceRef = doc(
+            firestore,
+            `users/${user.dataOwnerId}/advances`,
+            advanceId
+          );
+          batch.update(advanceRef, {
+            remainingAmount: 0,
+            status: ADVANCE_STATUS.FULLY_DEDUCTED,
+          });
+        }
+      }
+
+      // Create ledger entry for the NET salary (what is actually being paid out now)
+      // Note: The full salary was recorded when advances were given out
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
       const ledgerDocRef = doc(ledgerRef);
+
+      // Build notes with advance deduction info
+      let notes = `راتب شهر ${payrollEntry.month}`;
+      if (payrollEntry.overtimeHours > 0) {
+        notes += ` - ساعات إضافية: ${payrollEntry.overtimeHours}`;
+      }
+      if (advanceDeduction > 0) {
+        notes += ` - خصم سلف: ${advanceDeduction}`;
+      }
+
       batch.set(ledgerDocRef, {
         transactionId: transactionId,
-        description: `راتب ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+        description: `راتب ${payrollEntry.employeeName} - ${payrollEntry.month}${advanceDeduction > 0 ? ' (بعد خصم السلف)' : ''}`,
         type: "مصروف",
-        amount: payrollEntry.totalSalary,
+        amount: amountToPay,
         category: "مصاريف تشغيلية",
         subCategory: "رواتب وأجور",
         associatedParty: payrollEntry.employeeName,
         date: new Date(),
         reference: `Payroll-${payrollEntry.month}`,
-        notes: `راتب شهر ${payrollEntry.month}${payrollEntry.overtimeHours > 0 ? ` - ساعات إضافية: ${payrollEntry.overtimeHours}` : ""}`,
+        notes: notes,
         createdAt: new Date(),
       });
 
-      // Create payment entry
+      // Create payment entry for the NET amount
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
       const paymentDocRef = doc(paymentsRef);
       batch.set(paymentDocRef, {
         clientName: payrollEntry.employeeName,
-        amount: payrollEntry.totalSalary,
+        amount: amountToPay,
         type: "صرف",
         linkedTransactionId: transactionId,
         date: new Date(),
-        notes: `دفع راتب ${payrollEntry.month}`,
+        notes: `دفع راتب ${payrollEntry.month}${advanceDeduction > 0 ? ` - خصم سلف: ${advanceDeduction}` : ''}`,
         category: "مصاريف تشغيلية",
         subCategory: "رواتب وأجور",
         createdAt: new Date(),
@@ -455,15 +512,22 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         userEmail: user.email || '',
         description: `تسجيل دفع راتب: ${payrollEntry.employeeName}`,
         metadata: {
-          salary: payrollEntry.totalSalary,
+          totalSalary: payrollEntry.totalSalary,
+          advanceDeduction: advanceDeduction,
+          netSalary: amountToPay,
           name: payrollEntry.employeeName,
           month: payrollEntry.month,
+          advanceIds: payrollEntry.advanceIds,
         },
       });
 
+      const toastDescription = advanceDeduction > 0
+        ? `تم دفع ${amountToPay} دينار لـ ${payrollEntry.employeeName} (بعد خصم سلف ${advanceDeduction})`
+        : `تم تسجيل دفع راتب ${payrollEntry.employeeName}`;
+
       toast({
         title: "تم الدفع",
-        description: `تم تسجيل دفع راتب ${payrollEntry.employeeName}`,
+        description: toastDescription,
       });
       return true;
     } catch (error) {

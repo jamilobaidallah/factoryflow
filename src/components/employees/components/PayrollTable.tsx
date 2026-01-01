@@ -12,8 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, Trash2, Download, Check, Wallet, Clock, Gift, MinusCircle, Calculator } from "lucide-react";
+import { DollarSign, Trash2, Download, Check, Wallet, Clock, Gift, MinusCircle, Calculator, Banknote } from "lucide-react";
 import { Employee, PayrollEntry } from "../types/employees";
+import { Advance } from "../types/advances";
+import { ADVANCE_STATUS } from "@/lib/constants";
 import { safeAdd, safeSubtract, safeMultiply, safeDivide, parseAmount, sumAmounts } from "@/lib/currency";
 import { exportPayrollToExcel } from "@/lib/export-payroll-excel";
 import { formatNumber } from "@/lib/date-utils";
@@ -39,6 +41,7 @@ interface PayrollTableProps {
   onMarkAsPaid: (entry: PayrollEntry) => void;
   onDeletePayrollEntry: (entry: PayrollEntry) => void;
   onMarkAllAsPaid?: () => void;
+  advances?: Advance[];
 }
 
 /**
@@ -103,10 +106,19 @@ export function PayrollTable({
   onMarkAsPaid,
   onDeletePayrollEntry,
   onMarkAllAsPaid,
+  advances = [],
 }: PayrollTableProps) {
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
     const hourlyRate = safeDivide(currentSalary, 208);
     return safeMultiply(safeMultiply(overtimeHours, hourlyRate), 1.5);
+  };
+
+  // Get total active advance amount for an employee
+  const getEmployeeAdvanceDeduction = (employeeId: string): number => {
+    const activeAdvances = advances.filter(
+      (a) => a.employeeId === employeeId && a.status === ADVANCE_STATUS.ACTIVE
+    );
+    return sumAmounts(activeAdvances.map((a) => a.remainingAmount));
   };
 
   // Filter employees by eligibility for the selected month
@@ -142,17 +154,21 @@ export function PayrollTable({
     const totalDeductions = sumAmounts(monthPayroll.map(e =>
       e.deductions ? sumAmounts(e.deductions.map(d => d.amount)) : 0
     ));
+    const totalAdvanceDeductions = sumAmounts(monthPayroll.map(e => e.advanceDeduction || 0));
     const grandTotal = sumAmounts(monthPayroll.map(e => e.totalSalary));
+    const grandNetTotal = sumAmounts(monthPayroll.map(e => e.netSalary ?? e.totalSalary));
     const paidCount = monthPayroll.filter(e => e.isPaid).length;
     const unpaidCount = monthPayroll.length - paidCount;
-    const unpaidTotal = sumAmounts(monthPayroll.filter(e => !e.isPaid).map(e => e.totalSalary));
+    const unpaidTotal = sumAmounts(monthPayroll.filter(e => !e.isPaid).map(e => e.netSalary ?? e.totalSalary));
 
     return {
       totalBase,
       totalOvertime,
       totalBonuses,
       totalDeductions,
+      totalAdvanceDeductions,
       grandTotal,
+      grandNetTotal,
       paidCount,
       unpaidCount,
       unpaidTotal,
@@ -167,8 +183,11 @@ export function PayrollTable({
     let totalOvertime = 0;
     let totalBonuses = 0;
     let totalDeductions = 0;
+    let totalAdvanceDeductions = 0;
     let grandTotal = 0;
+    let grandNetTotal = 0;
     let proratedCount = 0;
+    let advanceCount = 0;
 
     eligibleEmployees.forEach(employee => {
       const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
@@ -188,11 +207,18 @@ export function PayrollTable({
         deduction
       );
 
+      // Get advance deduction for this employee
+      const advanceDeduction = getEmployeeAdvanceDeduction(employee.id);
+      if (advanceDeduction > 0) advanceCount++;
+      const netTotal = safeSubtract(total, advanceDeduction);
+
       totalBase = safeAdd(totalBase, baseSalary);
       totalOvertime = safeAdd(totalOvertime, overtimePay);
       totalBonuses = safeAdd(totalBonuses, bonus);
       totalDeductions = safeAdd(totalDeductions, deduction);
+      totalAdvanceDeductions = safeAdd(totalAdvanceDeductions, advanceDeduction);
       grandTotal = safeAdd(grandTotal, total);
+      grandNetTotal = safeAdd(grandNetTotal, netTotal);
     });
 
     return {
@@ -200,11 +226,14 @@ export function PayrollTable({
       totalOvertime,
       totalBonuses,
       totalDeductions,
+      totalAdvanceDeductions,
       grandTotal,
+      grandNetTotal,
       employeeCount: eligibleEmployees.length,
       proratedCount,
+      advanceCount,
     };
-  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth]);
+  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth, advances]);
 
   return (
     <div className="space-y-6">
@@ -226,7 +255,7 @@ export function PayrollTable({
         <div className="space-y-6">
           {/* Summary Cards */}
           {payrollSummary && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="rounded-lg p-4 bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 text-slate-500 text-sm mb-1">
                   <Wallet className="w-4 h-4" />
@@ -263,13 +292,24 @@ export function PayrollTable({
                   -{formatNumber(payrollSummary.totalDeductions)}
                 </div>
               </div>
+              {payrollSummary.totalAdvanceDeductions > 0 && (
+                <div className="rounded-lg p-4 bg-warning-50 border border-warning-100">
+                  <div className="flex items-center gap-2 text-warning-600 text-sm mb-1">
+                    <Banknote className="w-4 h-4" />
+                    خصم السلف
+                  </div>
+                  <div className="text-xl font-bold text-warning-900">
+                    -{formatNumber(payrollSummary.totalAdvanceDeductions)}
+                  </div>
+                </div>
+              )}
               <div className="rounded-lg p-4 bg-primary-100 border border-primary-200">
                 <div className="flex items-center gap-2 text-primary-700 text-sm mb-1">
                   <Calculator className="w-4 h-4" />
-                  الإجمالي
+                  صافي المستحق
                 </div>
                 <div className="text-xl font-bold text-primary-900">
-                  {formatNumber(payrollSummary.grandTotal)}
+                  {formatNumber(payrollSummary.grandNetTotal)}
                 </div>
               </div>
             </div>
@@ -329,7 +369,9 @@ export function PayrollTable({
                   <TableHead>أجر إضافي</TableHead>
                   <TableHead className="text-green-700">مكافآت</TableHead>
                   <TableHead className="text-red-700">خصومات</TableHead>
+                  <TableHead className="text-warning-700">سلف</TableHead>
                   <TableHead>الإجمالي</TableHead>
+                  <TableHead>صافي المستحق</TableHead>
                   <TableHead>الحالة</TableHead>
                   <TableHead>الإجراء</TableHead>
                 </TableRow>
@@ -338,6 +380,8 @@ export function PayrollTable({
                 {monthPayroll.map((entry) => {
                   const bonusTotal = entry.bonuses ? sumAmounts(entry.bonuses.map(b => b.amount)) : 0;
                   const deductionTotal = entry.deductions ? sumAmounts(entry.deductions.map(d => d.amount)) : 0;
+                  const advanceDeduction = entry.advanceDeduction || 0;
+                  const netSalary = entry.netSalary ?? safeSubtract(entry.totalSalary, advanceDeduction);
 
                   return (
                     <TableRow key={entry.id}>
@@ -366,8 +410,14 @@ export function PayrollTable({
                       <TableCell className="text-red-600">
                         {deductionTotal > 0 ? `-${formatNumber(deductionTotal)}` : "-"}
                       </TableCell>
-                      <TableCell className="font-bold">
+                      <TableCell className="text-warning-600">
+                        {advanceDeduction > 0 ? `-${formatNumber(advanceDeduction)}` : "-"}
+                      </TableCell>
+                      <TableCell>
                         {formatNumber(entry.totalSalary)} دينار
+                      </TableCell>
+                      <TableCell className="font-bold text-primary-700">
+                        {formatNumber(netSalary)} دينار
                       </TableCell>
                       <TableCell>
                         {entry.isPaid ? (
@@ -442,7 +492,7 @@ export function PayrollTable({
                 <Calculator className="w-4 h-4" />
                 معاينة الإجماليات
               </h4>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                 <div>
                   <span className="text-primary-600">الرواتب الأساسية:</span>
                   <span className="font-bold text-primary-900 mr-2">{formatNumber(previewSummary.totalBase)}</span>
@@ -459,9 +509,15 @@ export function PayrollTable({
                   <span className="text-primary-600">الخصومات:</span>
                   <span className="font-bold text-danger-600 mr-2">-{formatNumber(previewSummary.totalDeductions)}</span>
                 </div>
+                {previewSummary.totalAdvanceDeductions > 0 && (
+                  <div>
+                    <span className="text-primary-600">خصم السلف:</span>
+                    <span className="font-bold text-warning-600 mr-2">-{formatNumber(previewSummary.totalAdvanceDeductions)}</span>
+                  </div>
+                )}
                 <div className="col-span-2 md:col-span-1">
-                  <span className="text-primary-600">الإجمالي:</span>
-                  <span className="font-bold text-primary-900 mr-2 text-lg">{formatNumber(previewSummary.grandTotal)} دينار</span>
+                  <span className="text-primary-600">صافي المستحق:</span>
+                  <span className="font-bold text-primary-900 mr-2 text-lg">{formatNumber(previewSummary.grandNetTotal)} دينار</span>
                 </div>
               </div>
             </div>
@@ -481,7 +537,9 @@ export function PayrollTable({
                   <TableHead>ساعات إضافية</TableHead>
                   <TableHead className="text-green-700">مكافآت</TableHead>
                   <TableHead className="text-red-700">خصومات</TableHead>
+                  <TableHead className="text-warning-700">سلف</TableHead>
                   <TableHead>الإجمالي</TableHead>
+                  <TableHead>صافي المستحق</TableHead>
                   <TableHead>ملاحظات</TableHead>
                 </TableRow>
               </TableHeader>
@@ -502,6 +560,10 @@ export function PayrollTable({
                     safeAdd(safeAdd(baseSalary, overtimePay), bonus),
                     deduction
                   );
+
+                  // Get advance deduction for this employee
+                  const advanceDeduction = getEmployeeAdvanceDeduction(employee.id);
+                  const netSalary = safeSubtract(total, advanceDeduction);
 
                   return (
                     <TableRow key={employee.id}>
@@ -584,7 +646,11 @@ export function PayrollTable({
                           className="w-24 border-red-200 focus:border-red-400"
                         />
                       </TableCell>
-                      <TableCell className="font-bold">{formatNumber(total)} دينار</TableCell>
+                      <TableCell className="text-warning-600">
+                        {advanceDeduction > 0 ? `-${formatNumber(advanceDeduction)}` : "-"}
+                      </TableCell>
+                      <TableCell>{formatNumber(total)} دينار</TableCell>
+                      <TableCell className="font-bold text-primary-700">{formatNumber(netSalary)} دينار</TableCell>
                       <TableCell>
                         <Input
                           value={empData.notes || ""}

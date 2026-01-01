@@ -113,7 +113,7 @@ export default function EmployeesPage() {
       `هل أنت متأكد من معالجة الرواتب لشهر ${selectedMonth}؟`,
       async () => {
         setLoading(true);
-        const success = await processPayroll(selectedMonth, employees, payrollData);
+        const success = await processPayroll(selectedMonth, employees, payrollData, advances);
         if (success) {
           setPayrollData({});
         }
@@ -295,6 +295,7 @@ export default function EmployeesPage() {
               onProcessPayroll={handleProcessPayroll}
               onMarkAsPaid={handleMarkAsPaid}
               onDeletePayrollEntry={handleDeletePayrollEntry}
+              advances={advances}
             />
           </CardContent>
         </Card>
