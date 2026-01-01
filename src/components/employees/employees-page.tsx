@@ -31,7 +31,7 @@ export default function EmployeesPage() {
 
   // Data and operations hooks
   const { employees, salaryHistory, payrollEntries, loading: dataLoading, getEmployeeUnpaidSalaries, getTotalUnpaidSalaries } = useEmployeesData();
-  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
+  const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment } = useEmployeesOperations();
   const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
   const { createAdvance, cancelAdvance } = useAdvancesOperations();
 
@@ -146,6 +146,33 @@ export default function EmployeesPage() {
         setLoading(false);
       },
       "destructive"
+    );
+  };
+
+  const handleUndoMonthPayroll = () => {
+    const unpaidCount = monthPayroll.filter(p => !p.isPaid).length;
+    confirm(
+      "تراجع عن معالجة الشهر",
+      `هل أنت متأكد من التراجع عن معالجة رواتب شهر ${selectedMonth}؟ سيتم حذف ${unpaidCount} سجل راتب غير مدفوع.`,
+      async () => {
+        setLoading(true);
+        await undoMonthPayroll(selectedMonth, monthPayroll);
+        setLoading(false);
+      },
+      "warning"
+    );
+  };
+
+  const handleReversePayment = (payrollEntry: typeof payrollEntries[0]) => {
+    confirm(
+      "عكس دفع الراتب",
+      `هل أنت متأكد من عكس دفع راتب ${payrollEntry.employeeName}؟ سيتم إنشاء قيود محاسبية عكسية واستعادة السلف المخصومة.`,
+      async () => {
+        setLoading(true);
+        await reversePayment(payrollEntry);
+        setLoading(false);
+      },
+      "warning"
     );
   };
 
@@ -295,6 +322,8 @@ export default function EmployeesPage() {
               onProcessPayroll={handleProcessPayroll}
               onMarkAsPaid={handleMarkAsPaid}
               onDeletePayrollEntry={handleDeletePayrollEntry}
+              onUndoMonthPayroll={handleUndoMonthPayroll}
+              onReversePayment={handleReversePayment}
               advances={advances}
             />
           </CardContent>

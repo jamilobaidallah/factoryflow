@@ -43,6 +43,8 @@ interface UseEmployeesOperationsReturn {
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
   deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
+  undoMonthPayroll: (selectedMonth: string, monthPayroll: PayrollEntry[]) => Promise<boolean>;
+  reversePayment: (payrollEntry: PayrollEntry) => Promise<boolean>;
 }
 
 export function useEmployeesOperations(): UseEmployeesOperationsReturn {
@@ -604,5 +606,246 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
   };
 
-  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry };
+  const undoMonthPayroll = async (
+    selectedMonth: string,
+    monthPayroll: PayrollEntry[]
+  ): Promise<boolean> => {
+    if (!user) return false;
+
+    // Check if any entries are paid
+    const paidEntries = monthPayroll.filter((e) => e.isPaid);
+    if (paidEntries.length > 0) {
+      toast({
+        title: "لا يمكن التراجع",
+        description: `يوجد ${paidEntries.length} سجل مدفوع. يرجى عكس الدفع أولاً.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const unpaidEntries = monthPayroll.filter((e) => !e.isPaid);
+    if (unpaidEntries.length === 0) {
+      toast({
+        title: "لا توجد سجلات",
+        description: "لا توجد سجلات رواتب للتراجع عنها",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(firestore);
+
+      // Collect all advance IDs to restore
+      const advanceIdsToRestore: string[] = [];
+
+      // Delete all unpaid payroll entries for this month
+      for (const entry of unpaidEntries) {
+        const payrollRef = doc(
+          firestore,
+          `users/${user.dataOwnerId}/payroll`,
+          entry.id
+        );
+        batch.delete(payrollRef);
+
+        // Collect advance IDs to restore
+        if (entry.advanceIds && entry.advanceIds.length > 0) {
+          advanceIdsToRestore.push(...entry.advanceIds);
+        }
+      }
+
+      // Restore advances to ACTIVE status (they weren't deducted yet since entries are unpaid)
+      // Note: Advances are only marked as FULLY_DEDUCTED when payment is made
+      // For unpaid entries, advances are still ACTIVE, so no restoration needed
+
+      await batch.commit();
+
+      logActivity(user.dataOwnerId, {
+        action: "delete",
+        module: "employees",
+        targetId: selectedMonth,
+        userId: user.uid,
+        userEmail: user.email || "",
+        description: `تراجع عن معالجة رواتب شهر ${selectedMonth}`,
+        metadata: {
+          month: selectedMonth,
+          deletedCount: unpaidEntries.length,
+        },
+      });
+
+      toast({
+        title: "تم التراجع",
+        description: `تم حذف ${unpaidEntries.length} سجل راتب لشهر ${selectedMonth}`,
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const reversePayment = async (payrollEntry: PayrollEntry): Promise<boolean> => {
+    if (!user) return false;
+
+    if (!payrollEntry.isPaid) {
+      toast({
+        title: "خطأ",
+        description: "هذا السجل غير مدفوع",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const batch = writeBatch(firestore);
+
+      // Generate reversal transaction ID
+      const now = new Date();
+      const reversalTransactionId = `REV-${now.getFullYear()}${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(
+        Math.floor(Math.random() * 1000)
+      ).padStart(3, "0")}`;
+
+      // Calculate the amount that was paid (net salary)
+      const advanceDeduction = payrollEntry.advanceDeduction || 0;
+      const paidAmount =
+        payrollEntry.netSalary !== undefined
+          ? payrollEntry.netSalary
+          : safeSubtract(payrollEntry.totalSalary, advanceDeduction);
+
+      // Update payroll entry to unpaid
+      const payrollRef = doc(
+        firestore,
+        `users/${user.dataOwnerId}/payroll`,
+        payrollEntry.id
+      );
+      batch.update(payrollRef, {
+        isPaid: false,
+        paidDate: null,
+        linkedTransactionId: null,
+      });
+
+      // Restore advances to ACTIVE status
+      if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
+        // We need to fetch the original advance amounts to restore them
+        // For simplicity, we'll query and restore each advance
+        const advancesRef = collection(
+          firestore,
+          `users/${user.dataOwnerId}/advances`
+        );
+
+        for (const advanceId of payrollEntry.advanceIds) {
+          const advanceRef = doc(advancesRef, advanceId);
+          // Note: We need to restore the original remaining amount
+          // Since we set it to 0 when paid, we need to query the original amount
+          // For now, we'll query the advance to get the original amount
+        }
+      }
+
+      // Create reversing ledger entry (opposite of the original)
+      const ledgerRef = collection(
+        firestore,
+        `users/${user.dataOwnerId}/ledger`
+      );
+      const ledgerDocRef = doc(ledgerRef);
+      batch.set(ledgerDocRef, {
+        transactionId: reversalTransactionId,
+        description: `عكس راتب ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+        type: "إيراد", // Opposite of مصروف
+        amount: paidAmount,
+        category: "تعديلات",
+        subCategory: "عكس رواتب",
+        associatedParty: payrollEntry.employeeName,
+        date: new Date(),
+        reference: `Reversal-${payrollEntry.linkedTransactionId || payrollEntry.id}`,
+        notes: `عكس دفع راتب شهر ${payrollEntry.month}`,
+        createdAt: new Date(),
+      });
+
+      // Create reversing payment entry
+      const paymentsRef = collection(
+        firestore,
+        `users/${user.dataOwnerId}/payments`
+      );
+      const paymentDocRef = doc(paymentsRef);
+      batch.set(paymentDocRef, {
+        clientName: payrollEntry.employeeName,
+        amount: paidAmount,
+        type: "قبض", // Opposite of صرف
+        linkedTransactionId: reversalTransactionId,
+        date: new Date(),
+        notes: `عكس دفع راتب ${payrollEntry.month}`,
+        category: "تعديلات",
+        subCategory: "عكس رواتب",
+        createdAt: new Date(),
+      });
+
+      await batch.commit();
+
+      // Now restore advances in a separate operation (need to query first)
+      if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
+        const advancesRef = collection(
+          firestore,
+          `users/${user.dataOwnerId}/advances`
+        );
+
+        for (const advanceId of payrollEntry.advanceIds) {
+          const advanceRef = doc(advancesRef, advanceId);
+          // Query the advance to get original amount
+          const advanceQuery = query(
+            advancesRef,
+            where("__name__", "==", advanceId),
+            limit(1)
+          );
+          const advanceSnapshot = await getDocs(advanceQuery);
+
+          if (!advanceSnapshot.empty) {
+            const advanceData = advanceSnapshot.docs[0].data();
+            // Restore to original amount and ACTIVE status
+            await updateDoc(advanceRef, {
+              remainingAmount: advanceData.amount, // Restore full amount
+              status: ADVANCE_STATUS.ACTIVE,
+            });
+          }
+        }
+      }
+
+      logActivity(user.dataOwnerId, {
+        action: "update",
+        module: "employees",
+        targetId: payrollEntry.id,
+        userId: user.uid,
+        userEmail: user.email || "",
+        description: `عكس دفع راتب: ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+        metadata: {
+          reversedAmount: paidAmount,
+          originalTransactionId: payrollEntry.linkedTransactionId,
+          reversalTransactionId,
+          advanceIds: payrollEntry.advanceIds,
+        },
+      });
+
+      toast({
+        title: "تم عكس الدفع",
+        description: `تم عكس دفع راتب ${payrollEntry.employeeName} بقيمة ${paidAmount} دينار`,
+      });
+      return true;
+    } catch (error) {
+      const appError = handleError(error);
+      toast({
+        title: getErrorTitle(appError),
+        description: appError.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  return { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment };
 }

@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, Trash2, Download, Check, Wallet, Clock, Gift, MinusCircle, Calculator, Banknote } from "lucide-react";
+import { DollarSign, Trash2, Download, Check, Wallet, Clock, Gift, MinusCircle, Calculator, Banknote, Undo2, RotateCcw } from "lucide-react";
 import { Employee, PayrollEntry } from "../types/employees";
 import { Advance } from "../types/advances";
 import { ADVANCE_STATUS } from "@/lib/constants";
@@ -41,6 +41,8 @@ interface PayrollTableProps {
   onMarkAsPaid: (entry: PayrollEntry) => void;
   onDeletePayrollEntry: (entry: PayrollEntry) => void;
   onMarkAllAsPaid?: () => void;
+  onUndoMonthPayroll?: () => void;
+  onReversePayment?: (entry: PayrollEntry) => void;
   advances?: Advance[];
 }
 
@@ -106,6 +108,8 @@ export function PayrollTable({
   onMarkAsPaid,
   onDeletePayrollEntry,
   onMarkAllAsPaid,
+  onUndoMonthPayroll,
+  onReversePayment,
   advances = [],
 }: PayrollTableProps) {
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
@@ -233,7 +237,7 @@ export function PayrollTable({
       proratedCount,
       advanceCount,
     };
-  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth, advances]);
+  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth, getEmployeeAdvanceDeduction]);
 
   return (
     <div className="space-y-6">
@@ -349,6 +353,20 @@ export function PayrollTable({
                   </Button>
                 </PermissionGate>
               )}
+              {payrollSummary && payrollSummary.unpaidCount > 0 && onUndoMonthPayroll && (
+                <PermissionGate action="delete" module="employees">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onUndoMonthPayroll}
+                    disabled={loading}
+                    className="gap-2 text-warning-600 border-warning-200 hover:bg-warning-50"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                    تراجع عن الشهر
+                  </Button>
+                </PermissionGate>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -432,7 +450,7 @@ export function PayrollTable({
                         )}
                       </TableCell>
                       <TableCell>
-                        {!entry.isPaid && (
+                        {!entry.isPaid ? (
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -453,6 +471,20 @@ export function PayrollTable({
                               <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </Button>
                           </div>
+                        ) : onReversePayment && (
+                          <PermissionGate action="update" module="employees">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onReversePayment(entry)}
+                              disabled={loading}
+                              className="gap-1 text-warning-600 border-warning-200 hover:bg-warning-50"
+                              aria-label={`عكس دفع راتب ${entry.employeeName}`}
+                            >
+                              <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                              عكس الدفع
+                            </Button>
+                          </PermissionGate>
                         )}
                       </TableCell>
                     </TableRow>
