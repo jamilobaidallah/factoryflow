@@ -136,11 +136,14 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     [payrollEntries]
   );
 
-  // Calculate total unpaid salaries across all employees
+  // Calculate total unpaid salaries across all existing employees (excludes orphaned records)
   const getTotalUnpaidSalaries = useCallback((): number => {
-    const unpaidEntries = payrollEntries.filter((p) => !p.isPaid);
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const unpaidEntries = payrollEntries.filter(
+      (p) => !p.isPaid && employeeIds.has(p.employeeId)
+    );
     return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
-  }, [payrollEntries]);
+  }, [payrollEntries, employees]);
 
   return useMemo(
     () => ({

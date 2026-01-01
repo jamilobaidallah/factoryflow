@@ -169,8 +169,38 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     if (!user) return false;
 
     try {
+      const batch = writeBatch(firestore);
+
+      // Delete the employee document
       const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, employeeId);
-      await deleteDoc(employeeRef);
+      batch.delete(employeeRef);
+
+      // Delete related payroll entries (unpaid only - paid ones are already in ledger)
+      const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
+      const payrollQuery = query(
+        payrollRef,
+        where("employeeId", "==", employeeId),
+        where("isPaid", "==", false),
+        limit(100)
+      );
+      const payrollSnapshot = await getDocs(payrollQuery);
+      payrollSnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+
+      // Delete related salary history
+      const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
+      const historyQuery = query(
+        historyRef,
+        where("employeeId", "==", employeeId),
+        limit(100)
+      );
+      const historySnapshot = await getDocs(historyQuery);
+      historySnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+
+      await batch.commit();
 
       // Log activity for delete
       logActivity(user.dataOwnerId, {
@@ -184,12 +214,14 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           salary: employee?.currentSalary,
           position: employee?.position,
           name: employee?.name,
+          deletedPayrollEntries: payrollSnapshot.size,
+          deletedHistoryEntries: historySnapshot.size,
         },
       });
 
       toast({
         title: "تم الحذف",
-        description: "تم حذف الموظف بنجاح",
+        description: "تم حذف الموظف وسجلاته بنجاح",
       });
       return true;
     } catch (error) {
