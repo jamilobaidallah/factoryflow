@@ -25,6 +25,7 @@ import {
   safeDivide,
   parseAmount,
 } from "@/lib/currency";
+import { toDate } from "@/lib/firestore-utils";
 
 interface UseEmployeesOperationsReturn {
   submitEmployee: (
@@ -274,9 +275,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       const monthStartDate = new Date(year, month - 1, 1); // First day of selected month
 
       const eligibleEmployees = employees.filter(employee => {
-        const hireDate = employee.hireDate instanceof Date
-          ? employee.hireDate
-          : new Date(employee.hireDate);
+        const hireDate = toDate(employee.hireDate);
         return hireDate <= monthStartDate;
       });
 

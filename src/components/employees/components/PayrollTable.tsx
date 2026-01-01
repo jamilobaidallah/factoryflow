@@ -18,6 +18,7 @@ import { safeAdd, safeSubtract, safeMultiply, safeDivide, parseAmount, sumAmount
 import { exportPayrollToExcel } from "@/lib/export-payroll-excel";
 import { formatNumber } from "@/lib/date-utils";
 import { PermissionGate } from "@/components/auth";
+import { toDate } from "@/lib/firestore-utils";
 
 export interface PayrollProcessingData {
   overtime: string;
@@ -48,10 +49,7 @@ function isEmployeeEligibleForMonth(employee: Employee, selectedMonth: string): 
   const [year, month] = selectedMonth.split('-').map(Number);
   // First day of the selected month
   const monthStartDate = new Date(year, month - 1, 1);
-
-  const hireDate = employee.hireDate instanceof Date
-    ? employee.hireDate
-    : new Date(employee.hireDate);
+  const hireDate = toDate(employee.hireDate);
 
   return hireDate <= monthStartDate;
 }
@@ -366,7 +364,7 @@ export function PayrollTable({
               </p>
               <ul className="text-sm text-warning-600 list-disc list-inside">
                 {ineligibleEmployees.map(emp => {
-                  const hireDate = emp.hireDate instanceof Date ? emp.hireDate : new Date(emp.hireDate);
+                  const hireDate = toDate(emp.hireDate);
                   return (
                     <li key={emp.id}>
                       {emp.name} - تاريخ التعيين: {hireDate.toLocaleDateString('ar-EG')}
