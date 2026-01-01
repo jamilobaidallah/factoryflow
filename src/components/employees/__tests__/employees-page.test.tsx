@@ -11,7 +11,15 @@ const mockDeleteDoc = jest.fn();
 const mockCollection = jest.fn();
 const mockDoc = jest.fn();
 const mockQuery = jest.fn();
-const mockWriteBatch = jest.fn();
+const mockGetDocs = jest.fn();
+const mockBatchDelete = jest.fn();
+const mockBatchCommit = jest.fn();
+const mockWriteBatch = jest.fn(() => ({
+  delete: mockBatchDelete,
+  set: jest.fn(),
+  update: jest.fn(),
+  commit: mockBatchCommit.mockResolvedValue(undefined),
+}));
 
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -19,11 +27,13 @@ jest.mock('firebase/firestore', () => ({
   addDoc: (...args: unknown[]) => mockAddDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   query: (...args: unknown[]) => mockQuery(...args),
+  where: jest.fn(),
   orderBy: jest.fn(),
   limit: jest.fn(),
-  writeBatch: () => mockWriteBatch,
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
 }));
 
 jest.mock('@/firebase/config', () => ({
@@ -127,6 +137,12 @@ describe('EmployeesPage', () => {
     mockCollection.mockReturnValue('employees-collection');
     mockQuery.mockReturnValue('employees-query');
     mockDoc.mockReturnValue('doc-ref');
+
+    // Mock getDocs to return empty results for related records queries
+    mockGetDocs.mockResolvedValue({
+      forEach: () => {},
+      size: 0,
+    });
   });
 
   describe('Rendering', () => {
@@ -347,9 +363,7 @@ describe('EmployeesPage', () => {
   });
 
   describe('Delete Employee', () => {
-    it('calls deleteDoc when delete confirmed', async () => {
-      mockDeleteDoc.mockResolvedValueOnce(undefined);
-
+    it('calls batch commit when delete confirmed', async () => {
       render(<EmployeesPage />);
 
       await waitFor(() => {
@@ -369,8 +383,9 @@ describe('EmployeesPage', () => {
       const confirmButton = screen.getByRole('button', { name: /تأكيد/ });
       await userEvent.click(confirmButton);
 
+      // The delete now uses batch writes
       await waitFor(() => {
-        expect(mockDeleteDoc).toHaveBeenCalled();
+        expect(mockBatchCommit).toHaveBeenCalled();
       });
     });
   });
