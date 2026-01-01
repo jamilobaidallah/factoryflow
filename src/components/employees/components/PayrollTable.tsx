@@ -245,6 +245,7 @@ export function PayrollTable({
             id="month"
             type="month"
             value={selectedMonth}
+            max={new Date().toISOString().slice(0, 7)}
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="w-48"
           />

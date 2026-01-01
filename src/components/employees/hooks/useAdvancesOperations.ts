@@ -51,6 +51,19 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
         return false;
       }
 
+      // Validate date is not in the future
+      const advanceDate = new Date(formData.date);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // End of today
+      if (advanceDate > today) {
+        toast({
+          title: "خطأ في التاريخ",
+          description: "لا يمكن تسجيل سلفة بتاريخ مستقبلي",
+          variant: "destructive",
+        });
+        return false;
+      }
+
       const batch = writeBatch(firestore);
 
       // Generate transaction ID

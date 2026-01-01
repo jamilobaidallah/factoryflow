@@ -107,11 +107,15 @@ export function AdvanceFormDialog({
                 id="date"
                 type="date"
                 value={formData.date}
+                max={new Date().toISOString().split("T")[0]}
                 onChange={(e) =>
                   setFormData({ ...formData, date: e.target.value })
                 }
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                لا يمكن تسجيل سلفة بتاريخ مستقبلي
+              </p>
             </div>
 
             <div className="grid gap-2">

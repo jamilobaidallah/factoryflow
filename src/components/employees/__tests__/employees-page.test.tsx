@@ -33,7 +33,7 @@ jest.mock('firebase/firestore', () => ({
   where: jest.fn(),
   orderBy: jest.fn(),
   limit: jest.fn(),
-  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
+  writeBatch: () => mockWriteBatch(),
 }));
 
 jest.mock('@/firebase/config', () => ({

@@ -255,6 +255,21 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     if (!user) return false;
 
     try {
+      // Validate that selected month is not in the future
+      const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // getMonth() is 0-indexed
+
+      if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonthNum > currentMonth)) {
+        toast({
+          title: "خطأ في الشهر",
+          description: "لا يمكن معالجة رواتب شهر مستقبلي",
+          variant: "destructive",
+        });
+        return false;
+      }
+
       const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
 
       // Check for existing payroll entries for this month
