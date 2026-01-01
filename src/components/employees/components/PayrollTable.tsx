@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,12 +114,12 @@ export function PayrollTable({
   };
 
   // Get total active advance amount for an employee
-  const getEmployeeAdvanceDeduction = (employeeId: string): number => {
+  const getEmployeeAdvanceDeduction = useCallback((employeeId: string): number => {
     const activeAdvances = advances.filter(
       (a) => a.employeeId === employeeId && a.status === ADVANCE_STATUS.ACTIVE
     );
     return sumAmounts(activeAdvances.map((a) => a.remainingAmount));
-  };
+  }, [advances]);
 
   // Filter employees by eligibility for the selected month
   const { eligibleEmployees, ineligibleEmployees } = useMemo(() => {
