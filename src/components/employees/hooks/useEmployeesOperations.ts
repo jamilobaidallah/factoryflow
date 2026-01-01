@@ -297,18 +297,42 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
       const batch = writeBatch(firestore);
 
+      // Calculate days in the selected month
+      const daysInMonth = new Date(year, month, 0).getDate();
+
       for (const employee of eligibleEmployees) {
         const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
         const overtimeHours = parseAmount(empData.overtime || "0");
         const bonusAmount = parseAmount(empData.bonus || "0");
         const deductionAmount = parseAmount(empData.deduction || "0");
+
+        // Check if employee was hired mid-month (proration needed)
+        const hireDate = toDate(employee.hireDate);
+        const hireYear = hireDate.getFullYear();
+        const hireMonth = hireDate.getMonth() + 1;
+        const hireDay = hireDate.getDate();
+
+        let baseSalary = employee.currentSalary;
+        let daysWorked = daysInMonth;
+        let isProrated = false;
+
+        // If hired in the selected month, prorate the salary
+        if (hireYear === year && hireMonth === month && hireDay > 1) {
+          daysWorked = daysInMonth - hireDay + 1;
+          baseSalary = safeMultiply(
+            safeDivide(employee.currentSalary, daysInMonth),
+            daysWorked
+          );
+          isProrated = true;
+        }
+
         const overtimePay = employee.overtimeEligible
           ? calculateOvertimePay(employee.currentSalary, overtimeHours)
           : 0;
 
-        // Total = Base + Overtime + Bonus - Deduction
+        // Total = Base (prorated if applicable) + Overtime + Bonus - Deduction
         const totalSalary = safeSubtract(
-          safeAdd(safeAdd(employee.currentSalary, overtimePay), bonusAmount),
+          safeAdd(safeAdd(baseSalary, overtimePay), bonusAmount),
           deductionAmount
         );
 
@@ -317,14 +341,18 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           employeeId: employee.id,
           employeeName: employee.name,
           month: selectedMonth,
-          baseSalary: employee.currentSalary,
+          baseSalary: baseSalary,
+          fullMonthlySalary: employee.currentSalary,
+          daysWorked: daysWorked,
+          daysInMonth: daysInMonth,
+          isProrated: isProrated,
           overtimeHours: overtimeHours,
           overtimePay: overtimePay,
           bonuses: bonusAmount > 0 ? [{ id: "1", type: "other", description: "مكافأة", amount: bonusAmount }] : [],
           deductions: deductionAmount > 0 ? [{ id: "1", type: "other", description: "خصم", amount: deductionAmount }] : [],
           totalSalary: totalSalary,
           isPaid: false,
-          notes: empData.notes || "",
+          notes: isProrated ? `راتب جزئي: ${daysWorked} يوم من ${daysInMonth}${empData.notes ? ' - ' + empData.notes : ''}` : empData.notes || "",
           createdAt: new Date(),
         });
       }

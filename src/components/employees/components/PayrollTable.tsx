@@ -57,6 +57,40 @@ function isEmployeeEligibleForMonth(employee: Employee, selectedMonth: string): 
   return false;
 }
 
+/**
+ * Calculate prorated salary info for an employee in a given month
+ */
+function getProratedSalaryInfo(employee: Employee, selectedMonth: string): {
+  baseSalary: number;
+  daysWorked: number;
+  daysInMonth: number;
+  isProrated: boolean;
+} {
+  const [year, month] = selectedMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const hireDate = toDate(employee.hireDate);
+  const hireYear = hireDate.getFullYear();
+  const hireMonth = hireDate.getMonth() + 1;
+  const hireDay = hireDate.getDate();
+
+  // If hired in the selected month after day 1, prorate
+  if (hireYear === year && hireMonth === month && hireDay > 1) {
+    const daysWorked = daysInMonth - hireDay + 1;
+    const baseSalary = safeMultiply(
+      safeDivide(employee.currentSalary, daysInMonth),
+      daysWorked
+    );
+    return { baseSalary, daysWorked, daysInMonth, isProrated: true };
+  }
+
+  return {
+    baseSalary: employee.currentSalary,
+    daysWorked: daysInMonth,
+    daysInMonth,
+    isProrated: false,
+  };
+}
+
 export function PayrollTable({
   employees,
   selectedMonth,
@@ -125,7 +159,7 @@ export function PayrollTable({
     };
   }, [monthPayroll]);
 
-  // Calculate preview totals for unprocessed payroll (only eligible employees)
+  // Calculate preview totals for unprocessed payroll (only eligible employees, with proration)
   const previewSummary = useMemo(() => {
     if (monthPayroll.length > 0 || eligibleEmployees.length === 0) return null;
 
@@ -134,21 +168,27 @@ export function PayrollTable({
     let totalBonuses = 0;
     let totalDeductions = 0;
     let grandTotal = 0;
+    let proratedCount = 0;
 
     eligibleEmployees.forEach(employee => {
       const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
       const overtime = parseAmount(empData.overtime || "0");
       const bonus = parseAmount(empData.bonus || "0");
       const deduction = parseAmount(empData.deduction || "0");
+
+      // Get prorated salary info
+      const { baseSalary, isProrated } = getProratedSalaryInfo(employee, selectedMonth);
+      if (isProrated) proratedCount++;
+
       const overtimePay = employee.overtimeEligible
         ? calculateOvertimePay(employee.currentSalary, overtime)
         : 0;
       const total = safeSubtract(
-        safeAdd(safeAdd(employee.currentSalary, overtimePay), bonus),
+        safeAdd(safeAdd(baseSalary, overtimePay), bonus),
         deduction
       );
 
-      totalBase = safeAdd(totalBase, employee.currentSalary);
+      totalBase = safeAdd(totalBase, baseSalary);
       totalOvertime = safeAdd(totalOvertime, overtimePay);
       totalBonuses = safeAdd(totalBonuses, bonus);
       totalDeductions = safeAdd(totalDeductions, deduction);
@@ -162,8 +202,9 @@ export function PayrollTable({
       totalDeductions,
       grandTotal,
       employeeCount: eligibleEmployees.length,
+      proratedCount,
     };
-  }, [eligibleEmployees, payrollData, monthPayroll.length]);
+  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth]);
 
   return (
     <div className="space-y-6">
@@ -300,8 +341,24 @@ export function PayrollTable({
 
                   return (
                     <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.employeeName}</TableCell>
-                      <TableCell>{entry.baseSalary} دينار</TableCell>
+                      <TableCell className="font-medium">
+                        {entry.employeeName}
+                        {entry.isProrated && entry.daysWorked && entry.daysInMonth && (
+                          <span className="block text-xs text-warning-600">
+                            ({entry.daysWorked} يوم من {entry.daysInMonth})
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {entry.isProrated && entry.fullMonthlySalary ? (
+                          <div>
+                            <span className="text-warning-700">{formatNumber(entry.baseSalary)} دينار</span>
+                            <span className="block text-xs text-gray-400 line-through">{entry.fullMonthlySalary}</span>
+                          </div>
+                        ) : (
+                          <span>{formatNumber(entry.baseSalary)} دينار</span>
+                        )}
+                      </TableCell>
                       <TableCell>{entry.overtimePay > 0 ? `${formatNumber(entry.overtimePay)} دينار` : "-"}</TableCell>
                       <TableCell className="text-green-600">
                         {bonusTotal > 0 ? `+${formatNumber(bonusTotal)}` : "-"}
@@ -434,18 +491,38 @@ export function PayrollTable({
                   const overtime = parseAmount(empData.overtime || "0");
                   const bonus = parseAmount(empData.bonus || "0");
                   const deduction = parseAmount(empData.deduction || "0");
+
+                  // Get prorated salary info
+                  const { baseSalary, daysWorked, daysInMonth, isProrated } = getProratedSalaryInfo(employee, selectedMonth);
+
                   const overtimePay = employee.overtimeEligible
                     ? calculateOvertimePay(employee.currentSalary, overtime)
                     : 0;
                   const total = safeSubtract(
-                    safeAdd(safeAdd(employee.currentSalary, overtimePay), bonus),
+                    safeAdd(safeAdd(baseSalary, overtimePay), bonus),
                     deduction
                   );
 
                   return (
                     <TableRow key={employee.id}>
-                      <TableCell className="font-medium">{employee.name}</TableCell>
-                      <TableCell>{employee.currentSalary} دينار</TableCell>
+                      <TableCell className="font-medium">
+                        {employee.name}
+                        {isProrated && (
+                          <span className="block text-xs text-warning-600">
+                            ({daysWorked} يوم من {daysInMonth})
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isProrated ? (
+                          <div>
+                            <span className="text-warning-700">{formatNumber(baseSalary)} دينار</span>
+                            <span className="block text-xs text-gray-400 line-through">{employee.currentSalary}</span>
+                          </div>
+                        ) : (
+                          <span>{employee.currentSalary} دينار</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {employee.overtimeEligible ? (
                           <Input

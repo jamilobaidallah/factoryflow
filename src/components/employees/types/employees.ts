@@ -42,6 +42,10 @@ export interface PayrollEntry {
   employeeName: string;
   month: string; // "2025-11"
   baseSalary: number;
+  fullMonthlySalary?: number; // Original monthly salary before proration
+  daysWorked?: number; // Days worked in the month
+  daysInMonth?: number; // Total days in the month
+  isProrated?: boolean; // Whether salary was prorated
   overtimeHours: number;
   overtimePay: number;
   deductions?: PayrollDeduction[];
