@@ -270,20 +270,17 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         return false;
       }
 
-      // Filter employees by hire date - only include those hired on or before the first day of selected month
+      // Filter employees by hire date - only include those hired during or before the selected month
       const [year, month] = selectedMonth.split('-').map(Number);
 
       const eligibleEmployees = employees.filter(employee => {
         const hireDate = toDate(employee.hireDate);
-        // Compare year, month, day only (ignore time component)
         const hireYear = hireDate.getFullYear();
         const hireMonth = hireDate.getMonth() + 1; // getMonth() is 0-indexed
-        const hireDay = hireDate.getDate();
 
-        // Employee is eligible if hired in a previous month, OR hired on day 1 of selected month
+        // Employee is eligible if hired in the selected month or any previous month
         if (hireYear < year) return true;
-        if (hireYear === year && hireMonth < month) return true;
-        if (hireYear === year && hireMonth === month && hireDay === 1) return true;
+        if (hireYear === year && hireMonth <= month) return true;
         return false;
       });
 
