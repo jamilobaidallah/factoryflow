@@ -223,6 +223,112 @@ useEffect(() => {
 
 ---
 
+## ⚡ PERFORMANCE RULES
+
+### Parallel vs Sequential Queries
+```typescript
+// ❌ WRONG — sequential queries (10 seconds for 5 queries)
+for (const id of ids) {
+  await getData(id);
+}
+
+// ✅ CORRECT — parallel queries (2 seconds for 5 queries)
+await Promise.all(ids.map(id => getData(id)));
+
+// ✅ CORRECT — parallel with error handling
+const results = await Promise.allSettled(ids.map(id => getData(id)));
+```
+
+### Context Provider Performance
+- **NEVER** block initial render with sequential async operations
+- Move heavy data fetching OUT of providers into page-level hooks
+- Use skeleton loaders during data fetch, not blank screens
+
+### Data Fetching Strategy
+| Scenario | Use | Why |
+|----------|-----|-----|
+| Frequently changing data (dashboard) | `onSnapshot` | Real-time updates |
+| Rarely changing data (settings) | `getDocs` | Less overhead |
+| Large lists | Pagination + `limit()` | Memory efficiency |
+
+### Loading Performance
+```typescript
+// ❌ WRONG — loads everything upfront
+import { HeavyChart } from './HeavyChart';
+
+// ✅ CORRECT — lazy load heavy components
+const HeavyChart = dynamic(() => import('./HeavyChart'), {
+  loading: () => <Skeleton />,
+});
+```
+
+---
+
+## 🔍 QUERY OPTIMIZATION
+
+### Always Bound Queries
+```typescript
+// ❌ WRONG — loads entire collection (could be 100,000 docs)
+const q = query(collectionRef, orderBy('date'));
+
+// ✅ CORRECT — always limit
+const q = query(collectionRef, orderBy('date', 'desc'), limit(100));
+```
+
+### Avoid Duplicate Listeners
+```typescript
+// ❌ WRONG — same data subscribed twice
+const { ledger } = useLedgerData();      // Listener 1
+const { totals } = useLedgerTotals();    // Listener 2 (same collection!)
+
+// ✅ CORRECT — single source, derive what you need
+const { ledger } = useLedgerData();
+const totals = useMemo(() => calculateTotals(ledger), [ledger]);
+```
+
+### Use Composite Indexes for Complex Queries
+When combining `where()` + `orderBy()` on different fields, create Firestore indexes.
+
+---
+
+## 🔐 SECURITY CHECKLIST
+
+### Input Validation
+```typescript
+// ❌ WRONG — trusting client input
+const amount = parseFloat(userInput);
+
+// ✅ CORRECT — validate and sanitize
+const amount = parseAmount(userInput); // Uses Decimal.js, handles edge cases
+if (amount <= 0) throw new Error('المبلغ يجب أن يكون أكبر من صفر');
+```
+
+### Never Expose Sensitive Data
+```typescript
+// ❌ WRONG — logging sensitive info
+console.log('User token:', token);
+console.log('Payment details:', paymentData);
+
+// ✅ CORRECT — log only IDs/references
+console.log('Processing payment:', paymentId);
+```
+
+### Firestore Security Rules
+- All data access MUST be validated by Firestore rules
+- Never trust client-side role checks alone — enforce in rules
+- Test rules with Firebase Emulator before deploying
+
+### XSS Prevention
+```typescript
+// ❌ WRONG — rendering raw HTML
+<div dangerouslySetInnerHTML={{ __html: userContent }} />
+
+// ✅ CORRECT — let React escape content
+<div>{userContent}</div>
+```
+
+---
+
 ## 📁 PROJECT STRUCTURE
 
 ```
