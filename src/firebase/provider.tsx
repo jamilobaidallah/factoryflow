@@ -29,29 +29,32 @@ interface FirebaseProviderProps {
  * Returns: 'legacy' if user has data, 'new' if definitely new, 'unknown' if check failed
  */
 async function checkIfLegacyOwner(uid: string): Promise<'legacy' | 'new' | 'unknown'> {
-  // Check common collections for existing data
-  // نتحقق من المجموعات الشائعة للبيانات الموجودة
+  // Check common collections for existing data IN PARALLEL for performance
+  // نتحقق من المجموعات الشائعة للبيانات الموجودة بشكل متوازي للأداء
   const collectionsToCheck = ['ledger', 'cheques', 'inventory', 'clients', 'partners'];
-  let successfulChecks = 0;
-  let totalErrors = 0;
 
-  for (const collectionName of collectionsToCheck) {
-    try {
+  // Run all queries in parallel using Promise.allSettled to handle errors gracefully
+  const results = await Promise.allSettled(
+    collectionsToCheck.map(async (collectionName) => {
       const collectionRef = collection(firestore, `users/${uid}/${collectionName}`);
       const q = query(collectionRef, limit(1));
       const snapshot = await getDocs(q);
-      successfulChecks++;
+      return { collectionName, hasData: !snapshot.empty };
+    })
+  );
 
-      if (!snapshot.empty) {
+  let successfulChecks = 0;
+
+  // Check results - if any collection has data, user is a legacy owner
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      successfulChecks++;
+      if (result.value.hasData) {
         // User has data - they are a legacy owner
         // المستخدم لديه بيانات - هو مالك قديم
-        console.log(`Legacy owner detected: found data in ${collectionName}`);
+        console.log(`Legacy owner detected: found data in ${result.value.collectionName}`);
         return 'legacy';
       }
-    } catch (error) {
-      // Permission error or other issue
-      totalErrors++;
-      console.error(`Error checking ${collectionName}:`, error);
     }
   }
 
