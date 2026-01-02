@@ -700,7 +700,20 @@ export class LedgerService {
         );
         const paymentsSnapshot = await getDocs(paymentsQuery);
 
-        paymentsSnapshot.forEach((paymentDoc) => {
+        // First, delete journal entries for each payment being updated
+        for (const paymentDoc of paymentsSnapshot.docs) {
+          const paymentJournalQuery = query(
+            this.journalEntriesRef,
+            where("linkedPaymentId", "==", paymentDoc.id)
+          );
+          const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+          paymentJournalSnapshot.forEach((journalDoc) => {
+            batch.delete(journalDoc.ref);
+          });
+        }
+
+        // Then update payment records (without recreating their journal entries)
+        paymentsSnapshot.docs.forEach((paymentDoc) => {
           batch.update(paymentDoc.ref, {
             clientName: newClientName,
             amount: newAmount,
@@ -737,6 +750,7 @@ export class LedgerService {
         });
 
         // Recreate journal entry with new values (only if entry exists)
+        // Use currentData flags to preserve original settlement type
         const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
         if (currentData) {
           addJournalEntryToBatch(batch, this.userId, {
@@ -748,7 +762,7 @@ export class LedgerService {
             subCategory: formData.subCategory,
             date: new Date(formData.date),
             isARAPEntry: currentData.isARAPEntry,
-            immediateSettlement: formData.immediateSettlement,
+            immediateSettlement: currentData.immediateSettlement ?? true,
           });
         }
       }
