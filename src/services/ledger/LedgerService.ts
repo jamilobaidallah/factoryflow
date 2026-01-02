@@ -672,9 +672,19 @@ export class LedgerService {
 
         // Recalculate AR/AP fields if this is an AR/AP entry and amount changed
         if (currentData.isARAPEntry && oldAmount !== newAmount) {
-          const totalPaid = currentData.totalPaid || 0;
+          let totalPaid = currentData.totalPaid || 0;
           const totalDiscount = currentData.totalDiscount || 0;
           const writeoffAmount = currentData.writeoffAmount || 0;
+
+          // For immediate settlement entries (was fully paid at creation),
+          // adjust totalPaid to match new amount to keep it "paid"
+          const wasImmediateSettlement = currentData.immediateSettlement ||
+            (totalPaid === oldAmount && currentData.paymentStatus === 'paid');
+
+          if (wasImmediateSettlement) {
+            totalPaid = newAmount;
+            updateData.totalPaid = totalPaid;
+          }
 
           updateData.remainingBalance = calculateRemainingBalance(
             newAmount,
