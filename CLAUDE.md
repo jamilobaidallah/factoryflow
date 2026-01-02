@@ -570,6 +570,207 @@ Before saying a task is complete:
 
 ---
 
+## 🚨 ERROR HANDLING PATTERNS
+
+### Error Types and Responses
+
+| Error Type | User Experience | Implementation |
+|------------|-----------------|----------------|
+| **Network error** | Arabic message + retry button | `toast.error('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى')` |
+| **Validation error** | Inline field error | Show error below field, focus on field |
+| **Permission error** | Redirect to appropriate page | Owner → login, Viewer → read-only view |
+| **Not found** | Friendly 404 message | `الصفحة غير موجودة` with link home |
+
+### Never Swallow Errors
+```typescript
+// ❌ WRONG — silent failure
+try {
+  await saveData();
+} catch (e) {
+  console.log(e); // User has no idea it failed
+}
+
+// ✅ CORRECT — inform user
+try {
+  await saveData();
+  toast.success('تم الحفظ بنجاح');
+} catch (e) {
+  console.error('Save failed:', e);
+  toast.error('فشل الحفظ. يرجى المحاولة مرة أخرى');
+}
+```
+
+### Async Operations Pattern
+```typescript
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+
+const handleSubmit = async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    await performAction();
+    toast.success('تمت العملية بنجاح');
+  } catch (e) {
+    setError('حدث خطأ. يرجى المحاولة مرة أخرى');
+    toast.error('فشلت العملية');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+---
+
+## ♿ ACCESSIBILITY (a11y)
+
+### Arabic ARIA Labels
+```tsx
+// ✅ Interactive elements need Arabic labels
+<Button aria-label="إضافة عميل جديد">
+  <Plus className="h-4 w-4" />
+</Button>
+
+<IconButton aria-label="حذف">
+  <Trash2 />
+</IconButton>
+```
+
+### Keyboard Navigation
+```tsx
+// ✅ Support keyboard navigation
+<div
+  role="button"
+  tabIndex={0}
+  onClick={handleClick}
+  onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+>
+```
+
+### Color + Visual Indicator
+```tsx
+// ❌ WRONG — color alone conveys meaning
+<span className="text-danger-600">فشل</span>
+
+// ✅ CORRECT — color + icon/text
+<span className="text-danger-600">
+  <XCircle className="inline ml-1 h-4 w-4" />
+  فشل
+</span>
+```
+
+### Form Error Linking
+```tsx
+// ✅ Link errors to fields for screen readers
+<Input
+  id="amount"
+  aria-invalid={!!errors.amount}
+  aria-describedby={errors.amount ? "amount-error" : undefined}
+/>
+{errors.amount && (
+  <p id="amount-error" className="text-danger-600 text-sm">
+    {errors.amount}
+  </p>
+)}
+```
+
+---
+
+## 📝 GIT COMMIT STANDARDS
+
+### Conventional Commits
+Use these prefixes for commit messages:
+
+| Prefix | Use For | Example |
+|--------|---------|---------|
+| `feat:` | New feature | `feat: add overtime tracking` |
+| `fix:` | Bug fix | `fix: correct balance calculation` |
+| `perf:` | Performance improvement | `perf: parallelize Firestore queries` |
+| `docs:` | Documentation only | `docs: update CLAUDE.md standards` |
+| `refactor:` | Code change (no behavior change) | `refactor: extract payment logic` |
+| `test:` | Adding/fixing tests | `test: add cheque state machine tests` |
+| `chore:` | Build, config, deps | `chore: upgrade Next.js to 14.2` |
+
+### Commit Message Format
+```
+<type>: <short description in English>
+
+<optional body explaining why, not what>
+
+🤖 Generated with Claude Code
+```
+
+### Examples
+```bash
+# Good
+feat: add employee overtime tracking with monthly summary
+fix: use dataOwnerId instead of uid for multi-user support
+perf: parallelize legacy owner check queries
+
+# Bad
+update code          # Too vague
+fixed bug            # What bug?
+WIP                  # Don't commit WIP
+```
+
+---
+
+## 🧩 COMPONENT ORGANIZATION
+
+### When to Split Components
+
+| Signal | Action |
+|--------|--------|
+| File > 300 lines | Split into smaller components |
+| Multiple responsibilities | Extract focused components |
+| Repeated UI patterns | Create reusable component |
+| Complex state logic | Extract to custom hook |
+
+### Component File Structure
+```
+src/components/employees/
+├── employees-page.tsx        # Main page component
+├── components/               # Sub-components
+│   ├── EmployeeTable.tsx
+│   ├── EmployeeCard.tsx
+│   └── PayrollDialog.tsx
+├── hooks/                    # Feature-specific hooks
+│   └── useEmployeesData.ts
+└── types/                    # Feature-specific types
+    └── employees.ts
+```
+
+### Naming Conventions
+```typescript
+// Components: PascalCase
+EmployeeTable.tsx
+PayrollDialog.tsx
+
+// Hooks: camelCase with 'use' prefix
+useEmployeesData.ts
+usePayrollCalculation.ts
+
+// Types: PascalCase
+interface Employee { }
+type PayrollStatus = 'pending' | 'processed';
+```
+
+### Keep Related Code Together
+```typescript
+// ✅ CORRECT — related components in same feature folder
+src/components/employees/
+  ├── EmployeeTable.tsx
+  ├── EmployeeCard.tsx
+  └── EmployeeForm.tsx
+
+// ❌ WRONG — scattered across codebase
+src/components/tables/EmployeeTable.tsx
+src/components/cards/EmployeeCard.tsx
+src/components/forms/EmployeeForm.tsx
+```
+
+---
+
 ## 📚 KEY FILES REFERENCE
 
 | Purpose | File |
