@@ -9,19 +9,19 @@ Built with Next.js 14, TypeScript, Firebase, Tailwind CSS, and shadcn/ui.
 
 ## 🚨 MANDATORY WORKFLOW
 
-### 1. Git Branching (CRITICAL)
-- **NEVER** commit directly to `master` or `main`
-- Create feature branch BEFORE any code: `feature/description` or `fix/issue-description`
-- This enables Vercel preview deployments
+### 1. Git Branching
+- **Features & refactors:** Create feature branch first (`feature/description` or `fix/issue-description`)
+- **Small fixes** (< 20 lines, single file, obvious fix): May commit directly to master
+- Feature branches enable Vercel preview deployments
 
 ### 2. Planning
-1. Read relevant codebase files
-2. Write plan in `tasks/todo.md` with checkable items
-3. **STOP** — ask for approval before coding
+- Use Claude Code's built-in **TodoWrite tool** to track tasks
+- **Clear tasks** (obvious solution): Proceed and explain as you go
+- **Ambiguous tasks** (multiple approaches, unclear requirements): Ask for clarification first
 
 ### 3. Execution
 - Work through todo items systematically
-- Mark complete in `tasks/todo.md`
+- Mark complete as you go
 - Explain each change
 
 ### 4. 🔍 SELF-REVIEW & BUG HUNTING (MANDATORY)
@@ -87,9 +87,17 @@ After self-review, report:
 - None / OR list any concerns
 ```
 
-### 5. 📋 HUMAN TESTING PLAN (REQUIRED)
+### 5. 📋 HUMAN TESTING PLAN
 
-**After self-review, Claude MUST generate a clear step-by-step testing plan:**
+**Tiered approach based on change size:**
+
+| Change Type | Testing Required |
+|-------------|------------------|
+| **Small fix** (< 20 lines, single file) | Quick verification: "Fixed X, tested Y, works" |
+| **Feature** (new functionality) | Full testing plan (template below) |
+| **Accounting change** (affects ledger/money) | Full plan + journal entry verification |
+
+**For features and significant changes, generate a testing plan:**
 
 ```markdown
 ## 📋 Human Testing Plan
@@ -170,10 +178,8 @@ After self-review, report:
 ```
 
 ### 6. Finalization
-1. Add "Self-Review" section to `tasks/todo.md`
-2. Add "Human Testing Plan" to `tasks/todo.md`
-3. Push branch, create PR
-4. **STOP** — Output the Human Testing Plan and say: "PR created. Self-review complete. Please follow this testing plan:"
+- **Small fixes:** Commit, push, report what was done
+- **Features:** Push branch, create PR, output testing plan for user review
 
 ---
 
