@@ -313,6 +313,8 @@ export const QUERY_LIMITS = {
   PARTNERS: 100,
   /** Maximum advances to fetch */
   ADVANCES: 500,
+  /** Maximum overtime entries to fetch */
+  OVERTIME_ENTRIES: 1000,
 } as const;
 
 // Employee Advances

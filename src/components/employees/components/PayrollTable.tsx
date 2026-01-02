@@ -44,6 +44,8 @@ interface PayrollTableProps {
   onUndoMonthPayroll?: () => void;
   onReversePayment?: (entry: PayrollEntry) => void;
   advances?: Advance[];
+  /** Overtime hours per employee from overtime entries (employeeId -> hours) */
+  overtimeHoursByEmployee?: Map<string, number>;
 }
 
 /**
@@ -111,11 +113,18 @@ export function PayrollTable({
   onUndoMonthPayroll,
   onReversePayment,
   advances = [],
+  overtimeHoursByEmployee = new Map(),
 }: PayrollTableProps) {
+  // Calculate overtime pay at 1x rate (same as regular hourly rate)
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
     const hourlyRate = safeDivide(currentSalary, 208);
-    return safeMultiply(safeMultiply(overtimeHours, hourlyRate), 1.5);
+    return safeMultiply(overtimeHours, hourlyRate);
   };
+
+  // Get overtime hours for an employee from the entries
+  const getEmployeeOvertimeHours = useCallback((employeeId: string): number => {
+    return overtimeHoursByEmployee.get(employeeId) || 0;
+  }, [overtimeHoursByEmployee]);
 
   // Get total active advance amount for an employee
   const getEmployeeAdvanceDeduction = useCallback((employeeId: string): number => {
@@ -192,10 +201,12 @@ export function PayrollTable({
     let grandNetTotal = 0;
     let proratedCount = 0;
     let advanceCount = 0;
+    let totalOvertimeHours = 0;
 
     eligibleEmployees.forEach(employee => {
       const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
-      const overtime = parseAmount(empData.overtime || "0");
+      // Get overtime from entries instead of payrollData
+      const overtimeHours = getEmployeeOvertimeHours(employee.id);
       const bonus = parseAmount(empData.bonus || "0");
       const deduction = parseAmount(empData.deduction || "0");
 
@@ -204,7 +215,7 @@ export function PayrollTable({
       if (isProrated) proratedCount++;
 
       const overtimePay = employee.overtimeEligible
-        ? calculateOvertimePay(employee.currentSalary, overtime)
+        ? calculateOvertimePay(employee.currentSalary, overtimeHours)
         : 0;
       const total = safeSubtract(
         safeAdd(safeAdd(baseSalary, overtimePay), bonus),
@@ -218,6 +229,7 @@ export function PayrollTable({
 
       totalBase = safeAdd(totalBase, baseSalary);
       totalOvertime = safeAdd(totalOvertime, overtimePay);
+      totalOvertimeHours = safeAdd(totalOvertimeHours, overtimeHours);
       totalBonuses = safeAdd(totalBonuses, bonus);
       totalDeductions = safeAdd(totalDeductions, deduction);
       totalAdvanceDeductions = safeAdd(totalAdvanceDeductions, advanceDeduction);
@@ -228,6 +240,7 @@ export function PayrollTable({
     return {
       totalBase,
       totalOvertime,
+      totalOvertimeHours,
       totalBonuses,
       totalDeductions,
       totalAdvanceDeductions,
@@ -237,7 +250,7 @@ export function PayrollTable({
       proratedCount,
       advanceCount,
     };
-  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth, getEmployeeAdvanceDeduction]);
+  }, [eligibleEmployees, payrollData, monthPayroll.length, selectedMonth, getEmployeeAdvanceDeduction, getEmployeeOvertimeHours]);
 
   return (
     <div className="space-y-6">
@@ -579,7 +592,8 @@ export function PayrollTable({
               <TableBody>
                 {eligibleEmployees.map((employee) => {
                   const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
-                  const overtime = parseAmount(empData.overtime || "0");
+                  // Get overtime from entries instead of payrollData
+                  const overtimeHours = getEmployeeOvertimeHours(employee.id);
                   const bonus = parseAmount(empData.bonus || "0");
                   const deduction = parseAmount(empData.deduction || "0");
 
@@ -587,7 +601,7 @@ export function PayrollTable({
                   const { baseSalary, daysWorked, daysInMonth, isProrated } = getProratedSalaryInfo(employee, selectedMonth);
 
                   const overtimePay = employee.overtimeEligible
-                    ? calculateOvertimePay(employee.currentSalary, overtime)
+                    ? calculateOvertimePay(employee.currentSalary, overtimeHours)
                     : 0;
                   const total = safeSubtract(
                     safeAdd(safeAdd(baseSalary, overtimePay), bonus),
@@ -620,23 +634,16 @@ export function PayrollTable({
                       </TableCell>
                       <TableCell>
                         {employee.overtimeEligible ? (
-                          <Input
-                            type="number"
-                            step="0.5"
-                            min="0"
-                            value={empData.overtime || ""}
-                            onChange={(e) =>
-                              setPayrollData({
-                                ...payrollData,
-                                [employee.id]: {
-                                  ...empData,
-                                  overtime: e.target.value,
-                                },
-                              })
-                            }
-                            placeholder="0"
-                            className="w-20"
-                          />
+                          overtimeHours > 0 ? (
+                            <div className="text-primary-600">
+                              <span className="font-medium">{formatNumber(overtimeHours)}</span>
+                              <span className="text-xs text-primary-500 block">
+                                ({formatNumber(overtimePay)} د)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">0</span>
+                          )
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}

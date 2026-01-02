@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Users, Wallet, Banknote } from "lucide-react";
+import { Plus, Users, Wallet, Banknote, Clock } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -12,10 +12,13 @@ import { formatNumber } from "@/lib/date-utils";
 // Types and hooks
 import { Employee, initialEmployeeFormData } from "./types/employees";
 import { initialAdvanceFormData } from "./types/advances";
+import { OvertimeEntry, initialOvertimeFormData } from "./types/overtime";
 import { useEmployeesData } from "./hooks/useEmployeesData";
 import { useEmployeesOperations } from "./hooks/useEmployeesOperations";
 import { useAdvancesData } from "./hooks/useAdvancesData";
 import { useAdvancesOperations } from "./hooks/useAdvancesOperations";
+import { useOvertimeData } from "./hooks/useOvertimeData";
+import { useOvertimeOperations } from "./hooks/useOvertimeOperations";
 
 // Components
 import { EmployeesStatsCards } from "./components/EmployeesStatsCards";
@@ -25,6 +28,8 @@ import { EmployeeFormDialog } from "./components/EmployeeFormDialog";
 import { SalaryHistoryDialog } from "./components/SalaryHistoryDialog";
 import { AdvancesTable } from "./components/AdvancesTable";
 import { AdvanceFormDialog } from "./components/AdvanceFormDialog";
+import { OvertimeTable } from "./components/OvertimeTable";
+import { OvertimeFormDialog } from "./components/OvertimeFormDialog";
 
 export default function EmployeesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
@@ -34,13 +39,17 @@ export default function EmployeesPage() {
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment } = useEmployeesOperations();
   const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
   const { createAdvance, cancelAdvance } = useAdvancesOperations();
+  const { overtimeEntries, loading: overtimeLoading, getEntriesForMonth, getEmployeeOvertimeHours, getMonthSummaryByEmployee, isMonthProcessed } = useOvertimeData();
+  const { createOvertimeEntry, updateOvertimeEntry, deleteOvertimeEntry } = useOvertimeOperations();
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"employees" | "payroll" | "advances">("employees");
+  const [activeTab, setActiveTab] = useState<"employees" | "payroll" | "advances" | "overtime">("employees");
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isAdvanceDialogOpen, setIsAdvanceDialogOpen] = useState(false);
+  const [isOvertimeDialogOpen, setIsOvertimeDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editingOvertimeEntry, setEditingOvertimeEntry] = useState<OvertimeEntry | null>(null);
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<typeof salaryHistory>([]);
   const [loading, setLoading] = useState(false);
 
@@ -50,9 +59,15 @@ export default function EmployeesPage() {
   );
   const [payrollData, setPayrollData] = useState<{[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}>({});
 
+  // Overtime state
+  const [selectedOvertimeMonth, setSelectedOvertimeMonth] = useState(
+    new Date().toISOString().slice(0, 7)
+  );
+
   // Form state
   const [employeeFormData, setEmployeeFormData] = useState(initialEmployeeFormData);
   const [advanceFormData, setAdvanceFormData] = useState(initialAdvanceFormData);
+  const [overtimeFormData, setOvertimeFormData] = useState(initialOvertimeFormData);
 
   const resetEmployeeForm = () => {
     setEmployeeFormData(initialEmployeeFormData);
@@ -178,6 +193,18 @@ export default function EmployeesPage() {
 
   const monthPayroll = payrollEntries.filter(p => p.month === selectedMonth);
 
+  // Create a map of overtime hours by employee for the selected payroll month
+  const overtimeHoursByEmployee = useMemo(() => {
+    const map = new Map<string, number>();
+    employees.forEach((emp) => {
+      const hours = getEmployeeOvertimeHours(emp.id, selectedMonth);
+      if (hours > 0) {
+        map.set(emp.id, hours);
+      }
+    });
+    return map;
+  }, [employees, selectedMonth, getEmployeeOvertimeHours]);
+
   // Advance handlers
   const openAddAdvanceDialog = () => {
     setAdvanceFormData(initialAdvanceFormData);
@@ -210,10 +237,66 @@ export default function EmployeesPage() {
     );
   };
 
+  // Overtime handlers
+  const openAddOvertimeDialog = () => {
+    setOvertimeFormData(initialOvertimeFormData);
+    setEditingOvertimeEntry(null);
+    setIsOvertimeDialogOpen(true);
+  };
+
+  const handleEditOvertimeEntry = (entry: OvertimeEntry) => {
+    setEditingOvertimeEntry(entry);
+    setOvertimeFormData({
+      employeeId: entry.employeeId,
+      date: new Date(entry.date).toISOString().split("T")[0],
+      hours: entry.hours.toString(),
+      notes: entry.notes || "",
+    });
+    setIsOvertimeDialogOpen(true);
+  };
+
+  const handleOvertimeSubmit = async () => {
+    const employee = employees.find((e) => e.id === overtimeFormData.employeeId);
+    if (!employee) return;
+
+    setLoading(true);
+    let success: boolean;
+    if (editingOvertimeEntry) {
+      success = await updateOvertimeEntry(editingOvertimeEntry.id, overtimeFormData, employee);
+    } else {
+      success = await createOvertimeEntry(overtimeFormData, employee);
+    }
+    if (success) {
+      setOvertimeFormData(initialOvertimeFormData);
+      setEditingOvertimeEntry(null);
+      setIsOvertimeDialogOpen(false);
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteOvertimeEntry = (entry: OvertimeEntry) => {
+    confirm(
+      "حذف الوقت الإضافي",
+      `هل أنت متأكد من حذف سجل الوقت الإضافي لـ ${entry.employeeName}؟`,
+      async () => {
+        setLoading(true);
+        await deleteOvertimeEntry(entry);
+        setLoading(false);
+      },
+      "destructive"
+    );
+  };
+
+  // Get overtime data for selected month
+  const selectedMonthOvertimeEntries = getEntriesForMonth(selectedOvertimeMonth);
+  const selectedMonthOvertimeSummary = getMonthSummaryByEmployee(selectedOvertimeMonth);
+  const selectedMonthProcessed = isMonthProcessed(selectedOvertimeMonth);
+
   const tabs = [
     { id: "employees" as const, label: "الموظفين", icon: Users },
     { id: "payroll" as const, label: "الرواتب الشهرية", icon: Wallet },
     { id: "advances" as const, label: "السلف", icon: Banknote },
+    { id: "overtime" as const, label: "الوقت الإضافي", icon: Clock },
   ];
 
   return (
@@ -326,6 +409,7 @@ export default function EmployeesPage() {
               onUndoMonthPayroll={handleUndoMonthPayroll}
               onReversePayment={handleReversePayment}
               advances={advances}
+              overtimeHoursByEmployee={overtimeHoursByEmployee}
             />
           </CardContent>
         </Card>
@@ -361,6 +445,34 @@ export default function EmployeesPage() {
         </Card>
       )}
 
+      {/* Overtime Tab */}
+      {activeTab === "overtime" && (
+        <Card className="rounded-xl border border-slate-200/60 shadow-card">
+          <CardHeader className="border-b border-slate-100 pb-4">
+            <CardTitle className="text-lg font-semibold text-slate-800">الوقت الإضافي</CardTitle>
+            <p className="text-sm text-slate-500 mt-1">تسجيل ومتابعة ساعات العمل الإضافية</p>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {overtimeLoading ? (
+              <TableSkeleton rows={5} />
+            ) : (
+              <OvertimeTable
+                entries={selectedMonthOvertimeEntries}
+                employees={employees}
+                selectedMonth={selectedOvertimeMonth}
+                setSelectedMonth={setSelectedOvertimeMonth}
+                summaryByEmployee={selectedMonthOvertimeSummary}
+                loading={loading}
+                onAddEntry={openAddOvertimeDialog}
+                onEditEntry={handleEditOvertimeEntry}
+                onDeleteEntry={handleDeleteOvertimeEntry}
+                isMonthProcessed={selectedMonthProcessed}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <EmployeeFormDialog
         isOpen={isEmployeeDialogOpen}
         onClose={() => setIsEmployeeDialogOpen(false)}
@@ -385,6 +497,21 @@ export default function EmployeesPage() {
         setFormData={setAdvanceFormData}
         onSubmit={handleAdvanceSubmit}
         loading={loading}
+      />
+
+      <OvertimeFormDialog
+        isOpen={isOvertimeDialogOpen}
+        onClose={() => {
+          setIsOvertimeDialogOpen(false);
+          setEditingOvertimeEntry(null);
+          setOvertimeFormData(initialOvertimeFormData);
+        }}
+        employees={employees}
+        formData={overtimeFormData}
+        setFormData={setOvertimeFormData}
+        onSubmit={handleOvertimeSubmit}
+        loading={loading}
+        editingEntry={editingOvertimeEntry}
       />
 
       {confirmationDialog}

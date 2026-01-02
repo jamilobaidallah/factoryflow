@@ -245,8 +245,8 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   const calculateOvertimePay = (currentSalary: number, overtimeHours: number): number => {
     // Calculate hourly rate: monthly salary ÷ 208 hours (26 days × 8 hours)
     const hourlyRate = safeDivide(currentSalary, 208);
-    // Overtime at 1.5x
-    return safeMultiply(safeMultiply(overtimeHours, hourlyRate), 1.5);
+    // Overtime at 1x (same as regular hourly rate)
+    return safeMultiply(overtimeHours, hourlyRate);
   };
 
   const processPayroll = async (
@@ -322,9 +322,34 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       // Calculate days in the selected month
       const daysInMonth = new Date(year, month, 0).getDate();
 
+      // Query overtime entries for this month
+      const overtimeRef = collection(firestore, `users/${user.dataOwnerId}/overtime_entries`);
+      const overtimeQuery = query(
+        overtimeRef,
+        where("month", "==", selectedMonth),
+        limit(500)
+      );
+      const overtimeSnapshot = await getDocs(overtimeQuery);
+
+      // Group overtime entries by employee and sum hours
+      const overtimeByEmployee = new Map<string, { hours: number; entryIds: string[] }>();
+      overtimeSnapshot.forEach((doc) => {
+        const data = doc.data();
+        const employeeId = data.employeeId as string;
+        const hours = data.hours as number;
+        const existing = overtimeByEmployee.get(employeeId) || { hours: 0, entryIds: [] };
+        overtimeByEmployee.set(employeeId, {
+          hours: safeAdd(existing.hours, hours),
+          entryIds: [...existing.entryIds, doc.id],
+        });
+      });
+
       for (const employee of eligibleEmployees) {
         const empData = payrollData[employee.id] || { overtime: "", bonus: "", deduction: "", notes: "" };
-        const overtimeHours = parseAmount(empData.overtime || "0");
+        // Get overtime hours from database entries (not from payrollData anymore)
+        const employeeOvertime = overtimeByEmployee.get(employee.id) || { hours: 0, entryIds: [] };
+        const overtimeHours = employeeOvertime.hours;
+        const overtimeEntryIds = employeeOvertime.entryIds;
         const bonusAmount = parseAmount(empData.bonus || "0");
         const deductionAmount = parseAmount(empData.deduction || "0");
 
@@ -387,6 +412,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           isProrated: isProrated,
           overtimeHours: overtimeHours,
           overtimePay: overtimePay,
+          overtimeEntryIds: overtimeEntryIds,
           bonuses: bonusAmount > 0 ? [{ id: "1", type: "other", description: "مكافأة", amount: bonusAmount }] : [],
           deductions: deductionAmount > 0 ? [{ id: "1", type: "other", description: "خصم", amount: deductionAmount }] : [],
           advanceDeduction: advanceDeduction,
@@ -397,6 +423,12 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           notes: isProrated ? `راتب جزئي: ${daysWorked} يوم من ${daysInMonth}${empData.notes ? ' - ' + empData.notes : ''}` : empData.notes || "",
           createdAt: new Date(),
         });
+
+        // Mark overtime entries as linked to this payroll
+        for (const entryId of overtimeEntryIds) {
+          const entryRef = doc(overtimeRef, entryId);
+          batch.update(entryRef, { linkedPayrollId: payrollDocRef.id });
+        }
       }
 
       await batch.commit();
