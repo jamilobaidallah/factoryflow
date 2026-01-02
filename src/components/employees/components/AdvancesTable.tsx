@@ -26,14 +26,14 @@ interface AdvancesTableProps {
   advances: Advance[];
   employees: Employee[];
   loading: boolean;
-  onCancelAdvance: (advance: Advance) => void;
+  onDeleteAdvance: (advance: Advance) => void;
 }
 
 export function AdvancesTable({
   advances,
   employees,
   loading,
-  onCancelAdvance,
+  onDeleteAdvance,
 }: AdvancesTableProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -106,12 +106,12 @@ export function AdvancesTable({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => onCancelAdvance(advance)}
+                            onClick={() => onDeleteAdvance(advance)}
                             className="text-danger-600"
                             disabled={loading}
                           >
                             <XCircle className="h-4 w-4 ml-2" />
-                            إلغاء السلفة
+                            حذف السلفة
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -219,13 +219,13 @@ export function AdvancesTable({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => onCancelAdvance(advance)}
+                      onClick={() => onDeleteAdvance(advance)}
                       disabled={loading}
                       className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
-                      aria-label={`إلغاء سلفة ${advance.employeeName}`}
+                      aria-label={`حذف سلفة ${advance.employeeName}`}
                     >
                       <XCircle className="w-4 h-4 ml-1" aria-hidden="true" />
-                      إلغاء
+                      حذف
                     </Button>
                   </PermissionGate>
                 )}

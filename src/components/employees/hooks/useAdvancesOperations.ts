@@ -8,6 +8,9 @@ import {
   doc,
   writeBatch,
   updateDoc,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Advance, AdvanceFormData } from "../types/advances";
@@ -21,7 +24,7 @@ interface UseAdvancesOperationsReturn {
     formData: AdvanceFormData,
     employee: Employee
   ) => Promise<boolean>;
-  cancelAdvance: (advance: Advance) => Promise<boolean>;
+  deleteAdvance: (advance: Advance) => Promise<boolean>;
   deductFromAdvance: (
     advanceId: string,
     amount: number,
@@ -158,41 +161,80 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
     }
   };
 
-  const cancelAdvance = async (advance: Advance): Promise<boolean> => {
+  const deleteAdvance = async (advance: Advance): Promise<boolean> => {
     if (!user) return false;
 
     if (advance.status !== ADVANCE_STATUS.ACTIVE) {
       toast({
-        title: "لا يمكن الإلغاء",
-        description: "يمكن إلغاء السلف النشطة فقط",
+        title: "لا يمكن الحذف",
+        description: "يمكن حذف السلف النشطة فقط",
         variant: "destructive",
       });
       return false;
     }
 
     try {
+      const batch = writeBatch(firestore);
+
+      // 1. Delete advance document
       const advanceRef = doc(
         firestore,
         `users/${user.dataOwnerId}/advances`,
         advance.id
       );
-      await updateDoc(advanceRef, {
-        status: ADVANCE_STATUS.CANCELLED,
-      });
+      batch.delete(advanceRef);
+
+      // 2. Delete linked ledger entry
+      const ledgerRef = collection(
+        firestore,
+        `users/${user.dataOwnerId}/ledger`
+      );
+      const ledgerQuery = query(
+        ledgerRef,
+        where("transactionId", "==", advance.linkedTransactionId)
+      );
+      const ledgerSnapshot = await getDocs(ledgerQuery);
+      ledgerSnapshot.forEach((docSnap) => batch.delete(docSnap.ref));
+
+      // 3. Delete linked payment entry
+      const paymentsRef = collection(
+        firestore,
+        `users/${user.dataOwnerId}/payments`
+      );
+      const paymentsQuery = query(
+        paymentsRef,
+        where("linkedTransactionId", "==", advance.linkedTransactionId)
+      );
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      paymentsSnapshot.forEach((docSnap) => batch.delete(docSnap.ref));
+
+      // 4. Delete journal entries (if any)
+      const journalRef = collection(
+        firestore,
+        `users/${user.dataOwnerId}/journal_entries`
+      );
+      const journalQuery = query(
+        journalRef,
+        where("linkedTransactionId", "==", advance.linkedTransactionId)
+      );
+      const journalSnapshot = await getDocs(journalQuery);
+      journalSnapshot.forEach((docSnap) => batch.delete(docSnap.ref));
+
+      await batch.commit();
 
       logActivity(user.dataOwnerId, {
-        action: "update",
+        action: "delete",
         module: "employees",
         targetId: advance.id,
         userId: user.uid,
         userEmail: user.email || "",
-        description: `إلغاء سلفة: ${advance.employeeName}`,
+        description: `حذف سلفة: ${advance.employeeName} - ${advance.amount} دينار`,
         metadata: { amount: advance.amount, employeeId: advance.employeeId },
       });
 
       toast({
-        title: "تم الإلغاء",
-        description: `تم إلغاء سلفة ${advance.employeeName}`,
+        title: "تم الحذف",
+        description: `تم حذف سلفة ${advance.employeeName}`,
       });
       return true;
     } catch (error) {
@@ -246,5 +288,5 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
     }
   };
 
-  return { createAdvance, cancelAdvance, deductFromAdvance };
+  return { createAdvance, deleteAdvance, deductFromAdvance };
 }

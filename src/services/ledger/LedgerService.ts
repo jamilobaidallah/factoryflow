@@ -172,6 +172,10 @@ export class LedgerService {
     return collection(firestore, getUserCollectionPath(this.userId, "invoices"));
   }
 
+  private get journalEntriesRef() {
+    return collection(firestore, getUserCollectionPath(this.userId, "journal_entries"));
+  }
+
   private getLedgerDocRef(entryId: string) {
     return doc(firestore, getUserCollectionPath(this.userId, "ledger"), entryId);
   }
@@ -639,7 +643,7 @@ export class LedgerService {
       const entryRef = this.getLedgerDocRef(entryId);
       const batch = writeBatch(firestore);
 
-      const newAmount = parseFloat(formData.amount);
+      const newAmount = parseAmount(formData.amount);
 
       // Build update data
       const updateData: Record<string, unknown> = {
@@ -699,6 +703,11 @@ export class LedgerService {
         paymentsSnapshot.forEach((paymentDoc) => {
           batch.update(paymentDoc.ref, {
             clientName: newClientName,
+            amount: newAmount,
+            date: new Date(formData.date),
+            notes: formData.notes || paymentDoc.data().notes,
+            category: formData.category,
+            subCategory: formData.subCategory,
           });
         });
 
@@ -714,6 +723,34 @@ export class LedgerService {
             clientName: newClientName,
           });
         });
+
+        // Delete old journal entries and recreate with new values
+        const journalQuery = query(
+          this.journalEntriesRef,
+          where("linkedTransactionId", "==", existingTransactionId)
+        );
+        const journalSnapshot = await getDocs(journalQuery);
+
+        // Delete existing journal entries
+        journalSnapshot.forEach((journalDoc) => {
+          batch.delete(journalDoc.ref);
+        });
+
+        // Recreate journal entry with new values (only if entry exists)
+        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+        if (currentData) {
+          addJournalEntryToBatch(batch, this.userId, {
+            transactionId: existingTransactionId,
+            description: formData.description,
+            amount: newAmount,
+            type: entryType,
+            category: formData.category,
+            subCategory: formData.subCategory,
+            date: new Date(formData.date),
+            isARAPEntry: currentData.isARAPEntry,
+            immediateSettlement: formData.immediateSettlement,
+          });
+        }
       }
 
       await batch.commit();
@@ -727,7 +764,7 @@ export class LedgerService {
         userEmail: this.userEmail,
         description: `تعديل حركة مالية: ${formData.description}`,
         metadata: {
-          amount: parseFloat(formData.amount),
+          amount: newAmount,
           type: entryType,
         },
       });

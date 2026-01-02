@@ -17,13 +17,13 @@ import { ADVANCE_STATUS } from "@/lib/constants";
 
 interface EmployeeAdvancesHistoryProps {
   advances: Advance[];
-  onCancel: (advance: Advance) => void;
+  onDelete: (advance: Advance) => void;
   loading: boolean;
 }
 
 export function EmployeeAdvancesHistory({
   advances,
-  onCancel,
+  onDelete,
   loading,
 }: EmployeeAdvancesHistoryProps) {
   if (advances.length === 0) {
@@ -114,9 +114,9 @@ export function EmployeeAdvancesHistory({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-slate-400 hover:text-danger-600 hover:bg-danger-50"
-                        onClick={() => onCancel(advance)}
+                        onClick={() => onDelete(advance)}
                         disabled={loading}
-                        aria-label="إلغاء السلفة"
+                        aria-label="حذف السلفة"
                       >
                         <X className="h-4 w-4" />
                       </Button>

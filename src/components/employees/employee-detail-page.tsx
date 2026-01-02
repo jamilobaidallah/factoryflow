@@ -59,7 +59,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
   const { salaryHistory, payrollEntries, getEmployeeUnpaidSalaries } = useEmployeesData();
   const { submitEmployee, markAsPaid, deletePayrollEntry } = useEmployeesOperations();
   const { getEmployeeAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
-  const { createAdvance, cancelAdvance } = useAdvancesOperations();
+  const { createAdvance, deleteAdvance } = useAdvancesOperations();
 
   // UI state
   const [activeTab, setActiveTab] = useState<"overview" | "payroll" | "advances">("overview");
@@ -144,13 +144,13 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
     setLoading(false);
   };
 
-  const handleCancelAdvance = (advance: Advance) => {
+  const handleDeleteAdvance = (advance: Advance) => {
     confirm(
-      "إلغاء السلفة",
-      `هل أنت متأكد من إلغاء سلفة ${advance.employeeName}؟`,
+      "حذف السلفة",
+      `هل أنت متأكد من حذف سلفة ${advance.employeeName}؟ سيتم حذف جميع السجلات المرتبطة بها.`,
       async () => {
         setLoading(true);
-        await cancelAdvance(advance);
+        await deleteAdvance(advance);
         setLoading(false);
       },
       "destructive"
@@ -349,7 +349,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
           <CardContent className="pt-4">
             <EmployeeAdvancesHistory
               advances={employeeAdvances}
-              onCancel={handleCancelAdvance}
+              onDelete={handleDeleteAdvance}
               loading={loading}
             />
           </CardContent>

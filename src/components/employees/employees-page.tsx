@@ -38,7 +38,7 @@ export default function EmployeesPage() {
   const { employees, salaryHistory, payrollEntries, loading: dataLoading, getEmployeeUnpaidSalaries, getTotalUnpaidSalaries, getUnpaidSalariesBreakdown } = useEmployeesData();
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment } = useEmployeesOperations();
   const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
-  const { createAdvance, cancelAdvance } = useAdvancesOperations();
+  const { createAdvance, deleteAdvance } = useAdvancesOperations();
   const { overtimeEntries, loading: overtimeLoading, getEntriesForMonth, getEmployeeOvertimeHours, getMonthSummaryByEmployee, isMonthProcessed } = useOvertimeData();
   const { createOvertimeEntry, updateOvertimeEntry, deleteOvertimeEntry } = useOvertimeOperations();
 
@@ -224,13 +224,13 @@ export default function EmployeesPage() {
     setLoading(false);
   };
 
-  const handleCancelAdvance = (advance: typeof advances[0]) => {
+  const handleDeleteAdvance = (advance: typeof advances[0]) => {
     confirm(
-      "إلغاء السلفة",
-      `هل أنت متأكد من إلغاء سلفة ${advance.employeeName}؟`,
+      "حذف السلفة",
+      `هل أنت متأكد من حذف سلفة ${advance.employeeName}؟ سيتم حذف جميع السجلات المرتبطة بها.`,
       async () => {
         setLoading(true);
-        await cancelAdvance(advance);
+        await deleteAdvance(advance);
         setLoading(false);
       },
       "destructive"
@@ -438,7 +438,7 @@ export default function EmployeesPage() {
                 advances={advances}
                 employees={employees}
                 loading={loading}
-                onCancelAdvance={handleCancelAdvance}
+                onDeleteAdvance={handleDeleteAdvance}
               />
             )}
           </CardContent>
