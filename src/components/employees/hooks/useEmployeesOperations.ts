@@ -11,6 +11,7 @@ import {
   doc,
   writeBatch,
   getDocs,
+  getDoc,
   query,
   where,
   limit,
@@ -636,10 +637,9 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     try {
       const batch = writeBatch(firestore);
 
-      // Collect all advance IDs to restore
-      const advanceIdsToRestore: string[] = [];
-
       // Delete all unpaid payroll entries for this month
+      // Note: Advances are only marked as FULLY_DEDUCTED when payment is made
+      // For unpaid entries, advances remain ACTIVE, so no restoration needed
       for (const entry of unpaidEntries) {
         const payrollRef = doc(
           firestore,
@@ -647,16 +647,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           entry.id
         );
         batch.delete(payrollRef);
-
-        // Collect advance IDs to restore
-        if (entry.advanceIds && entry.advanceIds.length > 0) {
-          advanceIdsToRestore.push(...entry.advanceIds);
-        }
       }
-
-      // Restore advances to ACTIVE status (they weren't deducted yet since entries are unpaid)
-      // Note: Advances are only marked as FULLY_DEDUCTED when payment is made
-      // For unpaid entries, advances are still ACTIVE, so no restoration needed
 
       await batch.commit();
 
@@ -731,23 +722,6 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         linkedTransactionId: null,
       });
 
-      // Restore advances to ACTIVE status
-      if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
-        // We need to fetch the original advance amounts to restore them
-        // For simplicity, we'll query and restore each advance
-        const advancesRef = collection(
-          firestore,
-          `users/${user.dataOwnerId}/advances`
-        );
-
-        for (const advanceId of payrollEntry.advanceIds) {
-          const advanceRef = doc(advancesRef, advanceId);
-          // Note: We need to restore the original remaining amount
-          // Since we set it to 0 when paid, we need to query the original amount
-          // For now, we'll query the advance to get the original amount
-        }
-      }
-
       // Create reversing ledger entry (opposite of the original)
       const ledgerRef = collection(
         firestore,
@@ -788,28 +762,23 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
       await batch.commit();
 
-      // Now restore advances in a separate operation (need to query first)
+      // Restore advances to ACTIVE status with original amounts
       if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
-        const advancesRef = collection(
-          firestore,
-          `users/${user.dataOwnerId}/advances`
-        );
-
         for (const advanceId of payrollEntry.advanceIds) {
-          const advanceRef = doc(advancesRef, advanceId);
-          // Query the advance to get original amount
-          const advanceQuery = query(
-            advancesRef,
-            where("__name__", "==", advanceId),
-            limit(1)
+          const advanceRef = doc(
+            firestore,
+            `users/${user.dataOwnerId}/advances`,
+            advanceId
           );
-          const advanceSnapshot = await getDocs(advanceQuery);
 
-          if (!advanceSnapshot.empty) {
-            const advanceData = advanceSnapshot.docs[0].data();
+          // Get the advance document to retrieve original amount
+          const advanceSnap = await getDoc(advanceRef);
+
+          if (advanceSnap.exists()) {
+            const advanceData = advanceSnap.data();
             // Restore to original amount and ACTIVE status
             await updateDoc(advanceRef, {
-              remainingAmount: advanceData.amount, // Restore full amount
+              remainingAmount: advanceData.amount,
               status: ADVANCE_STATUS.ACTIVE,
             });
           }
