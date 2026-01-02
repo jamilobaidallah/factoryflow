@@ -353,6 +353,7 @@ export class LedgerService {
       const ledgerDocRef = doc(this.ledgerRef);
 
       // Add ledger entry to batch
+      // Store immediateSettlement and isARAPEntry for correct behavior during edit
       batch.set(ledgerDocRef, {
         transactionId,
         description: formData.description,
@@ -366,6 +367,8 @@ export class LedgerService {
         reference: formData.reference,
         notes: formData.notes,
         createdAt: new Date(),
+        immediateSettlement: formData.immediateSettlement ?? true,
+        isARAPEntry: false,
       });
 
       // Add journal entry to batch (atomic with ledger entry)
@@ -464,6 +467,7 @@ export class LedgerService {
       const shouldTrackARAP = formData.trackARAP || hasCashedCheques;
 
       // Add ledger entry
+      // Always store immediateSettlement and isARAPEntry for correct behavior during edit
       batch.set(ledgerDocRef, {
         transactionId,
         description: formData.description,
@@ -477,8 +481,9 @@ export class LedgerService {
         reference: formData.reference,
         notes: formData.notes,
         createdAt: new Date(),
+        immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
+        isARAPEntry: shouldTrackARAP,
         ...(shouldTrackARAP && {
-          isARAPEntry: true,
           totalPaid: initialPaid,
           remainingBalance: safeSubtract(totalAmount, initialPaid),
           paymentStatus: initialStatus,
@@ -751,6 +756,7 @@ export class LedgerService {
 
         // Recreate journal entry with new values (only if entry exists)
         // Use currentData flags to preserve original settlement type
+        // For legacy entries without these fields, default to immediate settlement (cash)
         const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
         if (currentData) {
           addJournalEntryToBatch(batch, this.userId, {
@@ -761,7 +767,7 @@ export class LedgerService {
             category: formData.category,
             subCategory: formData.subCategory,
             date: new Date(formData.date),
-            isARAPEntry: currentData.isARAPEntry,
+            isARAPEntry: currentData.isARAPEntry ?? false,
             immediateSettlement: currentData.immediateSettlement ?? true,
           });
         }
