@@ -87,6 +87,27 @@ After self-review, report:
 - None / OR list any concerns
 ```
 
+#### Step F: Code Quality Review
+Before committing, verify the code is clean:
+
+| Check | Question |
+|-------|----------|
+| **Matches patterns** | Does it follow existing code style in the file/codebase? |
+| **Readable** | Would another developer understand this in 6 months? |
+| **Not over-engineered** | Is this the simplest solution that works? |
+| **No duplication** | Could this reuse existing utilities/components? |
+| **Named clearly** | Are variables/functions named descriptively? |
+| **Minimal changes** | Did I only change what was necessary? |
+
+**Report format (include automatically):**
+```
+✅ Code Quality: Follows existing patterns, uses established utilities, minimal changes
+```
+or if issues found:
+```
+⚠️ Code Quality: Works but [specific concern] - want me to refactor?
+```
+
 ### 5. 📋 HUMAN TESTING PLAN
 
 **Tiered approach based on change size:**
