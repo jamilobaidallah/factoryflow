@@ -15,6 +15,14 @@ import { convertFirestoreDates, toDateOptional } from "@/lib/firestore-utils";
 import { sumAmounts } from "@/lib/currency";
 import { useToast } from "@/hooks/use-toast";
 
+// Breakdown of unpaid salaries by month (for expandable card display)
+export interface UnpaidSalaryBreakdown {
+  month: string;
+  entries: PayrollEntry[];
+  total: number;
+  employeeCount: number;
+}
+
 interface UseEmployeesDataReturn {
   employees: Employee[];
   salaryHistory: SalaryHistory[];
@@ -22,6 +30,7 @@ interface UseEmployeesDataReturn {
   loading: boolean;
   getEmployeeUnpaidSalaries: (employeeId: string) => number;
   getTotalUnpaidSalaries: () => number;
+  getUnpaidSalariesBreakdown: () => UnpaidSalaryBreakdown[];
 }
 
 export function useEmployeesData(): UseEmployeesDataReturn {
@@ -145,6 +154,31 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
   }, [payrollEntries, employees]);
 
+  // Get unpaid salaries breakdown by month (for expandable card display)
+  const getUnpaidSalariesBreakdown = useCallback((): UnpaidSalaryBreakdown[] => {
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const unpaidEntries = payrollEntries.filter(
+      (p) => !p.isPaid && employeeIds.has(p.employeeId)
+    );
+
+    // Group entries by month
+    const byMonth = new Map<string, PayrollEntry[]>();
+    unpaidEntries.forEach((entry) => {
+      const existing = byMonth.get(entry.month) || [];
+      byMonth.set(entry.month, [...existing, entry]);
+    });
+
+    // Convert to array sorted by month (newest first)
+    return Array.from(byMonth.entries())
+      .map(([month, entries]) => ({
+        month,
+        entries,
+        total: sumAmounts(entries.map((e) => e.netSalary ?? e.totalSalary)),
+        employeeCount: entries.length,
+      }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+  }, [payrollEntries, employees]);
+
   return useMemo(
     () => ({
       employees,
@@ -153,6 +187,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
       loading,
       getEmployeeUnpaidSalaries,
       getTotalUnpaidSalaries,
+      getUnpaidSalariesBreakdown,
     }),
     [
       employees,
@@ -161,6 +196,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
       loading,
       getEmployeeUnpaidSalaries,
       getTotalUnpaidSalaries,
+      getUnpaidSalariesBreakdown,
     ]
   );
 }

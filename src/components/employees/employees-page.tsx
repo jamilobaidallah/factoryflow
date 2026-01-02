@@ -30,7 +30,7 @@ export default function EmployeesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   // Data and operations hooks
-  const { employees, salaryHistory, payrollEntries, loading: dataLoading, getEmployeeUnpaidSalaries, getTotalUnpaidSalaries } = useEmployeesData();
+  const { employees, salaryHistory, payrollEntries, loading: dataLoading, getEmployeeUnpaidSalaries, getTotalUnpaidSalaries, getUnpaidSalariesBreakdown } = useEmployeesData();
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment } = useEmployeesOperations();
   const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
   const { createAdvance, cancelAdvance } = useAdvancesOperations();
@@ -240,6 +240,7 @@ export default function EmployeesPage() {
             employees={employees}
             outstandingAdvances={getTotalOutstandingAdvances()}
             totalUnpaidSalaries={getTotalUnpaidSalaries()}
+            unpaidBreakdown={getUnpaidSalariesBreakdown()}
           />
         )}
       </div>
