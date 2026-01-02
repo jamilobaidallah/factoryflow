@@ -93,10 +93,18 @@ export function EmployeesStatsCards({
       } shadow-sm overflow-hidden`}>
         {/* Card Header - Clickable */}
         <div
-          className={`p-6 ${hasUnpaidEntries ? "cursor-pointer hover:bg-black/5 transition-colors" : ""}`}
+          className={`p-6 ${hasUnpaidEntries ? "cursor-pointer hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 transition-colors" : ""}`}
           onClick={() => hasUnpaidEntries && setIsExpanded(!isExpanded)}
+          onKeyDown={(e) => {
+            if (hasUnpaidEntries && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              setIsExpanded(!isExpanded);
+            }
+          }}
           role={hasUnpaidEntries ? "button" : undefined}
+          tabIndex={hasUnpaidEntries ? 0 : undefined}
           aria-expanded={hasUnpaidEntries ? isExpanded : undefined}
+          aria-label={hasUnpaidEntries ? `${netOwed > 0 ? "مستحقات للموظفين" : netOwed < 0 ? "مستحقات على الموظفين" : "الرصيد الصافي"} - اضغط لعرض التفاصيل` : undefined}
         >
           <div className="flex items-center justify-between">
             <div>
@@ -129,11 +137,11 @@ export function EmployeesStatsCards({
                   {isExpanded ? (
                     <ChevronUp className={`w-4 h-4 ${
                       netOwed > 0 ? "text-danger-600" : netOwed < 0 ? "text-success-600" : "text-slate-600"
-                    }`} />
+                    }`} aria-hidden="true" />
                   ) : (
                     <ChevronDown className={`w-4 h-4 ${
                       netOwed > 0 ? "text-danger-600" : netOwed < 0 ? "text-success-600" : "text-slate-600"
-                    }`} />
+                    }`} aria-hidden="true" />
                   )}
                 </div>
               )}
