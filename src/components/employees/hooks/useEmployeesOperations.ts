@@ -384,9 +384,11 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         );
 
         // Calculate advance deductions for this employee
-        // Find active advances for this employee
+        // Find active advances for this employee that aren't already linked to another payroll month
         const employeeActiveAdvances = advances?.filter(
-          (a) => a.employeeId === employee.id && a.status === ADVANCE_STATUS.ACTIVE
+          (a) => a.employeeId === employee.id &&
+                 a.status === ADVANCE_STATUS.ACTIVE &&
+                 !a.linkedPayrollMonth // Exclude advances already linked to a payroll
         ) || [];
 
         // Sum up remaining amounts from active advances
@@ -428,6 +430,16 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         for (const entryId of overtimeEntryIds) {
           const entryRef = doc(overtimeRef, entryId);
           batch.update(entryRef, { linkedPayrollId: payrollDocRef.id });
+        }
+
+        // Mark advances as linked to this payroll month (so they don't appear in future months)
+        for (const advanceId of advanceIds) {
+          const advanceRef = doc(
+            firestore,
+            `users/${user.dataOwnerId}/advances`,
+            advanceId
+          );
+          batch.update(advanceRef, { linkedPayrollMonth: selectedMonth });
         }
       }
 
@@ -605,8 +617,24 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     }
 
     try {
+      const batch = writeBatch(firestore);
+
       const payrollRef = doc(firestore, `users/${user.dataOwnerId}/payroll`, payrollEntry.id);
-      await deleteDoc(payrollRef);
+      batch.delete(payrollRef);
+
+      // Clear linkedPayrollMonth from advances (so they can be used in future payroll)
+      if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
+        for (const advanceId of payrollEntry.advanceIds) {
+          const advanceRef = doc(
+            firestore,
+            `users/${user.dataOwnerId}/advances`,
+            advanceId
+          );
+          batch.update(advanceRef, { linkedPayrollMonth: null });
+        }
+      }
+
+      await batch.commit();
 
       // Log activity for delete
       logActivity(user.dataOwnerId, {
@@ -669,9 +697,10 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     try {
       const batch = writeBatch(firestore);
 
+      // Collect all advance IDs from unpaid entries to clear their linkedPayrollMonth
+      const allAdvanceIds: string[] = [];
+
       // Delete all unpaid payroll entries for this month
-      // Note: Advances are only marked as FULLY_DEDUCTED when payment is made
-      // For unpaid entries, advances remain ACTIVE, so no restoration needed
       for (const entry of unpaidEntries) {
         const payrollRef = doc(
           firestore,
@@ -679,6 +708,21 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           entry.id
         );
         batch.delete(payrollRef);
+
+        // Collect advance IDs to clear their linkedPayrollMonth
+        if (entry.advanceIds && entry.advanceIds.length > 0) {
+          allAdvanceIds.push(...entry.advanceIds);
+        }
+      }
+
+      // Clear linkedPayrollMonth from advances (so they can be used in future payroll)
+      for (const advanceId of allAdvanceIds) {
+        const advanceRef = doc(
+          firestore,
+          `users/${user.dataOwnerId}/advances`,
+          advanceId
+        );
+        batch.update(advanceRef, { linkedPayrollMonth: null });
       }
 
       await batch.commit();

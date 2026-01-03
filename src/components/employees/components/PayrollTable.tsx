@@ -126,10 +126,12 @@ export function PayrollTable({
     return overtimeHoursByEmployee.get(employeeId) || 0;
   }, [overtimeHoursByEmployee]);
 
-  // Get total active advance amount for an employee
+  // Get total active advance amount for an employee (excluding already-linked advances)
   const getEmployeeAdvanceDeduction = useCallback((employeeId: string): number => {
     const activeAdvances = advances.filter(
-      (a) => a.employeeId === employeeId && a.status === ADVANCE_STATUS.ACTIVE
+      (a) => a.employeeId === employeeId &&
+             a.status === ADVANCE_STATUS.ACTIVE &&
+             !a.linkedPayrollMonth // Exclude advances already linked to a payroll
     );
     return sumAmounts(activeAdvances.map((a) => a.remainingAmount));
   }, [advances]);
