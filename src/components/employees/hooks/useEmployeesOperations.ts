@@ -40,7 +40,8 @@ interface UseEmployeesOperationsReturn {
     selectedMonth: string,
     employees: Employee[],
     payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}},
-    advances?: Advance[]
+    advances?: Advance[],
+    allPayrollEntries?: PayrollEntry[]
   ) => Promise<boolean>;
   markAsPaid: (payrollEntry: PayrollEntry) => Promise<boolean>;
   deletePayrollEntry: (payrollEntry: PayrollEntry) => Promise<boolean>;
@@ -253,7 +254,8 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     selectedMonth: string,
     employees: Employee[],
     payrollData: {[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}},
-    advances?: Advance[]
+    advances?: Advance[],
+    allPayrollEntries?: PayrollEntry[]
   ): Promise<boolean> => {
     if (!user) return false;
 
@@ -384,11 +386,24 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         );
 
         // Calculate advance deductions for this employee
-        // Find active advances for this employee that aren't already linked to another payroll month
+        // Build set of advance IDs already linked to any payroll entry (for backwards compatibility)
+        const linkedAdvanceIds = new Set<string>();
+        if (allPayrollEntries) {
+          for (const entry of allPayrollEntries) {
+            if (entry.advanceIds) {
+              for (const id of entry.advanceIds) {
+                linkedAdvanceIds.add(id);
+              }
+            }
+          }
+        }
+
+        // Find active advances for this employee that aren't already linked to another payroll
         const employeeActiveAdvances = advances?.filter(
           (a) => a.employeeId === employee.id &&
                  a.status === ADVANCE_STATUS.ACTIVE &&
-                 !a.linkedPayrollMonth // Exclude advances already linked to a payroll
+                 !a.linkedPayrollMonth && // Exclude advances with linkedPayrollMonth field
+                 !linkedAdvanceIds.has(a.id) // Exclude advances already in any payroll entry
         ) || [];
 
         // Sum up remaining amounts from active advances

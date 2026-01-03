@@ -34,6 +34,8 @@ interface PayrollTableProps {
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   monthPayroll: PayrollEntry[];
+  /** All payroll entries (for checking if advances are already linked to other months) */
+  allPayrollEntries?: PayrollEntry[];
   payrollData: {[key: string]: PayrollProcessingData};
   setPayrollData: (data: {[key: string]: PayrollProcessingData}) => void;
   loading: boolean;
@@ -103,6 +105,7 @@ export function PayrollTable({
   selectedMonth,
   setSelectedMonth,
   monthPayroll,
+  allPayrollEntries = [],
   payrollData,
   setPayrollData,
   loading,
@@ -126,15 +129,29 @@ export function PayrollTable({
     return overtimeHoursByEmployee.get(employeeId) || 0;
   }, [overtimeHoursByEmployee]);
 
+  // Build a set of advance IDs that are already linked to any payroll entry
+  const linkedAdvanceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const entry of allPayrollEntries) {
+      if (entry.advanceIds) {
+        for (const id of entry.advanceIds) {
+          ids.add(id);
+        }
+      }
+    }
+    return ids;
+  }, [allPayrollEntries]);
+
   // Get total active advance amount for an employee (excluding already-linked advances)
   const getEmployeeAdvanceDeduction = useCallback((employeeId: string): number => {
     const activeAdvances = advances.filter(
       (a) => a.employeeId === employeeId &&
              a.status === ADVANCE_STATUS.ACTIVE &&
-             !a.linkedPayrollMonth // Exclude advances already linked to a payroll
+             !a.linkedPayrollMonth && // Exclude advances with linkedPayrollMonth field
+             !linkedAdvanceIds.has(a.id) // Exclude advances already in any payroll entry
     );
     return sumAmounts(activeAdvances.map((a) => a.remainingAmount));
-  }, [advances]);
+  }, [advances, linkedAdvanceIds]);
 
   // Filter employees by eligibility for the selected month
   const { eligibleEmployees, ineligibleEmployees } = useMemo(() => {

@@ -128,7 +128,7 @@ export default function EmployeesPage() {
       `هل أنت متأكد من معالجة الرواتب لشهر ${selectedMonth}؟`,
       async () => {
         setLoading(true);
-        const success = await processPayroll(selectedMonth, employees, payrollData, advances);
+        const success = await processPayroll(selectedMonth, employees, payrollData, advances, payrollEntries);
         if (success) {
           setPayrollData({});
         }
@@ -400,6 +400,7 @@ export default function EmployeesPage() {
               selectedMonth={selectedMonth}
               setSelectedMonth={setSelectedMonth}
               monthPayroll={monthPayroll}
+              allPayrollEntries={payrollEntries}
               payrollData={payrollData}
               setPayrollData={setPayrollData}
               loading={loading}
