@@ -76,6 +76,8 @@ export interface IncomeStatementData {
   totalExpenses: number;
   totalDiscounts: number;
   totalBadDebt: number;
+  totalExpenseDiscounts: number;   // Expense discounts (contra-expense) - reduces net expenses
+  totalExpenseWriteoffs: number;   // Expense writeoffs - reduces net expenses
   netProfit: number;
   profitMargin: number;
   revenueByCategory: { [key: string]: number };
@@ -190,6 +192,8 @@ export function useReportsCalculations({
     let totalExpenses = 0;
     let totalDiscounts = 0;
     let totalBadDebt = 0;
+    let totalExpenseDiscounts = 0;   // Expense discounts (contra-expense)
+    let totalExpenseWriteoffs = 0;   // Expense writeoffs (contra-expense)
     const revenueByCategory: { [key: string]: number } = {};
     const expensesByCategory: { [key: string]: number } = {};
 
@@ -217,13 +221,22 @@ export function useReportsCalculations({
         totalExpenses = safeAdd(totalExpenses, entry.amount);
         expensesByCategory[entry.category] =
           safeAdd(expensesByCategory[entry.category] || 0, entry.amount);
+        // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
+        if (entry.totalDiscount) {
+          totalExpenseDiscounts = safeAdd(totalExpenseDiscounts, entry.totalDiscount);
+        }
+        if (entry.writeoffAmount) {
+          totalExpenseWriteoffs = safeAdd(totalExpenseWriteoffs, entry.writeoffAmount);
+        }
       }
     });
 
-    // Net revenue = Gross Revenue - Discounts
+    // Net revenue = Gross Revenue - Discounts (from income entries)
     const netRevenue = safeSubtract(totalRevenue, totalDiscounts);
-    // Net profit = Net Revenue - Expenses - Bad Debt
-    const netProfit = safeSubtract(safeSubtract(netRevenue, totalExpenses), totalBadDebt);
+    // Net expenses = Gross Expenses - Expense Discounts - Expense Writeoffs
+    const netExpenses = safeSubtract(safeSubtract(totalExpenses, totalExpenseDiscounts), totalExpenseWriteoffs);
+    // Net profit = Net Revenue - Net Expenses - Bad Debt (from income entries)
+    const netProfit = safeSubtract(safeSubtract(netRevenue, netExpenses), totalBadDebt);
     const profitMargin = totalRevenue > 0 ? safeMultiply(safeDivide(netProfit, totalRevenue), 100) : 0;
 
     return {
@@ -231,6 +244,8 @@ export function useReportsCalculations({
       totalExpenses,
       totalDiscounts,
       totalBadDebt,
+      totalExpenseDiscounts,
+      totalExpenseWriteoffs,
       netProfit,
       profitMargin,
       revenueByCategory,

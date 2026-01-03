@@ -358,9 +358,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [totalPaymentsReceived, setTotalPaymentsReceived] = useState(0);
   const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
   const [currentBalance, setCurrentBalance] = useState(0);
-  // Discounts and writeoffs from ledger entries
-  const [totalDiscounts, setTotalDiscounts] = useState(0);
-  const [totalWriteoffs, setTotalWriteoffs] = useState(0);
+  // Discounts and writeoffs from ledger entries - split by entry type
+  const [totalIncomeDiscounts, setTotalIncomeDiscounts] = useState(0);
+  const [totalIncomeWriteoffs, setTotalIncomeWriteoffs] = useState(0);
+  const [totalExpenseDiscounts, setTotalExpenseDiscounts] = useState(0);
+  const [totalExpenseWriteoffs, setTotalExpenseWriteoffs] = useState(0);
 
   // Loan balances
   const [loansReceivable, setLoansReceivable] = useState(0);  // Loans we gave to this party (they owe us)
@@ -425,8 +427,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         const entries: LedgerEntry[] = [];
         let sales = 0;
         let purchases = 0;
-        let discounts = 0;
-        let writeoffs = 0;
+        // Split discount tracking by entry type
+        let incomeDiscounts = 0;
+        let incomeWriteoffs = 0;
+        let expenseDiscounts = 0;
+        let expenseWriteoffs = 0;
         let loanReceivable = 0;  // Loans we gave (قروض ممنوحة)
         let loanPayable = 0;     // Loans we received (قروض مستلمة)
 
@@ -456,14 +461,16 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             // Calculate regular totals (exclude advances and loans - they are not income/expense)
             if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvanceEntry(entry)) {
               sales += entry.amount;
+              // Track discounts/writeoffs for income entries (customer discounts)
+              incomeDiscounts += data.totalDiscount || 0;
+              incomeWriteoffs += data.writeoffAmount || 0;
             } else if (entry.type === "مصروف" && !isAdvanceEntry(entry)) {
               purchases += entry.amount;
+              // Track discounts/writeoffs for expense entries (supplier discounts)
+              expenseDiscounts += data.totalDiscount || 0;
+              expenseWriteoffs += data.writeoffAmount || 0;
             }
           }
-
-          // Track discounts and writeoffs (for balance calculation)
-          discounts += data.totalDiscount || 0;
-          writeoffs += data.writeoffAmount || 0;
         });
 
         // Sort by date in JavaScript instead of Firestore
@@ -472,8 +479,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         setLedgerEntries(entries);
         setTotalSales(sales);
         setTotalPurchases(purchases);
-        setTotalDiscounts(discounts);
-        setTotalWriteoffs(writeoffs);
+        setTotalIncomeDiscounts(incomeDiscounts);
+        setTotalIncomeWriteoffs(incomeWriteoffs);
+        setTotalExpenseDiscounts(expenseDiscounts);
+        setTotalExpenseWriteoffs(expenseWriteoffs);
         setLoansReceivable(loanReceivable);
         setLoansPayable(loanPayable);
       },
@@ -570,12 +579,16 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   }, [user, client]);
 
   // Calculate current balance
-  // Formula: balance = (sales - purchases) - (payments received - payments made) - discounts - writeoffs
-  // Discounts and writeoffs reduce what the client owes (like payments)
+  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs
+  // Income discounts/writeoffs reduce what the customer owes us (subtract)
+  // Expense discounts/writeoffs reduce what we owe the supplier (add back to make balance less negative)
   useEffect(() => {
-    const balance = totalSales - totalPurchases - (totalPaymentsReceived - totalPaymentsMade) - totalDiscounts - totalWriteoffs;
+    const balance = totalSales - totalPurchases
+      - (totalPaymentsReceived - totalPaymentsMade)
+      - totalIncomeDiscounts - totalIncomeWriteoffs
+      + totalExpenseDiscounts + totalExpenseWriteoffs;
     setCurrentBalance(balance);
-  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalDiscounts, totalWriteoffs]);
+  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs]);
 
   // Export statement to Excel
   const exportStatement = async () => {
@@ -1101,6 +1114,38 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         category: e.category,
                         debit: 0,
                         credit: e.writeoffAmount,  // Credit reduces debt
+                      });
+                    }
+
+                    // Row 4: Expense discount (if any) - reduces what we owe supplier (DEBIT)
+                    if (e.totalDiscount && e.totalDiscount > 0 && e.type === "مصروف") {
+                      rows.push({
+                        id: `${e.id}-discount`,
+                        transactionId: e.transactionId,
+                        source: 'ledger' as const,
+                        date: e.date,
+                        isPayment: true,
+                        entryType: 'خصم مورد',
+                        description: 'خصم من المورد',
+                        category: e.category,
+                        debit: e.totalDiscount,  // DEBIT reduces liability (opposite of income)
+                        credit: 0,
+                      });
+                    }
+
+                    // Row 5: Expense writeoff (if any) - reduces what we owe supplier (DEBIT)
+                    if (e.writeoffAmount && e.writeoffAmount > 0 && e.type === "مصروف") {
+                      rows.push({
+                        id: `${e.id}-writeoff`,
+                        transactionId: e.transactionId,
+                        source: 'ledger' as const,
+                        date: e.date,
+                        isPayment: true,
+                        entryType: 'إعفاء مورد',
+                        description: 'إعفاء من المورد',
+                        category: e.category,
+                        debit: e.writeoffAmount,  // DEBIT reduces liability
+                        credit: 0,
                       });
                     }
 

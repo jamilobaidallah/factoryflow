@@ -39,6 +39,8 @@ export interface LedgerDashboardData {
   totalExpenses: number;
   totalDiscounts: number;
   totalBadDebt: number;
+  totalExpenseDiscounts: number;   // Expense discounts (contra-expense)
+  totalExpenseWriteoffs: number;   // Expense writeoffs (contra-expense)
   financingCashIn: number;
   financingCashOut: number;
   loansReceivable: number;
@@ -102,6 +104,8 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
   let expenses = 0;
   let discounts = 0;
   let badDebt = 0;
+  let expenseDiscounts = 0;   // Expense discounts (contra-expense)
+  let expenseWriteoffs = 0;   // Expense writeoffs (contra-expense)
   let finCashIn = 0;
   let finCashOut = 0;
   let loanReceivableTotal = 0;
@@ -171,6 +175,13 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
         updateMonthlyData(monthlyMap, monthKey, entry.amount, 0, entry.totalDiscount || 0, data.writeoffAmount || 0);
       } else if (entry.type === EXPENSE_TYPE) {
         expenses += entry.amount;
+        // Track discounts/writeoffs on expense entries (contra-expense)
+        if (entry.totalDiscount) {
+          expenseDiscounts += entry.totalDiscount;
+        }
+        if (data.writeoffAmount) {
+          expenseWriteoffs += data.writeoffAmount;
+        }
         updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
         updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
       }
@@ -187,6 +198,8 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
     totalExpenses: expenses,
     totalDiscounts: discounts,
     totalBadDebt: badDebt,
+    totalExpenseDiscounts: expenseDiscounts,
+    totalExpenseWriteoffs: expenseWriteoffs,
     financingCashIn: finCashIn,
     financingCashOut: finCashOut,
     loansReceivable: loanReceivableTotal,
@@ -276,6 +289,8 @@ export function useLedgerDashboardData() {
     totalExpenses: 0,
     totalDiscounts: 0,
     totalBadDebt: 0,
+    totalExpenseDiscounts: 0,
+    totalExpenseWriteoffs: 0,
     financingCashIn: 0,
     financingCashOut: 0,
     loansReceivable: 0,

@@ -129,6 +129,8 @@ export default function ReportsPage() {
     let totalExpenses = 0;
     let totalDiscounts = 0;  // Track discounts (contra-revenue)
     let totalBadDebt = 0;    // Track bad debt write-offs (treated as expense)
+    let totalExpenseDiscounts = 0;  // Track expense discounts (contra-expense)
+    let totalExpenseWriteoffs = 0;  // Track expense writeoffs (contra-expense)
 
     filtered.forEach((entry: any) => {
       // Exclude owner equity AND advances from P&L
@@ -147,35 +149,43 @@ export default function ReportsPage() {
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount;
         expensesByCategory[entry.category] = (expensesByCategory[entry.category] || 0) + entry.amount;
+        // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
+        totalExpenseDiscounts += entry.totalDiscount || 0;
+        totalExpenseWriteoffs += entry.writeoffAmount || 0;
       }
     });
 
-    // Net profit = Revenue - Discounts - Expenses - Bad Debt
-    // Discounts are contra-revenue, bad debt is treated as expense
+    // Net profit = Revenue - Discounts - Net Expenses - Bad Debt
+    // Net Expenses = Gross Expenses - Expense Discounts - Expense Writeoffs
+    const netExpenses = totalExpenses - totalExpenseDiscounts - totalExpenseWriteoffs;
     return {
       revenueByCategory,
       expensesByCategory,
       totalRevenue,
-      totalExpenses,
+      totalExpenses: netExpenses,  // Return net expenses (after expense discounts)
+      grossExpenses: totalExpenses,  // Keep gross for reference
       totalDiscounts,
       totalBadDebt,
-      netProfit: totalRevenue - totalDiscounts - totalExpenses - totalBadDebt,
+      totalExpenseDiscounts,
+      totalExpenseWriteoffs,
+      netProfit: totalRevenue - totalDiscounts - netExpenses - totalBadDebt,
     };
   }, [ledgerEntries, dateRange]);
 
   // Build expense categories for donut chart (using filtered data)
+  // Use gross expenses for category percentages (so they add up to 100%)
   const expenseCategories = useMemo<CategoryData[]>(() => {
     const categories: CategoryData[] = [];
-    const totalExpenses = filteredData.totalExpenses;
+    const grossExpenses = filteredData.grossExpenses || filteredData.totalExpenses;
 
-    if (totalExpenses === 0) {
+    if (grossExpenses === 0) {
       return [];
     }
 
     Object.entries(filteredData.expensesByCategory)
       .sort(([, a], [, b]) => b - a)
       .forEach(([name, amount], index) => {
-        const percent = (amount / totalExpenses) * 100;
+        const percent = (amount / grossExpenses) * 100;
         categories.push({
           id: name,
           name,
@@ -186,7 +196,7 @@ export default function ReportsPage() {
       });
 
     return categories;
-  }, [filteredData.expensesByCategory, filteredData.totalExpenses]);
+  }, [filteredData.expensesByCategory, filteredData.grossExpenses, filteredData.totalExpenses]);
 
   // Generate insights
   const { insights } = useReportsInsights({

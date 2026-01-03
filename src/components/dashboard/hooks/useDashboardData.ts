@@ -22,6 +22,8 @@ export function useDashboardData(): UseDashboardDataReturn {
   const totalExpenses = ledgerData?.totalExpenses ?? 0;
   const totalDiscounts = ledgerData?.totalDiscounts ?? 0;
   const totalBadDebt = ledgerData?.totalBadDebt ?? 0;
+  const totalExpenseDiscounts = ledgerData?.totalExpenseDiscounts ?? 0;
+  const totalExpenseWriteoffs = ledgerData?.totalExpenseWriteoffs ?? 0;
   const financingCashIn = ledgerData?.financingCashIn ?? 0;
   const financingCashOut = ledgerData?.financingCashOut ?? 0;
   const loansReceivable = ledgerData?.loansReceivable ?? 0;
@@ -50,6 +52,8 @@ export function useDashboardData(): UseDashboardDataReturn {
     totalExpenses,
     totalDiscounts,
     totalBadDebt,
+    totalExpenseDiscounts,
+    totalExpenseWriteoffs,
     loansReceivable,
     loansPayable,
     loanCashIn,

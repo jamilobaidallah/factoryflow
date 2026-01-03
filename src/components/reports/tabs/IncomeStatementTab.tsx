@@ -18,6 +18,10 @@ import { Download } from "lucide-react";
 interface IncomeStatementData {
   totalRevenue: number;
   totalExpenses: number;
+  totalDiscounts: number;
+  totalBadDebt: number;
+  totalExpenseDiscounts: number;
+  totalExpenseWriteoffs: number;
   netProfit: number;
   profitMargin: number;
   revenueByCategory: Record<string, number>;
@@ -67,13 +71,18 @@ export function IncomeStatementTab({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">
-              إجمالي المصروفات
+              {(incomeStatement.totalExpenseDiscounts > 0 || incomeStatement.totalExpenseWriteoffs > 0) ? "صافي المصروفات" : "إجمالي المصروفات"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {incomeStatement.totalExpenses.toFixed(2)} د.أ
+              {(incomeStatement.totalExpenses - (incomeStatement.totalExpenseDiscounts || 0) - (incomeStatement.totalExpenseWriteoffs || 0)).toFixed(2)} د.أ
             </div>
+            {(incomeStatement.totalExpenseDiscounts > 0 || incomeStatement.totalExpenseWriteoffs > 0) && (
+              <div className="text-sm text-gray-500 mt-1">
+                إجمالي: {incomeStatement.totalExpenses.toFixed(2)} - خصومات: {((incomeStatement.totalExpenseDiscounts || 0) + (incomeStatement.totalExpenseWriteoffs || 0)).toFixed(2)}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -252,10 +261,20 @@ export function IncomeStatementTab({
                       </TableRow>
                     )
                   )}
+                  {((incomeStatement.totalExpenseDiscounts || 0) > 0 || (incomeStatement.totalExpenseWriteoffs || 0) > 0) && (
+                    <TableRow className="bg-green-50">
+                      <TableCell className="text-green-700">(-) خصومات الموردين</TableCell>
+                      <TableCell className="text-left font-medium text-green-700">
+                        -{((incomeStatement.totalExpenseDiscounts || 0) + (incomeStatement.totalExpenseWriteoffs || 0)).toFixed(2)} د.أ
+                      </TableCell>
+                    </TableRow>
+                  )}
                   <TableRow className="bg-red-50">
-                    <TableCell className="font-bold">المجموع</TableCell>
+                    <TableCell className="font-bold">
+                      {((incomeStatement.totalExpenseDiscounts || 0) > 0 || (incomeStatement.totalExpenseWriteoffs || 0) > 0) ? "صافي المصروفات" : "المجموع"}
+                    </TableCell>
                     <TableCell className="text-left font-bold text-red-700">
-                      {incomeStatement.totalExpenses.toFixed(2)} د.أ
+                      {(incomeStatement.totalExpenses - (incomeStatement.totalExpenseDiscounts || 0) - (incomeStatement.totalExpenseWriteoffs || 0)).toFixed(2)} د.أ
                     </TableCell>
                   </TableRow>
                 </TableBody>

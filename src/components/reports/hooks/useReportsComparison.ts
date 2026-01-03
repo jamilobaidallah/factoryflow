@@ -131,8 +131,9 @@ function filterEntriesByDateRange(
 
 /**
  * Calculate period data (revenue, expenses, profit, margin)
- * Profit = Net Revenue - Expenses - Bad Debt
+ * Profit = Net Revenue - Net Expenses - Bad Debt
  * - Discounts are contra-revenue (reduce gross revenue)
+ * - Expense discounts are contra-expense (reduce gross expenses)
  * - Bad debt is treated as expense (ديون معدومة)
  */
 function calculatePeriodData(entries: LedgerEntry[]): {
@@ -140,14 +141,19 @@ function calculatePeriodData(entries: LedgerEntry[]): {
   discounts: number;
   badDebt: number;
   revenue: number;  // Net revenue (gross - discounts)
-  expenses: number;
+  grossExpenses: number;
+  expenseDiscounts: number;
+  expenseWriteoffs: number;
+  expenses: number;  // Net expenses (gross - expense discounts - expense writeoffs)
   profit: number;
   margin: number;
 } {
   let grossRevenue = 0;
-  let expenses = 0;
+  let grossExpenses = 0;
   let discounts = 0;
   let badDebt = 0;
+  let expenseDiscounts = 0;
+  let expenseWriteoffs = 0;
 
   entries.forEach((entry) => {
     // Exclude owner equity AND advances from P&L
@@ -163,17 +169,22 @@ function calculatePeriodData(entries: LedgerEntry[]): {
       // Track bad debt write-offs (treated as expense)
       badDebt += entry.writeoffAmount || 0;
     } else if (entry.type === 'مصروف') {
-      expenses += entry.amount;
+      grossExpenses += entry.amount;
+      // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
+      expenseDiscounts += entry.totalDiscount || 0;
+      expenseWriteoffs += entry.writeoffAmount || 0;
     }
   });
 
   // Net revenue = Gross Revenue - Discounts
   const revenue = safeSubtract(grossRevenue, discounts);
-  // Net profit = Net Revenue - Expenses - Bad Debt
+  // Net expenses = Gross Expenses - Expense Discounts - Expense Writeoffs
+  const expenses = safeSubtract(safeSubtract(grossExpenses, expenseDiscounts), expenseWriteoffs);
+  // Net profit = Net Revenue - Net Expenses - Bad Debt
   const profit = safeSubtract(safeSubtract(revenue, expenses), badDebt);
   const margin = grossRevenue > 0 ? safeMultiply(safeDivide(profit, grossRevenue), 100) : 0;
 
-  return { grossRevenue, discounts, badDebt, revenue, expenses, profit, margin };
+  return { grossRevenue, discounts, badDebt, revenue, grossExpenses, expenseDiscounts, expenseWriteoffs, expenses, profit, margin };
 }
 
 /**
@@ -227,7 +238,7 @@ export function useReportsComparison({
     const currentData = calculatePeriodData(currentEntries);
 
     // Filter entries for comparison period (if applicable)
-    let previousData = { grossRevenue: 0, discounts: 0, badDebt: 0, revenue: 0, expenses: 0, profit: 0, margin: 0 };
+    let previousData = { grossRevenue: 0, discounts: 0, badDebt: 0, revenue: 0, grossExpenses: 0, expenseDiscounts: 0, expenseWriteoffs: 0, expenses: 0, profit: 0, margin: 0 };
     if (comparisonDateRange) {
       const previousEntries = filterEntriesByDateRange(
         ledgerEntries,

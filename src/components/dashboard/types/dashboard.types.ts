@@ -146,6 +146,8 @@ export interface UseDashboardDataReturn {
   totalExpenses: number;
   totalDiscounts: number;
   totalBadDebt: number;  // Bad debt write-offs (ديون معدومة)
+  totalExpenseDiscounts: number;   // Expense discounts (contra-expense)
+  totalExpenseWriteoffs: number;   // Expense writeoffs (contra-expense)
   // Loan tracking
   loansReceivable: number;  // Outstanding loans we gave (assets)
   loansPayable: number;     // Outstanding loans we owe (liabilities)

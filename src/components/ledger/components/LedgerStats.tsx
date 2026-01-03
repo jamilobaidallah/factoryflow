@@ -21,8 +21,10 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
   const stats = useMemo(() => {
     let totalIncome = 0;
     let totalExpenses = 0;
-    let totalDiscounts = 0;
+    let totalDiscounts = 0;  // Income discounts (contra-revenue)
     let totalBadDebt = 0;
+    let totalExpenseDiscounts = 0;  // Expense discounts (contra-expense)
+    let totalExpenseWriteoffs = 0;  // Expense writeoffs (contra-expense)
     let unpaidCount = 0;
     let unpaidAmount = 0;
 
@@ -53,15 +55,28 @@ function LedgerStatsComponent({ entries, onUnpaidClick }: LedgerStatsProps) {
         }
       } else if (entry.type === "مصروف") {
         totalExpenses += entry.amount || 0;
+        // Track expense discounts (contra-expense, reduces net expenses)
+        if (entry.totalDiscount) {
+          totalExpenseDiscounts += entry.totalDiscount;
+        }
+        // Track expense writeoffs (contra-expense, reduces net expenses)
+        if (entry.writeoffAmount) {
+          totalExpenseWriteoffs += entry.writeoffAmount;
+        }
       }
     });
 
-    // Net balance formula matches Dashboard: (income - discounts) - expenses - badDebt
-    const netBalance = (totalIncome - totalDiscounts) - totalExpenses - totalBadDebt;
+    // Net balance formula matches Dashboard:
+    // Net Revenue = Income - Discounts
+    // Net Expenses = Expenses - Expense Discounts - Expense Writeoffs
+    // Net Balance = Net Revenue - Net Expenses - Bad Debt
+    const netRevenue = totalIncome - totalDiscounts;
+    const netExpenses = totalExpenses - totalExpenseDiscounts - totalExpenseWriteoffs;
+    const netBalance = netRevenue - netExpenses - totalBadDebt;
 
     return {
       totalIncome,
-      totalExpenses,
+      totalExpenses: netExpenses,  // Show net expenses (after expense discounts)
       netBalance,
       unpaidCount,
       unpaidAmount,
