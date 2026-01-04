@@ -1203,7 +1203,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
                     // Skip payments linked to advance entries (already shown as سلفة)
                     if (p.linkedTransactionId) {
-                      const linkedEntry = ledgerEntries.find(e => e.id === p.linkedTransactionId);
+                      // linkedTransactionId stores the transactionId, not the document id
+                      const linkedEntry = ledgerEntries.find(e => e.transactionId === p.linkedTransactionId);
                       if (linkedEntry && isAdvanceEntry(linkedEntry)) {
                         return []; // Skip advance-related payments
                       }

@@ -258,10 +258,13 @@ export function useReportsCalculations({
     let cashIn = 0;
     let cashOut = 0;
 
-    // Create lookup map for ledger entries to check for advances
-    const ledgerEntryById = new Map<string, LedgerEntry>();
+    // Create lookup map for ledger entries by transactionId to check for advances
+    // (payments store linkedTransactionId which references the transactionId, not the document id)
+    const ledgerEntryByTransactionId = new Map<string, LedgerEntry>();
     ledgerEntries.forEach(entry => {
-      ledgerEntryById.set(entry.id, entry);
+      if (entry.transactionId) {
+        ledgerEntryByTransactionId.set(entry.transactionId, entry);
+      }
     });
 
     // Count all payments from Payments collection
@@ -275,7 +278,7 @@ export function useReportsCalculations({
 
       // Skip payments linked to advance transactions (they are balance sheet items, not operating cash)
       if (payment.linkedTransactionId) {
-        const linkedEntry = ledgerEntryById.get(payment.linkedTransactionId);
+        const linkedEntry = ledgerEntryByTransactionId.get(payment.linkedTransactionId);
         if (linkedEntry && isAdvanceTransaction(linkedEntry.category)) {
           return; // Skip advance-related payments from operating cash flow
         }
