@@ -56,7 +56,10 @@ export function useAvailableAdvances(
     : SUPPLIER_ADVANCE_CATEGORY;
 
   const fetchAdvances = useCallback(async () => {
+    console.log(`[useAvailableAdvances] fetchAdvances called: partyName="${partyName}", advanceType="${advanceType}"`);
+
     if (!user?.dataOwnerId || !partyName) {
+      console.log(`[useAvailableAdvances] Skipping: no user (${!!user?.dataOwnerId}) or no partyName (${!!partyName})`);
       setAdvances([]);
       return;
     }
@@ -85,11 +88,11 @@ export function useAvailableAdvances(
       snapshot.docs.forEach((doc) => {
         const data = doc.data() as LedgerEntry;
 
-        // Calculate remaining balance
-        // For new advances: remainingBalance = amount (nothing used yet)
-        // For partially used: remainingBalance is stored
+        // Calculate remaining balance for advances
+        // For advances, we track usage via totalUsedFromAdvance, NOT remainingBalance
+        // remainingBalance is for AR/AP payment tracking which doesn't apply to advances
         const totalUsed = data.totalUsedFromAdvance || 0;
-        const remaining = data.remainingBalance ?? (data.amount - totalUsed);
+        const remaining = data.amount - totalUsed;
 
         console.log(`[useAvailableAdvances] Entry ${doc.id}: amount=${data.amount}, totalUsed=${totalUsed}, remaining=${remaining}`);
 
