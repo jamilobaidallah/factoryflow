@@ -1054,19 +1054,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     const isAdvance = isAdvanceEntry(e);
                     const isLoan = isLoanTransaction(e.type, e.category);
 
-                    // For advances: show amount in description since debit/credit are 0
-                    const advanceDescription = isAdvance
-                      ? `${e.description} (${e.amount.toFixed(2)} د.أ - لا يؤثر على الرصيد)`
-                      : e.description;
-
-                    // Determine debit/credit for loans based on cash direction
+                    // Determine debit/credit based on entry type
                     let debit = 0;
                     let credit = 0;
-                    if (isAdvance) {
-                      // Advances: no debit/credit (informational only)
-                      debit = 0;
-                      credit = 0;
-                    } else if (isLoan) {
+                    if (isLoan) {
                       // Loans: direction based on subcategory
                       const loanType = getLoanType(e.category);
                       if (isInitialLoan(e.subCategory)) {
@@ -1101,7 +1092,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       date: e.date,
                       isPayment: false,
                       entryType: isAdvance ? 'سلفة' : (isLoan ? 'قرض' : e.type),
-                      description: advanceDescription,
+                      description: e.description,
                       category: e.category,
                       subCategory: e.subCategory,
                       debit,

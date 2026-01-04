@@ -7,22 +7,22 @@ import { doc } from "firebase/firestore";
 import { PAYMENT_TYPES } from "@/lib/constants";
 import type { HandlerContext } from "../types";
 
-// Advance categories where payment direction is REVERSED from entry type
-const CUSTOMER_ADVANCE_CATEGORY = "سلفة عميل";  // type "مصروف" but cash IN (customer pays us)
-const SUPPLIER_ADVANCE_CATEGORY = "سلفة مورد";  // type "دخل" but cash OUT (we pay supplier)
+// Advance categories - payment direction matches entry type now
+const CUSTOMER_ADVANCE_CATEGORY = "سلفة عميل";  // type "دخل" - cash IN (customer pays us)
+const SUPPLIER_ADVANCE_CATEGORY = "سلفة مورد";  // type "مصروف" - cash OUT (we pay supplier)
 
 /**
  * Determine the correct payment type based on entry type and category
- * For advance categories, the payment direction is REVERSED:
- * - سلفة عميل (Customer Advance): We RECEIVE cash from customer (RECEIPT)
- * - سلفة مورد (Supplier Advance): We PAY cash to supplier (DISBURSEMENT)
+ * For advances, the payment direction matches the entry type:
+ * - سلفة عميل (Customer Advance): type "دخل" = RECEIPT (we receive cash)
+ * - سلفة مورد (Supplier Advance): type "مصروف" = DISBURSEMENT (we pay cash)
  */
 function getPaymentType(entryType: string, category: string): string {
-  // Customer advance: type is "مصروف" but we RECEIVE cash
+  // Customer advance: type is "دخل" and we RECEIVE cash
   if (category === CUSTOMER_ADVANCE_CATEGORY) {
     return PAYMENT_TYPES.RECEIPT;
   }
-  // Supplier advance: type is "دخل" but we PAY cash
+  // Supplier advance: type is "مصروف" and we PAY cash
   if (category === SUPPLIER_ADVANCE_CATEGORY) {
     return PAYMENT_TYPES.DISBURSEMENT;
   }
