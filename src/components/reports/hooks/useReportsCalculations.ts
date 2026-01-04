@@ -258,13 +258,27 @@ export function useReportsCalculations({
     let cashIn = 0;
     let cashOut = 0;
 
+    // Create lookup map for ledger entries to check for advances
+    const ledgerEntryById = new Map<string, LedgerEntry>();
+    ledgerEntries.forEach(entry => {
+      ledgerEntryById.set(entry.id, entry);
+    });
+
     // Count all payments from Payments collection
     // Instant settlement automatically creates payment records, so we only need to count from payments
-    // EXCLUDE endorsed cheques and no-cash-movement payments to avoid double counting
+    // EXCLUDE endorsed cheques, no-cash-movement payments, and advance-related payments
     payments.forEach((payment: any) => {
       // Skip endorsed cheques and no-cash-movement payments
       if (payment.isEndorsement || payment.noCashMovement) {
         return;
+      }
+
+      // Skip payments linked to advance transactions (they are balance sheet items, not operating cash)
+      if (payment.linkedTransactionId) {
+        const linkedEntry = ledgerEntryById.get(payment.linkedTransactionId);
+        if (linkedEntry && isAdvanceTransaction(linkedEntry.category)) {
+          return; // Skip advance-related payments from operating cash flow
+        }
       }
 
       if (payment.type === "قبض") {
@@ -277,7 +291,7 @@ export function useReportsCalculations({
     const netCashFlow = safeSubtract(cashIn, cashOut);
 
     return { cashIn, cashOut, netCashFlow };
-  }, [payments]);
+  }, [payments, ledgerEntries]);
 
   // Calculate Financing Activities (equity and loan transactions from ledger)
   // These are NOT included in payments collection, so we calculate from ledger

@@ -6,6 +6,7 @@ import { formatNumber } from "@/lib/date-utils";
 import {
   isEquityTransaction,
   isLoanTransaction,
+  isAdvanceTransaction,
   isCapitalContribution,
   isOwnerDrawing,
   getLoanCashDirection,
@@ -548,7 +549,10 @@ function ExpenseAnalysisReport({
       if (!isExpenseType(entry.type)) {
         return;
       }
-      if (isEquityTransaction(entry.type, entry.category)) {
+      // Exclude equity, advances, and loans from expense analysis
+      if (isEquityTransaction(entry.type, entry.category) ||
+          isAdvanceTransaction(entry.category) ||
+          isLoanTransaction(entry.type, entry.category)) {
         return;
       }
 

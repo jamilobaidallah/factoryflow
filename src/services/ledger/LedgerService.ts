@@ -86,6 +86,7 @@ import {
   rollbackInventoryChanges,
 } from "./handlers/inventoryHandlers";
 import { handleFixedAssetBatch } from "./handlers/fixedAssetHandlers";
+import { handleAdvanceAllocationBatch } from "./handlers/advanceHandlers";
 
 // Re-export types for backwards compatibility
 export type {
@@ -560,6 +561,34 @@ export class LedgerService {
       // Handle fixed asset
       if (options.hasFixedAsset && options.fixedAssetFormData) {
         handleFixedAssetBatch(ctx, options.fixedAssetFormData);
+      }
+
+      // Handle advance allocation (applying existing advances to this invoice)
+      let advanceAllocationResult = { totalPaidFromAdvances: 0, paidFromAdvances: [] as { advanceId: string; advanceTransactionId: string; amount: number; date: Date }[] };
+      if (options.advanceAllocations && options.advanceAllocations.length > 0) {
+        advanceAllocationResult = await handleAdvanceAllocationBatch(
+          ctx,
+          options.advanceAllocations,
+          ledgerDocRef.id
+        );
+
+        // Update the ledger entry to include advance payment data
+        // Also update AR/AP tracking to reflect the advance payment
+        if (advanceAllocationResult.totalPaidFromAdvances > 0) {
+          const newTotalPaid = safeAdd(initialPaid, advanceAllocationResult.totalPaidFromAdvances);
+          const newRemainingBalance = safeSubtract(totalAmount, newTotalPaid);
+          const newStatus: "paid" | "unpaid" | "partial" =
+            newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+          batch.update(ledgerDocRef, {
+            paidFromAdvances: advanceAllocationResult.paidFromAdvances,
+            totalPaidFromAdvances: advanceAllocationResult.totalPaidFromAdvances,
+            // Update AR/AP tracking to reflect advance payment
+            totalPaid: newTotalPaid,
+            remainingBalance: newRemainingBalance,
+            paymentStatus: newStatus,
+          });
+        }
       }
 
       // Add journal entry to batch (atomic with ledger entry)

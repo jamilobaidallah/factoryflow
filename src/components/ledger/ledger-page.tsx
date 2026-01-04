@@ -44,6 +44,7 @@ const RelatedRecordsDialog = dynamic(() => import("./components/RelatedRecordsDi
 const QuickPayDialog = dynamic(() => import("./components/QuickPayDialog").then(m => ({ default: m.QuickPayDialog })), { ssr: false });
 const WriteOffDialog = dynamic(() => import("./components/WriteOffDialog").then(m => ({ default: m.WriteOffDialog })), { ssr: false });
 const QuickInvoiceDialog = dynamic(() => import("./components/QuickInvoiceDialog").then(m => ({ default: m.QuickInvoiceDialog })), { ssr: false });
+const AdvanceAllocationDialog = dynamic(() => import("./components/AdvanceAllocationDialog").then(m => ({ default: m.AdvanceAllocationDialog })), { ssr: false });
 
 // Context
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
@@ -56,7 +57,9 @@ import {
   EntryType,
   ViewMode,
 } from "./filters";
-import { isEquityTransaction } from "./utils/ledger-helpers";
+import { isEquityTransaction, getCategoryType } from "./utils/ledger-helpers";
+import { useAvailableAdvances, getAdvanceTypeForEntry } from "./hooks/useAvailableAdvances";
+import type { AdvanceAllocationResult } from "./components/AdvanceAllocationDialog";
 
 // Lazy load export utilities (only needed when user exports)
 const loadExportUtils = () => import("@/lib/export-utils");
@@ -100,6 +103,22 @@ export default function LedgerPage() {
   });
   const { submitLedgerEntry, deleteLedgerEntry, addPaymentToEntry, addChequeToEntry, addInventoryToEntry } = useLedgerOperations();
   const formHook = useLedgerForm();
+
+  // Determine the current entry type based on selected category
+  const currentEntryType = getCategoryType(state.form.formData.category, state.form.formData.subCategory);
+  const advanceType = getAdvanceTypeForEntry(currentEntryType);
+
+  // Query available advances for the associated party (only when creating income/expense entries)
+  const {
+    advances: availableAdvances,
+    totalAvailable: totalAdvancesAvailable,
+    loading: advancesLoading,
+    refetch: refetchAdvances,
+  } = useAvailableAdvances(
+    // Only fetch when we have a party name and the entry type supports advances
+    advanceType && state.form.formData.associatedParty ? state.form.formData.associatedParty : null,
+    advanceType || "customer"
+  );
 
   // Filters - initialize from URL params if present
   const {
@@ -208,8 +227,8 @@ export default function LedgerPage() {
     setViewMode("unpaid");
   }, [setViewMode]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Perform the actual ledger entry submission (after advance allocation check)
+  const performActualSubmit = useCallback(async (allocations: AdvanceAllocationResult[] = []) => {
     dispatch({ type: "SET_LOADING", payload: true });
 
     // Save pending invoice data before submission
@@ -234,6 +253,8 @@ export default function LedgerPage() {
         fixedAssetFormData: state.form.fixedAssetFormData,
         hasInitialPayment: state.form.hasInitialPayment,
         initialPaymentAmount: state.form.initialPaymentAmount,
+        // Advance allocation data
+        advanceAllocations: allocations.length > 0 ? allocations : undefined,
       });
 
       if (success) {
@@ -250,6 +271,39 @@ export default function LedgerPage() {
       dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [state.ui.createInvoice, state.form, state.data.editingEntry, submitLedgerEntry, toast]);
+
+  // Handle form submission - checks for available advances first
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Check if this is a new entry (not editing) with a party that has available advances
+    const isNewEntry = !state.data.editingEntry;
+    const hasParty = !!state.form.formData.associatedParty;
+    const hasAdvances = totalAdvancesAvailable > 0 && availableAdvances.length > 0;
+    const supportsAdvances = advanceType !== null;
+
+    // If conditions are met, show advance allocation dialog
+    if (isNewEntry && hasParty && hasAdvances && supportsAdvances && !advancesLoading) {
+      dispatch({ type: "OPEN_ADVANCE_ALLOCATION_DIALOG" });
+      return;
+    }
+
+    // Otherwise, proceed with normal submission
+    await performActualSubmit([]);
+  }, [state.data.editingEntry, state.form.formData.associatedParty, totalAdvancesAvailable, availableAdvances.length, advanceType, advancesLoading, performActualSubmit]);
+
+  // Handle advance allocation confirmation
+  const handleAdvanceAllocationConfirm = useCallback(async (allocations: AdvanceAllocationResult[]) => {
+    dispatch({ type: "SET_ADVANCE_ALLOCATIONS", payload: allocations });
+    dispatch({ type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" });
+    await performActualSubmit(allocations);
+  }, [performActualSubmit]);
+
+  // Handle advance allocation skip (proceed without applying advances)
+  const handleAdvanceAllocationSkip = useCallback(async () => {
+    dispatch({ type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" });
+    await performActualSubmit([]);
+  }, [performActualSubmit]);
 
   const handleEdit = useCallback((entry: LedgerEntry) => {
     dispatch({ type: "START_EDIT", payload: entry });
@@ -532,6 +586,18 @@ export default function LedgerPage() {
         isOpen={state.dialogs.quickInvoice}
         onClose={() => dispatch({ type: "CLOSE_QUICK_INVOICE_DIALOG" })}
         pendingData={state.data.pendingInvoiceData}
+      />
+
+      {/* Advance Allocation Dialog - shown when creating invoice for party with available advances */}
+      <AdvanceAllocationDialog
+        isOpen={state.dialogs.advanceAllocation}
+        onClose={() => dispatch({ type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" })}
+        onConfirm={handleAdvanceAllocationConfirm}
+        onSkip={handleAdvanceAllocationSkip}
+        advances={availableAdvances}
+        invoiceAmount={parseFloat(state.form.formData.amount) || 0}
+        partyName={state.form.formData.associatedParty}
+        isCustomer={advanceType === "customer"}
       />
 
       {confirmationDialog}

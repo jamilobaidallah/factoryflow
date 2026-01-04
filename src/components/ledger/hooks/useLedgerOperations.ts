@@ -18,6 +18,7 @@ import type {
   ChequeRelatedFormData,
   InventoryRelatedFormData,
 } from "../types/ledger";
+import type { AdvanceAllocationResult } from "../components/AdvanceAllocationDialog";
 
 export function useLedgerOperations() {
   const { user, role } = useUser();
@@ -43,6 +44,8 @@ export function useLedgerOperations() {
       fixedAssetFormData?: FixedAssetFormData;
       hasInitialPayment?: boolean;
       initialPaymentAmount?: string;
+      // Advance allocation support
+      advanceAllocations?: AdvanceAllocationResult[];
     } = {}
   ): Promise<boolean> => {
     if (!user) { return false; }
@@ -82,7 +85,8 @@ export function useLedgerOperations() {
         options.hasFixedAsset ||
         options.hasInitialPayment ||
         formData.trackARAP ||
-        formData.immediateSettlement;
+        formData.immediateSettlement ||
+        (options.advanceAllocations && options.advanceAllocations.length > 0);
 
       if (needsBatch) {
         const serviceOptions: CreateLedgerEntryOptions = {
@@ -99,6 +103,8 @@ export function useLedgerOperations() {
           fixedAssetFormData: options.fixedAssetFormData,
           hasInitialPayment: options.hasInitialPayment,
           initialPaymentAmount: options.initialPaymentAmount,
+          // Advance allocation support
+          advanceAllocations: options.advanceAllocations,
         };
 
         const result = await service.createLedgerEntryWithRelated(formData, serviceOptions);

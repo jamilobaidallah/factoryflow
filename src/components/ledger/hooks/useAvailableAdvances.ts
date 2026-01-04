@@ -1,0 +1,151 @@
+/**
+ * useAvailableAdvances - Hook to query available customer/supplier advances
+ * Used to check if a party has advances that can be applied to new invoices
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from "firebase/firestore";
+import { firestore } from "@/firebase/config";
+import { useUser } from "@/firebase/provider";
+import type { LedgerEntry } from "../utils/ledger-constants";
+
+// Advance categories
+const CUSTOMER_ADVANCE_CATEGORY = "سلفة عميل";
+const SUPPLIER_ADVANCE_CATEGORY = "سلفة مورد";
+
+export interface AvailableAdvance {
+  id: string;
+  transactionId: string;
+  amount: number;              // Original advance amount
+  remainingBalance: number;    // Available to allocate
+  date: Date;
+  description: string;
+  category: string;
+}
+
+interface UseAvailableAdvancesReturn {
+  advances: AvailableAdvance[];
+  totalAvailable: number;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook to fetch available advances for a specific party
+ * @param partyName - Name of the customer/supplier
+ * @param advanceType - "customer" for سلفة عميل, "supplier" for سلفة مورد
+ */
+export function useAvailableAdvances(
+  partyName: string | null,
+  advanceType: "customer" | "supplier"
+): UseAvailableAdvancesReturn {
+  const { user } = useUser();
+  const [advances, setAdvances] = useState<AvailableAdvance[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const category = advanceType === "customer"
+    ? CUSTOMER_ADVANCE_CATEGORY
+    : SUPPLIER_ADVANCE_CATEGORY;
+
+  const fetchAdvances = useCallback(async () => {
+    if (!user?.dataOwnerId || !partyName) {
+      setAdvances([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+
+      // Query for advances of this party with remaining balance
+      const advancesQuery = query(
+        ledgerRef,
+        where("category", "==", category),
+        where("associatedParty", "==", partyName),
+        orderBy("date", "asc") // FIFO - oldest advances first
+      );
+
+      const snapshot = await getDocs(advancesQuery);
+      const availableAdvances: AvailableAdvance[] = [];
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data() as LedgerEntry;
+
+        // Calculate remaining balance
+        // For new advances: remainingBalance = amount (nothing used yet)
+        // For partially used: remainingBalance is stored
+        const totalUsed = data.totalUsedFromAdvance || 0;
+        const remaining = data.remainingBalance ?? (data.amount - totalUsed);
+
+        // Only include advances with remaining balance > 0
+        if (remaining > 0) {
+          availableAdvances.push({
+            id: doc.id,
+            transactionId: data.transactionId,
+            amount: data.amount,
+            remainingBalance: remaining,
+            date: data.date instanceof Date ? data.date : new Date(data.date),
+            description: data.description,
+            category: data.category,
+          });
+        }
+      });
+
+      setAdvances(availableAdvances);
+    } catch (err) {
+      console.error("Error fetching available advances:", err);
+      setError("حدث خطأ أثناء جلب السلف المتاحة");
+      setAdvances([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.dataOwnerId, partyName, category]);
+
+  // Fetch when party name or category changes
+  useEffect(() => {
+    fetchAdvances();
+  }, [fetchAdvances]);
+
+  // Calculate total available
+  const totalAvailable = advances.reduce((sum, adv) => sum + adv.remainingBalance, 0);
+
+  return {
+    advances,
+    totalAvailable,
+    loading,
+    error,
+    refetch: fetchAdvances,
+  };
+}
+
+/**
+ * Helper function to check if a category is an advance category
+ */
+export function isAdvanceCategory(category: string): boolean {
+  return category === CUSTOMER_ADVANCE_CATEGORY || category === SUPPLIER_ADVANCE_CATEGORY;
+}
+
+/**
+ * Helper function to get the opposite advance type for a transaction
+ * - When creating income (دخل) for a customer → check for سلفة عميل
+ * - When creating expense (مصروف) for a supplier → check for سلفة مورد
+ */
+export function getAdvanceTypeForEntry(entryType: string): "customer" | "supplier" | null {
+  if (entryType === "دخل") {
+    return "customer"; // Customer advance can pay customer invoices
+  }
+  if (entryType === "مصروف") {
+    return "supplier"; // Supplier advance can offset supplier purchases
+  }
+  return null;
+}
