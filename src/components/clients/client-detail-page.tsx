@@ -474,8 +474,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             }
           } else if (isAdvanceEntry(entry)) {
             // Track advance balances (outstanding amount)
-            // remainingBalance = amount - totalUsedFromAdvance
-            const remainingAdvance = entry.remainingBalance ?? entry.amount ?? 0;
+            // Calculate from totalUsedFromAdvance (consistent with useAvailableAdvances hook)
+            const totalUsed = entry.totalUsedFromAdvance || 0;
+            const remainingAdvance = entry.amount - totalUsed;
+
             if (entry.category === "سلفة عميل") {
               custAdvances += remainingAdvance; // Customer advance - we owe them
             } else if (entry.category === "سلفة مورد") {
@@ -1105,10 +1107,14 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       // Advances have INVERTED debit/credit vs their entry type
                       // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
                       // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
+                      // Use REMAINING balance (amount - totalUsedFromAdvance), not full amount
+                      const totalUsed = e.totalUsedFromAdvance || 0;
+                      const remaining = e.amount - totalUsed;
+
                       if (e.category === "سلفة عميل") {
-                        credit = e.amount; // We owe them (liability)
+                        credit = remaining; // We owe them (liability) - only remaining amount
                       } else if (e.category === "سلفة مورد") {
-                        debit = e.amount; // They owe us (asset)
+                        debit = remaining; // They owe us (asset) - only remaining amount
                       }
                     } else if (e.type === "دخل" || e.type === "إيراد") {
                       debit = e.amount;
@@ -1129,6 +1135,27 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       debit,
                       credit,
                     });
+
+                    // Advance allocation rows - show how the advance was used
+                    if (isAdvance && e.advanceAllocations && e.advanceAllocations.length > 0) {
+                      e.advanceAllocations.forEach((allocation: { invoiceId: string; invoiceTransactionId: string; amount: number; date: Date | string; description?: string }, idx: number) => {
+                        const allocationDate = allocation.date instanceof Date ? allocation.date : new Date(allocation.date);
+                        rows.push({
+                          id: `${e.id}-allocation-${idx}`,
+                          transactionId: e.transactionId,
+                          source: 'ledger' as const,
+                          date: allocationDate,
+                          isPayment: true,
+                          entryType: 'تخصيص سلفة',
+                          description: `مخصوم لفاتورة: ${allocation.description || allocation.invoiceTransactionId}`,
+                          category: e.category,
+                          // Customer advance allocation: reduces our liability (debit)
+                          // Supplier advance allocation: reduces their debt to us (credit)
+                          debit: e.category === "سلفة عميل" ? allocation.amount : 0,
+                          credit: e.category === "سلفة مورد" ? allocation.amount : 0,
+                        });
+                      });
+                    }
 
                     // Row 2: Discount from ledger entry (if any) - reduces what client owes
                     if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
