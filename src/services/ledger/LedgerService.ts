@@ -39,7 +39,7 @@ import type {
   InventoryItemData,
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { getCategoryType, generateTransactionId, LOAN_CATEGORIES } from "@/components/ledger/utils/ledger-helpers";
+import { getCategoryType, generateTransactionId, LOAN_CATEGORIES, isAdvanceTransaction } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import {
   parseAmount,
@@ -544,6 +544,15 @@ export class LedgerService {
         // Use "cheque" method if payment involves cashed cheques
         const paymentMethod = (hasCashedIncoming || hasCashedOutgoing) ? "cheque" : "cash";
         handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod);
+      }
+
+      // Handle advance payment (SPECIAL CASE)
+      // Advances need payment records (cash received/paid) even though immediateSettlement is false
+      // because the AR/AP tracking is for the OBLIGATION (goods/services owed), not the cash movement
+      // - Customer advance (سلفة عميل): We received cash, owe goods → create receipt payment
+      // - Supplier advance (سلفة مورد): We paid cash, owed goods → create disbursement payment
+      if (isAdvanceTransaction(formData.category) && !formData.immediateSettlement) {
+        handleImmediateSettlementBatch(ctx, totalAmount, "cash");
       }
 
       // Handle initial payment
