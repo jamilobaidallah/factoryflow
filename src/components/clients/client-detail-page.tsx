@@ -92,6 +92,15 @@ interface LedgerEntry {
   totalDiscount?: number;        // Settlement discounts (خصم تسوية)
   writeoffAmount?: number;       // Bad debt write-offs (ديون معدومة)
   totalPaidFromAdvances?: number; // Amount paid from customer/supplier advances
+  // Advance allocation fields
+  totalUsedFromAdvance?: number;  // Total amount consumed from this advance
+  advanceAllocations?: Array<{    // Which invoices used this advance
+    invoiceId: string;
+    invoiceTransactionId: string;
+    amount: number;
+    date: Date | string;
+    description?: string;
+  }>;
 }
 
 interface Payment {
