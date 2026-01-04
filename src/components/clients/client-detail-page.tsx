@@ -369,6 +369,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   // Advance payments - amounts paid from customer/supplier advances
   const [totalIncomeAdvancePayments, setTotalIncomeAdvancePayments] = useState(0);
   const [totalExpenseAdvancePayments, setTotalExpenseAdvancePayments] = useState(0);
+  // Advance balances - outstanding advances (not yet consumed by invoices)
+  const [customerAdvances, setCustomerAdvances] = useState(0);  // سلفة عميل - we owe them (liability)
+  const [supplierAdvances, setSupplierAdvances] = useState(0);  // سلفة مورد - they owe us (asset)
 
   // Loan balances
   const [loansReceivable, setLoansReceivable] = useState(0);  // Loans we gave to this party (they owe us)
@@ -441,6 +444,9 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         // Advance payments tracking
         let incomeAdvancePayments = 0;
         let expenseAdvancePayments = 0;
+        // Advance balances (outstanding amount not yet consumed)
+        let custAdvances = 0;  // سلفة عميل - we owe them
+        let suppAdvances = 0;  // سلفة مورد - they owe us
         let loanReceivable = 0;  // Loans we gave (قروض ممنوحة)
         let loanPayable = 0;     // Loans we received (قروض مستلمة)
 
@@ -465,6 +471,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 // Loans Received - they lent to us, we owe them
                 loanPayable += entry.remainingBalance ?? entry.amount ?? 0;
               }
+            }
+          } else if (isAdvanceEntry(entry)) {
+            // Track advance balances (outstanding amount)
+            // remainingBalance = amount - totalUsedFromAdvance
+            const remainingAdvance = entry.remainingBalance ?? entry.amount ?? 0;
+            if (entry.category === "سلفة عميل") {
+              custAdvances += remainingAdvance; // Customer advance - we owe them
+            } else if (entry.category === "سلفة مورد") {
+              suppAdvances += remainingAdvance; // Supplier advance - they owe us
             }
           } else {
             // Calculate regular totals (exclude advances and loans - they are not income/expense)
@@ -498,6 +513,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         setTotalExpenseWriteoffs(expenseWriteoffs);
         setTotalIncomeAdvancePayments(incomeAdvancePayments);
         setTotalExpenseAdvancePayments(expenseAdvancePayments);
+        setCustomerAdvances(custAdvances);
+        setSupplierAdvances(suppAdvances);
         setLoansReceivable(loanReceivable);
         setLoansPayable(loanPayable);
       },
@@ -594,11 +611,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   }, [user, client]);
 
   // Calculate current balance using Decimal.js for precision
-  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs - income advance payments + expense advance payments
+  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs - income advance payments + expense advance payments + supplier advances - customer advances
   // Income discounts/writeoffs reduce what the customer owes us (subtract)
   // Expense discounts/writeoffs reduce what we owe the supplier (add back to make balance less negative)
   // Income advance payments: customer advance used to pay for invoice (subtract - reduces what they owe)
   // Expense advance payments: supplier advance used to pay for purchase (add - reduces what we owe them)
+  // Customer advances (سلفة عميل): We received cash, owe them goods → subtract (we owe them)
+  // Supplier advances (سلفة مورد): We paid cash, they owe us goods → add (they owe us)
   useEffect(() => {
     // Use Decimal.js via safeAdd/safeSubtract for money precision
     let balance = safeSubtract(totalSales, totalPurchases);
@@ -610,8 +629,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     balance = safeAdd(balance, totalExpenseWriteoffs);
     balance = safeSubtract(balance, totalIncomeAdvancePayments);
     balance = safeAdd(balance, totalExpenseAdvancePayments);
+    // Include advance balances
+    balance = safeSubtract(balance, customerAdvances);  // We owe customer (liability)
+    balance = safeAdd(balance, supplierAdvances);       // Supplier owes us (asset)
     setCurrentBalance(balance);
-  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs, totalIncomeAdvancePayments, totalExpenseAdvancePayments]);
+  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs, totalIncomeAdvancePayments, totalExpenseAdvancePayments, customerAdvances, supplierAdvances]);
 
   // Export statement to Excel
   const exportStatement = async () => {
@@ -1078,6 +1100,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         } else if (loanType === "payable") {
                           debit = e.amount; // We paid back
                         }
+                      }
+                    } else if (isAdvance) {
+                      // Advances have INVERTED debit/credit vs their entry type
+                      // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
+                      // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
+                      if (e.category === "سلفة عميل") {
+                        credit = e.amount; // We owe them (liability)
+                      } else if (e.category === "سلفة مورد") {
+                        debit = e.amount; // They owe us (asset)
                       }
                     } else if (e.type === "دخل" || e.type === "إيراد") {
                       debit = e.amount;
