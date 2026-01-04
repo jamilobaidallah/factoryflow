@@ -117,6 +117,7 @@ interface Payment {
   noCashMovement?: boolean; // True if no actual cash moved (endorsements)
   endorsementChequeId?: string; // Links payment to the endorsed cheque
   linkedTransactionId?: string; // Links payment to its ledger entry
+  category?: string;  // Category for filtering (e.g., سلفة عميل, سلفة مورد)
 }
 
 interface Cheque {
@@ -482,15 +483,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
               }
             }
           } else if (isAdvanceEntry(entry)) {
-            // Track advance balances (outstanding amount)
-            // Calculate from totalUsedFromAdvance (consistent with useAvailableAdvances hook)
-            const totalUsed = entry.totalUsedFromAdvance || 0;
-            const remainingAdvance = entry.amount - totalUsed;
-
+            // Track advance balances - use FULL amount (not remaining)
+            // The "مدفوع من سلفة" row on invoices is informational only
+            // Balance formula will NOT subtract totalIncomeAdvancePayments since we use full advance
             if (entry.category === "سلفة عميل") {
-              custAdvances += remainingAdvance; // Customer advance - we owe them
+              custAdvances += entry.amount; // Customer advance - we owe them (full amount)
             } else if (entry.category === "سلفة مورد") {
-              suppAdvances += remainingAdvance; // Supplier advance - they owe us
+              suppAdvances += entry.amount; // Supplier advance - they owe us (full amount)
             }
           } else {
             // Calculate regular totals (exclude advances and loans - they are not income/expense)
@@ -563,11 +562,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           } as Payment;
           paymentsList.push(payment);
 
-          // Calculate totals
-          if (payment.type === "قبض") {
-            received += payment.amount;
-          } else if (payment.type === "صرف") {
-            made += payment.amount;
+          // Calculate totals - EXCLUDE advance payments
+          // Advance payments are tracked separately via customerAdvances/supplierAdvances
+          const isAdvancePayment = payment.category === "سلفة عميل" || payment.category === "سلفة مورد";
+          if (!isAdvancePayment) {
+            if (payment.type === "قبض") {
+              received += payment.amount;
+            } else if (payment.type === "صرف") {
+              made += payment.amount;
+            }
           }
         });
 
@@ -622,15 +625,17 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   }, [user, client]);
 
   // Calculate current balance using Decimal.js for precision
-  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs - income advance payments + expense advance payments + supplier advances - customer advances
+  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs - customer advances + supplier advances
   // Income discounts/writeoffs reduce what the customer owes us (subtract)
   // Expense discounts/writeoffs reduce what we owe the supplier (add back to make balance less negative)
-  // Income advance payments: customer advance used to pay for invoice (subtract - reduces what they owe)
-  // Expense advance payments: supplier advance used to pay for purchase (add - reduces what we owe them)
-  // Customer advances (سلفة عميل): We received cash, owe them goods → subtract (we owe them)
-  // Supplier advances (سلفة مورد): We paid cash, they owe us goods → add (they owe us)
+  // Customer advances (سلفة عميل): We received cash, owe them goods → subtract (we owe them) - FULL amount
+  // Supplier advances (سلفة مورد): We paid cash, they owe us goods → add (they owe us) - FULL amount
+  // NOTE: Advance payments (amount used from advance) are NOT in this formula - they're informational only
   useEffect(() => {
     // Use Decimal.js via safeAdd/safeSubtract for money precision
+    // NOTE: Advance payments (totalIncomeAdvancePayments, totalExpenseAdvancePayments) are NOT in formula
+    // because advances are tracked at FULL amount via customerAdvances/supplierAdvances
+    // The "مدفوع من سلفة" row on invoices is informational only (debit=0, credit=0)
     let balance = safeSubtract(totalSales, totalPurchases);
     balance = safeSubtract(balance, totalPaymentsReceived);
     balance = safeAdd(balance, totalPaymentsMade);
@@ -638,13 +643,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     balance = safeSubtract(balance, totalIncomeWriteoffs);
     balance = safeAdd(balance, totalExpenseDiscounts);
     balance = safeAdd(balance, totalExpenseWriteoffs);
-    balance = safeSubtract(balance, totalIncomeAdvancePayments);
-    balance = safeAdd(balance, totalExpenseAdvancePayments);
-    // Include advance balances
+    // Include advance balances at FULL amount
     balance = safeSubtract(balance, customerAdvances);  // We owe customer (liability)
     balance = safeAdd(balance, supplierAdvances);       // Supplier owes us (asset)
     setCurrentBalance(balance);
-  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs, totalIncomeAdvancePayments, totalExpenseAdvancePayments, customerAdvances, supplierAdvances]);
+  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs, customerAdvances, supplierAdvances]);
 
   // Export statement to Excel
   const exportStatement = async () => {
@@ -1116,14 +1119,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       // Advances have INVERTED debit/credit vs their entry type
                       // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
                       // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
-                      // Use REMAINING balance (amount - totalUsedFromAdvance), not full amount
-                      const totalUsed = e.totalUsedFromAdvance || 0;
-                      const remaining = e.amount - totalUsed;
-
+                      // Show FULL amount - the "مدفوع من سلفة" row on invoices is informational only
                       if (e.category === "سلفة عميل") {
-                        credit = remaining; // We owe them (liability) - only remaining amount
+                        credit = e.amount; // We owe them (liability) - full amount received
                       } else if (e.category === "سلفة مورد") {
-                        debit = remaining; // They owe us (asset) - only remaining amount
+                        debit = e.amount; // They owe us (asset) - full amount paid
                       }
                     } else if (e.type === "دخل" || e.type === "إيراد") {
                       debit = e.amount;
@@ -1209,10 +1209,10 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       });
                     }
 
-                    // Row 6: Paid from advance (if any) - shows that invoice was paid using customer/supplier advance
+                    // Row 6: Paid from advance (if any) - INFORMATIONAL ONLY
+                    // Shows that invoice was paid using customer/supplier advance, but doesn't affect balance
+                    // The advance entry shows FULL amount, so this row is just for clarity
                     if (e.totalPaidFromAdvances && e.totalPaidFromAdvances > 0) {
-                      // For income entries: advance payment is credit (reduces what customer owes)
-                      // For expense entries: advance payment is debit (reduces what we owe supplier)
                       const isIncome = e.type === "دخل" || e.type === "إيراد";
                       rows.push({
                         id: `${e.id}-advance-payment`,
@@ -1220,11 +1220,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                         source: 'ledger' as const,
                         date: e.date,
                         isPayment: true,
-                        entryType: isIncome ? 'خصم من سلفة' : 'تسوية سلفة',
-                        description: isIncome ? 'مدفوع من سلفة عميل' : 'مخصوم من سلفة مورد',
+                        entryType: 'معلومات',
+                        description: isIncome
+                          ? `مدفوع من سلفة عميل (${e.totalPaidFromAdvances})`
+                          : `مخصوم من سلفة مورد (${e.totalPaidFromAdvances})`,
                         category: e.category,
-                        debit: isIncome ? 0 : e.totalPaidFromAdvances,
-                        credit: isIncome ? e.totalPaidFromAdvances : 0,
+                        debit: 0,   // Informational only - no balance impact
+                        credit: 0,  // The advance entry already shows full amount
                       });
                     }
 
