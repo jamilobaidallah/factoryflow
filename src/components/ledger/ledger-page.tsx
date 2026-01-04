@@ -58,7 +58,7 @@ import {
   ViewMode,
 } from "./filters";
 import { isEquityTransaction, getCategoryType } from "./utils/ledger-helpers";
-import { useAvailableAdvances, getAdvanceTypeForEntry } from "./hooks/useAvailableAdvances";
+import { useAvailableAdvances, getAdvanceTypeForEntry, isAdvanceCategory } from "./hooks/useAvailableAdvances";
 import type { AdvanceAllocationResult } from "./components/AdvanceAllocationDialog";
 
 // Lazy load export utilities (only needed when user exports)
@@ -107,16 +107,20 @@ export default function LedgerPage() {
   // Determine the current entry type based on selected category
   const currentEntryType = getCategoryType(state.form.formData.category, state.form.formData.subCategory);
   const advanceType = getAdvanceTypeForEntry(currentEntryType);
+  // Check if we're creating an advance entry (don't need to query for advances in that case)
+  const isCreatingAdvanceEntry = isAdvanceCategory(state.form.formData.category);
 
-  // Query available advances for the associated party (only when creating income/expense entries)
+  // Query available advances for the associated party (only when creating income/expense entries, not advances)
   const {
     advances: availableAdvances,
     totalAvailable: totalAdvancesAvailable,
     loading: advancesLoading,
     refetch: refetchAdvances,
   } = useAvailableAdvances(
-    // Only fetch when we have a party name and the entry type supports advances
-    advanceType && state.form.formData.associatedParty ? state.form.formData.associatedParty : null,
+    // Only fetch when we have a party name, the entry type supports advances, and we're not creating an advance
+    advanceType && state.form.formData.associatedParty && !isCreatingAdvanceEntry
+      ? state.form.formData.associatedParty
+      : null,
     advanceType || "customer"
   );
 
@@ -281,16 +285,19 @@ export default function LedgerPage() {
     const hasParty = !!state.form.formData.associatedParty;
     const hasAdvances = totalAdvancesAvailable > 0 && availableAdvances.length > 0;
     const supportsAdvances = advanceType !== null;
+    // Don't show advance dialog when creating an advance entry itself
+    const isCreatingAdvance = isAdvanceCategory(state.form.formData.category);
 
     // If conditions are met, show advance allocation dialog
-    if (isNewEntry && hasParty && hasAdvances && supportsAdvances && !advancesLoading) {
+    // (but not when creating an advance entry - can't use advance to pay for another advance)
+    if (isNewEntry && hasParty && hasAdvances && supportsAdvances && !advancesLoading && !isCreatingAdvance) {
       dispatch({ type: "OPEN_ADVANCE_ALLOCATION_DIALOG" });
       return;
     }
 
     // Otherwise, proceed with normal submission
     await performActualSubmit([]);
-  }, [state.data.editingEntry, state.form.formData.associatedParty, totalAdvancesAvailable, availableAdvances.length, advanceType, advancesLoading, performActualSubmit]);
+  }, [state.data.editingEntry, state.form.formData.associatedParty, state.form.formData.category, totalAdvancesAvailable, availableAdvances.length, advanceType, advancesLoading, performActualSubmit]);
 
   // Handle advance allocation confirmation
   const handleAdvanceAllocationConfirm = useCallback(async (allocations: AdvanceAllocationResult[]) => {

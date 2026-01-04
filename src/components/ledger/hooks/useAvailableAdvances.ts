@@ -68,6 +68,7 @@ export function useAvailableAdvances(
       const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
       // Query for advances of this party with remaining balance
+      // Note: This query requires a composite index on (category, associatedParty, date)
       const advancesQuery = query(
         ledgerRef,
         where("category", "==", category),
@@ -75,7 +76,10 @@ export function useAvailableAdvances(
         orderBy("date", "asc") // FIFO - oldest advances first
       );
 
+      console.log(`[useAvailableAdvances] Querying for category="${category}", party="${partyName}"`);
       const snapshot = await getDocs(advancesQuery);
+      console.log(`[useAvailableAdvances] Found ${snapshot.docs.length} advance entries`);
+
       const availableAdvances: AvailableAdvance[] = [];
 
       snapshot.docs.forEach((doc) => {
@@ -86,6 +90,8 @@ export function useAvailableAdvances(
         // For partially used: remainingBalance is stored
         const totalUsed = data.totalUsedFromAdvance || 0;
         const remaining = data.remainingBalance ?? (data.amount - totalUsed);
+
+        console.log(`[useAvailableAdvances] Entry ${doc.id}: amount=${data.amount}, totalUsed=${totalUsed}, remaining=${remaining}`);
 
         // Only include advances with remaining balance > 0
         if (remaining > 0) {
@@ -101,9 +107,14 @@ export function useAvailableAdvances(
         }
       });
 
+      console.log(`[useAvailableAdvances] ${availableAdvances.length} advances with remaining balance > 0`);
       setAdvances(availableAdvances);
     } catch (err) {
-      console.error("Error fetching available advances:", err);
+      console.error("[useAvailableAdvances] Error fetching advances:", err);
+      // Check if it's an index error
+      if (err instanceof Error && err.message.includes("index")) {
+        console.error("[useAvailableAdvances] Missing Firestore composite index! Create index on: category, associatedParty, date");
+      }
       setError("حدث خطأ أثناء جلب السلف المتاحة");
       setAdvances([]);
     } finally {
