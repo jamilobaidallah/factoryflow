@@ -149,6 +149,21 @@ export const CATEGORIES: Category[] = [
             "تحصيل قرض",     // Loan Collection - reduces asset, cash IN
         ]
     },
+    // Advance Categories (NOT P&L - Balance Sheet items for prepayments)
+    {
+        name: "سلفة عميل",  // Customer Advance - Liability (we owe customer goods/services)
+        type: "مصروف",      // Treated as expense type for cash flow, but excluded from P&L
+        subcategories: [
+            "دفعة مقدمة من عميل",     // Advance payment received - cash IN, liability created
+        ]
+    },
+    {
+        name: "سلفة مورد",  // Supplier Advance - Asset (supplier owes us goods/services)
+        type: "دخل",        // Treated as income type for cash flow, but excluded from P&L
+        subcategories: [
+            "دفعة مقدمة لمورد",       // Advance payment made - cash OUT, asset created
+        ]
+    },
 ];
 
 /**
