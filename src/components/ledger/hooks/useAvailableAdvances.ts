@@ -89,12 +89,15 @@ export function useAvailableAdvances(
         const data = doc.data() as LedgerEntry;
 
         // Calculate remaining balance for advances
-        // For advances, we track usage via totalUsedFromAdvance, NOT remainingBalance
-        // remainingBalance is for AR/AP payment tracking which doesn't apply to advances
-        const totalUsed = data.totalUsedFromAdvance || 0;
-        const remaining = data.amount - totalUsed;
+        // SEMANTIC CHANGE: Advances now use standard AR/AP tracking (totalPaid)
+        // For backwards compatibility, we also check totalUsedFromAdvance (old field)
+        //
+        // Priority: remainingBalance (if maintained) > calculated from totalPaid > calculated from totalUsedFromAdvance
+        // This ensures we work with both old and new advance entries
+        const totalUsed = data.totalPaid ?? data.totalUsedFromAdvance ?? 0;
+        const remaining = data.remainingBalance ?? (data.amount - totalUsed);
 
-        console.log(`[useAvailableAdvances] Entry ${doc.id}: amount=${data.amount}, totalUsed=${totalUsed}, remaining=${remaining}`);
+        console.log(`[useAvailableAdvances] Entry ${doc.id}: amount=${data.amount}, totalPaid=${data.totalPaid ?? 'N/A'}, totalUsedFromAdvance=${data.totalUsedFromAdvance ?? 'N/A'}, remaining=${remaining}`);
 
         // Only include advances with remaining balance > 0
         if (remaining > 0) {

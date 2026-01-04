@@ -715,13 +715,20 @@ export class LedgerService {
             );
 
             // Reverse the allocation using atomic operations
+            // SEMANTIC CHANGE: Using totalPaid instead of totalUsedFromAdvance
+            // This aligns advances with standard AR/AP tracking (like loans)
+            //
             // Note: We use increment for the numeric fields. The advanceAllocations array
             // will retain stale entries, but they don't affect calculations since we use
-            // totalUsedFromAdvance as the authoritative source for remaining balance.
+            // totalPaid as the authoritative source for remaining balance.
             // A cleanup function could be added later to remove stale allocation records.
+            //
+            // paymentStatus is set to "partial" since reversing means the advance
+            // now has remaining balance again (can't be "paid")
             batch.update(advanceRef, {
-              totalUsedFromAdvance: increment(-advancePayment.amount),
+              totalPaid: increment(-advancePayment.amount),
               remainingBalance: increment(advancePayment.amount),
+              paymentStatus: "partial",
             });
           }
 

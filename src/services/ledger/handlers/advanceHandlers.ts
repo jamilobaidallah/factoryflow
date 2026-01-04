@@ -4,6 +4,18 @@
  *
  * BUG 1 FIX: Uses FieldValue.arrayUnion and FieldValue.increment for atomic updates
  * to prevent race conditions when multiple invoices allocate from the same advance
+ *
+ * SEMANTIC CHANGE: Advances now use standard AR/AP tracking (totalPaid, remainingBalance, paymentStatus)
+ * instead of the separate totalUsedFromAdvance field. This aligns with how loans track obligations.
+ *
+ * The advance entry represents an OBLIGATION:
+ * - Customer advance (سلفة عميل): We owe the customer goods/services
+ * - Supplier advance (سلفة مورد): Supplier owes us goods/services
+ *
+ * When an invoice "uses" an advance, it's fulfilling that obligation:
+ * - totalPaid increases (obligation fulfilled)
+ * - remainingBalance decreases (remaining obligation)
+ * - paymentStatus transitions: unpaid → partial → paid
  */
 
 import { doc, arrayUnion, increment } from "firebase/firestore";
@@ -22,11 +34,11 @@ import type {
  *
  * BUG 1 FIX: Uses atomic Firestore operations to prevent race conditions:
  * - arrayUnion() for advanceAllocations - atomically appends to array
- * - increment() for totalUsedFromAdvance - atomically adds to the value
+ * - increment() for totalPaid - atomically adds to the value (standard AR/AP field)
  *
  * Note: remainingBalance is updated as a convenience field but can always be
- * recalculated from (amount - totalUsedFromAdvance) if needed. The authoritative
- * source is totalUsedFromAdvance which is now atomic.
+ * recalculated from (amount - totalPaid) if needed. The authoritative
+ * source is totalPaid which is now atomic.
  *
  * @param ctx - Handler context with batch, refs, and form data
  * @param allocations - Array of advance allocations from the dialog
@@ -78,15 +90,25 @@ export async function handleAdvanceAllocationBatch(
 
     // BUG 1 FIX: Use atomic operations to prevent race conditions
     // - arrayUnion: atomically appends to advanceAllocations array
-    // - increment: atomically adds to totalUsedFromAdvance
+    // - increment: atomically adds to totalPaid (standard AR/AP field)
     // - increment(-amount): atomically subtracts from remainingBalance
     //
     // This ensures that concurrent allocations don't overwrite each other.
     // Even if two requests run simultaneously, both amounts will be added correctly.
+    //
+    // SEMANTIC CHANGE: Using totalPaid instead of totalUsedFromAdvance
+    // This aligns advances with standard AR/AP tracking (like loans)
+    //
+    // paymentStatus is determined by remainingAfterAllocation:
+    // - 0: Advance fully consumed → "paid"
+    // - > 0: Partial consumption → "partial"
+    const newPaymentStatus = allocation.remainingAfterAllocation <= 0 ? "paid" : "partial";
+
     batch.update(advanceRef, {
       advanceAllocations: arrayUnion(newAllocation),
-      totalUsedFromAdvance: increment(allocation.amount),
+      totalPaid: increment(allocation.amount),
       remainingBalance: increment(-allocation.amount),
+      paymentStatus: newPaymentStatus,
     });
   }
 
