@@ -1145,27 +1145,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       credit,
                     });
 
-                    // Advance allocation rows - show how the advance was used
-                    if (isAdvance && e.advanceAllocations && e.advanceAllocations.length > 0) {
-                      e.advanceAllocations.forEach((allocation: { invoiceId: string; invoiceTransactionId: string; amount: number; date: Date | string; description?: string }, idx: number) => {
-                        const allocationDate = allocation.date instanceof Date ? allocation.date : new Date(allocation.date);
-                        rows.push({
-                          id: `${e.id}-allocation-${idx}`,
-                          transactionId: e.transactionId,
-                          source: 'ledger' as const,
-                          date: allocationDate,
-                          isPayment: true,
-                          entryType: 'تخصيص سلفة',
-                          description: `مخصوم لفاتورة: ${allocation.description || allocation.invoiceTransactionId}`,
-                          category: e.category,
-                          // Customer advance allocation: reduces our liability (debit)
-                          // Supplier advance allocation: reduces their debt to us (credit)
-                          debit: e.category === "سلفة عميل" ? allocation.amount : 0,
-                          credit: e.category === "سلفة مورد" ? allocation.amount : 0,
-                        });
-                      });
-                    }
-
                     // Row 2: Discount from ledger entry (if any) - reduces what client owes
                     if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
                       rows.push({
