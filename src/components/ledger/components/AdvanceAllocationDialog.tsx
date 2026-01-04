@@ -161,7 +161,7 @@ export function AdvanceAllocationDialog({
               <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium text-blue-800">
-                  {partyLabel} "{partyName}" لديه {advanceLabel} متاحة
+                  {partyLabel} &quot;{partyName}&quot; لديه {advanceLabel} متاحة
                 </p>
                 <p className="text-blue-700 mt-1">
                   إجمالي السلف المتاحة:{" "}
