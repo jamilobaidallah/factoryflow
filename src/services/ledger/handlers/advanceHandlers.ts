@@ -1,11 +1,14 @@
 /**
  * Advance Allocation Handlers
  * Handles applying customer/supplier advances to invoices
+ *
+ * BUG 1 FIX: Uses FieldValue.arrayUnion and FieldValue.increment for atomic updates
+ * to prevent race conditions when multiple invoices allocate from the same advance
  */
 
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, arrayUnion, increment } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
-import { safeAdd, safeSubtract } from "@/lib/currency";
+import { safeAdd } from "@/lib/currency";
 import type { HandlerContext } from "../types";
 import type { AdvanceAllocationResult } from "@/components/ledger/components/AdvanceAllocationDialog";
 import type {
@@ -16,6 +19,14 @@ import type {
 /**
  * Handle advance allocation batch operation
  * Updates both the advance entry (mark as used) and the new invoice entry (mark as paid by advance)
+ *
+ * BUG 1 FIX: Uses atomic Firestore operations to prevent race conditions:
+ * - arrayUnion() for advanceAllocations - atomically appends to array
+ * - increment() for totalUsedFromAdvance - atomically adds to the value
+ *
+ * Note: remainingBalance is updated as a convenience field but can always be
+ * recalculated from (amount - totalUsedFromAdvance) if needed. The authoritative
+ * source is totalUsedFromAdvance which is now atomic.
  *
  * @param ctx - Handler context with batch, refs, and form data
  * @param allocations - Array of advance allocations from the dialog
@@ -56,17 +67,6 @@ export async function handleAdvanceAllocationBatch(
       allocation.advanceId
     );
 
-    // Fetch current advance data to update allocations array
-    const advanceSnap = await getDoc(advanceRef);
-    if (!advanceSnap.exists()) {
-      console.warn(`Advance entry ${allocation.advanceId} not found`);
-      continue;
-    }
-
-    const advanceData = advanceSnap.data();
-    const existingAllocations: AdvanceAllocation[] = advanceData.advanceAllocations || [];
-    const existingTotalUsed = advanceData.totalUsedFromAdvance || 0;
-
     // Create new allocation record
     const newAllocation: AdvanceAllocation = {
       invoiceId: invoiceDocId,
@@ -76,18 +76,17 @@ export async function handleAdvanceAllocationBatch(
       description: formData.description,
     };
 
-    // Calculate new totals
-    const newTotalUsed = safeAdd(existingTotalUsed, allocation.amount);
-    const newRemainingBalance = safeSubtract(
-      advanceData.amount,
-      newTotalUsed
-    );
-
-    // Update advance entry in batch
+    // BUG 1 FIX: Use atomic operations to prevent race conditions
+    // - arrayUnion: atomically appends to advanceAllocations array
+    // - increment: atomically adds to totalUsedFromAdvance
+    // - increment(-amount): atomically subtracts from remainingBalance
+    //
+    // This ensures that concurrent allocations don't overwrite each other.
+    // Even if two requests run simultaneously, both amounts will be added correctly.
     batch.update(advanceRef, {
-      advanceAllocations: [...existingAllocations, newAllocation],
-      totalUsedFromAdvance: newTotalUsed,
-      remainingBalance: newRemainingBalance,
+      advanceAllocations: arrayUnion(newAllocation),
+      totalUsedFromAdvance: increment(allocation.amount),
+      remainingBalance: increment(-allocation.amount),
     });
   }
 

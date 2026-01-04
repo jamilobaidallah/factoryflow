@@ -25,6 +25,8 @@ import {
   DocumentSnapshot,
   Unsubscribe,
   QueryConstraint,
+  increment,
+  arrayRemove,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import type {
@@ -698,6 +700,53 @@ export class LedgerService {
       if (currentEntrySnap.exists()) {
         const currentData = currentEntrySnap.data();
         const oldAmount = currentData.amount || 0;
+
+        // BUG 4 FIX: Reverse advance allocations when editing an invoice
+        // If this entry was paid by advances, we need to:
+        // 1. Reverse the allocations on each advance entry
+        // 2. Clear the paidFromAdvances and totalPaidFromAdvances fields
+        // This allows the advances to be re-allocated to other invoices
+        if (currentData.paidFromAdvances && currentData.paidFromAdvances.length > 0) {
+          for (const advancePayment of currentData.paidFromAdvances) {
+            const advanceRef = doc(
+              firestore,
+              `users/${this.userId}/ledger`,
+              advancePayment.advanceId
+            );
+
+            // Reverse the allocation using atomic operations
+            // Note: We use increment for the numeric fields. The advanceAllocations array
+            // will retain stale entries, but they don't affect calculations since we use
+            // totalUsedFromAdvance as the authoritative source for remaining balance.
+            // A cleanup function could be added later to remove stale allocation records.
+            batch.update(advanceRef, {
+              totalUsedFromAdvance: increment(-advancePayment.amount),
+              remainingBalance: increment(advancePayment.amount),
+            });
+          }
+
+          // Clear advance payment info from this entry
+          updateData.paidFromAdvances = [];
+          updateData.totalPaidFromAdvances = 0;
+
+          // Also recalculate AR/AP tracking since advance payments are being removed
+          const totalPaid = (currentData.totalPaid || 0) - (currentData.totalPaidFromAdvances || 0);
+          const totalDiscount = currentData.totalDiscount || 0;
+          const writeoffAmount = currentData.writeoffAmount || 0;
+          updateData.totalPaid = totalPaid;
+          updateData.remainingBalance = calculateRemainingBalance(
+            newAmount,
+            totalPaid,
+            totalDiscount,
+            writeoffAmount
+          );
+          updateData.paymentStatus = calculatePaymentStatus(
+            totalPaid,
+            newAmount,
+            totalDiscount,
+            writeoffAmount
+          );
+        }
 
         // Recalculate AR/AP fields if this is an AR/AP entry and amount changed
         if (currentData.isARAPEntry && oldAmount !== newAmount) {

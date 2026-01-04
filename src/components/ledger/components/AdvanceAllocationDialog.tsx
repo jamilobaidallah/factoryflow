@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Wallet, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Wallet, CheckCircle2, Lock } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
+import { parseAmount } from "@/lib/currency";
+import { useToast } from "@/hooks/use-toast";
 import type { AvailableAdvance } from "../hooks/useAvailableAdvances";
 
 export interface AdvanceAllocationResult {
@@ -48,6 +50,8 @@ export function AdvanceAllocationDialog({
   partyName,
   isCustomer,
 }: AdvanceAllocationDialogProps) {
+  const { toast } = useToast();
+
   // Track which advances are selected and their allocation amounts
   const [selectedAdvances, setSelectedAdvances] = useState<Map<string, number>>(
     new Map()
@@ -102,12 +106,23 @@ export function AdvanceAllocationDialog({
   };
 
   // Update allocation amount for a specific advance
-  const handleAmountChange = (advanceId: string, amount: number, maxAmount: number) => {
+  // BUG 3 FIX: Added validation to prevent over-allocation
+  // BUG 5 FIX: Uses parseAmount (Decimal.js) instead of parseFloat
+  const handleAmountChange = (advanceId: string, inputValue: string, maxAmount: number) => {
+    const amount = parseAmount(inputValue);
     const newSelected = new Map(selectedAdvances);
-    const validAmount = Math.max(0, Math.min(amount, maxAmount));
 
-    if (validAmount > 0) {
-      newSelected.set(advanceId, validAmount);
+    // Validate: amount cannot exceed remaining balance
+    if (amount > maxAmount) {
+      toast({
+        title: "تجاوز الحد المسموح",
+        description: `لا يمكن تخصيص أكثر من ${formatNumber(maxAmount)} (المتبقي من السلفة)`,
+        variant: "destructive",
+      });
+      // Cap at max amount instead of rejecting
+      newSelected.set(advanceId, maxAmount);
+    } else if (amount > 0) {
+      newSelected.set(advanceId, amount);
     } else {
       newSelected.delete(advanceId);
     }
@@ -189,28 +204,43 @@ export function AdvanceAllocationDialog({
 
           {/* Advances List */}
           <div className="space-y-3 max-h-[250px] overflow-y-auto">
-            {advances.map((advance) => {
+            {advances.map((advance, index) => {
               const isSelected = selectedAdvances.has(advance.id);
               const allocatedAmount = selectedAdvances.get(advance.id) || 0;
               const advanceDate = advance.date instanceof Date
                 ? advance.date.toLocaleDateString("ar-EG")
                 : new Date(advance.date).toLocaleDateString("ar-EG");
 
+              // BUG 6 FIX: FIFO enforcement - disable newer advances until older ones are fully used
+              const previousNotFullyAllocated = advances
+                .slice(0, index)
+                .some((prev) => {
+                  const allocated = selectedAdvances.get(prev.id) || 0;
+                  return allocated < prev.remainingBalance;
+                });
+              const isFIFODisabled = previousNotFullyAllocated && !isSelected;
+
               return (
                 <div
                   key={advance.id}
                   className={`border rounded-lg p-3 transition-colors ${
                     isSelected ? "border-primary-500 bg-primary-50" : "border-slate-200"
-                  }`}
+                  } ${isFIFODisabled ? "opacity-60" : ""}`}
                 >
                   <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() =>
-                        handleToggleAdvance(advance.id, advance.remainingBalance)
-                      }
-                      className="mt-1"
-                    />
+                    <div className="relative">
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={isFIFODisabled}
+                        onCheckedChange={() =>
+                          handleToggleAdvance(advance.id, advance.remainingBalance)
+                        }
+                        className="mt-1"
+                      />
+                      {isFIFODisabled && (
+                        <Lock className="h-3 w-3 text-slate-400 absolute -top-1 -right-1" />
+                      )}
+                    </div>
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
                         <div>
@@ -235,7 +265,7 @@ export function AdvanceAllocationDialog({
                             onChange={(e) =>
                               handleAmountChange(
                                 advance.id,
-                                parseFloat(e.target.value) || 0,
+                                e.target.value,
                                 advance.remainingBalance
                               )
                             }
