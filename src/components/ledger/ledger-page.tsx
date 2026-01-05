@@ -596,13 +596,17 @@ export default function LedgerPage() {
       />
 
       {/* Advance Allocation Dialog - shown when creating invoice for party with available advances */}
+      {/* invoiceAmount = total amount - initial payment (if partial payment was selected) */}
       <AdvanceAllocationDialog
         isOpen={state.dialogs.advanceAllocation}
         onClose={() => dispatch({ type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" })}
         onConfirm={handleAdvanceAllocationConfirm}
         onSkip={handleAdvanceAllocationSkip}
         advances={availableAdvances}
-        invoiceAmount={parseFloat(state.form.formData.amount) || 0}
+        invoiceAmount={
+          (parseFloat(state.form.formData.amount) || 0) -
+          (state.form.hasInitialPayment ? parseFloat(state.form.initialPaymentAmount) || 0 : 0)
+        }
         partyName={state.form.formData.associatedParty}
         isCustomer={advanceType === "customer"}
       />
