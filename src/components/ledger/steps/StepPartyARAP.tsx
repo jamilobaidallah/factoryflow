@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
-import { isLoanTransaction } from "../utils/ledger-helpers";
+import { isLoanTransaction, isAdvanceTransaction } from "../utils/ledger-helpers";
 import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
 
 interface ClientOption {
@@ -102,15 +102,25 @@ export function StepPartyARAP({
   // Check if this is a loan transaction - loans require party and AR/AP tracking
   const isLoan = isLoanTransaction(currentEntryType, formData.category);
 
+  // Check if this is an advance transaction - advances track AR/AP (obligation to deliver goods/services)
+  const isAdvance = isAdvanceTransaction(formData.category);
+
   // Check if subcategory is a non-cash expense (wastage, free samples, etc.)
   const isNonCashSubcategory = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
 
-  // Force AR/AP tracking for loans
+  // Force AR/AP tracking for loans AND advances
+  // Advances represent an obligation: we owe goods/services to customer (سلفة عميل)
+  // or supplier owes us goods/services (سلفة مورد)
   useEffect(() => {
-    if (isLoan && !formData.trackARAP) {
+    if ((isLoan || isAdvance) && !formData.trackARAP) {
       onUpdate({ trackARAP: true });
     }
-  }, [isLoan, formData.trackARAP, onUpdate]);
+    // Advances CANNOT be marked as immediate settlement (fully paid)
+    // because receiving cash doesn't fulfill the obligation - delivering goods does
+    if (isAdvance && formData.immediateSettlement) {
+      onUpdate({ immediateSettlement: false });
+    }
+  }, [isLoan, isAdvance, formData.trackARAP, formData.immediateSettlement, onUpdate]);
 
   // Auto-select non-cash expense option for wastage/samples subcategories
   useEffect(() => {
@@ -251,8 +261,8 @@ export function StepPartyARAP({
         <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
           <Label className="font-medium">حالة الدفع</Label>
           <div className="space-y-3">
-            {/* Option 1: Fully Paid */}
-            <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+            {/* Option 1: Fully Paid - DISABLED for advances (obligation not fulfilled by receiving cash) */}
+            <label className={`flex items-center space-x-2 space-x-reverse ${isAdvance ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
               <input
                 type="radio"
                 name="paymentStatus"
@@ -264,8 +274,10 @@ export function StepPartyARAP({
                   setInitialPaymentAmount("");
                 }}
                 className="h-4 w-4"
+                disabled={isAdvance}
               />
               <span>مدفوع بالكامل (نقدي أو شيك صرف)</span>
+              {isAdvance && <span className="text-xs text-amber-600 mr-2">(غير متاح للسلف)</span>}
             </label>
 
             {/* Option 2: On Credit */}

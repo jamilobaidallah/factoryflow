@@ -12,6 +12,7 @@ import type {
   FixedAssetFormData,
 } from "@/components/ledger/types/ledger";
 import type { ErrorType } from "@/lib/error-handling";
+import type { AdvanceAllocationResult } from "@/components/ledger/components/AdvanceAllocationDialog";
 
 // ============================================
 // Service Result Types
@@ -52,6 +53,8 @@ export interface CreateLedgerEntryOptions {
   fixedAssetFormData?: FixedAssetFormData;
   hasInitialPayment?: boolean;
   initialPaymentAmount?: string;
+  // Advance allocation support (applies customer/supplier advances to this invoice)
+  advanceAllocations?: AdvanceAllocationResult[];
 }
 
 // ============================================

@@ -18,6 +18,7 @@ import {
   initialInventoryFormData,
   initialFixedAssetFormData,
 } from "../types/ledger";
+import type { AdvanceAllocationResult } from "../components/AdvanceAllocationDialog";
 
 /**
  * Consolidated page state interface
@@ -36,6 +37,7 @@ export interface LedgerPageState {
     quickPay: boolean;
     quickInvoice: boolean;
     writeOff: boolean;
+    advanceAllocation: boolean;
   };
 
   // Selected/editing data
@@ -52,6 +54,12 @@ export interface LedgerPageState {
     loading: boolean;
     relatedTab: "payments" | "cheques" | "inventory";
     createInvoice: boolean;
+  };
+
+  // Advance allocation state (for applying customer/supplier advances to invoices)
+  advanceAllocation: {
+    pendingSubmission: boolean;  // True when waiting for user to confirm/skip allocations
+    allocations: AdvanceAllocationResult[];  // Selected advance allocations
   };
 
   // Main ledger form
@@ -87,6 +95,7 @@ export const initialLedgerPageState: LedgerPageState = {
     quickPay: false,
     quickInvoice: false,
     writeOff: false,
+    advanceAllocation: false,
   },
   data: {
     editingEntry: null,
@@ -99,6 +108,10 @@ export const initialLedgerPageState: LedgerPageState = {
     loading: false,
     relatedTab: "payments",
     createInvoice: false,
+  },
+  advanceAllocation: {
+    pendingSubmission: false,
+    allocations: [],
   },
   form: {
     formData: initialLedgerFormData,
@@ -135,6 +148,10 @@ export type LedgerPageAction =
   | { type: "CLOSE_QUICK_INVOICE_DIALOG" }
   | { type: "OPEN_WRITE_OFF_DIALOG"; payload: LedgerEntry }
   | { type: "CLOSE_WRITE_OFF_DIALOG" }
+  | { type: "OPEN_ADVANCE_ALLOCATION_DIALOG" }
+  | { type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" }
+  | { type: "SET_ADVANCE_ALLOCATIONS"; payload: AdvanceAllocationResult[] }
+  | { type: "CLEAR_ADVANCE_ALLOCATIONS" }
 
   // Data actions
   | { type: "SET_EDITING_ENTRY"; payload: LedgerEntry | null }
@@ -247,6 +264,32 @@ export function ledgerPageReducer(
         ...state,
         dialogs: { ...state.dialogs, writeOff: false },
         data: { ...state.data, writeOffEntry: null },
+      };
+
+    case "OPEN_ADVANCE_ALLOCATION_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, advanceAllocation: true },
+        advanceAllocation: { ...state.advanceAllocation, pendingSubmission: true },
+      };
+
+    case "CLOSE_ADVANCE_ALLOCATION_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, advanceAllocation: false },
+        advanceAllocation: { ...state.advanceAllocation, pendingSubmission: false },
+      };
+
+    case "SET_ADVANCE_ALLOCATIONS":
+      return {
+        ...state,
+        advanceAllocation: { ...state.advanceAllocation, allocations: action.payload },
+      };
+
+    case "CLEAR_ADVANCE_ALLOCATIONS":
+      return {
+        ...state,
+        advanceAllocation: { pendingSubmission: false, allocations: [] },
       };
 
     // Data
@@ -433,8 +476,9 @@ export function ledgerPageReducer(
           fixedAssetFormData: initialFixedAssetFormData,
         },
         data: { ...state.data, editingEntry: null },
-        dialogs: { ...state.dialogs, form: false },
+        dialogs: { ...state.dialogs, form: false, advanceAllocation: false },
         ui: { ...state.ui, createInvoice: false },
+        advanceAllocation: { pendingSubmission: false, allocations: [] },
       };
 
       // If invoice data provided, open invoice dialog
@@ -470,6 +514,7 @@ export function ledgerPageReducer(
         data: { ...state.data, editingEntry: null },
         dialogs: { ...state.dialogs, form: true },
         ui: { ...state.ui, createInvoice: false },
+        advanceAllocation: { pendingSubmission: false, allocations: [] },
       };
 
     default:

@@ -1,4 +1,25 @@
 /**
+ * Advance Allocation Record - tracks how an advance was used to pay invoices
+ */
+export interface AdvanceAllocation {
+    invoiceId: string;           // ID of the invoice this advance paid
+    invoiceTransactionId: string; // Transaction ID for reference
+    amount: number;              // Amount allocated from this advance
+    date: Date;                  // Date of allocation
+    description?: string;        // Invoice description for reference
+}
+
+/**
+ * Advance Payment Record - tracks which advances paid an invoice
+ */
+export interface AdvancePaymentRecord {
+    advanceId: string;           // ID of the advance entry
+    advanceTransactionId: string; // Transaction ID for reference
+    amount: number;              // Amount paid from this advance
+    date: Date;                  // Date of allocation
+}
+
+/**
  * Ledger Entry Interface
  */
 export interface LedgerEntry {
@@ -27,6 +48,12 @@ export interface LedgerEntry {
     writeoffReason?: string;          // Reason for writeoff (required)
     writeoffDate?: Date;              // When written off
     writeoffBy?: string;              // User who authorized (audit)
+    // Advance Allocation Fields (for سلفة عميل / سلفة مورد entries)
+    advanceAllocations?: AdvanceAllocation[];  // Which invoices used this advance
+    totalUsedFromAdvance?: number;             // Total amount consumed from this advance
+    // Advance Payment Fields (for invoice entries paid by advances)
+    paidFromAdvances?: AdvancePaymentRecord[]; // Which advances paid this invoice
+    totalPaidFromAdvances?: number;            // Total amount paid from advances
 }
 
 /**
@@ -147,6 +174,21 @@ export const CATEGORIES: Category[] = [
         subcategories: [
             "منح قرض",       // Loan Given - creates asset, cash OUT
             "تحصيل قرض",     // Loan Collection - reduces asset, cash IN
+        ]
+    },
+    // Advance Categories (NOT P&L - Balance Sheet items for prepayments)
+    {
+        name: "سلفة عميل",  // Customer Advance - Liability (we owe customer goods/services)
+        type: "دخل",        // We RECEIVE cash from customer - shows in debit (they paid us)
+        subcategories: [
+            "دفعة مقدمة من عميل",     // Advance payment received - cash IN, liability created
+        ]
+    },
+    {
+        name: "سلفة مورد",  // Supplier Advance - Asset (supplier owes us goods/services)
+        type: "مصروف",      // We PAY cash to supplier - shows in credit (we paid them)
+        subcategories: [
+            "دفعة مقدمة لمورد",       // Advance payment made - cash OUT, asset created
         ]
     },
 ];

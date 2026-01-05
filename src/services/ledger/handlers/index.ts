@@ -13,3 +13,4 @@ export {
   rollbackInventoryChanges,
 } from "./inventoryHandlers";
 export { handleFixedAssetBatch } from "./fixedAssetHandlers";
+export { handleAdvanceAllocationBatch } from "./advanceHandlers";

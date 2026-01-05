@@ -6,6 +6,7 @@ import { formatNumber } from "@/lib/date-utils";
 import {
   isEquityTransaction,
   isLoanTransaction,
+  isAdvanceTransaction,
   isCapitalContribution,
   isOwnerDrawing,
   getLoanCashDirection,
@@ -361,14 +362,33 @@ function AgingReport({
         }
       } else {
         // Regular AR/AP (non-loan entries)
-        // Receivables = Income entries (money owed TO us)
-        // Payables = Expense entries (money we OWE)
-        if (isIncomeType(entry.type)) {
-          buckets.receivables[bucket].count++;
-          buckets.receivables[bucket].amount += balance;
-        } else if (isExpenseType(entry.type)) {
-          buckets.payables[bucket].count++;
-          buckets.payables[bucket].amount += balance;
+        // SPECIAL CASE: Advances have REVERSED AR/AP semantics
+        // - Customer advance (سلفة عميل, type "دخل"): We received cash, owe THEM goods → PAYABLE
+        // - Supplier advance (سلفة مورد, type "مصروف"): We paid cash, THEY owe us goods → RECEIVABLE
+        const isAdvance = isAdvanceTransaction(entry.category);
+
+        if (isAdvance) {
+          // Advances: FLIP the normal logic
+          if (isIncomeType(entry.type)) {
+            // Customer advance - we owe them goods (payable)
+            buckets.payables[bucket].count++;
+            buckets.payables[bucket].amount += balance;
+          } else if (isExpenseType(entry.type)) {
+            // Supplier advance - they owe us goods (receivable)
+            buckets.receivables[bucket].count++;
+            buckets.receivables[bucket].amount += balance;
+          }
+        } else {
+          // Regular transactions: normal logic
+          // Receivables = Income entries (money owed TO us)
+          // Payables = Expense entries (money we OWE)
+          if (isIncomeType(entry.type)) {
+            buckets.receivables[bucket].count++;
+            buckets.receivables[bucket].amount += balance;
+          } else if (isExpenseType(entry.type)) {
+            buckets.payables[bucket].count++;
+            buckets.payables[bucket].amount += balance;
+          }
         }
       }
     });
@@ -548,7 +568,10 @@ function ExpenseAnalysisReport({
       if (!isExpenseType(entry.type)) {
         return;
       }
-      if (isEquityTransaction(entry.type, entry.category)) {
+      // Exclude equity, advances, and loans from expense analysis
+      if (isEquityTransaction(entry.type, entry.category) ||
+          isAdvanceTransaction(entry.category) ||
+          isLoanTransaction(entry.type, entry.category)) {
         return;
       }
 

@@ -7,6 +7,29 @@ import { doc } from "firebase/firestore";
 import { PAYMENT_TYPES } from "@/lib/constants";
 import type { HandlerContext } from "../types";
 
+// Advance categories - payment direction matches entry type now
+const CUSTOMER_ADVANCE_CATEGORY = "سلفة عميل";  // type "دخل" - cash IN (customer pays us)
+const SUPPLIER_ADVANCE_CATEGORY = "سلفة مورد";  // type "مصروف" - cash OUT (we pay supplier)
+
+/**
+ * Determine the correct payment type based on entry type and category
+ * For advances, the payment direction matches the entry type:
+ * - سلفة عميل (Customer Advance): type "دخل" = RECEIPT (we receive cash)
+ * - سلفة مورد (Supplier Advance): type "مصروف" = DISBURSEMENT (we pay cash)
+ */
+function getPaymentType(entryType: string, category: string): string {
+  // Customer advance: type is "دخل" and we RECEIVE cash
+  if (category === CUSTOMER_ADVANCE_CATEGORY) {
+    return PAYMENT_TYPES.RECEIPT;
+  }
+  // Supplier advance: type is "مصروف" and we PAY cash
+  if (category === SUPPLIER_ADVANCE_CATEGORY) {
+    return PAYMENT_TYPES.DISBURSEMENT;
+  }
+  // Normal entries: income = receipt, expense = disbursement
+  return entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+}
+
 /**
  * Handle immediate settlement batch operation
  * Creates a payment record for full immediate payment
@@ -25,11 +48,12 @@ export function handleImmediateSettlementBatch(
   if (amount > 0) {
     const paymentDocRef = doc(refs.payments);
     const isCheque = method === "cheque";
+    const paymentType = getPaymentType(entryType, formData.category);
 
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: amount,
-      type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
+      type: paymentType,
       method: method,
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
@@ -55,10 +79,12 @@ export function handleInitialPaymentBatch(
 
   if (paymentAmount > 0) {
     const paymentDocRef = doc(refs.payments);
+    const paymentType = getPaymentType(entryType, formData.category);
+
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: paymentAmount,
-      type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
+      type: paymentType,
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
       notes: `دفعة أولية - ${formData.description}`,

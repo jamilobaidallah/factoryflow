@@ -25,6 +25,8 @@ import {
   DocumentSnapshot,
   Unsubscribe,
   QueryConstraint,
+  increment,
+  arrayRemove,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import type {
@@ -37,7 +39,7 @@ import type {
   InventoryItemData,
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { getCategoryType, generateTransactionId, LOAN_CATEGORIES } from "@/components/ledger/utils/ledger-helpers";
+import { getCategoryType, generateTransactionId, LOAN_CATEGORIES, isAdvanceTransaction } from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import {
   parseAmount,
@@ -86,6 +88,7 @@ import {
   rollbackInventoryChanges,
 } from "./handlers/inventoryHandlers";
 import { handleFixedAssetBatch } from "./handlers/fixedAssetHandlers";
+import { handleAdvanceAllocationBatch } from "./handlers/advanceHandlers";
 
 // Re-export types for backwards compatibility
 export type {
@@ -543,6 +546,15 @@ export class LedgerService {
         handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod);
       }
 
+      // Handle advance payment (SPECIAL CASE)
+      // Advances need payment records (cash received/paid) even though immediateSettlement is false
+      // because the AR/AP tracking is for the OBLIGATION (goods/services owed), not the cash movement
+      // - Customer advance (سلفة عميل): We received cash, owe goods → create receipt payment
+      // - Supplier advance (سلفة مورد): We paid cash, owed goods → create disbursement payment
+      if (isAdvanceTransaction(formData.category) && !formData.immediateSettlement) {
+        handleImmediateSettlementBatch(ctx, totalAmount, "cash");
+      }
+
       // Handle initial payment
       if (options.hasInitialPayment && options.initialPaymentAmount && formData.trackARAP) {
         handleInitialPaymentBatch(ctx, parseFloat(options.initialPaymentAmount));
@@ -560,6 +572,34 @@ export class LedgerService {
       // Handle fixed asset
       if (options.hasFixedAsset && options.fixedAssetFormData) {
         handleFixedAssetBatch(ctx, options.fixedAssetFormData);
+      }
+
+      // Handle advance allocation (applying existing advances to this invoice)
+      let advanceAllocationResult = { totalPaidFromAdvances: 0, paidFromAdvances: [] as { advanceId: string; advanceTransactionId: string; amount: number; date: Date }[] };
+      if (options.advanceAllocations && options.advanceAllocations.length > 0) {
+        advanceAllocationResult = await handleAdvanceAllocationBatch(
+          ctx,
+          options.advanceAllocations,
+          ledgerDocRef.id
+        );
+
+        // Update the ledger entry to include advance payment data
+        // Also update AR/AP tracking to reflect the advance payment
+        if (advanceAllocationResult.totalPaidFromAdvances > 0) {
+          const newTotalPaid = safeAdd(initialPaid, advanceAllocationResult.totalPaidFromAdvances);
+          const newRemainingBalance = safeSubtract(totalAmount, newTotalPaid);
+          const newStatus: "paid" | "unpaid" | "partial" =
+            newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+          batch.update(ledgerDocRef, {
+            paidFromAdvances: advanceAllocationResult.paidFromAdvances,
+            totalPaidFromAdvances: advanceAllocationResult.totalPaidFromAdvances,
+            // Update AR/AP tracking to reflect advance payment
+            totalPaid: newTotalPaid,
+            remainingBalance: newRemainingBalance,
+            paymentStatus: newStatus,
+          });
+        }
       }
 
       // Add journal entry to batch (atomic with ledger entry)
@@ -669,6 +709,63 @@ export class LedgerService {
       if (currentEntrySnap.exists()) {
         const currentData = currentEntrySnap.data();
         const oldAmount = currentData.amount || 0;
+
+        // BUG 4 FIX: Reverse advance allocations when editing an invoice
+        // If this entry was paid by advances, we need to:
+        // 1. Reverse the allocations on each advance entry
+        // 2. Clear the paidFromAdvances and totalPaidFromAdvances fields
+        // This allows the advances to be re-allocated to other invoices
+        if (currentData.paidFromAdvances && currentData.paidFromAdvances.length > 0) {
+          for (const advancePayment of currentData.paidFromAdvances) {
+            const advanceRef = doc(
+              firestore,
+              `users/${this.userId}/ledger`,
+              advancePayment.advanceId
+            );
+
+            // Reverse the allocation using atomic operations
+            // SEMANTIC CHANGE: Using totalPaid instead of totalUsedFromAdvance
+            // This aligns advances with standard AR/AP tracking (like loans)
+            //
+            // Note: We use increment for the numeric fields. The advanceAllocations array
+            // will retain stale entries, but they don't affect calculations since we use
+            // totalPaid as the authoritative source for remaining balance.
+            // A cleanup function could be added later to remove stale allocation records.
+            //
+            // paymentStatus is set to "partial" as a safe default. We can't determine
+            // if this should be "unpaid" (totalPaid=0) without reading the advance first,
+            // which would require a transaction instead of batch. Since most filtering
+            // uses `!== "paid"` (treating unpaid and partial the same), this is acceptable.
+            // The numeric fields (totalPaid, remainingBalance) are authoritative.
+            batch.update(advanceRef, {
+              totalPaid: increment(-advancePayment.amount),
+              remainingBalance: increment(advancePayment.amount),
+              paymentStatus: "partial",
+            });
+          }
+
+          // Clear advance payment info from this entry
+          updateData.paidFromAdvances = [];
+          updateData.totalPaidFromAdvances = 0;
+
+          // Also recalculate AR/AP tracking since advance payments are being removed
+          const totalPaid = (currentData.totalPaid || 0) - (currentData.totalPaidFromAdvances || 0);
+          const totalDiscount = currentData.totalDiscount || 0;
+          const writeoffAmount = currentData.writeoffAmount || 0;
+          updateData.totalPaid = totalPaid;
+          updateData.remainingBalance = calculateRemainingBalance(
+            newAmount,
+            totalPaid,
+            totalDiscount,
+            writeoffAmount
+          );
+          updateData.paymentStatus = calculatePaymentStatus(
+            totalPaid,
+            newAmount,
+            totalDiscount,
+            writeoffAmount
+          );
+        }
 
         // Recalculate AR/AP fields if this is an AR/AP entry and amount changed
         if (currentData.isARAPEntry && oldAmount !== newAmount) {
@@ -850,6 +947,21 @@ export class LedgerService {
     const inventoryChanges: Array<{ itemId: string; quantityDelta: number }> = [];
 
     try {
+      // VALIDATION: Prevent deletion of advances that have active allocations
+      // Deleting such advances would leave orphaned references in invoices
+      // We check totalPaid > 0 because if any allocations exist, totalPaid would be > 0
+      if (isAdvanceTransaction(entry.category)) {
+        const totalPaid = entry.totalPaid ?? 0;
+
+        if (totalPaid > 0) {
+          return {
+            success: false,
+            error: "لا يمكن حذف سلفة تم استخدامها في فواتير. يجب أولاً تعديل أو حذف الفواتير التي تستخدم هذه السلفة.",
+            errorType: ErrorType.VALIDATION,
+          };
+        }
+      }
+
       const batch = writeBatch(firestore);
       let deletedRelatedCount = 0;
 
@@ -935,6 +1047,30 @@ export class LedgerService {
         batch.delete(movementDoc.ref);
         deletedRelatedCount++;
       });
+
+      // CRITICAL FIX: Reverse advance allocations if this invoice was paid by advances
+      // Without this, deleting an invoice that used advances would create "ghost allocations"
+      // that permanently reduce advance availability
+      if (entry.paidFromAdvances && entry.paidFromAdvances.length > 0) {
+        for (const advancePayment of entry.paidFromAdvances) {
+          const advanceRef = doc(
+            firestore,
+            `users/${this.userId}/ledger`,
+            advancePayment.advanceId
+          );
+
+          // Reverse the allocation using atomic operations
+          // paymentStatus is set to "partial" as a safe default. We can't determine
+          // if this should be "unpaid" (totalPaid=0) without reading the advance first.
+          // Since most filtering uses `!== "paid"`, this is acceptable.
+          // The numeric fields (totalPaid, remainingBalance) are authoritative.
+          batch.update(advanceRef, {
+            totalPaid: increment(-advancePayment.amount),
+            remainingBalance: increment(advancePayment.amount),
+            paymentStatus: "partial",
+          });
+        }
+      }
 
       // Delete auto-generated COGS entries
       const cogsQuery = query(
