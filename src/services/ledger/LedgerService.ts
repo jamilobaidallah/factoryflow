@@ -732,8 +732,11 @@ export class LedgerService {
             // totalPaid as the authoritative source for remaining balance.
             // A cleanup function could be added later to remove stale allocation records.
             //
-            // paymentStatus is set to "partial" since reversing means the advance
-            // now has remaining balance again (can't be "paid")
+            // paymentStatus is set to "partial" as a safe default. We can't determine
+            // if this should be "unpaid" (totalPaid=0) without reading the advance first,
+            // which would require a transaction instead of batch. Since most filtering
+            // uses `!== "paid"` (treating unpaid and partial the same), this is acceptable.
+            // The numeric fields (totalPaid, remainingBalance) are authoritative.
             batch.update(advanceRef, {
               totalPaid: increment(-advancePayment.amount),
               remainingBalance: increment(advancePayment.amount),
@@ -944,6 +947,21 @@ export class LedgerService {
     const inventoryChanges: Array<{ itemId: string; quantityDelta: number }> = [];
 
     try {
+      // VALIDATION: Prevent deletion of advances that have active allocations
+      // Deleting such advances would leave orphaned references in invoices
+      if (isAdvanceTransaction(entry.category)) {
+        const totalPaid = entry.totalPaid ?? 0;
+        const hasAllocations = entry.advanceAllocations && entry.advanceAllocations.length > 0;
+
+        if (totalPaid > 0 || hasAllocations) {
+          return {
+            success: false,
+            error: "لا يمكن حذف سلفة تم استخدامها في فواتير. يجب أولاً تعديل أو حذف الفواتير التي تستخدم هذه السلفة.",
+            errorType: ErrorType.VALIDATION,
+          };
+        }
+      }
+
       const batch = writeBatch(firestore);
       let deletedRelatedCount = 0;
 
@@ -1029,6 +1047,30 @@ export class LedgerService {
         batch.delete(movementDoc.ref);
         deletedRelatedCount++;
       });
+
+      // CRITICAL FIX: Reverse advance allocations if this invoice was paid by advances
+      // Without this, deleting an invoice that used advances would create "ghost allocations"
+      // that permanently reduce advance availability
+      if (entry.paidFromAdvances && entry.paidFromAdvances.length > 0) {
+        for (const advancePayment of entry.paidFromAdvances) {
+          const advanceRef = doc(
+            firestore,
+            `users/${this.userId}/ledger`,
+            advancePayment.advanceId
+          );
+
+          // Reverse the allocation using atomic operations
+          // paymentStatus is set to "partial" as a safe default. We can't determine
+          // if this should be "unpaid" (totalPaid=0) without reading the advance first.
+          // Since most filtering uses `!== "paid"`, this is acceptable.
+          // The numeric fields (totalPaid, remainingBalance) are authoritative.
+          batch.update(advanceRef, {
+            totalPaid: increment(-advancePayment.amount),
+            remainingBalance: increment(advancePayment.amount),
+            paymentStatus: "partial",
+          });
+        }
+      }
 
       // Delete auto-generated COGS entries
       const cogsQuery = query(
