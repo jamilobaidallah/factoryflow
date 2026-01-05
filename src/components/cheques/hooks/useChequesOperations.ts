@@ -732,16 +732,87 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     }
 
     try {
-      const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
-      await updateDoc(chequeRef, {
-        status: CHEQUE_STATUS_AR.BOUNCED,
-        bouncedDate: new Date(),
-      });
+      // Check if cheque was previously CASHED - need to reverse AR/AP
+      const wasCashed = cheque.status === CHEQUE_STATUS_AR.CASHED ||
+                        cheque.status === CHEQUE_STATUS_AR.COLLECTED ||
+                        cheque.status === "cashed" ||
+                        cheque.status === "cleared";
 
-      toast({
-        title: "تم تسجيل الشيك كمرتجع",
-        description: `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع. رصيد العميل لم يتغير.`,
-      });
+      if (wasCashed && cheque.linkedTransactionId) {
+        // Use atomic batch to reverse AR/AP and update cheque status
+        const batch = writeBatch(firestore);
+
+        // Update cheque status
+        const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
+        batch.update(chequeRef, {
+          status: CHEQUE_STATUS_AR.BOUNCED,
+          bouncedDate: new Date(),
+        });
+
+        // Find and reverse the AR/AP tracking
+        const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+        const ledgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", cheque.linkedTransactionId.trim())
+        );
+        const ledgerSnapshot = await getDocs(ledgerQuery);
+
+        if (!ledgerSnapshot.empty) {
+          const ledgerDoc = ledgerSnapshot.docs[0];
+          const ledgerData = ledgerDoc.data();
+
+          if (ledgerData.isARAPEntry) {
+            const currentTotalPaid = ledgerData.totalPaid || 0;
+            const transactionAmount = ledgerData.amount || 0;
+            // Subtract the cheque amount (reverse the payment)
+            const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, cheque.amount));
+            const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
+            const newPaymentStatus: "paid" | "unpaid" | "partial" =
+              newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+            batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
+              totalPaid: newTotalPaid,
+              remainingBalance: newRemainingBalance,
+              paymentStatus: newPaymentStatus,
+            });
+          }
+        }
+
+        // Find and delete related payment records
+        const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+        const paymentsQuery = query(
+          paymentsRef,
+          where("linkedTransactionId", "==", cheque.linkedTransactionId)
+        );
+        const paymentsSnapshot = await getDocs(paymentsQuery);
+
+        // Filter payments related to this cheque
+        paymentsSnapshot.docs.forEach((paymentDoc) => {
+          const paymentData = paymentDoc.data();
+          if (paymentData.notes && paymentData.notes.includes(cheque.chequeNumber)) {
+            batch.delete(doc(firestore, `users/${user.dataOwnerId}/payments`, paymentDoc.id));
+          }
+        });
+
+        await batch.commit();
+
+        toast({
+          title: "تم تسجيل الشيك كمرتجع",
+          description: `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع وتم عكس الرصيد.`,
+        });
+      } else {
+        // Simple case: cheque was PENDING, just update status
+        const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
+        await updateDoc(chequeRef, {
+          status: CHEQUE_STATUS_AR.BOUNCED,
+          bouncedDate: new Date(),
+        });
+
+        toast({
+          title: "تم تسجيل الشيك كمرتجع",
+          description: `تم تسجيل الشيك رقم ${cheque.chequeNumber} كمرتجع.`,
+        });
+      }
 
       // Log activity for bounce
       logActivity(user.dataOwnerId, {
@@ -750,13 +821,14 @@ export function useChequesOperations(): UseChequesOperationsReturn {
         targetId: cheque.id,
         userId: user.uid,
         userEmail: user.email || '',
-        description: `ارتجاع شيك: ${cheque.chequeNumber} - ${cheque.amount} دينار`,
+        description: `ارتجاع شيك: ${cheque.chequeNumber} - ${cheque.amount} دينار${wasCashed ? ' (عكس الرصيد)' : ''}`,
         metadata: {
           amount: cheque.amount,
           chequeNumber: cheque.chequeNumber,
           status: CHEQUE_STATUS_AR.BOUNCED,
           type: cheque.type,
           clientName: cheque.clientName,
+          wasReversed: wasCashed,
         },
       });
 

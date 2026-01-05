@@ -1083,6 +1083,17 @@ export class LedgerService {
         deletedRelatedCount++;
       });
 
+      // Delete linked journal entries (prevents orphaned accounting records)
+      const journalQuery = query(
+        this.journalEntriesRef,
+        where("linkedTransactionId", "==", entry.transactionId)
+      );
+      const journalSnapshot = await getDocs(journalQuery);
+      journalSnapshot.forEach((journalDoc) => {
+        batch.delete(journalDoc.ref);
+        deletedRelatedCount++;
+      });
+
       // Commit batch
       try {
         await batch.commit();
@@ -1592,13 +1603,17 @@ export class LedgerService {
 
   /**
    * Add inventory movement to an existing ledger entry
+   * Movement type logic (matches inventoryHandlers.ts):
+   * - Expense (مصروف) for purchasing/receiving → inventory IN (دخول)
+   * - Income (دخل/إيراد) for selling → inventory OUT (خروج)
    */
   async addInventoryToEntry(
     entry: LedgerEntry,
     formData: InventoryRelatedFormData
   ): Promise<ServiceResult> {
     try {
-      const movementType = entry.type === "مصروف" ? "خروج" : "دخول";
+      // FIX: Expense = purchasing = inventory IN; Income = selling = inventory OUT
+      const movementType = entry.type === "مصروف" ? "دخول" : "خروج";
       await addDoc(this.inventoryMovementsRef, {
         itemId: "",
         itemName: formData.itemName,

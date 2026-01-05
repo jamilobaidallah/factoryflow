@@ -25,7 +25,7 @@ import {
 } from '../types';
 import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
-import { createJournalEntryForPayment } from '@/services/journalService';
+import { createJournalEntryForPayment, deleteJournalEntriesByPayment } from '@/services/journalService';
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from '@/lib/constants';
 
 /** Result from savePaymentWithAllocations */
@@ -437,6 +437,14 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           transaction.update(ledgerRef, updateData);
         }
       });
+
+      // Delete linked journal entries (prevents orphaned accounting records)
+      try {
+        await deleteJournalEntriesByPayment(user.dataOwnerId, paymentId);
+      } catch (journalError) {
+        console.error("Failed to delete journal entries for payment:", journalError);
+        // Continue - payment is already deleted, journal cleanup failure is logged
+      }
 
       setLoading(false);
       return true;

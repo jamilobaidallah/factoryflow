@@ -19,6 +19,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 
@@ -316,9 +317,31 @@ export default function InventoryPage() {
 
     confirm(
       "حذف الحركة",
-      "هل أنت متأكد من حذف هذه الحركة؟ لا يمكن التراجع عن هذا الإجراء.",
+      "هل أنت متأكد من حذف هذه الحركة؟ سيتم عكس تأثير الكمية على المخزون.",
       async () => {
         try {
+          // If movement has itemId, revert the quantity change
+          if (movement?.itemId) {
+            const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, movement.itemId);
+            const itemSnapshot = await getDoc(itemRef);
+
+            if (itemSnapshot.exists()) {
+              const currentQuantity = itemSnapshot.data().quantity || 0;
+              const movementQty = movement.quantity || 0;
+
+              // Reverse the movement: if it was IN (دخول), subtract; if OUT (خروج), add
+              const newQuantity = movement.type === "دخول"
+                ? safeSubtract(currentQuantity, movementQty)  // Reverse IN by subtracting
+                : safeAdd(currentQuantity, movementQty);       // Reverse OUT by adding
+
+              // Update inventory item quantity
+              await updateDoc(itemRef, {
+                quantity: Math.max(0, newQuantity),  // Prevent negative quantity
+              });
+            }
+          }
+
+          // Delete the movement record
           const movementRef = doc(firestore, `users/${user.dataOwnerId}/inventory_movements`, movementId);
           await deleteDoc(movementRef);
 
@@ -328,7 +351,7 @@ export default function InventoryPage() {
             targetId: movementId,
             userId: user.uid,
             userEmail: user.email || '',
-            description: `حذف حركة مخزون: ${movement?.itemName || ''} - ${movement?.type || ''}`,
+            description: `حذف حركة مخزون: ${movement?.itemName || ''} - ${movement?.type || ''} (تم عكس الكمية)`,
             metadata: {
               quantity: movement?.quantity,
               itemName: movement?.itemName,
@@ -338,7 +361,7 @@ export default function InventoryPage() {
 
           toast({
             title: "تم الحذف",
-            description: "تم حذف الحركة بنجاح",
+            description: "تم حذف الحركة وعكس تأثير الكمية على المخزون",
           });
         } catch (error) {
           const appError = handleError(error);

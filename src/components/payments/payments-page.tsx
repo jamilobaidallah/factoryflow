@@ -11,6 +11,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
+import { createJournalEntryForPayment, deleteJournalEntriesByPayment } from "@/services/journalService";
 import { exportPaymentsToExcelProfessional } from "@/lib/export-payments-excel";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
@@ -260,6 +261,22 @@ export default function PaymentsPage() {
           createdAt: new Date(),
         });
 
+        // Create journal entry for the payment (double-entry accounting)
+        try {
+          await createJournalEntryForPayment(
+            user.dataOwnerId,
+            docRef.id,
+            `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+            paymentAmount,
+            formData.type as 'قبض' | 'صرف',
+            new Date(formData.date),
+            formData.linkedTransactionId || undefined
+          );
+        } catch (journalError) {
+          console.error("Failed to create journal entry for payment:", journalError);
+          // Continue - payment is created, journal entry failure is logged but not blocking
+        }
+
         logActivity(user.dataOwnerId, {
           action: 'create',
           module: 'payments',
@@ -483,6 +500,14 @@ export default function PaymentsPage() {
                 await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), updateData);
               }
             }
+          }
+
+          // Delete linked journal entries (prevents orphaned accounting records)
+          try {
+            await deleteJournalEntriesByPayment(user.dataOwnerId, paymentId);
+          } catch (journalError) {
+            console.error("Failed to delete journal entries for payment:", journalError);
+            // Continue - we still want to delete the payment
           }
 
           const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, paymentId);
