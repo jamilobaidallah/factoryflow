@@ -27,6 +27,16 @@ export interface LedgerEntry {
   writeoffReason?: string;          // Reason for writeoff (required)
   writeoffDate?: Date;              // When written off
   writeoffBy?: string;              // User who authorized (audit)
+  // Immediate Settlement tracking
+  immediateSettlement?: boolean;    // Whether entry was fully paid at creation
+  // Advance Payment Fields (for invoice entries paid by advances)
+  paidFromAdvances?: Array<{
+    advanceId: string;
+    advanceTransactionId: string;
+    amount: number;
+    date: Date;
+  }>;
+  totalPaidFromAdvances?: number;   // Total amount paid from advances
 }
 
 /**

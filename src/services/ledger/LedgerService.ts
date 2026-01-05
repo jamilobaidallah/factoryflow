@@ -949,11 +949,11 @@ export class LedgerService {
     try {
       // VALIDATION: Prevent deletion of advances that have active allocations
       // Deleting such advances would leave orphaned references in invoices
+      // We check totalPaid > 0 because if any allocations exist, totalPaid would be > 0
       if (isAdvanceTransaction(entry.category)) {
         const totalPaid = entry.totalPaid ?? 0;
-        const hasAllocations = entry.advanceAllocations && entry.advanceAllocations.length > 0;
 
-        if (totalPaid > 0 || hasAllocations) {
+        if (totalPaid > 0) {
           return {
             success: false,
             error: "لا يمكن حذف سلفة تم استخدامها في فواتير. يجب أولاً تعديل أو حذف الفواتير التي تستخدم هذه السلفة.",
