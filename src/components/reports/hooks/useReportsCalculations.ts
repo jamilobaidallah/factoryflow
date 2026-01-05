@@ -348,12 +348,31 @@ export function useReportsCalculations({
                               isLoanTransaction(entry.type, entry.category);
 
       if (entry.isARAPEntry && entry.paymentStatus !== "paid" && !excludeFromARAP) {
-        if (entry.type === "دخل") {
-          receivables.push(entry);
-          totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
-        } else if (entry.type === "مصروف") {
-          payables.push(entry);
-          totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
+        // SPECIAL CASE: Advances have REVERSED AR/AP semantics
+        // - Customer advance (سلفة عميل, type "دخل"): We received cash, owe THEM goods → PAYABLE
+        // - Supplier advance (سلفة مورد, type "مصروف"): We paid cash, THEY owe us goods → RECEIVABLE
+        const isAdvance = isAdvanceTransaction(entry.category);
+
+        if (isAdvance) {
+          // Advances: FLIP the normal logic
+          if (entry.type === "دخل") {
+            // Customer advance - we owe them goods (payable)
+            payables.push(entry);
+            totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
+          } else if (entry.type === "مصروف") {
+            // Supplier advance - they owe us goods (receivable)
+            receivables.push(entry);
+            totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
+          }
+        } else {
+          // Regular transactions: normal logic
+          if (entry.type === "دخل") {
+            receivables.push(entry);
+            totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
+          } else if (entry.type === "مصروف") {
+            payables.push(entry);
+            totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
+          }
         }
       }
     });
