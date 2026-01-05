@@ -17,6 +17,7 @@ import { collection, query, getDocs, where, orderBy, limit } from 'firebase/fire
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { safeAdd } from '@/lib/currency';
+import { isAdvanceTransaction } from '@/components/ledger/utils/ledger-helpers';
 
 type ClientSource = 'ledger' | 'partner' | 'client' | 'both' | 'multiple';
 
@@ -123,10 +124,22 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
           const remainingBalance = data.remainingBalance || 0;
           const paymentStatus = data.paymentStatus || 'unpaid';
           const entryType = data.type;
+          const category = data.category || '';
+
+          // SPECIAL CASE: Advances have REVERSED AR/AP semantics
+          // - Customer advance (سلفة عميل, type "دخل"): We received cash, owe THEM goods → NEGATIVE (we owe them)
+          // - Supplier advance (سلفة مورد, type "مصروف"): We paid cash, THEY owe us goods → POSITIVE (they owe us)
+          const isAdvance = isAdvanceTransaction(category);
 
           let balanceContribution = 0;
           if (paymentStatus !== 'paid' && remainingBalance > 0) {
-            balanceContribution = entryType === 'مصروف' ? -remainingBalance : remainingBalance;
+            if (isAdvance) {
+              // Advances: FLIP the normal logic
+              balanceContribution = entryType === 'مصروف' ? remainingBalance : -remainingBalance;
+            } else {
+              // Regular transactions: normal logic
+              balanceContribution = entryType === 'مصروف' ? -remainingBalance : remainingBalance;
+            }
           }
 
           if (existing) {
