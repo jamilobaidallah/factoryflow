@@ -18,16 +18,50 @@ const mockBatchSet = jest.fn();
 const mockBatchUpdate = jest.fn();
 const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
 
+// Create mock transaction object for runTransaction
+const mockTransactionGet = jest.fn();
+const mockTransactionSet = jest.fn();
+const mockTransactionUpdate = jest.fn();
+
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(() => ({ path: 'mock-collection' })),
   addDoc: jest.fn(),
   doc: jest.fn(() => ({ path: 'mock-doc', id: 'mock-doc-id' })),
   updateDoc: jest.fn(),
+  getDoc: jest.fn().mockResolvedValue({
+    exists: () => true,
+    data: () => ({
+      remainingBalance: 1000,
+      totalPaid: 0,
+      paymentStatus: 'unpaid',
+    }),
+  }),
   writeBatch: jest.fn(() => ({
     set: mockBatchSet,
     update: mockBatchUpdate,
     commit: mockBatchCommit,
   })),
+  runTransaction: jest.fn(async (db, callback) => {
+    // Create a mock transaction object and execute the async callback
+    const mockTransaction = {
+      get: mockTransactionGet.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          remainingBalance: 1000,
+          totalPaid: 0,
+          totalDiscount: 0,
+          writeoffAmount: 0,
+          amount: 1000,
+          paymentStatus: 'unpaid',
+          isARAPEntry: true,
+        }),
+      }),
+      set: mockTransactionSet,
+      update: mockTransactionUpdate,
+    };
+    // Await the async callback
+    return await callback(mockTransaction);
+  }),
 }));
 
 // Mock hooks
@@ -90,6 +124,17 @@ describe('QuickPayDialog', () => {
     mockBatchSet.mockClear();
     mockBatchUpdate.mockClear();
     mockBatchCommit.mockClear().mockResolvedValue(undefined);
+    // Reset transaction mocks
+    mockTransactionGet.mockClear().mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        remainingBalance: 1000,
+        totalPaid: 0,
+        paymentStatus: 'unpaid',
+      }),
+    });
+    mockTransactionSet.mockClear();
+    mockTransactionUpdate.mockClear();
   });
 
   describe('Dialog Display', () => {
@@ -324,6 +369,7 @@ describe('QuickPayDialog', () => {
     });
 
     it('should not submit when entry is null', async () => {
+      const { runTransaction } = require('firebase/firestore');
       render(
         <QuickPayDialog
           isOpen={true}
@@ -337,7 +383,7 @@ describe('QuickPayDialog', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockBatchCommit).not.toHaveBeenCalled();
+        expect(runTransaction).not.toHaveBeenCalled();
       });
     });
   });
@@ -392,7 +438,8 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(mockBatchSet).toHaveBeenCalledWith(
+        // Now uses runTransaction with transaction.set instead of batch.set
+        expect(mockTransactionSet).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             clientName: 'عميل أ',
@@ -428,7 +475,8 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(mockBatchSet).toHaveBeenCalledWith(
+        // Now uses runTransaction with transaction.set instead of batch.set
+        expect(mockTransactionSet).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             type: 'صرف',
@@ -454,7 +502,8 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(mockBatchUpdate).toHaveBeenCalledWith(
+        // Now uses runTransaction with transaction.update instead of batch.update
+        expect(mockTransactionUpdate).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             totalPaid: 500,
@@ -482,7 +531,8 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(mockBatchUpdate).toHaveBeenCalledWith(
+        // Now uses runTransaction with transaction.update instead of batch.update
+        expect(mockTransactionUpdate).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
             totalPaid: 1000,
@@ -494,8 +544,9 @@ describe('QuickPayDialog', () => {
     });
 
     it('should handle Firebase errors gracefully', async () => {
-      // Make batch commit fail
-      mockBatchCommit.mockRejectedValueOnce(new Error('Firebase error'));
+      // Make runTransaction fail
+      const { runTransaction } = require('firebase/firestore');
+      runTransaction.mockRejectedValueOnce(new Error('Firebase error'));
 
       render(
         <QuickPayDialog
@@ -550,12 +601,13 @@ describe('QuickPayDialog', () => {
     });
 
     it('should show loading state during submission', async () => {
-      // Create a promise that we can control for batch commit
-      let resolveCommit: () => void;
-      const commitPromise = new Promise<void>((resolve) => {
-        resolveCommit = resolve;
+      // Create a promise that we can control for runTransaction
+      let resolveTransaction: () => void;
+      const transactionPromise = new Promise<void>((resolve) => {
+        resolveTransaction = resolve;
       });
-      mockBatchCommit.mockReturnValueOnce(commitPromise);
+      const { runTransaction } = require('firebase/firestore');
+      runTransaction.mockReturnValueOnce(transactionPromise);
 
       render(
         <QuickPayDialog
@@ -579,7 +631,7 @@ describe('QuickPayDialog', () => {
       });
 
       // Resolve the promise
-      resolveCommit!();
+      resolveTransaction!();
     });
   });
 

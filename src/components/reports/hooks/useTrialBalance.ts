@@ -39,10 +39,10 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
 
     try {
       // Ensure chart of accounts exists
-      await seedChartOfAccounts(user.uid);
+      await seedChartOfAccounts(user.dataOwnerId);
 
       // Fetch trial balance
-      const result = await getTrialBalance(user.uid, asOfDate);
+      const result = await getTrialBalance(user.dataOwnerId, asOfDate);
 
       if (result.success && result.data) {
         setTrialBalance(result.data);

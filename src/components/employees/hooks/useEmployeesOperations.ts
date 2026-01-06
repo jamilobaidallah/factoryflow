@@ -853,7 +853,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
       await batch.commit();
 
-      // Restore advances to ACTIVE status with original amounts
+      // Restore advances to ACTIVE status with original amounts and clear linkedPayrollMonth
       if (payrollEntry.advanceIds && payrollEntry.advanceIds.length > 0) {
         for (const advanceId of payrollEntry.advanceIds) {
           const advanceRef = doc(
@@ -867,10 +867,11 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
 
           if (advanceSnap.exists()) {
             const advanceData = advanceSnap.data();
-            // Restore to original amount and ACTIVE status
+            // Restore to original amount, ACTIVE status, and clear linkedPayrollMonth
             await updateDoc(advanceRef, {
               remainingAmount: advanceData.amount,
               status: ADVANCE_STATUS.ACTIVE,
+              linkedPayrollMonth: null, // Clear so advance can be used in future payroll
             });
           }
         }

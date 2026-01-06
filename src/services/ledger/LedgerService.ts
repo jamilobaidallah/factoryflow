@@ -1145,6 +1145,8 @@ export class LedgerService {
 
   /**
    * Add a payment to an existing ledger entry
+   * Uses transaction to prevent race conditions when multiple payments
+   * happen simultaneously on the same ledger entry
    */
   async addPaymentToEntry(
     entry: LedgerEntry,
@@ -1152,45 +1154,55 @@ export class LedgerService {
   ): Promise<ServiceResult> {
     try {
       const paymentAmount = parseAmount(formData.amount);
-
-      if (entry.isARAPEntry && entry.remainingBalance !== undefined) {
-        if (paymentAmount > entry.remainingBalance) {
-          return {
-            success: false,
-            error: `المبلغ المتبقي هو ${roundCurrency(entry.remainingBalance).toFixed(2)} دينار فقط`,
-          };
-        }
-      }
-
       const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
-      const batch = writeBatch(firestore);
 
+      const entryRef = this.getLedgerDocRef(entry.id);
       const paymentDocRef = doc(this.paymentsRef);
-      batch.set(paymentDocRef, {
-        clientName: entry.associatedParty || "غير محدد",
-        amount: paymentAmount,
-        type: paymentType,
-        linkedTransactionId: entry.transactionId,
-        date: new Date(),
-        notes: formData.notes,
-        createdAt: new Date(),
+
+      await runTransaction(firestore, async (transaction) => {
+        // Read current ledger entry state (ensures fresh data)
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists()) {
+          throw new Error("القيد غير موجود");
+        }
+
+        const entryData = entryDoc.data();
+        const isARAPEntry = entryData.isARAPEntry;
+        const currentTotalPaid = entryData.totalPaid || 0;
+        const currentRemainingBalance = entryData.remainingBalance ?? entryData.amount ?? 0;
+        const entryAmount = entryData.amount || 0;
+
+        // Validate: payment cannot exceed remaining balance
+        if (isARAPEntry && paymentAmount > currentRemainingBalance) {
+          throw new Error(`المبلغ المتبقي هو ${roundCurrency(currentRemainingBalance).toFixed(2)} دينار فقط`);
+        }
+
+        // Create payment record
+        transaction.set(paymentDocRef, {
+          clientName: entry.associatedParty || "غير محدد",
+          amount: paymentAmount,
+          type: paymentType,
+          linkedTransactionId: entry.transactionId,
+          date: new Date(),
+          notes: formData.notes,
+          createdAt: new Date(),
+        });
+
+        // Update ledger entry if it's an AR/AP entry
+        if (isARAPEntry) {
+          const newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
+          const newRemainingBalance = safeSubtract(entryAmount, newTotalPaid);
+          const newStatus: "paid" | "unpaid" | "partial" =
+            newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+
+          transaction.update(entryRef, {
+            totalPaid: newTotalPaid,
+            remainingBalance: newRemainingBalance,
+            paymentStatus: newStatus,
+          });
+        }
       });
 
-      if (entry.isARAPEntry) {
-        const newTotalPaid = safeAdd(entry.totalPaid || 0, paymentAmount);
-        const newRemainingBalance = safeSubtract(entry.amount, newTotalPaid);
-        const newStatus: "paid" | "unpaid" | "partial" =
-          newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
-
-        const entryRef = this.getLedgerDocRef(entry.id);
-        batch.update(entryRef, {
-          totalPaid: newTotalPaid,
-          remainingBalance: newRemainingBalance,
-          paymentStatus: newStatus,
-        });
-      }
-
-      await batch.commit();
       return { success: true };
     } catch (error) {
       const { message, type } = handleError(error);
@@ -1210,15 +1222,6 @@ export class LedgerService {
   async addQuickPayment(data: QuickPaymentData): Promise<ServiceResult> {
     try {
       const discountAmount = data.discountAmount || 0;
-      const totalSettlement = safeAdd(data.amount, discountAmount);
-
-      // Validate: payment + discount cannot exceed remaining balance
-      if (data.isARAPEntry && totalSettlement > data.remainingBalance) {
-        return {
-          success: false,
-          error: `المجموع (${roundCurrency(totalSettlement).toFixed(2)}) أكبر من المتبقي (${roundCurrency(data.remainingBalance).toFixed(2)})`,
-        };
-      }
 
       // Determine payment type based on entry type and category
       let paymentType: string;
@@ -1234,76 +1237,97 @@ export class LedgerService {
       } else {
         paymentType = PAYMENT_TYPES.DISBURSEMENT;
       }
-      const batch = writeBatch(firestore);
 
-      // Create payment record (if there's cash payment OR discount)
-      if (data.amount > 0 || discountAmount > 0) {
-        const paymentDocRef = doc(this.paymentsRef);
+      // Use transaction to prevent race conditions when multiple payments
+      // happen simultaneously on the same ledger entry
+      const entryRef = this.getLedgerDocRef(data.entryId);
+      const paymentDocRef = doc(this.paymentsRef);
 
-        // Determine notes based on payment type
-        let notes: string;
-        if (data.amount > 0 && discountAmount > 0) {
-          notes = `دفعة مع خصم - ${data.entryDescription}`;
-        } else if (discountAmount > 0 && data.amount === 0) {
-          notes = `خصم تسوية - ${data.entryDescription}`;
-        } else {
-          notes = `دفعة جزئية - ${data.entryDescription}`;
+      await runTransaction(firestore, async (transaction) => {
+        // Read current ledger entry state (ensures fresh data)
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists()) {
+          throw new Error("القيد غير موجود");
         }
 
-        const paymentData: Record<string, unknown> = {
-          clientName: data.associatedParty || "غير محدد",
-          amount: data.amount,
-          type: paymentType,
-          linkedTransactionId: data.entryTransactionId,
-          date: data.date || new Date(),
-          notes,
-          category: data.entryCategory,
-          subCategory: data.entrySubCategory,
-          createdAt: new Date(),
+        const entryData = entryDoc.data();
+        const currentTotalPaid = entryData.totalPaid || 0;
+        const currentTotalDiscount = entryData.totalDiscount || 0;
+        const currentRemainingBalance = entryData.remainingBalance ?? entryData.amount ?? 0;
+        const writeoffAmount = entryData.writeoffAmount || 0;
+        const entryAmount = entryData.amount || 0;
+
+        // Validate: payment + discount cannot exceed remaining balance
+        const totalSettlement = safeAdd(data.amount, discountAmount);
+        if (data.isARAPEntry && totalSettlement > currentRemainingBalance) {
+          throw new Error(`المجموع (${roundCurrency(totalSettlement).toFixed(2)}) أكبر من المتبقي (${roundCurrency(currentRemainingBalance).toFixed(2)})`);
+        }
+
+        // Create payment record (if there's cash payment OR discount)
+        if (data.amount > 0 || discountAmount > 0) {
+          // Determine notes based on payment type
+          let notes: string;
+          if (data.amount > 0 && discountAmount > 0) {
+            notes = `دفعة مع خصم - ${data.entryDescription}`;
+          } else if (discountAmount > 0 && data.amount === 0) {
+            notes = `خصم تسوية - ${data.entryDescription}`;
+          } else {
+            notes = `دفعة جزئية - ${data.entryDescription}`;
+          }
+
+          const paymentData: Record<string, unknown> = {
+            clientName: data.associatedParty || "غير محدد",
+            amount: data.amount,
+            type: paymentType,
+            linkedTransactionId: data.entryTransactionId,
+            date: data.date || new Date(),
+            notes,
+            category: data.entryCategory,
+            subCategory: data.entrySubCategory,
+            createdAt: new Date(),
+          };
+
+          // Add discount fields to payment if discount was given
+          if (discountAmount > 0) {
+            paymentData.discountAmount = discountAmount;
+            paymentData.discountReason = data.discountReason;
+            paymentData.isSettlementDiscount = true;
+          }
+
+          transaction.set(paymentDocRef, paymentData);
+        }
+
+        // Calculate new totals using fresh data from transaction
+        const newTotalPaid = safeAdd(currentTotalPaid, data.amount);
+        const newTotalDiscount = safeAdd(currentTotalDiscount, discountAmount);
+        const newRemainingBalance = calculateRemainingBalance(
+          entryAmount,
+          newTotalPaid,
+          newTotalDiscount,
+          writeoffAmount
+        );
+        const newStatus = calculatePaymentStatus(
+          newTotalPaid,
+          entryAmount,
+          newTotalDiscount,
+          writeoffAmount
+        );
+
+        // Build update object for ledger entry
+        const updateData: Record<string, unknown> = {
+          totalPaid: newTotalPaid,
+          remainingBalance: newRemainingBalance,
+          paymentStatus: newStatus,
         };
 
-        // Add discount fields to payment if discount was given
-        if (discountAmount > 0) {
-          paymentData.discountAmount = discountAmount;
-          paymentData.discountReason = data.discountReason;
-          paymentData.isSettlementDiscount = true;
+        // Only update totalDiscount if there's a discount
+        if (discountAmount > 0 || currentTotalDiscount > 0) {
+          updateData.totalDiscount = newTotalDiscount;
         }
 
-        batch.set(paymentDocRef, paymentData);
-      }
+        transaction.update(entryRef, updateData);
+      });
 
-      // Calculate new totals using arap-utils functions
-      const newTotalPaid = safeAdd(data.totalPaid, data.amount);
-      const newTotalDiscount = safeAdd(data.totalDiscount || 0, discountAmount);
-      const newRemainingBalance = calculateRemainingBalance(
-        data.entryAmount,
-        newTotalPaid,
-        newTotalDiscount,
-        0 // writeoffAmount
-      );
-      const newStatus = calculatePaymentStatus(
-        newTotalPaid,
-        data.entryAmount,
-        newTotalDiscount,
-        0 // writeoffAmount
-      );
-
-      // Build update object for ledger entry
-      const updateData: Record<string, unknown> = {
-        totalPaid: newTotalPaid,
-        remainingBalance: newRemainingBalance,
-        paymentStatus: newStatus,
-      };
-
-      // Only update totalDiscount if there's a discount
-      if (discountAmount > 0 || (data.totalDiscount || 0) > 0) {
-        updateData.totalDiscount = newTotalDiscount;
-      }
-
-      const entryRef = this.getLedgerDocRef(data.entryId);
-      batch.update(entryRef, updateData);
-
-      await batch.commit();
       return { success: true };
     } catch (error) {
       const { message, type } = handleError(error);
@@ -1614,11 +1638,63 @@ export class LedgerService {
     try {
       // FIX: Expense = purchasing = inventory IN; Income = selling = inventory OUT
       const movementType = entry.type === "مصروف" ? "دخول" : "خروج";
+      const quantityChange = parseAmount(formData.quantity);
+
+      // Look up existing inventory item by name
+      const itemQuery = query(this.inventoryRef, where("itemName", "==", formData.itemName));
+      const itemSnapshot = await getDocs(itemQuery);
+
+      let itemId: string;
+
+      if (!itemSnapshot.empty) {
+        // Item exists - update quantity
+        const existingItem = itemSnapshot.docs[0];
+        itemId = existingItem.id;
+        const currentQuantity = existingItem.data().quantity || 0;
+
+        const newQuantity = movementType === "دخول"
+          ? safeAdd(currentQuantity, quantityChange)
+          : safeSubtract(currentQuantity, quantityChange);
+
+        if (newQuantity < 0) {
+          return {
+            success: false,
+            error: `الكمية غير كافية في المخزون. المتوفر: ${currentQuantity}`,
+          };
+        }
+
+        await updateDoc(doc(this.inventoryRef, itemId), {
+          quantity: newQuantity,
+        });
+      } else {
+        // Item doesn't exist
+        if (movementType === "خروج") {
+          return {
+            success: false,
+            error: `الصنف "${formData.itemName}" غير موجود في المخزون`,
+          };
+        }
+
+        // Create new item for IN movement
+        const newItemRef = await addDoc(this.inventoryRef, {
+          itemName: formData.itemName,
+          quantity: quantityChange,
+          unit: formData.unit,
+          unitPrice: 0,
+          thickness: formData.thickness ? parseAmount(formData.thickness) : null,
+          width: formData.width ? parseAmount(formData.width) : null,
+          length: formData.length ? parseAmount(formData.length) : null,
+          createdAt: new Date(),
+        });
+        itemId = newItemRef.id;
+      }
+
+      // Create movement record linked to the item
       await addDoc(this.inventoryMovementsRef, {
-        itemId: "",
+        itemId,
         itemName: formData.itemName,
         type: movementType,
-        quantity: parseAmount(formData.quantity),
+        quantity: quantityChange,
         unit: formData.unit,
         thickness: formData.thickness ? parseAmount(formData.thickness) : null,
         width: formData.width ? parseAmount(formData.width) : null,

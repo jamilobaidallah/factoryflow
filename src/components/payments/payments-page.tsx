@@ -216,9 +216,16 @@ export default function PaymentsPage() {
     try {
       if (editingPayment) {
         const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, editingPayment.id);
+        const newAmount = parseFloat(formData.amount);
+        const oldAmount = editingPayment.amount || 0;
+        const amountDifference = newAmount - oldAmount;
+        const oldLinkedId = editingPayment.linkedTransactionId;
+        const newLinkedId = formData.linkedTransactionId;
+
+        // Update payment document
         await updateDoc(paymentRef, {
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: newAmount,
           type: formData.type,
           linkedTransactionId: formData.linkedTransactionId,
           date: new Date(formData.date),
@@ -226,6 +233,58 @@ export default function PaymentsPage() {
           category: formData.category || null,
           subCategory: formData.subCategory || null,
         });
+
+        // Update linked ledger entry if amount changed or linked transaction changed
+        if (amountDifference !== 0 || oldLinkedId !== newLinkedId) {
+          const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+
+          // If linked transaction changed, update both old and new ledger entries
+          if (oldLinkedId && oldLinkedId !== newLinkedId) {
+            // Remove old amount from old ledger entry
+            const oldLedgerQuery = query(ledgerRef, where("transactionId", "==", oldLinkedId));
+            const oldLedgerSnapshot = await getDocs(oldLedgerQuery);
+            if (!oldLedgerSnapshot.empty) {
+              const oldLedgerDoc = oldLedgerSnapshot.docs[0];
+              const oldLedgerData = oldLedgerDoc.data();
+              if (oldLedgerData.isARAPEntry) {
+                const oldTotalPaid = oldLedgerData.totalPaid || 0;
+                const oldTransactionAmount = oldLedgerData.amount || 0;
+                const newTotalPaid = Math.max(0, oldTotalPaid - oldAmount);
+                const newRemainingBalance = calculateRemainingBalance(oldTransactionAmount, newTotalPaid, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
+                const newStatus = calculatePaymentStatus(newTotalPaid, oldTransactionAmount, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
+                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, oldLedgerDoc.id), {
+                  totalPaid: newTotalPaid,
+                  remainingBalance: newRemainingBalance,
+                  paymentStatus: newStatus,
+                });
+              }
+            }
+          }
+
+          // Add new amount to new ledger entry (or adjust if same entry)
+          if (newLinkedId) {
+            const newLedgerQuery = query(ledgerRef, where("transactionId", "==", newLinkedId));
+            const newLedgerSnapshot = await getDocs(newLedgerQuery);
+            if (!newLedgerSnapshot.empty) {
+              const newLedgerDoc = newLedgerSnapshot.docs[0];
+              const newLedgerData = newLedgerDoc.data();
+              if (newLedgerData.isARAPEntry) {
+                const currentTotalPaid = newLedgerData.totalPaid || 0;
+                const transactionAmount = newLedgerData.amount || 0;
+                // If same entry, just apply difference; if new entry, add full amount
+                const adjustmentAmount = oldLinkedId === newLinkedId ? amountDifference : newAmount;
+                const updatedTotalPaid = Math.max(0, currentTotalPaid + adjustmentAmount);
+                const updatedRemainingBalance = calculateRemainingBalance(transactionAmount, updatedTotalPaid, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
+                const updatedStatus = calculatePaymentStatus(updatedTotalPaid, transactionAmount, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
+                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, newLedgerDoc.id), {
+                  totalPaid: updatedTotalPaid,
+                  remainingBalance: updatedRemainingBalance,
+                  paymentStatus: updatedStatus,
+                });
+              }
+            }
+          }
+        }
 
         logActivity(user.dataOwnerId, {
           action: 'update',
@@ -235,7 +294,7 @@ export default function PaymentsPage() {
           userEmail: user.email || '',
           description: `تعديل مدفوعة: ${formData.clientName}`,
           metadata: {
-            amount: parseFloat(formData.amount),
+            amount: newAmount,
             type: formData.type,
             clientName: formData.clientName,
           },

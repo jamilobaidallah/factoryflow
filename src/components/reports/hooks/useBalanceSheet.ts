@@ -50,12 +50,12 @@ export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
 
     try {
       // Ensure chart of accounts exists
-      await seedChartOfAccounts(user.uid);
+      await seedChartOfAccounts(user.dataOwnerId);
 
       // Fetch balance sheet and trial balance in parallel
       const [bsResult, tbResult] = await Promise.all([
-        getBalanceSheet(user.uid, asOfDate),
-        getTrialBalance(user.uid, asOfDate),
+        getBalanceSheet(user.dataOwnerId, asOfDate),
+        getTrialBalance(user.dataOwnerId, asOfDate),
       ]);
 
       if (bsResult.success && bsResult.data) {

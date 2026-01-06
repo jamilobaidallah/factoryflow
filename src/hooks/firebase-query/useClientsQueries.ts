@@ -53,6 +53,7 @@ export interface Payment {
   type: string;
   amount: number;
   clientName?: string;
+  category?: string; // Category for filtering advance payments (سلفة عميل, سلفة مورد)
 }
 
 export interface ClientBalance {
@@ -102,6 +103,7 @@ function transformPayments(docs: DocumentData[]): Payment[] {
     type: data.type,
     amount: data.amount || 0,
     clientName: data.clientName,
+    category: data.category, // Needed to filter advance payments
   }));
 }
 
@@ -158,7 +160,16 @@ function buildClientIndexes(
 
 /**
  * Calculate client balances using the same formula as client-detail-page:
- * currentBalance = openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs
+ * currentBalance = openingBalance + sales - purchases - (paymentsReceived - paymentsMade)
+ *                  - incomeDiscounts - incomeWriteoffs + expenseDiscounts + expenseWriteoffs
+ *                  - customerAdvances + supplierAdvances
+ *
+ * Key rules:
+ * - Income discounts/writeoffs reduce what the client owes us (subtract)
+ * - Expense discounts/writeoffs reduce what we owe the supplier (add)
+ * - Customer advances (سلفة عميل): Client paid ahead, we owe them (subtract)
+ * - Supplier advances (سلفة مورد): We paid ahead, they owe us (add)
+ * - Advance payments are excluded from regular payment totals to avoid double-counting
  *
  * Then for expected balance after cheques:
  * expectedBalance = currentBalance - incomingCheques + outgoingCheques
@@ -187,26 +198,47 @@ function calculateClientBalances(
     const clientLedger = ledgerByClient.get(client.name) || [];
     let sales = 0;
     let purchases = 0;
-    let discounts = 0;
-    let writeoffs = 0;
+    // Split discounts and writeoffs by entry type (Bug #26 fix)
+    let incomeDiscounts = 0;
+    let incomeWriteoffs = 0;
+    let expenseDiscounts = 0;
+    let expenseWriteoffs = 0;
+    // Track advances separately (Bug #23 fix)
+    let customerAdvances = 0; // سلفة عميل - we owe them
+    let supplierAdvances = 0; // سلفة مورد - they owe us
 
     for (const entry of clientLedger) {
-      // Exclude advances from balance calculation
-      const isAdvance = entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
+      const isCustomerAdvance = entry.category === "سلفة عميل";
+      const isSupplierAdvance = entry.category === "سلفة مورد";
+      const isAdvance = isCustomerAdvance || isSupplierAdvance;
 
-      if (!isAdvance) {
-        const isIncome =
-          entry.type === TRANSACTION_TYPES.INCOME ||
-          entry.type === TRANSACTION_TYPES.INCOME_ALT ||
-          entry.type === TRANSACTION_TYPES.LOAN;
+      const isIncome =
+        entry.type === TRANSACTION_TYPES.INCOME ||
+        entry.type === TRANSACTION_TYPES.INCOME_ALT ||
+        entry.type === TRANSACTION_TYPES.LOAN;
+      const isExpense = entry.type === TRANSACTION_TYPES.EXPENSE;
+
+      if (isAdvance) {
+        // Track advances separately - they affect balance directly
+        if (isCustomerAdvance) {
+          customerAdvances += entry.amount || 0; // We owe them (subtract later)
+        } else if (isSupplierAdvance) {
+          supplierAdvances += entry.amount || 0; // They owe us (add later)
+        }
+      } else {
+        // Regular income/expense transactions
         if (isIncome) {
           sales += entry.amount || 0;
-        } else if (entry.type === TRANSACTION_TYPES.EXPENSE) {
+          // Income discounts/writeoffs reduce what client owes (subtract)
+          incomeDiscounts += entry.totalDiscount || 0;
+          incomeWriteoffs += entry.writeoffAmount || 0;
+        } else if (isExpense) {
           purchases += entry.amount || 0;
+          // Expense discounts/writeoffs reduce what we owe (add back)
+          expenseDiscounts += entry.totalDiscount || 0;
+          expenseWriteoffs += entry.writeoffAmount || 0;
         }
       }
-      discounts += entry.totalDiscount || 0;
-      writeoffs += entry.writeoffAmount || 0;
     }
 
     // O(1) lookup instead of O(n) filter
@@ -215,6 +247,13 @@ function calculateClientBalances(
     let paymentsMade = 0;
 
     for (const payment of clientPayments) {
+      // Bug #24 fix: Exclude advance payments from regular payment totals
+      // Advances are already tracked via ledger entries
+      const isAdvancePayment = payment.category === "سلفة عميل" || payment.category === "سلفة مورد";
+      if (isAdvancePayment) {
+        continue; // Skip advance payments to avoid double-counting
+      }
+
       if (payment.type === PAYMENT_TYPES.RECEIPT) {
         paymentsReceived += payment.amount || 0;
       } else if (payment.type === PAYMENT_TYPES.DISBURSEMENT) {
@@ -222,10 +261,19 @@ function calculateClientBalances(
       }
     }
 
-    // Current balance formula
+    // Current balance formula (matching client-detail-page.tsx)
     const openingBalance = client.balance || 0;
     const currentBalance =
-      openingBalance + sales - purchases - (paymentsReceived - paymentsMade) - discounts - writeoffs;
+      openingBalance +
+      sales -
+      purchases -
+      (paymentsReceived - paymentsMade) -
+      incomeDiscounts -
+      incomeWriteoffs +
+      expenseDiscounts +
+      expenseWriteoffs -
+      customerAdvances + // We owe customer (liability)
+      supplierAdvances;  // Supplier owes us (asset)
 
     // O(1) lookup instead of O(n) filter
     const clientCheques = chequesByClient.get(client.name) || [];

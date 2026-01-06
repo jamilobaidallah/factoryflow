@@ -140,7 +140,8 @@ export function useEmployeesData(): UseEmployeesDataReturn {
       const unpaidEntries = payrollEntries.filter(
         (p) => p.employeeId === employeeId && !p.isPaid
       );
-      return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
+      // Use netSalary (after advance deductions) if available, otherwise totalSalary
+      return sumAmounts(unpaidEntries.map((p) => p.netSalary ?? p.totalSalary));
     },
     [payrollEntries]
   );
@@ -151,7 +152,8 @@ export function useEmployeesData(): UseEmployeesDataReturn {
     const unpaidEntries = payrollEntries.filter(
       (p) => !p.isPaid && employeeIds.has(p.employeeId)
     );
-    return sumAmounts(unpaidEntries.map((p) => p.totalSalary));
+    // Use netSalary (after advance deductions) if available, otherwise totalSalary
+    return sumAmounts(unpaidEntries.map((p) => p.netSalary ?? p.totalSalary));
   }, [payrollEntries, employees]);
 
   // Get unpaid salaries breakdown by month (for expandable card display)
