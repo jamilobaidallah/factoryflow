@@ -75,7 +75,9 @@ export function useAdvancesData(): UseAdvancesDataReturn {
   const getEmployeeActiveAdvances = useCallback(
     (employeeId: string) => {
       return advances.filter(
-        (a) => a.employeeId === employeeId && a.status === ADVANCE_STATUS.ACTIVE
+        (a) => a.employeeId === employeeId &&
+               a.status === ADVANCE_STATUS.ACTIVE &&
+               !a.linkedPayrollMonth // Exclude advances already assigned to a payroll
       );
     },
     [advances]
@@ -90,10 +92,13 @@ export function useAdvancesData(): UseAdvancesDataReturn {
   );
 
   const getTotalOutstandingAdvances = useCallback(() => {
-    const activeAdvances = advances.filter(
-      (a) => a.status === ADVANCE_STATUS.ACTIVE
+    // Only count advances that are:
+    // 1. ACTIVE status (not yet fully deducted)
+    // 2. Not linked to any payroll month (not yet assigned to a payroll)
+    const unassignedAdvances = advances.filter(
+      (a) => a.status === ADVANCE_STATUS.ACTIVE && !a.linkedPayrollMonth
     );
-    return sumAmounts(activeAdvances.map((a) => a.remainingAmount));
+    return sumAmounts(unassignedAdvances.map((a) => a.remainingAmount));
   }, [advances]);
 
   return useMemo(
