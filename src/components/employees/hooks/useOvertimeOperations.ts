@@ -15,7 +15,7 @@ import { OvertimeEntry, OvertimeFormData, getMonthFromDate } from "../types/over
 import { Employee } from "../types/employees";
 import { logActivity } from "@/services/activityLogService";
 import { parseAmount } from "@/lib/currency";
-import { toDate } from "@/lib/firestore-utils";
+import { toDate, parseLocalDate } from "@/lib/firestore-utils";
 
 interface UseOvertimeOperationsReturn {
   createOvertimeEntry: (
@@ -52,7 +52,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
       }
 
       // Validate date is not in the future
-      const entryDate = new Date(formData.date);
+      const entryDate = parseLocalDate(formData.date);
       const today = new Date();
       today.setHours(23, 59, 59, 999);
       if (entryDate > today) {
@@ -95,7 +95,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
       await addDoc(overtimeRef, {
         employeeId: employee.id,
         employeeName: employee.name,
-        date: new Date(formData.date),
+        date: entryDate,
         hours,
         notes: formData.notes || "",
         month,
@@ -149,7 +149,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
       }
 
       // Validate date is not in the future
-      const entryDate = new Date(formData.date);
+      const entryDate = parseLocalDate(formData.date);
       const today = new Date();
       today.setHours(23, 59, 59, 999);
       if (entryDate > today) {
@@ -181,7 +181,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
       const month = getMonthFromDate(formData.date);
 
       await updateDoc(entryRef, {
-        date: new Date(formData.date),
+        date: entryDate,
         hours,
         notes: formData.notes || "",
         month,

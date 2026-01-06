@@ -85,9 +85,11 @@ function getProratedSalaryInfo(employee: Employee, selectedMonth: string): {
   // If hired in the selected month after day 1, prorate
   if (hireYear === year && hireMonth === month && hireDay > 1) {
     const daysWorked = daysInMonth - hireDay + 1;
-    const baseSalary = safeMultiply(
-      safeDivide(employee.currentSalary, daysInMonth),
-      daysWorked
+    // Multiply first, then divide to avoid double rounding error
+    // e.g., (salary * daysWorked) / daysInMonth instead of (salary / daysInMonth) * daysWorked
+    const baseSalary = safeDivide(
+      safeMultiply(employee.currentSalary, daysWorked),
+      daysInMonth
     );
     return { baseSalary, daysWorked, daysInMonth, isProrated: true };
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Users, Wallet, Banknote, Clock } from "lucide-react";
@@ -39,7 +39,7 @@ export default function EmployeesPage() {
   const { submitEmployee, deleteEmployee, processPayroll, markAsPaid, deletePayrollEntry, undoMonthPayroll, reversePayment } = useEmployeesOperations();
   const { advances, loading: advancesLoading, getTotalOutstandingAdvances, getEmployeeOutstandingBalance } = useAdvancesData();
   const { createAdvance, deleteAdvance } = useAdvancesOperations();
-  const { overtimeEntries, loading: overtimeLoading, getEntriesForMonth, getEmployeeOvertimeHours, getMonthSummaryByEmployee, isMonthProcessed } = useOvertimeData();
+  const { overtimeEntries, loading: overtimeLoading, getEntriesForMonth, getEmployeeOvertimeHours, getMonthSummaryByEmployee } = useOvertimeData();
   const { createOvertimeEntry, updateOvertimeEntry, deleteOvertimeEntry } = useOvertimeOperations();
 
   // UI state
@@ -58,6 +58,11 @@ export default function EmployeesPage() {
     new Date().toISOString().slice(0, 7) // "2025-11"
   );
   const [payrollData, setPayrollData] = useState<{[key: string]: {overtime: string, bonus: string, deduction: string, notes: string}}>({});
+
+  // Clear payroll data when month changes (prevents phantom data from previous month)
+  useEffect(() => {
+    setPayrollData({});
+  }, [selectedMonth]);
 
   // Overtime state
   const [selectedOvertimeMonth, setSelectedOvertimeMonth] = useState(
@@ -290,7 +295,10 @@ export default function EmployeesPage() {
   // Get overtime data for selected month
   const selectedMonthOvertimeEntries = getEntriesForMonth(selectedOvertimeMonth);
   const selectedMonthOvertimeSummary = getMonthSummaryByEmployee(selectedOvertimeMonth);
-  const selectedMonthProcessed = isMonthProcessed(selectedOvertimeMonth);
+  // A month is "processed" if ANY payroll entries exist for that month
+  // This is more accurate than checking if overtime entries are linked,
+  // because payroll could be processed without any overtime entries
+  const selectedMonthProcessed = payrollEntries.some(p => p.month === selectedOvertimeMonth);
 
   const tabs = [
     { id: "employees" as const, label: "الموظفين", icon: Users },

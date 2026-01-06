@@ -77,6 +77,7 @@ export function EmployeeFormDialog({
                 id="currentSalary"
                 type="number"
                 step="0.01"
+                min="0.01"
                 value={formData.currentSalary}
                 onChange={(e) =>
                   setFormData({

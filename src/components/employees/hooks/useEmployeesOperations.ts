@@ -28,7 +28,7 @@ import {
   safeDivide,
   parseAmount,
 } from "@/lib/currency";
-import { toDate } from "@/lib/firestore-utils";
+import { toDate, parseLocalDate } from "@/lib/firestore-utils";
 
 interface UseEmployeesOperationsReturn {
   submitEmployee: (
@@ -59,10 +59,21 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   ): Promise<boolean> => {
     if (!user) return false;
 
+    // Validate salary is positive
+    const salary = parseAmount(formData.currentSalary);
+    if (salary <= 0) {
+      toast({
+        title: "خطأ في الراتب",
+        description: "الراتب يجب أن يكون أكبر من صفر",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     try {
       if (editingEmployee) {
         const oldSalary = editingEmployee.currentSalary;
-        const newSalary = parseAmount(formData.currentSalary);
+        const newSalary = salary; // Already parsed above for validation
 
         // Update employee
         const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, editingEmployee.id);
@@ -71,7 +82,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           currentSalary: newSalary,
           overtimeEligible: formData.overtimeEligible,
           position: formData.position,
-          hireDate: new Date(formData.hireDate),
+          hireDate: parseLocalDate(formData.hireDate),
         });
 
         // If salary changed, record history and log activity
@@ -133,10 +144,10 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
         const docRef = await addDoc(employeesRef, {
           name: formData.name,
-          currentSalary: parseAmount(formData.currentSalary),
+          currentSalary: salary, // Already parsed above for validation
           overtimeEligible: formData.overtimeEligible,
           position: formData.position,
-          hireDate: new Date(formData.hireDate),
+          hireDate: parseLocalDate(formData.hireDate),
           createdAt: new Date(),
         });
 
@@ -149,7 +160,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           userEmail: user.email || '',
           description: `إضافة موظف: ${formData.name}`,
           metadata: {
-            salary: parseAmount(formData.currentSalary),
+            salary: salary,
             position: formData.position,
             name: formData.name,
           },
@@ -368,9 +379,11 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         // If hired in the selected month, prorate the salary
         if (hireYear === year && hireMonth === month && hireDay > 1) {
           daysWorked = daysInMonth - hireDay + 1;
-          baseSalary = safeMultiply(
-            safeDivide(employee.currentSalary, daysInMonth),
-            daysWorked
+          // Multiply first, then divide to avoid double rounding error
+          // e.g., (salary * daysWorked) / daysInMonth instead of (salary / daysInMonth) * daysWorked
+          baseSalary = safeDivide(
+            safeMultiply(employee.currentSalary, daysWorked),
+            daysInMonth
           );
           isProrated = true;
         }
@@ -649,6 +662,18 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         }
       }
 
+      // Clear linkedPayrollId from overtime entries that were linked to this payroll
+      const overtimeRef = collection(firestore, `users/${user.dataOwnerId}/overtime_entries`);
+      const overtimeQuery = query(
+        overtimeRef,
+        where("linkedPayrollId", "==", payrollEntry.id),
+        limit(100)
+      );
+      const overtimeSnapshot = await getDocs(overtimeQuery);
+      overtimeSnapshot.docs.forEach((docSnap) => {
+        batch.update(docSnap.ref, { linkedPayrollId: null });
+      });
+
       await batch.commit();
 
       // Log activity for delete
@@ -738,6 +763,20 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
           advanceId
         );
         batch.update(advanceRef, { linkedPayrollMonth: null });
+      }
+
+      // Clear linkedPayrollId from overtime entries that were linked to any of these payroll entries
+      const overtimeRef = collection(firestore, `users/${user.dataOwnerId}/overtime_entries`);
+      for (const entry of unpaidEntries) {
+        const overtimeQuery = query(
+          overtimeRef,
+          where("linkedPayrollId", "==", entry.id),
+          limit(100)
+        );
+        const overtimeSnapshot = await getDocs(overtimeQuery);
+        overtimeSnapshot.docs.forEach((docSnap) => {
+          batch.update(docSnap.ref, { linkedPayrollId: null });
+        });
       }
 
       await batch.commit();

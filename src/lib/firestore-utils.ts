@@ -3,6 +3,19 @@
  */
 
 /**
+ * Parses a date string (YYYY-MM-DD) as local time, not UTC.
+ * Fixes timezone issues where "2025-01-15" would shift to the previous day in timezones west of UTC.
+ *
+ * @param dateString - Date string in YYYY-MM-DD format (from input type="date")
+ * @returns A Date object representing local midnight on that date
+ */
+export function parseLocalDate(dateString: string): Date {
+  // Split the date string and create a date using local timezone
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed in JavaScript
+}
+
+/**
  * Represents a Firestore Timestamp object
  */
 export interface FirestoreTimestamp {

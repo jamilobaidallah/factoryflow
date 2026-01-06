@@ -18,6 +18,7 @@ import { Employee } from "../types/employees";
 import { logActivity } from "@/services/activityLogService";
 import { parseAmount, safeSubtract } from "@/lib/currency";
 import { ADVANCE_STATUS } from "@/lib/constants";
+import { parseLocalDate } from "@/lib/firestore-utils";
 
 interface UseAdvancesOperationsReturn {
   createAdvance: (
@@ -55,7 +56,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
       }
 
       // Validate date is not in the future
-      const advanceDate = new Date(formData.date);
+      const advanceDate = parseLocalDate(formData.date);
       const today = new Date();
       today.setHours(23, 59, 59, 999); // End of today
       if (advanceDate > today) {
@@ -87,7 +88,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
         employeeId: employee.id,
         employeeName: employee.name,
         amount,
-        date: new Date(formData.date),
+        date: advanceDate,
         remainingAmount: amount,
         status: ADVANCE_STATUS.ACTIVE,
         linkedTransactionId: transactionId,
@@ -109,7 +110,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
         category: "مصاريف تشغيلية",
         subCategory: "سلف موظفين",
         associatedParty: employee.name,
-        date: new Date(formData.date),
+        date: advanceDate,
         notes: formData.notes || `سلفة للموظف ${employee.name}`,
         createdAt: new Date(),
       });
@@ -125,7 +126,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
         amount,
         type: "صرف",
         linkedTransactionId: transactionId,
-        date: new Date(formData.date),
+        date: advanceDate,
         notes: `سلفة ${employee.name}`,
         category: "مصاريف تشغيلية",
         subCategory: "سلف موظفين",
