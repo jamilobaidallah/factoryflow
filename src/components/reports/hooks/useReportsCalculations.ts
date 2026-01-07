@@ -237,7 +237,8 @@ export function useReportsCalculations({
     const netExpenses = safeSubtract(safeSubtract(totalExpenses, totalExpenseDiscounts), totalExpenseWriteoffs);
     // Net profit = Net Revenue - Net Expenses - Bad Debt (from income entries)
     const netProfit = safeSubtract(safeSubtract(netRevenue, netExpenses), totalBadDebt);
-    const profitMargin = totalRevenue > 0 ? safeMultiply(safeDivide(netProfit, totalRevenue), 100) : 0;
+    // Profit margin should use NET revenue (after discounts), not gross revenue
+    const profitMargin = netRevenue > 0 ? safeMultiply(safeDivide(netProfit, netRevenue), 100) : 0;
 
     return {
       totalRevenue,

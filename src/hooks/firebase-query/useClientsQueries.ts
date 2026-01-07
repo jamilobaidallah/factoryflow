@@ -301,13 +301,22 @@ function calculateClientBalances(
     // O(1) lookup instead of O(n) filter
     const clientCheques = chequesByClient.get(client.name) || [];
 
-    if (clientCheques.length === 0) {
+    // Filter to only PENDING cheques (excluding endorsed ones which are transferred)
+    // Bug #27 fix: Only pending cheques should count towards expected balance
+    // - Cashed cheques are already counted in payments
+    // - Bounced cheques shouldn't be counted
+    // - Endorsed incoming cheques are transferred to another party
+    const pendingCheques = clientCheques.filter(
+      (c) => c.status === CHEQUE_STATUS_AR.PENDING && !c.isEndorsedCheque
+    );
+
+    if (pendingCheques.length === 0) {
       balanceMap.set(client.id, { currentBalance, expectedBalance: null });
     } else {
       let incomingTotal = 0;
       let outgoingTotal = 0;
 
-      for (const cheque of clientCheques) {
+      for (const cheque of pendingCheques) {
         if (cheque.type === CHEQUE_TYPES.INCOMING) {
           incomingTotal += cheque.amount || 0;
         } else if (cheque.type === CHEQUE_TYPES.OUTGOING) {
@@ -461,8 +470,9 @@ export function useLedgerEntriesSubscription() {
     }
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
-    // Limit entries to prevent unbounded queries
-    const q = query(ledgerRef, limit(QUERY_LIMITS.LEDGER_ENTRIES));
+    // Order by date descending to get most recent entries first, then limit
+    // This ensures if we hit the limit, we have the most recent data (not random)
+    const q = query(ledgerRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.LEDGER_ENTRIES));
 
     unsubscribeRef.current = onSnapshot(
       q,
@@ -521,8 +531,9 @@ export function usePaymentsSubscription() {
     }
 
     const paymentsRef = collection(firestore, `users/${ownerId}/payments`);
-    // Limit payments to prevent unbounded queries
-    const q = query(paymentsRef, limit(QUERY_LIMITS.PAYMENTS));
+    // Order by date descending to get most recent payments first, then limit
+    // This ensures if we hit the limit, we have the most recent data (not random)
+    const q = query(paymentsRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.PAYMENTS));
 
     unsubscribeRef.current = onSnapshot(
       q,

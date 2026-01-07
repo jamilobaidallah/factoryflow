@@ -230,9 +230,11 @@ export default function ReportsPage() {
       }
 
       if (entry.type === "دخل") {
-        data.revenue += entry.amount;
+        // Net revenue = gross - discounts - writeoffs
+        data.revenue += entry.amount - (entry.totalDiscount || 0) - (entry.writeoffAmount || 0);
       } else if (entry.type === "مصروف") {
-        data.expenses += entry.amount;
+        // Net expenses = gross - expense discounts - expense writeoffs
+        data.expenses += entry.amount - (entry.totalDiscount || 0) - (entry.writeoffAmount || 0);
       }
     });
 
