@@ -88,6 +88,12 @@ jest.mock('@/lib/account-mapping', () => ({
     debitAccountNameAr: 'مصاريف الإهلاك',
     creditAccountNameAr: 'مجمع الإهلاك',
   })),
+  getAccountMappingForBadDebt: jest.fn(() => ({
+    debitAccount: '5600',
+    creditAccount: '1200',
+    debitAccountNameAr: 'مصروف ديون معدومة',
+    creditAccountNameAr: 'ذمم مدينة',
+  })),
   getAccountNameAr: jest.fn((code: string) => {
     const names: Record<string, string> = {
       '1000': 'النقدية',
@@ -96,6 +102,7 @@ jest.mock('@/lib/account-mapping', () => ({
       '2000': 'ذمم دائنة',
       '4000': 'إيرادات المبيعات',
       '5000': 'تكلفة البضاعة المباعة',
+      '5600': 'مصروف ديون معدومة',
     };
     return names[code] || 'حساب';
   }),
@@ -595,6 +602,503 @@ describe('Journal Service', () => {
       const result = validateJournalEntry(lines);
       // Totals: debits=100, credits=100 (50+50)
       expect(result.isValid).toBe(true);
+    });
+  });
+
+  describe('Journal Entry Creation Functions', () => {
+    // Import the functions we need to test
+    const {
+      createJournalEntryForLedger,
+      createJournalEntryForPayment,
+      createJournalEntryForCOGS,
+      createJournalEntryForDepreciation,
+      createJournalEntryForBadDebt,
+      addJournalEntryToBatch,
+      addCOGSJournalEntryToBatch,
+    } = require('../journalService');
+
+    beforeEach(() => {
+      // Reset all mocks before each test
+      jest.clearAllMocks();
+
+      // Setup default mock implementations
+      mockAddDoc.mockResolvedValue({ id: 'journal-entry-123' });
+      mockGetDocs.mockResolvedValue({
+        docs: [],
+        empty: true,
+      });
+      mockCollection.mockReturnValue({ id: 'collection-ref' });
+      mockDoc.mockReturnValue({ id: 'doc-ref' });
+      mockQuery.mockReturnValue({});
+      mockWriteBatch.mockReturnValue({
+        set: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        commit: jest.fn().mockResolvedValue(undefined),
+      });
+    });
+
+    describe('createJournalEntryForLedger', () => {
+      it('should create journal entry for income transaction', async () => {
+        const result = await createJournalEntryForLedger(
+          'user-123',
+          'TXN-001',
+          'مبيعات نقدية',
+          1000,
+          'دخل',
+          'مبيعات',
+          '',
+          new Date('2024-01-15'),
+          true, // isARAPEntry
+          false // immediateSettlement
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should create journal entry for expense transaction', async () => {
+        const result = await createJournalEntryForLedger(
+          'user-123',
+          'TXN-002',
+          'شراء مواد',
+          5000,
+          'مصروف',
+          'مشتريات',
+          'مواد خام',
+          new Date('2024-01-15'),
+          true,
+          false
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should create journal entry for immediate settlement', async () => {
+        const result = await createJournalEntryForLedger(
+          'user-123',
+          'TXN-003',
+          'بيع نقدي فوري',
+          2500,
+          'دخل',
+          'مبيعات',
+          '',
+          new Date('2024-01-15'),
+          false, // isARAPEntry
+          true // immediateSettlement - cash
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should throw on invalid amount', async () => {
+        await expect(
+          createJournalEntryForLedger(
+            'user-123',
+            'TXN-004',
+            'Test',
+            -100, // Invalid negative amount
+            'دخل',
+            'مبيعات',
+            '',
+            new Date()
+          )
+        ).rejects.toThrow();
+      });
+    });
+
+    describe('createJournalEntryForPayment', () => {
+      it('should create journal entry for receipt payment', async () => {
+        const result = await createJournalEntryForPayment(
+          'user-123',
+          'PAY-001',
+          'استلام دفعة من العميل',
+          500,
+          'قبض', // Receipt
+          new Date('2024-01-15'),
+          'TXN-001'
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should create journal entry for disbursement payment', async () => {
+        const result = await createJournalEntryForPayment(
+          'user-123',
+          'PAY-002',
+          'دفعة للمورد',
+          3000,
+          'صرف', // Disbursement
+          new Date('2024-01-15'),
+          'TXN-002'
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should throw on invalid amount', async () => {
+        await expect(
+          createJournalEntryForPayment(
+            'user-123',
+            'PAY-003',
+            'Test',
+            0, // Invalid zero amount
+            'قبض',
+            new Date()
+          )
+        ).rejects.toThrow();
+      });
+    });
+
+    describe('createJournalEntryForCOGS', () => {
+      it('should create journal entry for COGS', async () => {
+        const result = await createJournalEntryForCOGS(
+          'user-123',
+          'تكلفة البضاعة المباعة - حديد',
+          750,
+          new Date('2024-01-15'),
+          'TXN-SALE-001'
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+
+      it('should handle COGS without linked transaction', async () => {
+        const result = await createJournalEntryForCOGS(
+          'user-123',
+          'تكلفة إنتاج',
+          1200,
+          new Date('2024-01-15')
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+    });
+
+    describe('createJournalEntryForDepreciation', () => {
+      it('should create journal entry for depreciation', async () => {
+        const result = await createJournalEntryForDepreciation(
+          'user-123',
+          'إهلاك شهري - معدات',
+          200,
+          new Date('2024-01-31'),
+          'ASSET-001'
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+    });
+
+    describe('createJournalEntryForBadDebt', () => {
+      it('should create journal entry for bad debt writeoff', async () => {
+        const result = await createJournalEntryForBadDebt(
+          'user-123',
+          'شطب دين معدوم - شركة النور',
+          2500,
+          new Date('2024-01-15'),
+          'TXN-AR-001'
+        );
+
+        expect(result).toBeDefined();
+        expect(mockAddDoc).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Batch Journal Entry Operations', () => {
+    const {
+      addJournalEntryToBatch,
+      addCOGSJournalEntryToBatch,
+    } = require('../journalService');
+
+    let mockBatch: {
+      set: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+      commit: jest.Mock;
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockBatch = {
+        set: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        commit: jest.fn().mockResolvedValue(undefined),
+      };
+      mockCollection.mockReturnValue({ id: 'collection-ref' });
+      mockDoc.mockReturnValue({ id: 'doc-ref' });
+    });
+
+    describe('addJournalEntryToBatch', () => {
+      it('should add journal entry to batch for income', () => {
+        addJournalEntryToBatch(mockBatch, 'user-123', {
+          transactionId: 'TXN-001',
+          description: 'مبيعات',
+          amount: 1000,
+          type: 'دخل',
+          category: 'مبيعات',
+          subCategory: '',
+          date: new Date('2024-01-15'),
+          isARAPEntry: true,
+          immediateSettlement: false,
+        });
+
+        expect(mockBatch.set).toHaveBeenCalled();
+      });
+
+      it('should add journal entry to batch for expense', () => {
+        addJournalEntryToBatch(mockBatch, 'user-123', {
+          transactionId: 'TXN-002',
+          description: 'مشتريات',
+          amount: 5000,
+          type: 'مصروف',
+          category: 'مشتريات',
+          subCategory: '',
+          date: new Date('2024-01-15'),
+          isARAPEntry: true,
+        });
+
+        expect(mockBatch.set).toHaveBeenCalled();
+      });
+
+      it('should throw on invalid userId', () => {
+        expect(() =>
+          addJournalEntryToBatch(mockBatch, '', {
+            transactionId: 'TXN-003',
+            description: 'Test',
+            amount: 100,
+            type: 'دخل',
+            category: 'مبيعات',
+            subCategory: '',
+            date: new Date(),
+          })
+        ).toThrow();
+      });
+
+      it('should throw on invalid amount', () => {
+        expect(() =>
+          addJournalEntryToBatch(mockBatch, 'user-123', {
+            transactionId: 'TXN-004',
+            description: 'Test',
+            amount: -100, // Invalid
+            type: 'دخل',
+            category: 'مبيعات',
+            subCategory: '',
+            date: new Date(),
+          })
+        ).toThrow();
+      });
+
+      it('should throw on invalid description', () => {
+        expect(() =>
+          addJournalEntryToBatch(mockBatch, 'user-123', {
+            transactionId: 'TXN-005',
+            description: '', // Invalid empty
+            amount: 100,
+            type: 'دخل',
+            category: 'مبيعات',
+            subCategory: '',
+            date: new Date(),
+          })
+        ).toThrow();
+      });
+    });
+
+    describe('addCOGSJournalEntryToBatch', () => {
+      it('should add COGS journal entry to batch', () => {
+        addCOGSJournalEntryToBatch(mockBatch, 'user-123', {
+          description: 'تكلفة البضاعة المباعة',
+          amount: 750,
+          date: new Date('2024-01-15'),
+          linkedTransactionId: 'TXN-SALE-001',
+        });
+
+        expect(mockBatch.set).toHaveBeenCalled();
+      });
+
+      it('should throw on invalid amount', () => {
+        expect(() =>
+          addCOGSJournalEntryToBatch(mockBatch, 'user-123', {
+            description: 'Test COGS',
+            amount: 0, // Invalid
+            date: new Date(),
+          })
+        ).toThrow();
+      });
+    });
+  });
+
+  describe('Business Scenario Tests', () => {
+    it('should validate complete sales cycle journal entries', () => {
+      // 1. Sale on credit: DR AR, CR Revenue
+      const saleEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+          accountName: 'AR',
+          accountNameAr: 'ذمم مدينة',
+          debit: 5000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.SALES_REVENUE,
+          accountName: 'Revenue',
+          accountNameAr: 'إيرادات المبيعات',
+          debit: 0,
+          credit: 5000,
+        },
+      ];
+
+      // 2. COGS: DR COGS, CR Inventory
+      const cogsEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.COST_OF_GOODS_SOLD,
+          accountName: 'COGS',
+          accountNameAr: 'تكلفة البضاعة المباعة',
+          debit: 3000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.INVENTORY,
+          accountName: 'Inventory',
+          accountNameAr: 'المخزون',
+          debit: 0,
+          credit: 3000,
+        },
+      ];
+
+      // 3. Payment received: DR Cash, CR AR
+      const paymentEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.CASH,
+          accountName: 'Cash',
+          accountNameAr: 'النقدية',
+          debit: 5000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+          accountName: 'AR',
+          accountNameAr: 'ذمم مدينة',
+          debit: 0,
+          credit: 5000,
+        },
+      ];
+
+      expect(validateJournalEntry(saleEntry).isValid).toBe(true);
+      expect(validateJournalEntry(cogsEntry).isValid).toBe(true);
+      expect(validateJournalEntry(paymentEntry).isValid).toBe(true);
+    });
+
+    it('should validate complete purchase cycle journal entries', () => {
+      // 1. Purchase on credit: DR Expense/Inventory, CR AP
+      const purchaseEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.INVENTORY,
+          accountName: 'Inventory',
+          accountNameAr: 'المخزون',
+          debit: 8000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+          accountName: 'AP',
+          accountNameAr: 'ذمم دائنة',
+          debit: 0,
+          credit: 8000,
+        },
+      ];
+
+      // 2. Payment made: DR AP, CR Cash
+      const paymentEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+          accountName: 'AP',
+          accountNameAr: 'ذمم دائنة',
+          debit: 8000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.CASH,
+          accountName: 'Cash',
+          accountNameAr: 'النقدية',
+          debit: 0,
+          credit: 8000,
+        },
+      ];
+
+      expect(validateJournalEntry(purchaseEntry).isValid).toBe(true);
+      expect(validateJournalEntry(paymentEntry).isValid).toBe(true);
+    });
+
+    it('should validate owner equity transactions', () => {
+      // Owner capital contribution: DR Cash, CR Owner Capital
+      const capitalEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.CASH,
+          accountName: 'Cash',
+          accountNameAr: 'النقدية',
+          debit: 50000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.OWNER_CAPITAL,
+          accountName: 'Owner Capital',
+          accountNameAr: 'رأس المال',
+          debit: 0,
+          credit: 50000,
+        },
+      ];
+
+      // Owner withdrawal: DR Drawings, CR Cash
+      const withdrawalEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.OWNER_DRAWINGS,
+          accountName: 'Owner Drawings',
+          accountNameAr: 'سحوبات المالك',
+          debit: 5000,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.CASH,
+          accountName: 'Cash',
+          accountNameAr: 'النقدية',
+          debit: 0,
+          credit: 5000,
+        },
+      ];
+
+      expect(validateJournalEntry(capitalEntry).isValid).toBe(true);
+      expect(validateJournalEntry(withdrawalEntry).isValid).toBe(true);
+    });
+
+    it('should validate bad debt writeoff', () => {
+      // Bad debt: DR Bad Debt Expense, CR AR
+      const badDebtEntry: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.BAD_DEBT_EXPENSE,
+          accountName: 'Bad Debt Expense',
+          accountNameAr: 'مصروف ديون معدومة',
+          debit: 2500,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+          accountName: 'AR',
+          accountNameAr: 'ذمم مدينة',
+          debit: 0,
+          credit: 2500,
+        },
+      ];
+
+      expect(validateJournalEntry(badDebtEntry).isValid).toBe(true);
     });
   });
 });
