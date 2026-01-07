@@ -18,13 +18,15 @@ describe("Cheque Handlers", () => {
   // Helper to create base form data
   const createBaseFormData = (overrides: Partial<LedgerFormData> = {}): LedgerFormData => ({
     date: "2024-01-15",
-    type: "دخل",
     category: "مبيعات",
     subCategory: "",
     amount: "1000",
     associatedParty: "عميل اختبار",
     description: "معاملة اختبار",
-    includeInARAPTracking: false,
+    ownerName: "",
+    reference: "",
+    notes: "",
+    trackARAP: false,
     immediateSettlement: false,
     ...overrides,
   });
@@ -74,9 +76,8 @@ describe("Cheque Handlers", () => {
         cheques: { id: "cheques" } as any,
         payments: { id: "payments" } as any,
         inventory: { id: "inventory" } as any,
-        inventoryHistory: { id: "inventoryHistory" } as any,
-        journalEntries: { id: "journalEntries" } as any,
-        activityLogs: { id: "activityLogs" } as any,
+        inventoryMovements: { id: "inventory_movements" } as any,
+        fixedAssets: { id: "fixed_assets" } as any,
       },
     };
   };
@@ -84,7 +85,7 @@ describe("Cheque Handlers", () => {
   describe("handleIncomingCheckBatch", () => {
     describe("Cashed Cheques (accountingType: cashed)", () => {
       it("should create cheque and payment for income entry", () => {
-        const formData = createBaseFormData({ type: "دخل" });
+        const formData = createBaseFormData();
         const checkData = createCheckFormData({ accountingType: "cashed" });
         const ctx = createMockContext(formData, "دخل");
 
@@ -119,7 +120,7 @@ describe("Cheque Handlers", () => {
       });
 
       it("should create cheque and disbursement payment for expense entry", () => {
-        const formData = createBaseFormData({ type: "مصروف" });
+        const formData = createBaseFormData();
         const checkData = createCheckFormData({ accountingType: "cashed" });
         const ctx = createMockContext(formData, "مصروف");
 
@@ -361,7 +362,7 @@ describe("Cheque Handlers", () => {
   describe("handleOutgoingCheckBatch", () => {
     describe("Cashed Cheques (accountingType: cashed)", () => {
       it("should create cheque and disbursement payment", () => {
-        const formData = createBaseFormData({ type: "مصروف" });
+        const formData = createBaseFormData();
         const checkData = createOutgoingCheckFormData({ accountingType: "cashed" });
         const ctx = createMockContext(formData, "مصروف");
 
@@ -579,7 +580,6 @@ describe("Cheque Handlers", () => {
   describe("Integration Scenarios", () => {
     it("should handle complete income transaction with cashed incoming cheque", () => {
       const formData = createBaseFormData({
-        type: "دخل",
         category: "مبيعات",
         description: "بيع بضاعة نقداً",
         associatedParty: "شركة النور",
@@ -608,7 +608,6 @@ describe("Cheque Handlers", () => {
 
     it("should handle complete expense transaction with outgoing cheque", () => {
       const formData = createBaseFormData({
-        type: "مصروف",
         category: "مشتريات",
         description: "شراء مواد خام",
         associatedParty: "مورد المواد",
@@ -632,8 +631,7 @@ describe("Cheque Handlers", () => {
 
     it("should handle post-dated incoming cheque (no immediate cash impact)", () => {
       const formData = createBaseFormData({
-        type: "دخل",
-        includeInARAPTracking: true,
+        trackARAP: true,
       });
       const checkData = createCheckFormData({
         chequeNumber: "CHQ-PDC-001",
@@ -654,7 +652,6 @@ describe("Cheque Handlers", () => {
 
     it("should handle cheque endorsement flow", () => {
       const formData = createBaseFormData({
-        type: "دخل",
         associatedParty: "العميل الأصلي",
       });
       const checkData = createCheckFormData({

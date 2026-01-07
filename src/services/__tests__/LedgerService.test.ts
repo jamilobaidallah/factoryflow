@@ -447,7 +447,17 @@ describe('LedgerService', () => {
       const formData = createMockFormData();
       const options = {
         hasInventoryUpdate: true,
-        inventoryFormData: { itemName: 'Test Item', quantity: '10', unit: 'kg' },
+        inventoryFormData: {
+          itemId: '',
+          itemName: 'Test Item',
+          quantity: '10',
+          unit: 'kg',
+          thickness: '',
+          width: '',
+          length: '',
+          shippingCost: '',
+          otherCosts: '',
+        },
       };
 
       const result = await service.createLedgerEntryWithRelated(formData, options);
@@ -473,7 +483,13 @@ describe('LedgerService', () => {
       });
 
       const options = {
-        advanceAllocations: [{ advanceId: 'adv-1', amount: 500 }],
+        advanceAllocations: [{
+          advanceId: 'adv-1',
+          advanceTransactionId: 'TXN-ADV-001',
+          amount: 500,
+          originalAdvanceAmount: 1000,
+          remainingAfterAllocation: 500,
+        }],
       };
 
       const result = await service.createLedgerEntryWithRelated(formData, options);
@@ -581,7 +597,7 @@ describe('LedgerService', () => {
       ];
       mockGetDocs.mockResolvedValue({
         docs: mockPaymentDocs,
-        forEach: (fn: Function) => mockPaymentDocs.forEach(fn),
+        forEach: (fn: (doc: typeof mockPaymentDocs[0]) => void) => mockPaymentDocs.forEach(fn),
       });
 
       const formData = createMockFormData({ associatedParty: 'New Client Name' });
@@ -650,7 +666,7 @@ describe('LedgerService', () => {
 
       const mockPayments = [{ ref: { id: 'pay-1' } }, { ref: { id: 'pay-2' } }];
       mockGetDocs
-        .mockResolvedValueOnce({ docs: mockPayments, forEach: (fn: Function) => mockPayments.forEach(fn) }) // payments
+        .mockResolvedValueOnce({ docs: mockPayments, forEach: (fn: (doc: typeof mockPayments[0]) => void) => mockPayments.forEach(fn) }) // payments
         .mockResolvedValue({ docs: [], forEach: jest.fn() }); // other queries
 
       const result = await service.deleteLedgerEntry(mockEntry as any);
@@ -666,7 +682,7 @@ describe('LedgerService', () => {
       const mockCheques = [{ ref: { id: 'chq-1' } }];
       mockGetDocs
         .mockResolvedValueOnce({ docs: [], forEach: jest.fn() }) // payments
-        .mockResolvedValueOnce({ docs: mockCheques, forEach: (fn: Function) => mockCheques.forEach(fn) }) // cheques
+        .mockResolvedValueOnce({ docs: mockCheques, forEach: (fn: (doc: typeof mockCheques[0]) => void) => mockCheques.forEach(fn) }) // cheques
         .mockResolvedValue({ docs: [], forEach: jest.fn() }); // other queries
 
       const result = await service.deleteLedgerEntry(mockEntry as any);
@@ -837,8 +853,12 @@ describe('LedgerService', () => {
         entryTransactionId: 'TXN-123',
         entryDescription: 'Test invoice',
         entryType: 'دخل',
+        entryAmount: 1000,
         entryCategory: 'مبيعات',
+        entrySubCategory: '',
         associatedParty: 'Test Client',
+        totalPaid: 0,
+        remainingBalance: 1000,
         amount: 800,
         discountAmount: 100,
         discountReason: 'Early payment',
@@ -870,8 +890,12 @@ describe('LedgerService', () => {
         entryTransactionId: 'TXN-123',
         entryDescription: 'Test',
         entryType: 'دخل',
+        entryAmount: 1000,
         entryCategory: 'مبيعات',
+        entrySubCategory: '',
         associatedParty: 'Client',
+        totalPaid: 500,
+        remainingBalance: 300,
         amount: 200,
         discountAmount: 200, // Total 400 > remaining 300
         isARAPEntry: true,
@@ -905,8 +929,12 @@ describe('LedgerService', () => {
         entryTransactionId: 'TXN-123',
         entryDescription: 'Loan repayment',
         entryType: 'قرض',
+        entryAmount: 1000,
         entryCategory: 'قروض مستلمة', // Received loan = disbursement
+        entrySubCategory: '',
         associatedParty: 'Bank',
+        totalPaid: 0,
+        remainingBalance: 1000,
         amount: 500,
         isARAPEntry: true,
       });
@@ -927,6 +955,7 @@ describe('LedgerService', () => {
       const result = await service.writeOffBadDebt({
         entryId: 'entry-123',
         entryTransactionId: 'TXN-123',
+        entryDescription: 'Test invoice',
         entryType: 'دخل',
         entryCategory: 'مبيعات',
         associatedParty: 'Bad Client',
@@ -949,6 +978,7 @@ describe('LedgerService', () => {
       const result = await service.writeOffBadDebt({
         entryId: 'entry-123',
         entryTransactionId: 'TXN-123',
+        entryDescription: 'Test invoice',
         entryType: 'دخل',
         entryCategory: 'مبيعات',
         associatedParty: 'Client',
@@ -970,6 +1000,7 @@ describe('LedgerService', () => {
       const result = await service.writeOffBadDebt({
         entryId: 'entry-123',
         entryTransactionId: 'TXN-123',
+        entryDescription: 'Test invoice',
         entryType: 'دخل',
         entryCategory: 'مبيعات',
         associatedParty: 'Client',
@@ -991,6 +1022,7 @@ describe('LedgerService', () => {
       const result = await service.writeOffBadDebt({
         entryId: 'entry-123',
         entryTransactionId: 'TXN-123',
+        entryDescription: 'Test invoice',
         entryType: 'دخل',
         entryCategory: 'مبيعات',
         associatedParty: 'Client',

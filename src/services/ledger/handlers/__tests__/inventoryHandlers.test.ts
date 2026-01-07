@@ -83,13 +83,15 @@ describe("Inventory Handlers", () => {
   // Helper to create base form data
   const createBaseFormData = (overrides: Partial<LedgerFormData> = {}): LedgerFormData => ({
     date: "2024-01-15",
-    type: "مصروف", // Expense for purchasing
     category: "مشتريات",
     subCategory: "",
     amount: "5000",
     associatedParty: "مورد المواد",
     description: "شراء مواد خام",
-    includeInARAPTracking: false,
+    ownerName: "",
+    reference: "",
+    notes: "",
+    trackARAP: false,
     immediateSettlement: false,
     ...overrides,
   });
@@ -143,8 +145,7 @@ describe("Inventory Handlers", () => {
         payments: createMockCollectionRef(),
         inventory: createMockCollectionRef(),
         inventoryMovements: createMockCollectionRef(),
-        journalEntries: createMockCollectionRef(),
-        activityLogs: createMockCollectionRef(),
+        fixedAssets: createMockCollectionRef(),
       },
     };
   };
@@ -467,7 +468,7 @@ describe("Inventory Handlers", () => {
   describe("handleInventoryUpdate", () => {
     describe("Movement Direction Logic", () => {
       it("should set movement type to 'دخول' for expense (purchase)", async () => {
-        const formData = createBaseFormData({ type: "مصروف", subCategory: "" });
+        const formData = createBaseFormData({ subCategory: "" });
         const ctx = createMockContext(formData, "مصروف");
         const inventoryFormData = createInventoryFormData();
 
@@ -482,7 +483,7 @@ describe("Inventory Handlers", () => {
       });
 
       it("should set movement type to 'خروج' for income (sale)", async () => {
-        const formData = createBaseFormData({ type: "دخل" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "دخل");
         const inventoryFormData = createInventoryFormData({ quantity: "10" });
 
@@ -493,7 +494,6 @@ describe("Inventory Handlers", () => {
 
       it("should set movement type to 'خروج' for non-cash expense (wastage)", async () => {
         const formData = createBaseFormData({
-          type: "مصروف",
           subCategory: "هدر وتالف",
         });
         const ctx = createMockContext(formData, "مصروف");
@@ -506,7 +506,6 @@ describe("Inventory Handlers", () => {
 
       it("should set movement type to 'خروج' for free samples", async () => {
         const formData = createBaseFormData({
-          type: "مصروف",
           subCategory: "عينات مجانية",
         });
         const ctx = createMockContext(formData, "مصروف");
@@ -524,7 +523,7 @@ describe("Inventory Handlers", () => {
       });
 
       it("should create new item when purchasing non-existent item", async () => {
-        const formData = createBaseFormData({ type: "مصروف" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "مصروف");
         const inventoryFormData = createInventoryFormData();
 
@@ -536,7 +535,7 @@ describe("Inventory Handlers", () => {
       });
 
       it("should fail when trying to sell non-existent item", async () => {
-        const formData = createBaseFormData({ type: "دخل" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "دخل"); // Sale
         const inventoryFormData = createInventoryFormData();
 
@@ -563,7 +562,7 @@ describe("Inventory Handlers", () => {
           throw new InsufficientQuantityError(10, 50, "حديد مجلفن");
         });
 
-        const formData = createBaseFormData({ type: "دخل" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "دخل");
         const inventoryFormData = createInventoryFormData({ quantity: "50" }); // Want 50, only 10 available
 
@@ -576,7 +575,7 @@ describe("Inventory Handlers", () => {
 
     describe("COGS Creation", () => {
       it("should not create COGS for purchase transactions", async () => {
-        const formData = createBaseFormData({ type: "مصروف" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "مصروف");
         const inventoryFormData = createInventoryFormData();
 
@@ -589,7 +588,7 @@ describe("Inventory Handlers", () => {
 
     describe("Result Values", () => {
       it("should return inventory change details", async () => {
-        const formData = createBaseFormData({ type: "مصروف" });
+        const formData = createBaseFormData();
         const ctx = createMockContext(formData, "مصروف");
         const inventoryFormData = createInventoryFormData({ quantity: "25" });
 
@@ -606,7 +605,6 @@ describe("Inventory Handlers", () => {
     it("should handle complete purchase flow", async () => {
       mockItemExists = false; // New item
       const formData = createBaseFormData({
-        type: "مصروف",
         amount: "10000",
         description: "شراء حديد من المورد",
       });
@@ -633,7 +631,6 @@ describe("Inventory Handlers", () => {
       mockCurrentUnitPrice = 90; // Current avg price
 
       const formData = createBaseFormData({
-        type: "مصروف",
         amount: "5500", // New purchase at 110/unit
       });
       const ctx = createMockContext(formData, "مصروف");

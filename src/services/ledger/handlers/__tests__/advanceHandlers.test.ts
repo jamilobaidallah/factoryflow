@@ -17,7 +17,7 @@ const mockIncrement = jest.fn((value) => ({ _increment: true, value }));
 // Mock firebase/firestore
 jest.mock("firebase/firestore", () => ({
   doc: jest.fn((db, path, id) => ({ _path: `${path}/${id}`, id })),
-  arrayUnion: (...args: any[]) => mockArrayUnion(...args),
+  arrayUnion: (value: unknown) => mockArrayUnion(value),
   increment: (value: number) => mockIncrement(value),
 }));
 
@@ -34,13 +34,15 @@ describe("Advance Handlers", () => {
   // Helper to create base form data
   const createBaseFormData = (overrides: Partial<LedgerFormData> = {}): LedgerFormData => ({
     date: "2024-01-15",
-    type: "دخل",
     category: "مبيعات",
     subCategory: "",
     amount: "5000",
     associatedParty: "عميل اختبار",
     description: "فاتورة مبيعات",
-    includeInARAPTracking: true,
+    ownerName: "",
+    reference: "",
+    notes: "",
+    trackARAP: true,
     immediateSettlement: false,
     ...overrides,
   });
@@ -75,9 +77,8 @@ describe("Advance Handlers", () => {
         cheques: { id: "cheques" } as any,
         payments: { id: "payments" } as any,
         inventory: { id: "inventory" } as any,
-        inventoryHistory: { id: "inventoryHistory" } as any,
-        journalEntries: { id: "journalEntries" } as any,
-        activityLogs: { id: "activityLogs" } as any,
+        inventoryMovements: { id: "inventory_movements" } as any,
+        fixedAssets: { id: "fixed_assets" } as any,
       },
     };
   };
@@ -415,7 +416,6 @@ describe("Advance Handlers", () => {
     describe("Integration Scenarios", () => {
       it("should handle customer advance allocation to sales invoice", async () => {
         const formData = createBaseFormData({
-          type: "دخل",
           category: "مبيعات",
           description: "فاتورة مبيعات للعميل",
           associatedParty: "شركة الأمل",
@@ -447,7 +447,6 @@ describe("Advance Handlers", () => {
 
       it("should handle supplier advance allocation to purchase invoice", async () => {
         const formData = createBaseFormData({
-          type: "مصروف",
           category: "مشتريات",
           description: "فاتورة شراء من المورد",
           associatedParty: "مورد الخامات",
