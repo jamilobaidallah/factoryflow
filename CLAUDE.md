@@ -202,6 +202,32 @@ or if issues found:
 - **Small fixes:** Commit, push, report what was done
 - **Features:** Push branch, create PR, output testing plan for user review
 
+### 7. 🔬 VERIFY BEFORE CLAIMING (Code > Documentation)
+
+**CRITICAL: Never make architecture or performance claims without reading the actual implementation code.**
+
+Before stating anything about how the codebase works:
+
+| Step | Action | Why |
+|------|--------|-----|
+| 1 | **Read implementation files** | Types/interfaces show WHAT, not HOW |
+| 2 | **Search for optimizations** | grep for "optimize", "O(n)", "performance", "cache" |
+| 3 | **Verify hook/effect patterns** | Read the actual `useEffect` bodies, not just signatures |
+| 4 | **Don't trust docs blindly** | CLAUDE.md and comments can be outdated |
+
+**Red flags that you're about to make an unverified claim:**
+- "This is O(n²) because..." → Did you read the calculation code?
+- "Listeners aren't cleaned up..." → Did you check the `useEffect` return statements?
+- "There's no caching..." → Did you search for React Query or useMemo usage?
+- "The pattern is..." → Did you read multiple examples of that pattern?
+
+**The rule:**
+```
+Actual Code > Documentation > Assumptions > "Best Practices"
+```
+
+When in doubt, READ THE CODE before claiming how it works.
+
 ---
 
 ## 🐛 CRITICAL BUG PATTERNS TO AVOID
@@ -385,9 +411,10 @@ src/
 ## ⚠️ KNOWN ISSUES (Don't Make Worse)
 
 ### Performance Debt
-- **Client balance calculation is O(n²)** — calculated client-side from ledger + payments + cheques every render. Don't add complexity.
-- **Some pages have 4+ onSnapshot listeners** — consolidate if possible, don't add more.
+- **Client balance calculation is O(n)** — optimized via `buildClientIndexes()` in `useClientsQueries.ts`. Uses Map-based indexing for O(1) lookups per client. Still client-side, so don't add complexity.
+- **Some pages have 4+ onSnapshot listeners** — properly cleaned up, but each listener fetches large datasets. Don't add more without need.
 - **`usePaginatedCollection` is incomplete** — the `loadMore()` function is a TODO. Don't rely on it.
+- **Dashboard queries unbounded by date** — fetches 5000 docs without date filter. Consider adding date range filter if performance degrades.
 
 ### N+1 Query Pattern (AVOID)
 ```typescript
