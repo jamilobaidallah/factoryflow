@@ -1,14 +1,36 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, limit } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
+import { QUERY_LIMITS } from "@/lib/constants";
+import { toast } from "@/hooks/use-toast";
 import type { AlertData, UseReceivablesAlertsReturn } from "../types/dashboard.types";
 import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
 
 /** Outstanding payment statuses */
 const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
+
+/** Track which limit warnings have been shown this session */
+const shownLimitWarnings = new Set<string>();
+
+/** Show a warning toast when query limit is reached */
+function showLimitWarning(limitType: string, limitValue: number, message: string) {
+  const warningKey = `${limitType}-${limitValue}`;
+  if (shownLimitWarnings.has(warningKey)) {
+    return; // Already shown this session
+  }
+  shownLimitWarnings.add(warningKey);
+
+  console.warn(`${limitType} limit reached (${limitValue}). ${message}`);
+  toast({
+    title: "تحذير: تجاوز حد البيانات",
+    description: message,
+    variant: "destructive",
+    duration: 10000,
+  });
+}
 
 /**
  * Hook for fetching unpaid receivables and payables alerts
@@ -23,7 +45,19 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
     if (!user) return;
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const unsubscribe = onSnapshot(ledgerRef, (snapshot) => {
+    // Add limit to prevent loading unbounded data
+    const ledgerQuery = query(ledgerRef, limit(QUERY_LIMITS.DASHBOARD_ENTRIES));
+
+    const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
+      // Show warning if limit is reached (data may be incomplete)
+      if (snapshot.size >= QUERY_LIMITS.DASHBOARD_ENTRIES) {
+        showLimitWarning(
+          'Receivables alerts',
+          QUERY_LIMITS.DASHBOARD_ENTRIES,
+          'بعض قيود الذمم المدينة/الدائنة قد لا تظهر. يُنصح بأرشفة القيود القديمة.'
+        );
+      }
+
       let receivablesCount = 0;
       let receivablesTotal = 0;
       let payablesCount = 0;

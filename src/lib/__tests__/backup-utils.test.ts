@@ -13,14 +13,16 @@ jest.mock('@/firebase/config', () => ({
 jest.mock('firebase/firestore', () => {
   const mockBatchCommitFn = jest.fn().mockResolvedValue(undefined);
   const mockBatchSetFn = jest.fn();
+  const mockBatchDeleteFn = jest.fn();
   const mockDeleteDocFn = jest.fn().mockResolvedValue(undefined);
-  const mockGetDocsFn = jest.fn().mockResolvedValue({ docs: [] });
+  const mockGetDocsFn = jest.fn().mockResolvedValue({ docs: [], empty: true });
 
   return {
     collection: jest.fn(),
     getDocs: mockGetDocsFn,
     writeBatch: jest.fn(() => ({
       set: mockBatchSetFn,
+      delete: mockBatchDeleteFn,
       commit: mockBatchCommitFn,
     })),
     doc: jest.fn(),
@@ -38,6 +40,7 @@ jest.mock('firebase/firestore', () => {
     __mocks__: {
       mockBatchCommit: mockBatchCommitFn,
       mockBatchSet: mockBatchSetFn,
+      mockBatchDelete: mockBatchDeleteFn,
       mockDeleteDoc: mockDeleteDocFn,
       mockGetDocs: mockGetDocsFn,
     },
@@ -266,21 +269,24 @@ describe('Backup Utilities', () => {
     });
 
     it('should delete existing documents in replace mode', async () => {
-      // Mock existing documents in the collection
+      // Mock existing documents in the collection - first call returns docs, second returns empty
       const mockDocRef1 = { id: 'existing1' };
       const mockDocRef2 = { id: 'existing2' };
-      mocks.mockGetDocs.mockResolvedValue({
-        docs: [
-          { ref: mockDocRef1 },
-          { ref: mockDocRef2 },
-        ],
-      });
+      mocks.mockGetDocs
+        .mockResolvedValueOnce({
+          docs: [
+            { ref: mockDocRef1 },
+            { ref: mockDocRef2 },
+          ],
+          empty: false,
+        })
+        .mockResolvedValue({ docs: [], empty: true }); // Subsequent calls return empty
 
       await restoreBackup(validBackup, 'test-user-id', 'replace');
 
-      // Verify deleteDoc was called for existing documents
-      expect(mocks.mockDeleteDoc).toHaveBeenCalledWith(mockDocRef1);
-      expect(mocks.mockDeleteDoc).toHaveBeenCalledWith(mockDocRef2);
+      // Verify batch.delete was called for existing documents
+      expect(mocks.mockBatchDelete).toHaveBeenCalledWith(mockDocRef1);
+      expect(mocks.mockBatchDelete).toHaveBeenCalledWith(mockDocRef2);
     });
 
     it('should NOT delete existing documents in merge mode', async () => {
@@ -289,12 +295,13 @@ describe('Backup Utilities', () => {
         docs: [
           { ref: { id: 'existing1' } },
         ],
+        empty: false,
       });
 
       await restoreBackup(validBackup, 'test-user-id', 'merge');
 
-      // Verify deleteDoc was NOT called in merge mode
-      expect(mocks.mockDeleteDoc).not.toHaveBeenCalled();
+      // Verify batch.delete was NOT called in merge mode
+      expect(mocks.mockBatchDelete).not.toHaveBeenCalled();
     });
 
     it('should use merge mode by default', async () => {

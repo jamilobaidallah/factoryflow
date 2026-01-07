@@ -188,7 +188,7 @@ export async function restoreBackup(
       const actualCollectionName = reverseMapping[collectionName] || collectionName;
       const collectionRef = collection(firestore, `users/${userId}/${actualCollectionName}`);
 
-      // If replace mode, delete existing documents first
+      // If replace mode, delete existing documents first (in batches to prevent memory issues)
       if (mode === 'replace') {
         if (onProgress) {
           onProgress(
@@ -197,11 +197,23 @@ export async function restoreBackup(
           );
         }
 
-        const existingDocs = await getDocs(query(collectionRef));
-        const deletePromises = existingDocs.docs.map((docSnapshot) =>
-          deleteDoc(docSnapshot.ref)
-        );
-        await Promise.all(deletePromises);
+        // Delete in batches of 500 to prevent memory issues with large collections
+        const deleteBatchSize = 500;
+        let hasMore = true;
+        while (hasMore) {
+          const existingDocs = await getDocs(query(collectionRef, limit(deleteBatchSize)));
+          if (existingDocs.empty) {
+            hasMore = false;
+          } else {
+            const deleteBatch = writeBatch(firestore);
+            existingDocs.docs.forEach((docSnapshot) => {
+              deleteBatch.delete(docSnapshot.ref);
+            });
+            await deleteBatch.commit();
+            // If we got fewer than batch size, we're done
+            hasMore = existingDocs.docs.length === deleteBatchSize;
+          }
+        }
       }
       const batchSize = 500; // Firestore batch limit
 

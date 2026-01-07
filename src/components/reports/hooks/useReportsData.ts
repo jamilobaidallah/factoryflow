@@ -10,7 +10,6 @@ import {
   query,
   where,
   getDocs,
-  onSnapshot,
   orderBy,
   limit,
 } from "firebase/firestore";
@@ -80,27 +79,49 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
 
-  // Real-time listener for ledger entries
-  // This ensures updates from payment deletions are reflected immediately
-  useEffect(() => {
+  // Fetch all report data - using getDocs for efficiency (reports are point-in-time snapshots)
+  const fetchAllData = useCallback(async () => {
     if (!userId) { return; }
+    setLoading(true);
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
 
-    const ledgerRef = collection(firestore, `users/${userId}/ledger`);
-    const ledgerQuery = query(
-      ledgerRef,
-      where("date", ">=", start),
-      where("date", "<=", end),
-      orderBy("date", "desc"),
-      limit(1000)
-    );
+      // Fetch all data in parallel for better performance
+      const [ledgerSnapshot, paymentsSnapshot, inventorySnapshot, assetsSnapshot] = await Promise.all([
+        // Fetch ledger entries for date range
+        getDocs(query(
+          collection(firestore, `users/${userId}/ledger`),
+          where("date", ">=", start),
+          where("date", "<=", end),
+          orderBy("date", "desc"),
+          limit(1000)
+        )),
+        // Fetch payments for date range
+        getDocs(query(
+          collection(firestore, `users/${userId}/payments`),
+          where("date", ">=", start),
+          where("date", "<=", end),
+          orderBy("date", "desc"),
+          limit(1000)
+        )),
+        // Fetch inventory (limit to 500 items)
+        getDocs(query(
+          collection(firestore, `users/${userId}/inventory`),
+          limit(500)
+        )),
+        // Fetch fixed assets (limit to 500 items)
+        getDocs(query(
+          collection(firestore, `users/${userId}/fixed_assets`),
+          limit(500)
+        )),
+      ]);
 
-    const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
+      // Process ledger entries
       const ledgerData: LedgerEntry[] = [];
-      snapshot.forEach((doc) => {
+      ledgerSnapshot.forEach((doc) => {
         const data = doc.data();
         ledgerData.push({
           id: doc.id,
@@ -108,33 +129,10 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
         } as LedgerEntry);
       });
       setLedgerEntries(ledgerData);
-    }, (error) => {
-      console.error("Error in ledger snapshot:", error);
-    });
 
-    return () => unsubscribe();
-  }, [userId, startDate, endDate]);
-
-  // Real-time listener for payments
-  useEffect(() => {
-    if (!userId) { return; }
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-
-    const paymentsRef = collection(firestore, `users/${userId}/payments`);
-    const paymentsQuery = query(
-      paymentsRef,
-      where("date", ">=", start),
-      where("date", "<=", end),
-      orderBy("date", "desc"),
-      limit(1000)
-    );
-
-    const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+      // Process payments
       const paymentsData: Payment[] = [];
-      snapshot.forEach((doc) => {
+      paymentsSnapshot.forEach((doc) => {
         const data = doc.data();
         paymentsData.push({
           id: doc.id,
@@ -142,40 +140,22 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
         } as Payment);
       });
       setPayments(paymentsData);
-    }, (error) => {
-      console.error("Error in payments snapshot:", error);
-    });
 
-    return () => unsubscribe();
-  }, [userId, startDate, endDate]);
-
-  // Fetch static data (inventory and fixed assets) - one-time fetch is fine for these
-  const fetchStaticData = useCallback(async () => {
-    if (!userId) { return; }
-    setLoading(true);
-
-    try {
-      // Fetch inventory (limit to 500 items)
-      const inventoryRef = collection(firestore, `users/${userId}/inventory`);
-      const inventoryQuery = query(inventoryRef, limit(500));
-      const inventorySnapshot = await getDocs(inventoryQuery);
+      // Process inventory
       const inventoryData: InventoryItem[] = [];
       inventorySnapshot.forEach((doc) => {
         inventoryData.push({ id: doc.id, ...doc.data() } as InventoryItem);
       });
       setInventory(inventoryData);
 
-      // Fetch fixed assets (limit to 500 items)
-      const assetsRef = collection(firestore, `users/${userId}/fixed_assets`);
-      const assetsQuery = query(assetsRef, limit(500));
-      const assetsSnapshot = await getDocs(assetsQuery);
+      // Process fixed assets
       const assetsData: FixedAsset[] = [];
       assetsSnapshot.forEach((doc) => {
         assetsData.push({ id: doc.id, ...doc.data() } as FixedAsset);
       });
       setFixedAssets(assetsData);
     } catch (error) {
-      console.error("Error fetching static data:", error);
+      console.error("Error fetching report data:", error);
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء تحميل البيانات",
@@ -184,11 +164,11 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
     } finally {
       setLoading(false);
     }
-  }, [userId, toast]);
+  }, [userId, startDate, endDate, toast]);
 
   useEffect(() => {
-    fetchStaticData();
-  }, [fetchStaticData]);
+    fetchAllData();
+  }, [fetchAllData]);
 
   return {
     loading,
@@ -196,6 +176,6 @@ export function useReportsData({ userId, startDate, endDate }: UseReportsDataPro
     payments,
     inventory,
     fixedAssets,
-    refetch: fetchStaticData,
+    refetch: fetchAllData,
   };
 }

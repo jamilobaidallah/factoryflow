@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -394,6 +394,261 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   // Date filter state for statement
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+
+  // Memoize allTransactions - expensive computation that combines ledger entries and payments
+  const allTransactions = useMemo((): StatementItem[] => {
+    return [
+      // Ledger entries (invoices) plus their discounts and writeoffs
+      ...ledgerEntries.flatMap((e) => {
+        const rows: StatementItem[] = [];
+        const isAdvance = isAdvanceEntry(e);
+        const isLoan = isLoanTransaction(e.type, e.category);
+
+        // Determine debit/credit based on entry type
+        let debit = 0;
+        let credit = 0;
+        if (isLoan) {
+          // Loans: direction based on subcategory
+          const loanType = getLoanType(e.category);
+          if (isInitialLoan(e.subCategory)) {
+            // Initial loans:
+            // - Loan Given (قروض ممنوحة / منح قرض): We lent money → debit (they owe us)
+            // - Loan Received (قروض مستلمة / استلام قرض): We borrowed → credit (we owe them)
+            if (loanType === "receivable") {
+              debit = e.amount; // We lent money, they owe us
+            } else if (loanType === "payable") {
+              credit = e.amount; // We borrowed, we owe them
+            }
+          } else {
+            // Loan repayments/collections:
+            // - Loan Collection (تحصيل قرض): They paid us back → credit (reduces what they owe)
+            // - Loan Repayment (سداد قرض): We paid back → debit (reduces what we owe)
+            if (loanType === "receivable") {
+              credit = e.amount; // They paid back
+            } else if (loanType === "payable") {
+              debit = e.amount; // We paid back
+            }
+          }
+        } else if (isAdvance) {
+          // Advances have INVERTED debit/credit vs their entry type
+          // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
+          // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
+          // Show FULL amount - the "مدفوع من سلفة" row on invoices is informational only
+          if (e.category === "سلفة عميل") {
+            credit = e.amount; // We owe them (liability) - full amount received
+          } else if (e.category === "سلفة مورد") {
+            debit = e.amount; // They owe us (asset) - full amount paid
+          }
+        } else if (e.type === "دخل" || e.type === "إيراد") {
+          debit = e.amount;
+        } else if (e.type === "مصروف") {
+          credit = e.amount;
+        }
+
+        rows.push({
+          id: e.id,
+          transactionId: e.transactionId,
+          source: 'ledger' as const,
+          date: e.date,
+          isPayment: false,
+          entryType: isAdvance ? 'سلفة' : (isLoan ? 'قرض' : e.type),
+          description: e.description,
+          category: e.category,
+          subCategory: e.subCategory,
+          debit,
+          credit,
+        });
+
+        // Row 2: Discount from ledger entry (if any) - reduces what client owes
+        if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+          rows.push({
+            id: `${e.id}-discount`,
+            transactionId: e.transactionId,
+            source: 'ledger' as const,
+            date: e.date,
+            isPayment: true,  // Display as payment-like row
+            entryType: 'خصم',
+            description: 'خصم تسوية',
+            category: e.category,
+            debit: 0,
+            credit: e.totalDiscount,  // Credit reduces debt
+          });
+        }
+
+        // Row 3: Writeoff from ledger entry (if any) - reduces what client owes
+        if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+          rows.push({
+            id: `${e.id}-writeoff`,
+            transactionId: e.transactionId,
+            source: 'ledger' as const,
+            date: e.date,
+            isPayment: true,  // Display as payment-like row
+            entryType: 'شطب',
+            description: 'شطب دين معدوم',
+            category: e.category,
+            debit: 0,
+            credit: e.writeoffAmount,  // Credit reduces debt
+          });
+        }
+
+        // Row 4: Expense discount (if any) - reduces what we owe supplier (DEBIT)
+        if (e.totalDiscount && e.totalDiscount > 0 && e.type === "مصروف") {
+          rows.push({
+            id: `${e.id}-discount`,
+            transactionId: e.transactionId,
+            source: 'ledger' as const,
+            date: e.date,
+            isPayment: true,
+            entryType: 'خصم مورد',
+            description: 'خصم من المورد',
+            category: e.category,
+            debit: e.totalDiscount,  // DEBIT reduces liability (opposite of income)
+            credit: 0,
+          });
+        }
+
+        // Row 5: Expense writeoff (if any) - reduces what we owe supplier (DEBIT)
+        if (e.writeoffAmount && e.writeoffAmount > 0 && e.type === "مصروف") {
+          rows.push({
+            id: `${e.id}-writeoff`,
+            transactionId: e.transactionId,
+            source: 'ledger' as const,
+            date: e.date,
+            isPayment: true,
+            entryType: 'إعفاء مورد',
+            description: 'إعفاء من المورد',
+            category: e.category,
+            debit: e.writeoffAmount,  // DEBIT reduces liability
+            credit: 0,
+          });
+        }
+
+        // Row 6: Paid from advance (if any) - INFORMATIONAL ONLY
+        // Shows that invoice was paid using customer/supplier advance, but doesn't affect balance
+        // The advance entry shows FULL amount, so this row is just for clarity
+        if (e.totalPaidFromAdvances && e.totalPaidFromAdvances > 0) {
+          const isIncome = e.type === "دخل" || e.type === "إيراد";
+          rows.push({
+            id: `${e.id}-advance-payment`,
+            transactionId: e.transactionId,
+            source: 'ledger' as const,
+            date: e.date,
+            isPayment: true,
+            entryType: 'معلومات',
+            description: isIncome
+              ? `مدفوع من سلفة عميل (${e.totalPaidFromAdvances})`
+              : `مخصوم من سلفة مورد (${e.totalPaidFromAdvances})`,
+            category: e.category,
+            debit: 0,   // Informational only - no balance impact
+            credit: 0,  // The advance entry already shows full amount
+          });
+        }
+
+        return rows;
+      }),
+      // Payments (cash/cheque payments only - discounts/writeoffs come from ledger)
+      // Note: Don't include payment.discountAmount here as it's already in ledger.totalDiscount
+      ...payments.flatMap((p) => {
+        // Only show payments with actual amount (skip discount-only records)
+        if (p.amount <= 0) {
+          return [];
+        }
+
+        // Skip payments linked to advance entries (already shown as سلفة)
+        if (p.linkedTransactionId) {
+          // linkedTransactionId stores the transactionId, not the document id
+          const linkedEntry = ledgerEntries.find(e => e.transactionId === p.linkedTransactionId);
+          if (linkedEntry && isAdvanceEntry(linkedEntry)) {
+            return []; // Skip advance-related payments
+          }
+        }
+
+        return [{
+          id: p.id,
+          source: 'payment' as const,
+          date: p.date,
+          isPayment: true,
+          entryType: p.type,
+          description: p.notes || p.description || '',
+          notes: p.notes,
+          isEndorsement: p.isEndorsement || false, // Track endorsement payments
+          // Payment received (قبض): goes in دائن (reduces what they owe us)
+          // Payment made (صرف): goes in مدين (reduces what we owe them)
+          debit: p.type === "صرف" ? p.amount : 0,
+          credit: p.type === "قبض" ? p.amount : 0,
+        }];
+      }),
+    ].sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [ledgerEntries, payments]);
+
+  // Memoize date range calculation
+  const dateRange = useMemo(() => getDateRange(allTransactions), [allTransactions]);
+
+  // Memoize filtered transactions and balance calculations
+  const statementData = useMemo(() => {
+    // Calculate opening balance
+    // Start with client's initial balance (الرصيد الافتتاحي) from their record
+    const clientInitialBalance = client?.balance || 0;
+    let openingBalance = clientInitialBalance;
+
+    // If date filter is applied, add all transactions BEFORE the "from" date
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      allTransactions.forEach((item) => {
+        const itemDate = new Date(item.date);
+        itemDate.setHours(0, 0, 0, 0);
+        if (itemDate < fromDate) {
+          openingBalance += item.debit - item.credit;
+        }
+      });
+    }
+
+    // Filter transactions by date range
+    const filteredTransactions = allTransactions.filter((item) => {
+      const itemDate = new Date(item.date);
+      itemDate.setHours(0, 0, 0, 0);
+
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        fromDate.setHours(0, 0, 0, 0);
+        if (itemDate < fromDate) {
+          return false;
+        }
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        if (itemDate > toDate) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Calculate totals from filtered transactions
+    // Running balance starts from opening balance
+    let totalDebit = 0;
+    let totalCredit = 0;
+    let runningBalance = openingBalance;
+    const rowsWithBalance = filteredTransactions.map((t) => {
+      totalDebit += t.debit;
+      totalCredit += t.credit;
+      runningBalance += t.debit - t.credit;
+      return { ...t, balance: runningBalance };
+    });
+
+    const finalBalance = runningBalance;
+
+    return {
+      openingBalance,
+      filteredTransactions,
+      rowsWithBalance,
+      totalDebit,
+      totalCredit,
+      finalBalance,
+    };
+  }, [allTransactions, dateFrom, dateTo, client?.balance]);
 
   // Load client data
   useEffect(() => {
@@ -1081,523 +1336,278 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         <TabsContent value="statement">
           <Card>
             <CardContent className="p-0">
-              {(() => {
-                // Combine and sort all transactions chronologically
-                const allTransactions: StatementItem[] = [
-                  // Ledger entries (invoices) plus their discounts and writeoffs
-                  ...ledgerEntries.flatMap((e) => {
-                    const rows: StatementItem[] = [];
-                    const isAdvance = isAdvanceEntry(e);
-                    const isLoan = isLoanTransaction(e.type, e.category);
-
-                    // Determine debit/credit based on entry type
-                    let debit = 0;
-                    let credit = 0;
-                    if (isLoan) {
-                      // Loans: direction based on subcategory
-                      const loanType = getLoanType(e.category);
-                      if (isInitialLoan(e.subCategory)) {
-                        // Initial loans:
-                        // - Loan Given (قروض ممنوحة / منح قرض): We lent money → debit (they owe us)
-                        // - Loan Received (قروض مستلمة / استلام قرض): We borrowed → credit (we owe them)
-                        if (loanType === "receivable") {
-                          debit = e.amount; // We lent money, they owe us
-                        } else if (loanType === "payable") {
-                          credit = e.amount; // We borrowed, we owe them
-                        }
-                      } else {
-                        // Loan repayments/collections:
-                        // - Loan Collection (تحصيل قرض): They paid us back → credit (reduces what they owe)
-                        // - Loan Repayment (سداد قرض): We paid back → debit (reduces what we owe)
-                        if (loanType === "receivable") {
-                          credit = e.amount; // They paid back
-                        } else if (loanType === "payable") {
-                          debit = e.amount; // We paid back
-                        }
-                      }
-                    } else if (isAdvance) {
-                      // Advances have INVERTED debit/credit vs their entry type
-                      // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
-                      // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
-                      // Show FULL amount - the "مدفوع من سلفة" row on invoices is informational only
-                      if (e.category === "سلفة عميل") {
-                        credit = e.amount; // We owe them (liability) - full amount received
-                      } else if (e.category === "سلفة مورد") {
-                        debit = e.amount; // They owe us (asset) - full amount paid
-                      }
-                    } else if (e.type === "دخل" || e.type === "إيراد") {
-                      debit = e.amount;
-                    } else if (e.type === "مصروف") {
-                      credit = e.amount;
-                    }
-
-                    rows.push({
-                      id: e.id,
-                      transactionId: e.transactionId,
-                      source: 'ledger' as const,
-                      date: e.date,
-                      isPayment: false,
-                      entryType: isAdvance ? 'سلفة' : (isLoan ? 'قرض' : e.type),
-                      description: e.description,
-                      category: e.category,
-                      subCategory: e.subCategory,
-                      debit,
-                      credit,
-                    });
-
-                    // Row 2: Discount from ledger entry (if any) - reduces what client owes
-                    if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-                      rows.push({
-                        id: `${e.id}-discount`,
-                        transactionId: e.transactionId,
-                        source: 'ledger' as const,
-                        date: e.date,
-                        isPayment: true,  // Display as payment-like row
-                        entryType: 'خصم',
-                        description: 'خصم تسوية',
-                        category: e.category,
-                        debit: 0,
-                        credit: e.totalDiscount,  // Credit reduces debt
-                      });
-                    }
-
-                    // Row 3: Writeoff from ledger entry (if any) - reduces what client owes
-                    if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-                      rows.push({
-                        id: `${e.id}-writeoff`,
-                        transactionId: e.transactionId,
-                        source: 'ledger' as const,
-                        date: e.date,
-                        isPayment: true,  // Display as payment-like row
-                        entryType: 'شطب',
-                        description: 'شطب دين معدوم',
-                        category: e.category,
-                        debit: 0,
-                        credit: e.writeoffAmount,  // Credit reduces debt
-                      });
-                    }
-
-                    // Row 4: Expense discount (if any) - reduces what we owe supplier (DEBIT)
-                    if (e.totalDiscount && e.totalDiscount > 0 && e.type === "مصروف") {
-                      rows.push({
-                        id: `${e.id}-discount`,
-                        transactionId: e.transactionId,
-                        source: 'ledger' as const,
-                        date: e.date,
-                        isPayment: true,
-                        entryType: 'خصم مورد',
-                        description: 'خصم من المورد',
-                        category: e.category,
-                        debit: e.totalDiscount,  // DEBIT reduces liability (opposite of income)
-                        credit: 0,
-                      });
-                    }
-
-                    // Row 5: Expense writeoff (if any) - reduces what we owe supplier (DEBIT)
-                    if (e.writeoffAmount && e.writeoffAmount > 0 && e.type === "مصروف") {
-                      rows.push({
-                        id: `${e.id}-writeoff`,
-                        transactionId: e.transactionId,
-                        source: 'ledger' as const,
-                        date: e.date,
-                        isPayment: true,
-                        entryType: 'إعفاء مورد',
-                        description: 'إعفاء من المورد',
-                        category: e.category,
-                        debit: e.writeoffAmount,  // DEBIT reduces liability
-                        credit: 0,
-                      });
-                    }
-
-                    // Row 6: Paid from advance (if any) - INFORMATIONAL ONLY
-                    // Shows that invoice was paid using customer/supplier advance, but doesn't affect balance
-                    // The advance entry shows FULL amount, so this row is just for clarity
-                    if (e.totalPaidFromAdvances && e.totalPaidFromAdvances > 0) {
-                      const isIncome = e.type === "دخل" || e.type === "إيراد";
-                      rows.push({
-                        id: `${e.id}-advance-payment`,
-                        transactionId: e.transactionId,
-                        source: 'ledger' as const,
-                        date: e.date,
-                        isPayment: true,
-                        entryType: 'معلومات',
-                        description: isIncome
-                          ? `مدفوع من سلفة عميل (${e.totalPaidFromAdvances})`
-                          : `مخصوم من سلفة مورد (${e.totalPaidFromAdvances})`,
-                        category: e.category,
-                        debit: 0,   // Informational only - no balance impact
-                        credit: 0,  // The advance entry already shows full amount
-                      });
-                    }
-
-                    return rows;
-                  }),
-                  // Payments (cash/cheque payments only - discounts/writeoffs come from ledger)
-                  // Note: Don't include payment.discountAmount here as it's already in ledger.totalDiscount
-                  ...payments.flatMap((p) => {
-                    // Only show payments with actual amount (skip discount-only records)
-                    if (p.amount <= 0) {
-                      return [];
-                    }
-
-                    // Skip payments linked to advance entries (already shown as سلفة)
-                    if (p.linkedTransactionId) {
-                      // linkedTransactionId stores the transactionId, not the document id
-                      const linkedEntry = ledgerEntries.find(e => e.transactionId === p.linkedTransactionId);
-                      if (linkedEntry && isAdvanceEntry(linkedEntry)) {
-                        return []; // Skip advance-related payments
-                      }
-                    }
-
-                    return [{
-                      id: p.id,
-                      source: 'payment' as const,
-                      date: p.date,
-                      isPayment: true,
-                      entryType: p.type,
-                      description: p.notes || p.description || '',
-                      notes: p.notes,
-                      isEndorsement: p.isEndorsement || false, // Track endorsement payments
-                      // Payment received (قبض): goes in دائن (reduces what they owe us)
-                      // Payment made (صرف): goes in مدين (reduces what we owe them)
-                      debit: p.type === "صرف" ? p.amount : 0,
-                      credit: p.type === "قبض" ? p.amount : 0,
-                    }];
-                  }),
-                ].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-                // Calculate date range (from all transactions, before filtering)
-                const dateRange = getDateRange(allTransactions);
-
-                // Calculate opening balance
-                // Start with client's initial balance (الرصيد الافتتاحي) from their record
-                const clientInitialBalance = client?.balance || 0;
-                let openingBalance = clientInitialBalance;
-
-                // If date filter is applied, add all transactions BEFORE the "from" date
-                if (dateFrom) {
-                  const fromDate = new Date(dateFrom);
-                  fromDate.setHours(0, 0, 0, 0);
-                  allTransactions.forEach((item) => {
-                    const itemDate = new Date(item.date);
-                    itemDate.setHours(0, 0, 0, 0);
-                    if (itemDate < fromDate) {
-                      openingBalance += item.debit - item.credit;
-                    }
-                  });
-                }
-
-                // Filter transactions by date range
-                const filteredTransactions = allTransactions.filter((item) => {
-                  const itemDate = new Date(item.date);
-                  itemDate.setHours(0, 0, 0, 0);
-
-                  if (dateFrom) {
-                    const fromDate = new Date(dateFrom);
-                    fromDate.setHours(0, 0, 0, 0);
-                    if (itemDate < fromDate) {
-                      return false;
-                    }
-                  }
-                  if (dateTo) {
-                    const toDate = new Date(dateTo);
-                    toDate.setHours(23, 59, 59, 999);
-                    if (itemDate > toDate) {
-                      return false;
-                    }
-                  }
-                  return true;
-                });
-
-                // Calculate totals from filtered transactions
-                // Running balance starts from opening balance
-                let totalDebit = 0;
-                let totalCredit = 0;
-                let runningBalance = openingBalance;
-                const rowsWithBalance = filteredTransactions.map((t) => {
-                  totalDebit += t.debit;
-                  totalCredit += t.credit;
-                  runningBalance += t.debit - t.credit;
-                  return { ...t, balance: runningBalance };
-                });
-
-                const finalBalance = runningBalance;
-
-                return (
-                  <div>
-                    {/* Statement Header */}
-                    <div className="bg-gradient-to-l from-blue-600 to-blue-800 text-white p-5 rounded-t-lg">
-                      <h3 className="text-lg mb-1">كشف حساب</h3>
-                      <div className="text-2xl font-bold mb-2">{client.name}</div>
-                      {allTransactions.length > 0 && (
-                        <div className="text-sm opacity-90">
-                          الفترة: من {dateFrom ? format(dateFrom, "dd/MM/yyyy") : formatDateAr(dateRange.oldest)} إلى {dateTo ? format(dateTo, "dd/MM/yyyy") : formatDateAr(dateRange.newest)}
-                        </div>
-                      )}
+              <div>
+                {/* Statement Header */}
+                <div className="bg-gradient-to-l from-blue-600 to-blue-800 text-white p-5 rounded-t-lg">
+                  <h3 className="text-lg mb-1">كشف حساب</h3>
+                  <div className="text-2xl font-bold mb-2">{client?.name}</div>
+                  {allTransactions.length > 0 && (
+                    <div className="text-sm opacity-90">
+                      الفترة: من {dateFrom ? format(dateFrom, "dd/MM/yyyy") : formatDateAr(dateRange.oldest)} إلى {dateTo ? format(dateTo, "dd/MM/yyyy") : formatDateAr(dateRange.newest)}
                     </div>
+                  )}
+                </div>
 
-                    {/* Date Range Filter Bar */}
-                    <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 border-b" dir="rtl">
-                      <span className="text-sm font-medium text-gray-600">تصفية حسب التاريخ:</span>
+                {/* Date Range Filter Bar */}
+                <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 border-b" dir="rtl">
+                  <span className="text-sm font-medium text-gray-600">تصفية حسب التاريخ:</span>
 
-                      {/* From Date */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">من</span>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={`w-[140px] justify-start text-right font-normal ${
-                                !dateFrom && "text-muted-foreground"
-                              }`}
-                            >
-                              <CalendarIcon className="ml-2 h-4 w-4" />
-                              {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "اختر تاريخ"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={dateFrom}
-                              onSelect={setDateFrom}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      {/* To Date */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">إلى</span>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={`w-[140px] justify-start text-right font-normal ${
-                                !dateTo && "text-muted-foreground"
-                              }`}
-                            >
-                              <CalendarIcon className="ml-2 h-4 w-4" />
-                              {dateTo ? format(dateTo, "dd/MM/yyyy") : "اختر تاريخ"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={dateTo}
-                              onSelect={setDateTo}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      {/* Clear Filter Button */}
-                      {(dateFrom || dateTo) && (
+                  {/* From Date */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">من</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDateFrom(undefined);
-                            setDateTo(undefined);
-                          }}
-                          className="text-gray-500 hover:text-gray-700"
+                          variant="outline"
+                          className={`w-[140px] justify-start text-right font-normal ${
+                            !dateFrom && "text-muted-foreground"
+                          }`}
                         >
-                          مسح الفلتر
+                          <CalendarIcon className="ml-2 h-4 w-4" />
+                          {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "اختر تاريخ"}
                         </Button>
-                      )}
-
-                      {/* Show filtered count */}
-                      {(dateFrom || dateTo) && (
-                        <span className="text-sm text-gray-500 mr-auto">
-                          ({filteredTransactions.length} من {allTransactions.length} معاملة)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Statement Table - RTL column order: الرصيد | دائن | مدين | البيان | التاريخ */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-gray-50 border-b-2 border-gray-200">
-                            <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">التاريخ</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* Opening Balance Row */}
-                          <tr className="bg-gray-100">
-                            <td className={`pl-1 pr-2 py-3 font-medium ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
-                              د.أ {openingBalance > 0 ? 'عليه' : openingBalance < 0 ? 'له' : ''}
-                            </td>
-                            <td className={`pl-0 pr-4 py-3 font-medium text-left ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
-                              {formatNumber(Math.abs(openingBalance))}
-                            </td>
-                            <td className="px-4 py-3"></td>
-                            <td className="px-4 py-3"></td>
-                            <td colSpan={2} className="px-4 py-3 text-right font-medium text-gray-600">رصيد افتتاحي</td>
-                          </tr>
-
-                          {/* Transaction Rows */}
-                          {rowsWithBalance.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                                لا توجد معاملات
-                              </td>
-                            </tr>
-                          ) : (
-                            rowsWithBalance.map((transaction, index) => (
-                              <tr
-                                key={index}
-                                onClick={() => {
-                                  setSelectedTransaction(transaction);
-                                  setIsModalOpen(true);
-                                }}
-                                className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
-                              >
-                                <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
-                                </td>
-                                <td className={`pl-0 pr-4 py-3 text-sm font-semibold text-left ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {formatNumber(Math.abs(transaction.balance))}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-green-600 font-medium">
-                                  {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-red-600 font-medium">
-                                  {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-right">
-                                  <div className="flex items-center gap-2 justify-end">
-                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
-                                      transaction.entryType === 'سلفة'
-                                        ? 'bg-orange-100 text-orange-800'
-                                        : transaction.entryType === 'قرض'
-                                        ? 'bg-indigo-100 text-indigo-800'
-                                        : transaction.isEndorsement
-                                        ? 'bg-purple-100 text-purple-800'
-                                        : transaction.isPayment
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-blue-100 text-blue-800'
-                                    }`}>
-                                      {transaction.entryType === 'سلفة' ? 'سلفة' : transaction.entryType === 'قرض' ? 'قرض' : transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
-                                    </span>
-                                    <span>
-                                      {transaction.isPayment
-                                        ? extractPaymentMethod(transaction.description)
-                                        : transaction.description}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
-                              </tr>
-                            ))
-                          )}
-
-                          {/* Totals Row */}
-                          {rowsWithBalance.length > 0 && (
-                            <tr className="bg-blue-800 text-white font-semibold">
-                              <td className="pl-1 pr-0 py-4"></td>
-                              <td className="pl-0 pr-4 py-4"></td>
-                              <td className="px-4 py-4">{formatNumber(totalCredit)}</td>
-                              <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
-                              <td className="px-4 py-4">المجموع</td>
-                              <td className="px-4 py-4"></td>
-                            </tr>
-                          )}
-
-                          {/* Final Balance Row */}
-                          {rowsWithBalance.length > 0 && (
-                            <tr className="bg-green-50">
-                              <td className={`pl-1 pr-2 py-4 font-bold ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
-                              </td>
-                              <td className={`pl-0 pr-4 py-4 font-bold text-lg text-left ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                {formatNumber(Math.abs(finalBalance))}
-                              </td>
-                              <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
-                                الرصيد المستحق
-                              </td>
-                              <td className="px-4 py-4"></td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pending Cheques Section */}
-                    {(() => {
-                      const pendingCheques = filterPendingCheques(cheques);
-                      if (pendingCheques.length === 0) return null;
-
-                      const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
-                      const { balanceAfterCheques } = calculateBalanceAfterCheques(finalBalance, pendingCheques);
-
-                      return (
-                        <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
-                          <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                            <span>شيكات قيد الانتظار</span>
-                            <span className="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full">
-                              {pendingCheques.length}
-                            </span>
-                          </h3>
-
-                          <div className="bg-yellow-50 rounded-lg overflow-hidden">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="bg-yellow-100">
-                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">رقم الشيك</th>
-                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">النوع</th>
-                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">البنك</th>
-                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">تاريخ الاستحقاق</th>
-                                  <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">المبلغ</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {pendingCheques.map((cheque, index) => (
-                                  <tr key={cheque.id} className={index % 2 === 0 ? 'bg-yellow-50' : 'bg-white'}>
-                                    <td className="px-4 py-3 text-sm">{cheque.chequeNumber}</td>
-                                    <td className="px-4 py-3 text-sm">{cheque.type}</td>
-                                    <td className="px-4 py-3 text-sm">{cheque.bankName}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      {cheque.dueDate ? formatDateAr(cheque.dueDate) : '-'}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm font-medium">
-                                      {formatNumber(cheque.amount)} د.أ
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="bg-yellow-200 font-semibold">
-                                  <td colSpan={4} className="px-4 py-3 text-right">إجمالي الشيكات المعلقة</td>
-                                  <td className="px-4 py-3">
-                                    {formatNumber(totalPendingCheques)} د.أ
-                                  </td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-
-                          {/* Balance After Cheques Clear */}
-                          <div className="mt-4 p-4 bg-gray-100 rounded-lg flex justify-between items-center">
-                            <span className="font-medium text-gray-600">الرصيد المتوقع بعد صرف الشيكات:</span>
-                            <span className={`text-lg font-bold ${
-                              balanceAfterCheques > 0 ? 'text-red-600' : balanceAfterCheques < 0 ? 'text-green-600' : ''
-                            }`}>
-                              {formatNumber(Math.abs(balanceAfterCheques))} د.أ
-                              {balanceAfterCheques > 0 ? ' عليه' : balanceAfterCheques < 0 ? ' له' : ' (مسدد)'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateFrom}
+                          onSelect={setDateFrom}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                );
-              })()}
+
+                  {/* To Date */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">إلى</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={`w-[140px] justify-start text-right font-normal ${
+                            !dateTo && "text-muted-foreground"
+                          }`}
+                        >
+                          <CalendarIcon className="ml-2 h-4 w-4" />
+                          {dateTo ? format(dateTo, "dd/MM/yyyy") : "اختر تاريخ"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateTo}
+                          onSelect={setDateTo}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Clear Filter Button */}
+                  {(dateFrom || dateTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDateFrom(undefined);
+                        setDateTo(undefined);
+                      }}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      مسح الفلتر
+                    </Button>
+                  )}
+
+                  {/* Show filtered count */}
+                  {(dateFrom || dateTo) && (
+                    <span className="text-sm text-gray-500 mr-auto">
+                      ({statementData.filteredTransactions.length} من {allTransactions.length} معاملة)
+                    </span>
+                  )}
+                </div>
+
+                {/* Statement Table - RTL column order: الرصيد | دائن | مدين | البيان | التاريخ */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b-2 border-gray-200">
+                        <th colSpan={2} className="px-4 py-3 text-right text-sm font-semibold text-gray-600">الرصيد</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">دائن</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">مدين</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">البيان</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">التاريخ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Opening Balance Row */}
+                      <tr className="bg-gray-100">
+                        <td className={`pl-1 pr-2 py-3 font-medium ${statementData.openingBalance > 0 ? 'text-red-600' : statementData.openingBalance < 0 ? 'text-green-600' : ''}`}>
+                          د.أ {statementData.openingBalance > 0 ? 'عليه' : statementData.openingBalance < 0 ? 'له' : ''}
+                        </td>
+                        <td className={`pl-0 pr-4 py-3 font-medium text-left ${statementData.openingBalance > 0 ? 'text-red-600' : statementData.openingBalance < 0 ? 'text-green-600' : ''}`}>
+                          {formatNumber(Math.abs(statementData.openingBalance))}
+                        </td>
+                        <td className="px-4 py-3"></td>
+                        <td className="px-4 py-3"></td>
+                        <td colSpan={2} className="px-4 py-3 text-right font-medium text-gray-600">رصيد افتتاحي</td>
+                      </tr>
+
+                      {/* Transaction Rows */}
+                      {statementData.rowsWithBalance.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            لا توجد معاملات
+                          </td>
+                        </tr>
+                      ) : (
+                        statementData.rowsWithBalance.map((transaction, index) => (
+                          <tr
+                            key={index}
+                            onClick={() => {
+                              setSelectedTransaction(transaction);
+                              setIsModalOpen(true);
+                            }}
+                            className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
+                            </td>
+                            <td className={`pl-0 pr-4 py-3 text-sm font-semibold text-left ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {formatNumber(Math.abs(transaction.balance))}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-green-600 font-medium">
+                              {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-red-600 font-medium">
+                              {transaction.debit > 0 ? formatNumber(transaction.debit) : ''}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right">
+                              <div className="flex items-center gap-2 justify-end">
+                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
+                                  transaction.entryType === 'سلفة'
+                                    ? 'bg-orange-100 text-orange-800'
+                                    : transaction.entryType === 'قرض'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : transaction.isEndorsement
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : transaction.isPayment
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {transaction.entryType === 'سلفة' ? 'سلفة' : transaction.entryType === 'قرض' ? 'قرض' : transaction.isEndorsement ? 'تظهير' : transaction.isPayment ? 'دفعة' : 'فاتورة'}
+                                </span>
+                                <span>
+                                  {transaction.isPayment
+                                    ? extractPaymentMethod(transaction.description)
+                                    : transaction.description}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm">{formatDateAr(transaction.date)}</td>
+                          </tr>
+                        ))
+                      )}
+
+                      {/* Totals Row */}
+                      {statementData.rowsWithBalance.length > 0 && (
+                        <tr className="bg-blue-800 text-white font-semibold">
+                          <td className="pl-1 pr-0 py-4"></td>
+                          <td className="pl-0 pr-4 py-4"></td>
+                          <td className="px-4 py-4">{formatNumber(statementData.totalCredit)}</td>
+                          <td className="px-4 py-4">{formatNumber(statementData.totalDebit)}</td>
+                          <td className="px-4 py-4">المجموع</td>
+                          <td className="px-4 py-4"></td>
+                        </tr>
+                      )}
+
+                      {/* Final Balance Row */}
+                      {statementData.rowsWithBalance.length > 0 && (
+                        <tr className="bg-green-50">
+                          <td className={`pl-1 pr-2 py-4 font-bold ${statementData.finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            د.أ {statementData.finalBalance > 0 ? 'عليه' : statementData.finalBalance < 0 ? 'له' : '(مسدد)'}
+                          </td>
+                          <td className={`pl-0 pr-4 py-4 font-bold text-lg text-left ${statementData.finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatNumber(Math.abs(statementData.finalBalance))}
+                          </td>
+                          <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
+                            الرصيد المستحق
+                          </td>
+                          <td className="px-4 py-4"></td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pending Cheques Section */}
+                {(() => {
+                  const pendingCheques = filterPendingCheques(cheques);
+                  if (pendingCheques.length === 0) return null;
+
+                  const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
+                  const { balanceAfterCheques } = calculateBalanceAfterCheques(statementData.finalBalance, pendingCheques);
+
+                  return (
+                    <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
+                      <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <span>شيكات قيد الانتظار</span>
+                        <span className="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full">
+                          {pendingCheques.length}
+                        </span>
+                      </h3>
+
+                      <div className="bg-yellow-50 rounded-lg overflow-hidden">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-yellow-100">
+                              <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">رقم الشيك</th>
+                              <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">النوع</th>
+                              <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">البنك</th>
+                              <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">تاريخ الاستحقاق</th>
+                              <th className="px-4 py-3 text-right text-sm font-semibold text-yellow-800">المبلغ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pendingCheques.map((cheque, index) => (
+                              <tr key={cheque.id} className={index % 2 === 0 ? 'bg-yellow-50' : 'bg-white'}>
+                                <td className="px-4 py-3 text-sm">{cheque.chequeNumber}</td>
+                                <td className="px-4 py-3 text-sm">{cheque.type}</td>
+                                <td className="px-4 py-3 text-sm">{cheque.bankName}</td>
+                                <td className="px-4 py-3 text-sm">
+                                  {cheque.dueDate ? formatDateAr(cheque.dueDate) : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-medium">
+                                  {formatNumber(cheque.amount)} د.أ
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-yellow-200 font-semibold">
+                              <td colSpan={4} className="px-4 py-3 text-right">إجمالي الشيكات المعلقة</td>
+                              <td className="px-4 py-3">
+                                {formatNumber(totalPendingCheques)} د.أ
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+
+                      {/* Balance After Cheques Clear */}
+                      <div className="mt-4 p-4 bg-gray-100 rounded-lg flex justify-between items-center">
+                        <span className="font-medium text-gray-600">الرصيد المتوقع بعد صرف الشيكات:</span>
+                        <span className={`text-lg font-bold ${
+                          balanceAfterCheques > 0 ? 'text-red-600' : balanceAfterCheques < 0 ? 'text-green-600' : ''
+                        }`}>
+                          {formatNumber(Math.abs(balanceAfterCheques))} د.أ
+                          {balanceAfterCheques > 0 ? ' عليه' : balanceAfterCheques < 0 ? ' له' : ' (مسدد)'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </CardContent>
           </Card>
 
