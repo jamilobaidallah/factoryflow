@@ -17,6 +17,29 @@ import { convertFirestoreDates } from '@/lib/firestore-utils';
 import { queryKeys } from './keys';
 import { CHEQUE_STATUS_AR, CHEQUE_TYPES, TRANSACTION_TYPES, PAYMENT_TYPES, QUERY_LIMITS } from '@/lib/constants';
 import { useReactiveQueryData } from './useReactiveQueryData';
+import { toast } from '@/hooks/use-toast';
+
+// Track which limit warnings have been shown this session (to avoid spam)
+const shownLimitWarnings = new Set<string>();
+
+/**
+ * Show a limit warning toast to the user (once per session per warning type)
+ */
+function showLimitWarning(limitType: string, limitValue: number, message: string) {
+  const warningKey = `${limitType}-${limitValue}`;
+  if (shownLimitWarnings.has(warningKey)) {
+    return; // Already shown this session
+  }
+  shownLimitWarnings.add(warningKey);
+
+  console.warn(`${limitType} limit reached (${limitValue}). ${message}`);
+  toast({
+    title: "تحذير: تجاوز حد البيانات",
+    description: message,
+    variant: "destructive",
+    duration: 10000, // Show for 10 seconds
+  });
+}
 
 // Types matching clients-page.tsx
 export interface Client {
@@ -390,7 +413,7 @@ export function usePendingChequesSubscription() {
         }));
         // Warn if we hit the limit - indicates need for pagination
         if (snapshot.size >= QUERY_LIMITS.PENDING_CHEQUES) {
-          console.warn(`Pending cheques limit reached (${QUERY_LIMITS.PENDING_CHEQUES}). Some cheques may not be included in balance calculations.`);
+          showLimitWarning('Pending cheques', QUERY_LIMITS.PENDING_CHEQUES, 'بعض الشيكات المعلقة قد لا تُحتسب في حسابات الأرصدة. يُرجى مراجعة الشيكات القديمة.');
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
@@ -450,7 +473,7 @@ export function useLedgerEntriesSubscription() {
         }));
         // Warn if we hit the limit - indicates need for pagination or archiving
         if (snapshot.size >= QUERY_LIMITS.LEDGER_ENTRIES) {
-          console.warn(`Ledger entries limit reached (${QUERY_LIMITS.LEDGER_ENTRIES}). Some entries may not be included in balance calculations.`);
+          showLimitWarning('Ledger entries', QUERY_LIMITS.LEDGER_ENTRIES, 'بعض القيود المحاسبية قد لا تُحتسب. يُنصح بأرشفة القيود القديمة أو التواصل مع الدعم.');
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);
@@ -510,7 +533,7 @@ export function usePaymentsSubscription() {
         }));
         // Warn if we hit the limit - indicates need for pagination or archiving
         if (snapshot.size >= QUERY_LIMITS.PAYMENTS) {
-          console.warn(`Payments limit reached (${QUERY_LIMITS.PAYMENTS}). Some payments may not be included in balance calculations.`);
+          showLimitWarning('Payments', QUERY_LIMITS.PAYMENTS, 'بعض المدفوعات قد لا تُحتسب في الأرصدة. يُنصح بأرشفة المدفوعات القديمة.');
         }
         const data = transform(docs);
         queryClient.setQueryData(queryKey, data);

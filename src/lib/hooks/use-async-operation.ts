@@ -5,7 +5,7 @@
  * for async operations throughout the application.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { handleFirebaseError, logError, ErrorResult } from '../error-handler';
 
 interface UseAsyncOperationOptions {
@@ -56,16 +56,29 @@ export function useAsyncOperation<T, Args extends any[] = []>(
     error: null,
   });
 
+  // Use refs to avoid stale closures - always access latest callback values
+  // This prevents issues when callbacks capture stale state/props
+  const asyncFunctionRef = useRef(asyncFunction);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  const contextRef = useRef(context);
+
+  // Keep refs updated with latest values
+  asyncFunctionRef.current = asyncFunction;
+  onSuccessRef.current = onSuccess;
+  onErrorRef.current = onError;
+  contextRef.current = context;
+
   const execute = useCallback(
     async (...args: Args): Promise<T | undefined> => {
       setState({ data: null, loading: true, error: null });
 
       try {
-        const result = await asyncFunction(...args);
+        const result = await asyncFunctionRef.current(...args);
         setState({ data: result, loading: false, error: null });
 
-        if (onSuccess) {
-          onSuccess(result);
+        if (onSuccessRef.current) {
+          onSuccessRef.current(result);
         }
 
         return result;
@@ -73,16 +86,16 @@ export function useAsyncOperation<T, Args extends any[] = []>(
         const errorResult = handleFirebaseError(error);
         setState({ data: null, loading: false, error: errorResult });
 
-        logError(context, error);
+        logError(contextRef.current, error);
 
-        if (onError) {
-          onError(errorResult);
+        if (onErrorRef.current) {
+          onErrorRef.current(errorResult);
         }
 
         return undefined;
       }
     },
-    [asyncFunction, onSuccess, onError, context]
+    [] // No dependencies - refs always have latest values
   );
 
   const reset = useCallback(() => {

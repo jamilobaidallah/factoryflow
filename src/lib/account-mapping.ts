@@ -97,6 +97,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.UTILITIES_EXPENSE]: 'مصاريف المرافق',
   [ACCOUNT_CODES.DEPRECIATION_EXPENSE]: 'مصاريف الإهلاك',
   [ACCOUNT_CODES.OTHER_EXPENSES]: 'مصاريف أخرى',
+  [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
   // Sub-accounts
   '4010': 'مبيعات منتجات',
   '4110': 'مبيعات خدمات',
@@ -329,5 +330,21 @@ export function getAccountMappingForFixedAssetPurchase(
     creditAccount,
     debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.FIXED_ASSETS),
     creditAccountNameAr: getAccountNameAr(creditAccount),
+  };
+}
+
+/**
+ * Get account mapping for bad debt writeoff
+ *
+ * When receivable is written off as uncollectible:
+ * - DR Bad Debt Expense
+ * - CR Accounts Receivable
+ */
+export function getAccountMappingForBadDebt(): AccountMapping {
+  return {
+    debitAccount: ACCOUNT_CODES.BAD_DEBT_EXPENSE,
+    creditAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+    debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.BAD_DEBT_EXPENSE),
+    creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
   };
 }

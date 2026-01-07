@@ -54,6 +54,7 @@ import {
 import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
+  createJournalEntryForBadDebt,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
@@ -1428,11 +1429,24 @@ export class LedgerService {
         isWriteoff: true,
       });
 
-      // TODO: Add journal entry for bad debt expense when journal service is extended
+      await batch.commit();
+
+      // Create journal entry for bad debt expense
       // DR: Bad Debt Expense (5600)
       // CR: Accounts Receivable (1200)
-
-      await batch.commit();
+      try {
+        const journalDescription = `شطب دين معدوم: ${data.associatedParty} - ${data.writeoffReason}`;
+        await createJournalEntryForBadDebt(
+          this.userId,
+          journalDescription,
+          data.writeoffAmount,
+          new Date(),
+          data.entryTransactionId
+        );
+      } catch (journalError) {
+        // Log but don't fail - the writeoff was already committed
+        console.error("Failed to create journal entry for bad debt:", journalError);
+      }
 
       // Log the writeoff activity
       try {
@@ -1442,7 +1456,7 @@ export class LedgerService {
           action: 'write_off',
           module: 'ledger',
           targetId: data.entryId,
-          description: `شطب دين معدوم: ${data.writeoffAmount.toFixed(2)} دينار من ${data.associatedParty}`,
+          description: `شطب دين معدوم: ${roundCurrency(data.writeoffAmount).toFixed(2)} دينار من ${data.associatedParty}`,
           metadata: {
             writeoffAmount: data.writeoffAmount,
             writeoffReason: data.writeoffReason,

@@ -289,6 +289,36 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Journal Entries collection - قيود اليومية (double-entry bookkeeping)
+      // CRITICAL: Server-side validation that debits = credits
+      match /journal_entries/{entryId} {
+        // Helper function to validate journal entry balance
+        function isBalanced() {
+          let data = request.resource.data;
+          // totalDebits and totalCredits must be present and equal (within 0.01 tolerance for floating point)
+          return data.totalDebits is number
+            && data.totalCredits is number
+            && data.totalDebits >= 0
+            && data.totalCredits >= 0
+            && math.abs(data.totalDebits - data.totalCredits) < 0.01;
+        }
+
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
+        allow create: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
+          && hasRequiredFields(['entryNumber', 'date', 'description', 'lines', 'totalDebits', 'totalCredits', 'status', 'createdAt'])
+          && isValidString(request.resource.data.entryNumber)
+          && isValidString(request.resource.data.description)
+          && request.resource.data.date is timestamp
+          && request.resource.data.lines is list
+          && request.resource.data.lines.size() > 0
+          && request.resource.data.status in ['draft', 'posted', 'reversed']
+          && request.resource.data.createdAt is timestamp
+          && isBalanced();  // CRITICAL: Debits must equal Credits
+        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
+          && isBalanced();  // CRITICAL: Debits must equal Credits on update too
+        allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
+      }
+
       // Catch-all for any other subcollections (incoming-cheques, outgoing-cheques, etc.)
       match /{collection}/{docId} {
         allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);

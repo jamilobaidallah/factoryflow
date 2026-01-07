@@ -40,6 +40,7 @@ import {
   getAccountMappingForPayment,
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
+  getAccountMappingForBadDebt,
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
@@ -285,11 +286,14 @@ export async function createJournalEntry(
 
     // Use null for optional fields (Firestore rejects undefined but accepts null)
     // This maintains type safety and consistent document structure
+    // Include totalDebits and totalCredits for server-side validation in Firestore rules
     const docData = {
       entryNumber,
       date: Timestamp.fromDate(date),
       description,
       lines,
+      totalDebits: validation.totalDebits,   // For server-side validation
+      totalCredits: validation.totalCredits, // For server-side validation
       status: 'posted' as const, // Auto-post for simplicity
       linkedTransactionId: linkedTransactionId ?? null,
       linkedPaymentId: linkedPaymentId ?? null,
@@ -403,6 +407,24 @@ export async function createJournalEntryForDepreciation(
   const mapping = getAccountMappingForDepreciation();
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'depreciation');
+}
+
+/**
+ * Create journal entry for bad debt writeoff
+ * DR Bad Debt Expense, CR Accounts Receivable
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForBadDebt(
+  userId: string,
+  description: string,
+  amount: number,
+  date: Date,
+  linkedTransactionId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+  const mapping = getAccountMappingForBadDebt();
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'ledger');
 }
 
 // ============================================================================
