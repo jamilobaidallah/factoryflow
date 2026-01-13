@@ -151,12 +151,12 @@ describe('PaymentsPage', () => {
   describe('Stats Cards', () => {
     it('displays total income card', () => {
       render(<PaymentsPage />);
-      expect(screen.getByText('إجمالي المقبوضات')).toBeInTheDocument();
+      expect(screen.getByText('المقبوضات')).toBeInTheDocument();
     });
 
     it('displays total expenses card', () => {
       render(<PaymentsPage />);
-      expect(screen.getByText('إجمالي المصروفات')).toBeInTheDocument();
+      expect(screen.getByText('المصروفات')).toBeInTheDocument();
     });
   });
 

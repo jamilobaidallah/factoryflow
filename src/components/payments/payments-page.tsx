@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Layers, Search, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus, Layers } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
@@ -654,35 +653,16 @@ export default function PaymentsPage() {
         </PermissionGate>
       </div>
 
+      {/* Compact Stats Bar with Integrated Search */}
       <PaymentsSummaryCards
         totalReceived={totalReceived}
         totalPaid={totalPaid}
         loading={dataLoading}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
       />
 
       <div className="space-y-4">
-        {/* Search Input */}
-        <div className="relative max-w-md">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="بحث في المدفوعات..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pr-10 pl-10"
-          />
-          {searchTerm && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7"
-              onClick={() => setSearchTerm("")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-
         <PaymentsTable
           payments={filteredPayments}
           loading={dataLoading}
