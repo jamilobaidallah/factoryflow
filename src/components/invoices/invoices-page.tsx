@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useReducer } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -29,6 +28,7 @@ import { useInvoicesOperations } from "./hooks/useInvoicesOperations";
 // Components
 import { InvoicesFormDialog } from "./components/InvoicesFormDialog";
 import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
+import { InvoicesSummaryHeader } from "./components/InvoicesSummaryHeader";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 // UI state management with useReducer
@@ -247,62 +247,20 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">الفواتير</h1>
-          <p className="text-gray-500 mt-1">إنشاء وإدارة فواتير العملاء</p>
-        </div>
-        <PermissionGate action="create" module="invoices">
-          <Button onClick={openAddDialog}>
-            <Plus className="w-4 h-4 ml-2" />
-            فاتورة جديدة
-          </Button>
-        </PermissionGate>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">إجمالي الفواتير</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{invoiceStats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">المدفوعة</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {invoiceStats.paidCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">المتأخرة</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {invoiceStats.overdueCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">القيمة الكلية</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {invoiceStats.totalValue.toFixed(2)} د.أ
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="space-y-4">
+      {/* Unified Header: Title + Stats + Actions */}
+      <InvoicesSummaryHeader
+        stats={invoiceStats}
+        loading={dataLoading}
+        actions={
+          <PermissionGate action="create" module="invoices">
+            <Button size="sm" className="gap-1.5 h-9" onClick={openAddDialog}>
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">فاتورة جديدة</span>
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       {/* Invoices Table */}
       <div className="space-y-4">
