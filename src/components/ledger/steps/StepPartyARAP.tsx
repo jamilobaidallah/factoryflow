@@ -355,8 +355,8 @@ export function StepPartyARAP({
         </div>
       )}
 
-      {/* Related Records Options - Only for new entries */}
-      {!isEditMode && (
+      {/* Related Records Options - Only for new entries, not for capital transactions (no options apply) */}
+      {!isEditMode && formData.category !== "رأس المال" && (
         <div className="space-y-4 p-4 border rounded-lg bg-blue-50">
           <h4 className="font-medium text-sm">هل تريد إضافة سجلات مرتبطة؟</h4>
           <div className="grid grid-cols-2 gap-3">
