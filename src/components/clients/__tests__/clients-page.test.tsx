@@ -401,7 +401,8 @@ describe('ClientsPage', () => {
       render(<ClientsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/لا يوجد عملاء حالياً/)).toBeInTheDocument();
+        // Updated to match ContextualEmptyState text
+        expect(screen.getByText(/لا يوجد عملاء بعد/)).toBeInTheDocument();
       });
     });
 

@@ -234,3 +234,150 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* ============================================
+   MICRO-INTERACTIONS & ANIMATIONS
+   ============================================ */
+
+@layer components {
+  /* Button press animation */
+  .btn-press {
+    @apply transition-all duration-150 active:scale-95 active:shadow-sm;
+  }
+
+  /* Clickable card effect */
+  .card-clickable {
+    @apply cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  /* Skeleton shimmer effect */
+  .skeleton-shimmer {
+    @apply relative overflow-hidden bg-slate-200;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* View toggle button group */
+  .view-toggle {
+    @apply flex bg-slate-100 rounded-lg p-1 gap-1;
+  }
+  .view-toggle-btn {
+    @apply px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200;
+  }
+  .view-toggle-btn-active {
+    @apply bg-white text-slate-800 shadow-sm;
+  }
+  .view-toggle-btn-inactive {
+    @apply text-slate-500 hover:text-slate-700;
+  }
+}
+
+/* Shimmer keyframe */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Shake animation for errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Success checkmark animation */
+@keyframes checkmark-draw {
+  0% {
+    stroke-dashoffset: 50;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-checkmark {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: checkmark-draw 0.3s ease-out forwards;
+}
+
+/* Pulse animation for alerts */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Fade in animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
+
+/* Scale in animation for icons */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+/* Stagger delay utilities */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+.stagger-5 { animation-delay: 250ms; }

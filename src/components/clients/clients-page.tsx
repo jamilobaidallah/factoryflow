@@ -21,10 +21,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Edit, Trash2, AlertCircle, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Plus, Edit, Trash2, AlertCircle, ChevronUp, ChevronDown, ChevronsUpDown, LayoutGrid, LayoutList, Phone } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
-import { TableSkeleton } from "@/components/ui/loading-skeleton";
+import { TableSkeleton, CardGridSkeleton } from "@/components/ui/loading-skeleton";
+import { ContextualEmptyState } from "@/components/ui/empty-state";
+import { ClientCard } from "./ClientCard";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { collection, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
@@ -168,6 +170,24 @@ export default function ClientsPage() {
   // Sort state
   const [sortField, setSortField] = useState<ClientSortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  // View mode state (table or cards) - persisted in localStorage
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("clientsViewMode") as "table" | "cards") || "table";
+    }
+    return "table";
+  });
+
+  // Persist view mode preference
+  const handleViewModeChange = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("clientsViewMode", mode);
+    } catch {
+      // Silent fail for private browsing
+    }
+  };
 
   // Sort handler
   const handleSort = (field: ClientSortField) => {
@@ -443,13 +463,47 @@ export default function ClientsPage() {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">قائمة العملاء ({clients.length})</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">قائمة العملاء ({clients.length})</h2>
+          {/* View Toggle - Only show when there are clients */}
+          {clients.length > 0 && (
+            <div className="view-toggle">
+              <button
+                onClick={() => handleViewModeChange("table")}
+                className={`view-toggle-btn ${viewMode === "table" ? "view-toggle-btn-active" : "view-toggle-btn-inactive"}`}
+                aria-label="عرض جدول"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleViewModeChange("cards")}
+                className={`view-toggle-btn ${viewMode === "cards" ? "view-toggle-btn-active" : "view-toggle-btn-inactive"}`}
+                aria-label="عرض بطاقات"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
         {dataLoading ? (
-          <TableSkeleton rows={10} />
+          viewMode === "cards" ? <CardGridSkeleton cards={6} /> : <TableSkeleton rows={10} />
         ) : clients.length === 0 ? (
-          <p className="text-slate-500 text-center py-12">
-            لا يوجد عملاء حالياً. اضغط على &quot;إضافة عميل جديد&quot; للبدء.
-          </p>
+          <ContextualEmptyState type="clients" onAction={openAddDialog} />
+        ) : viewMode === "cards" ? (
+          /* Card View */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sortedClients.map((client, index) => (
+              <ClientCard
+                key={client.id}
+                client={client}
+                balance={getClientDisplayBalance(clientBalances.get(client.id))}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onClick={() => router.push(`/clients/${client.id}`)}
+                animationDelay={index * 50}
+              />
+            ))}
+          </div>
         ) : (
           <div className="card-modern overflow-hidden">
             <Table containerClassName="max-h-[70vh]">

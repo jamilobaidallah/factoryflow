@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
 import { DASHBOARD_LABELS } from "../constants/dashboard.constants";
@@ -105,51 +106,92 @@ function ViewModeToggle({
   );
 }
 
-/** Revenue card component */
+/** Revenue card component - Clickable to drill down to income ledger entries */
 function RevenueCard({ amount }: { amount: number }) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    router.push("/ledger?type=income");
+  };
+
   return (
-    <article className="bg-white rounded-xl p-5 border border-slate-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer">
+    <article
+      className="bg-white rounded-xl p-5 border border-slate-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer btn-press group"
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={`عرض الإيرادات - ${formatNumber(amount)} دينار`}
+    >
       <div className="flex items-center justify-between mb-3">
         <span className="text-slate-500 text-sm">{DASHBOARD_LABELS.revenue}</span>
-        <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
+        <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
           <ArrowUp className="w-5 h-5 text-emerald-600" aria-hidden="true" />
         </div>
       </div>
       <p className="text-2xl font-semibold text-slate-800">{formatNumber(amount)}</p>
-      <p className="text-xs text-slate-400 mt-1">{DASHBOARD_LABELS.currency}</p>
+      <p className="text-xs text-slate-400 mt-1 group-hover:text-emerald-500 transition-colors">
+        {DASHBOARD_LABELS.currency} ← انقر للتفاصيل
+      </p>
     </article>
   );
 }
 
-/** Expenses card component */
+/** Expenses card component - Clickable to drill down to expense ledger entries */
 function ExpensesCard({ amount }: { amount: number }) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    router.push("/ledger?type=expense");
+  };
+
   return (
-    <article className="bg-white rounded-xl p-5 border border-slate-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer">
+    <article
+      className="bg-white rounded-xl p-5 border border-slate-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer btn-press group"
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={`عرض المصروفات - ${formatNumber(amount)} دينار`}
+    >
       <div className="flex items-center justify-between mb-3">
         <span className="text-slate-500 text-sm">{DASHBOARD_LABELS.expenses}</span>
-        <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center">
+        <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-slate-200 transition-colors">
           <ArrowDown className="w-5 h-5 text-slate-500" aria-hidden="true" />
         </div>
       </div>
       <p className="text-2xl font-semibold text-slate-800">{formatNumber(amount)}</p>
-      <p className="text-xs text-slate-400 mt-1">{DASHBOARD_LABELS.currency}</p>
+      <p className="text-xs text-slate-400 mt-1 group-hover:text-slate-600 transition-colors">
+        {DASHBOARD_LABELS.currency} ← انقر للتفاصيل
+      </p>
     </article>
   );
 }
 
-/** Profit/Loss card component */
+/** Profit/Loss card component - Clickable to view all ledger entries */
 function ProfitCard({ amount, isLoss }: { amount: number; isLoss: boolean }) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    router.push("/ledger");
+  };
+
   return (
     <article
-      className={`rounded-xl p-5 border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
+      className={`rounded-xl p-5 border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer btn-press group ${
         isLoss ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200"
       }`}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={`عرض ${isLoss ? "الخسارة" : "الربح"} - ${formatNumber(Math.abs(amount))} دينار`}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-slate-500 text-sm">{DASHBOARD_LABELS.netProfit}</span>
         <div
-          className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-            isLoss ? "bg-rose-100" : "bg-emerald-100"
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+            isLoss ? "bg-rose-100 group-hover:bg-rose-200" : "bg-emerald-100 group-hover:bg-emerald-200"
           }`}
         >
           <span className={`text-sm font-bold ${isLoss ? "text-rose-600" : "text-emerald-600"}`}>
@@ -160,8 +202,8 @@ function ProfitCard({ amount, isLoss }: { amount: number; isLoss: boolean }) {
       <p className={`text-2xl font-semibold ${isLoss ? "text-rose-700" : "text-emerald-700"}`}>
         {formatNumber(Math.abs(amount))}
       </p>
-      <p className={`text-xs mt-1 ${isLoss ? "text-rose-500" : "text-emerald-500"}`}>
-        {isLoss ? DASHBOARD_LABELS.loss : DASHBOARD_LABELS.profit}
+      <p className={`text-xs mt-1 transition-colors ${isLoss ? "text-rose-500 group-hover:text-rose-600" : "text-emerald-500 group-hover:text-emerald-600"}`}>
+        {isLoss ? DASHBOARD_LABELS.loss : DASHBOARD_LABELS.profit} ← انقر للتفاصيل
       </p>
     </article>
   );
