@@ -39,18 +39,18 @@ function PaymentsSummaryCardsComponent({
           {/* Divider - Desktop only */}
           <div className="hidden lg:block w-px h-12 bg-slate-200 mx-2" />
 
-          {/* Stats - Readable Size */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Stats - Fill Available Width */}
+          <div className="flex items-center gap-3 flex-1 flex-wrap lg:flex-nowrap">
             {loading ? (
               <>
-                <div className="h-14 w-40 bg-slate-200 rounded-lg animate-pulse" />
-                <div className="h-14 w-40 bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[140px] bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[140px] bg-slate-200 rounded-lg animate-pulse" />
               </>
             ) : (
               <>
                 {/* Total Received */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50/80 rounded-lg border border-emerald-100">
-                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 rounded-lg">
+                <div className="flex items-center gap-3 px-5 py-2.5 bg-emerald-50/80 rounded-lg border border-emerald-100 flex-1 min-w-[160px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 rounded-lg flex-shrink-0">
                     <ArrowDownLeft className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
                   </div>
                   <div className="flex flex-col">
@@ -62,8 +62,8 @@ function PaymentsSummaryCardsComponent({
                 </div>
 
                 {/* Total Paid */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-rose-50/80 rounded-lg border border-rose-100">
-                  <div className="flex items-center justify-center w-10 h-10 bg-rose-100 rounded-lg">
+                <div className="flex items-center gap-3 px-5 py-2.5 bg-rose-50/80 rounded-lg border border-rose-100 flex-1 min-w-[160px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-rose-100 rounded-lg flex-shrink-0">
                     <ArrowUpRight className="w-5 h-5 text-rose-600" strokeWidth={2.5} />
                   </div>
                   <div className="flex flex-col">
@@ -76,9 +76,6 @@ function PaymentsSummaryCardsComponent({
               </>
             )}
           </div>
-
-          {/* Spacer */}
-          <div className="flex-1 hidden lg:block" />
 
           {/* Search + Actions */}
           <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">

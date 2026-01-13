@@ -36,20 +36,20 @@ function InvoicesSummaryHeaderComponent({
           {/* Divider - Desktop only */}
           <div className="hidden xl:block w-px h-12 bg-slate-200 mx-2" />
 
-          {/* Stats - Readable Size */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Stats - Fill Available Width */}
+          <div className="flex items-center gap-3 flex-1 flex-wrap xl:flex-nowrap">
             {loading ? (
               <>
-                <div className="h-14 w-32 bg-slate-200 rounded-lg animate-pulse" />
-                <div className="h-14 w-28 bg-slate-200 rounded-lg animate-pulse" />
-                <div className="h-14 w-28 bg-slate-200 rounded-lg animate-pulse" />
-                <div className="h-14 w-36 bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[120px] bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[100px] bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[100px] bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 flex-1 min-w-[140px] bg-slate-200 rounded-lg animate-pulse" />
               </>
             ) : (
               <>
                 {/* Total Invoices */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50/80 rounded-lg border border-slate-200">
-                  <div className="flex items-center justify-center w-10 h-10 bg-slate-100 rounded-lg">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50/80 rounded-lg border border-slate-200 flex-1 min-w-[130px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-slate-100 rounded-lg flex-shrink-0">
                     <FileText className="w-5 h-5 text-slate-600" strokeWidth={2} />
                   </div>
                   <div className="flex flex-col">
@@ -61,8 +61,8 @@ function InvoicesSummaryHeaderComponent({
                 </div>
 
                 {/* Paid */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50/80 rounded-lg border border-emerald-100">
-                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 rounded-lg">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50/80 rounded-lg border border-emerald-100 flex-1 min-w-[110px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 rounded-lg flex-shrink-0">
                     <CheckCircle className="w-5 h-5 text-emerald-600" strokeWidth={2} />
                   </div>
                   <div className="flex flex-col">
@@ -74,8 +74,8 @@ function InvoicesSummaryHeaderComponent({
                 </div>
 
                 {/* Overdue */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-rose-50/80 rounded-lg border border-rose-100">
-                  <div className="flex items-center justify-center w-10 h-10 bg-rose-100 rounded-lg">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-rose-50/80 rounded-lg border border-rose-100 flex-1 min-w-[110px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-rose-100 rounded-lg flex-shrink-0">
                     <AlertCircle className="w-5 h-5 text-rose-600" strokeWidth={2} />
                   </div>
                   <div className="flex flex-col">
@@ -87,8 +87,8 @@ function InvoicesSummaryHeaderComponent({
                 </div>
 
                 {/* Total Value */}
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50/80 rounded-lg border border-blue-100">
-                  <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-lg">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50/80 rounded-lg border border-blue-100 flex-1 min-w-[150px]">
+                  <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-lg flex-shrink-0">
                     <Calculator className="w-5 h-5 text-blue-600" strokeWidth={2} />
                   </div>
                   <div className="flex flex-col">
@@ -101,9 +101,6 @@ function InvoicesSummaryHeaderComponent({
               </>
             )}
           </div>
-
-          {/* Spacer */}
-          <div className="flex-1 hidden xl:block" />
 
           {/* Action Buttons */}
           {actions && (
