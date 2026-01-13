@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download, Eye, Image, X } from "lucide-react";
+import { Plus, Edit, Trash2, Download, Eye, Image, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import {
   Dialog,
@@ -60,6 +60,10 @@ const initialUIState: UIState = {
   selectedImageUrl: null,
 };
 
+// Sort types for invoice table
+type InvoiceSortField = "invoiceNumber" | "clientName" | "invoiceDate" | "total" | "status";
+type SortDirection = "asc" | "desc";
+
 function uiReducer(state: UIState, action: UIAction): UIState {
   switch (action.type) {
     case 'OPEN_ADD_DIALOG':
@@ -96,6 +100,66 @@ export default function InvoicesPage() {
   // Form state (kept separate due to complexity)
   const [formData, setFormData] = useState<InvoiceFormData>(initialFormData);
   const [items, setItems] = useState<InvoiceItem[]>([initialInvoiceItem]);
+
+  // Sort state
+  const [sortField, setSortField] = useState<InvoiceSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  // Sort handler
+  const handleSort = (field: InvoiceSortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sort icon component
+  const SortIcon = ({ field }: { field: InvoiceSortField }) => {
+    if (sortField !== field) {
+      return <ChevronsUpDown className="h-4 w-4 text-slate-300" />;
+    }
+    return sortDirection === "asc" ? (
+      <ChevronUp className="h-4 w-4 text-blue-600" />
+    ) : (
+      <ChevronDown className="h-4 w-4 text-blue-600" />
+    );
+  };
+
+  // Sorted invoices with memoization
+  const sortedInvoices = useMemo(() => {
+    if (!sortField) return invoices;
+
+    return [...invoices].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case "invoiceNumber":
+          comparison = a.invoiceNumber.localeCompare(b.invoiceNumber);
+          break;
+        case "clientName":
+          comparison = a.clientName.localeCompare(b.clientName, "ar");
+          break;
+        case "invoiceDate": {
+          const dateA = a.invoiceDate instanceof Date ? a.invoiceDate : new Date(a.invoiceDate);
+          const dateB = b.invoiceDate instanceof Date ? b.invoiceDate : new Date(b.invoiceDate);
+          comparison = dateA.getTime() - dateB.getTime();
+          break;
+        }
+        case "total":
+          comparison = a.total - b.total;
+          break;
+        case "status": {
+          const statusOrder = { draft: 0, sent: 1, overdue: 2, paid: 3 };
+          comparison = statusOrder[a.status] - statusOrder[b.status];
+          break;
+        }
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [invoices, sortField, sortDirection]);
 
   // Memoized calculations for statistics cards
   const invoiceStats = useMemo(() => ({
@@ -247,25 +311,65 @@ export default function InvoicesPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                <TableHead className="text-right font-semibold text-slate-700">رقم الفاتورة</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">
+                  <button
+                    onClick={() => handleSort("invoiceNumber")}
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                  >
+                    رقم الفاتورة
+                    <SortIcon field="invoiceNumber" />
+                  </button>
+                </TableHead>
                 <TableHead className="text-right font-semibold text-slate-700">رقم يدوي</TableHead>
-                <TableHead className="text-right font-semibold text-slate-700">العميل</TableHead>
-                <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
-                <TableHead className="text-right font-semibold text-slate-700">المبلغ</TableHead>
-                <TableHead className="text-right font-semibold text-slate-700">الحالة</TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">
+                  <button
+                    onClick={() => handleSort("clientName")}
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                  >
+                    العميل
+                    <SortIcon field="clientName" />
+                  </button>
+                </TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">
+                  <button
+                    onClick={() => handleSort("invoiceDate")}
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                  >
+                    التاريخ
+                    <SortIcon field="invoiceDate" />
+                  </button>
+                </TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">
+                  <button
+                    onClick={() => handleSort("total")}
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                  >
+                    المبلغ
+                    <SortIcon field="total" />
+                  </button>
+                </TableHead>
+                <TableHead className="text-right font-semibold text-slate-700">
+                  <button
+                    onClick={() => handleSort("status")}
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                  >
+                    الحالة
+                    <SortIcon field="status" />
+                  </button>
+                </TableHead>
                 <TableHead className="text-right font-semibold text-slate-700">صورة</TableHead>
                 <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {invoices.length === 0 ? (
+              {sortedInvoices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                     لا توجد فواتير بعد. انقر على &quot;فاتورة جديدة&quot; للبدء.
                   </TableCell>
                 </TableRow>
               ) : (
-                invoices.map((invoice) => (
+                sortedInvoices.map((invoice) => (
                   <TableRow key={invoice.id} className="table-row-hover">
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell className="text-slate-600 text-sm">

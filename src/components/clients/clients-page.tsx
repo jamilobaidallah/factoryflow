@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer } from "react";
+import { useReducer, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Edit, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Edit, Trash2, AlertCircle, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -132,6 +132,10 @@ function uiReducer(state: UIState, action: UIAction): UIState {
   }
 }
 
+// Sort types for client table
+type ClientSortField = "name" | "phone" | "balance";
+type SortDirection = "asc" | "desc";
+
 /** Displays client balance with appropriate styling */
 function ClientBalanceDisplay({ balance }: { balance: number }) {
   const colorClass = balance > 0 ? 'text-red-600' : balance < 0 ? 'text-green-600' : '';
@@ -160,6 +164,58 @@ export default function ClientsPage() {
 
   // UI state - consolidated with useReducer
   const [ui, dispatch] = useReducer(uiReducer, initialUIState);
+
+  // Sort state
+  const [sortField, setSortField] = useState<ClientSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  // Sort handler
+  const handleSort = (field: ClientSortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sort icon component
+  const SortIcon = ({ field }: { field: ClientSortField }) => {
+    if (sortField !== field) {
+      return <ChevronsUpDown className="h-4 w-4 text-slate-300" />;
+    }
+    return sortDirection === "asc" ? (
+      <ChevronUp className="h-4 w-4 text-blue-600" />
+    ) : (
+      <ChevronDown className="h-4 w-4 text-blue-600" />
+    );
+  };
+
+  // Sorted clients with memoization
+  const sortedClients = useMemo(() => {
+    if (!sortField) return clients;
+
+    return [...clients].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case "name":
+          comparison = a.name.localeCompare(b.name, "ar");
+          break;
+        case "phone":
+          comparison = (a.phone || "").localeCompare(b.phone || "", "ar");
+          break;
+        case "balance": {
+          const balanceA = getClientDisplayBalance(clientBalances.get(a.id));
+          const balanceB = getClientDisplayBalance(clientBalances.get(b.id));
+          comparison = balanceA - balanceB;
+          break;
+        }
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [clients, clientBalances, sortField, sortDirection]);
 
   // Validate form data in real-time
   const validateForm = (data: FormData): boolean => {
@@ -399,16 +455,40 @@ export default function ClientsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                  <TableHead className="text-right font-semibold text-slate-700">الاسم</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الهاتف</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">
+                    <button
+                      onClick={() => handleSort("name")}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                    >
+                      الاسم
+                      <SortIcon field="name" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">
+                    <button
+                      onClick={() => handleSort("phone")}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                    >
+                      الهاتف
+                      <SortIcon field="phone" />
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right font-semibold text-slate-700">البريد الإلكتروني</TableHead>
                   <TableHead className="text-right font-semibold text-slate-700">العنوان</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700">الرصيد</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700">
+                    <button
+                      onClick={() => handleSort("balance")}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                    >
+                      الرصيد
+                      <SortIcon field="balance" />
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right font-semibold text-slate-700">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.map((client) => (
+                {sortedClients.map((client) => (
                   <TableRow
                     key={client.id}
                     className="hover:bg-blue-50 cursor-pointer transition-colors duration-150"
