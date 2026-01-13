@@ -71,6 +71,21 @@ jest.mock('@tanstack/react-query', () => ({
   QueryClientProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Mock Next.js navigation (required for dashboard drill-down)
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => '/dashboard',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Import page components
 import DashboardPage from '@/components/dashboard/dashboard-page';
 

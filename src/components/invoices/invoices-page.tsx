@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Download, Eye, Image, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Plus, Edit, Trash2, Download, Eye, Image, X, ChevronUp, ChevronDown, ChevronsUpDown, LayoutGrid, LayoutList } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import { useInvoicesOperations } from "./hooks/useInvoicesOperations";
 import { InvoicesFormDialog } from "./components/InvoicesFormDialog";
 import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
 import { InvoicesSummaryHeader } from "./components/InvoicesSummaryHeader";
+import { ContextualEmptyState } from "@/components/ui/empty-state";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
 
 // UI state management with useReducer
@@ -322,8 +323,8 @@ export default function InvoicesPage() {
             <TableBody>
               {sortedInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                    لا توجد فواتير بعد. انقر على &quot;فاتورة جديدة&quot; للبدء.
+                  <TableCell colSpan={8} className="p-0">
+                    <ContextualEmptyState type="invoices" onAction={openAddDialog} />
                   </TableCell>
                 </TableRow>
               ) : (

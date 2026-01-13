@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, memo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/date-utils";
 import { DASHBOARD_LABELS } from "../constants/dashboard.constants";
@@ -217,7 +218,7 @@ function DonutChart({
   );
 }
 
-/** Individual donut segment */
+/** Individual donut segment - Clickable to drill down to category */
 function DonutSegment({
   segment,
   index,
@@ -231,9 +232,15 @@ function DonutSegment({
   isHovered: boolean;
   onHover: (id: string | null) => void;
 }) {
+  const router = useRouter();
   const circumference = 2 * Math.PI * CHART_CONFIG.RADIUS;
   const segmentLength = (segment.percent / 100) * circumference;
   const segmentOffset = (segment.offset / 100) * circumference;
+
+  const handleClick = () => {
+    // Navigate to ledger filtered by this expense category
+    router.push(`/ledger?type=expense&category=${encodeURIComponent(segment.id)}`);
+  };
 
   return (
     <circle
@@ -254,6 +261,10 @@ function DonutSegment({
       }}
       onMouseEnter={() => onHover(segment.id)}
       onMouseLeave={() => onHover(null)}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      aria-label={`${segment.label}: ${formatNumber(segment.amount)} دينار - انقر للتفاصيل`}
     />
   );
 }
@@ -316,7 +327,7 @@ function ChartLegend({
   );
 }
 
-/** Single legend item */
+/** Single legend item - Clickable to drill down */
 function LegendItem({
   item,
   isHovered,
@@ -326,13 +337,24 @@ function LegendItem({
   isHovered: boolean;
   onHover: (id: string | null) => void;
 }) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    router.push(`/ledger?type=expense&category=${encodeURIComponent(item.id)}`);
+  };
+
   return (
     <div
-      className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer ${
+      className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer btn-press ${
         isHovered ? "bg-slate-50 scale-105" : ""
       }`}
       onMouseEnter={() => onHover(item.id)}
       onMouseLeave={() => onHover(null)}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={`${item.label}: ${formatNumber(item.amount)} دينار - انقر للتفاصيل`}
     >
       <div
         className="w-4 h-4 rounded transition-transform duration-200"

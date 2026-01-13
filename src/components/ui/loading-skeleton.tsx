@@ -2,19 +2,26 @@
  * Loading Skeleton Components
  *
  * Provides various skeleton loading states for better UX during data fetching
+ * Features shimmer animation for a polished loading experience
  */
 
 import { cn } from "@/lib/utils";
 
 interface SkeletonProps {
   className?: string;
+  /** Use shimmer animation instead of pulse */
+  shimmer?: boolean;
 }
 
-export function Skeleton({ className }: SkeletonProps) {
+/**
+ * Base skeleton component with shimmer or pulse animation
+ */
+export function Skeleton({ className, shimmer = true }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-md bg-gray-200",
+        "rounded-md",
+        shimmer ? "skeleton-shimmer" : "animate-pulse bg-slate-200",
         className
       )}
     />
@@ -134,6 +141,111 @@ export function PageSkeleton() {
       {/* Table */}
       <div className="bg-white rounded-lg border p-6">
         <TableSkeleton />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Card grid skeleton for card view layouts
+ */
+export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: cards }).map((_, i) => (
+        <div
+          key={i}
+          className="card-modern p-4 space-y-3 animate-fade-in-up"
+          style={{ animationDelay: `${i * 50}ms` }}
+        >
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-7 w-7 rounded" />
+          </div>
+
+          {/* Content */}
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+
+          {/* Footer */}
+          <div className="p-2.5 rounded-lg bg-slate-50 flex items-center justify-between">
+            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+
+          {/* Action hint */}
+          <div className="flex items-center justify-center">
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Dashboard skeleton with hero, cards, and charts
+ */
+export function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Hero section */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-4">
+        <Skeleton className="h-4 w-32 bg-slate-700" shimmer={false} />
+        <Skeleton className="h-10 w-48 bg-slate-700" shimmer={false} />
+        <Skeleton className="h-3 w-24 bg-slate-700" shimmer={false} />
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <StatCardSkeleton key={i} />
+        ))}
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Bar chart */}
+        <div className="card-modern p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-8 w-24 rounded-lg" />
+          </div>
+          <div className="h-48 flex items-end justify-around gap-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex gap-2 items-end">
+                <Skeleton className="w-8 rounded-t" style={{ height: `${Math.random() * 80 + 20}px` }} />
+                <Skeleton className="w-8 rounded-t" style={{ height: `${Math.random() * 60 + 10}px` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Donut chart */}
+        <div className="card-modern p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-8 w-32 rounded-lg" />
+          </div>
+          <div className="flex items-center justify-center gap-8">
+            <Skeleton className="h-40 w-40 rounded-full" />
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

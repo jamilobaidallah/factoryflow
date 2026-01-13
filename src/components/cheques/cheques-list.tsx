@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 import { formatShortDate } from "@/lib/date-utils";
+import { ContextualEmptyState } from "@/components/ui/empty-state";
 
 /**
  * خصائص مكون قائمة الشيكات - ChequesList props
@@ -214,9 +215,7 @@ export function ChequesList({
         onTouchEnd={handleTouchEnd}
       >
         {cheques.length === 0 ? (
-          <div className="text-gray-500 text-center py-12">
-            لا توجد شيكات مسجلة
-          </div>
+          <ContextualEmptyState type="cheques" />
         ) : (
           <AnimatePresence mode="popLayout">
             {cheques.map((cheque, index) => (
@@ -243,9 +242,7 @@ export function ChequesList({
       {/* عرض الجدول لسطح المكتب - Desktop table view */}
       <div className="hidden md:block">
         {cheques.length === 0 ? (
-          <p className="text-gray-500 text-center py-12">
-            لا توجد شيكات مسجلة. اضغط على &quot;إضافة شيك&quot; للبدء.
-          </p>
+          <ContextualEmptyState type="cheques" />
         ) : (
           <Table>
             <TableHeader>

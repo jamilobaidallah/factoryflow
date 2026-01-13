@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, memo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHART_PERIODS, DASHBOARD_LABELS } from "../constants/dashboard.constants";
 import type { DashboardBarChartProps, ChartDataPoint, ChartPeriod } from "../types/dashboard.types";
@@ -145,7 +146,7 @@ function ChartBar({
   );
 }
 
-/** Individual bar with tooltip */
+/** Individual bar with tooltip - Clickable to drill down */
 function BarWithTooltip({
   id,
   value,
@@ -167,6 +168,7 @@ function BarWithTooltip({
   isHovered: boolean;
   onHover: (barId: string | null) => void;
 }) {
+  const router = useRouter();
   const isRevenue = type === "revenue";
   const baseColor = isRevenue ? "bg-emerald-500" : "bg-slate-400";
   const hoverColor = isRevenue ? "bg-emerald-600" : "bg-slate-500";
@@ -175,10 +177,16 @@ function BarWithTooltip({
   const tooltipLabelColor = isRevenue ? "text-emerald-300" : "text-slate-400";
   const delay = index * 150 + (isRevenue ? 0 : 75);
 
+  const handleClick = () => {
+    // Navigate to ledger filtered by type
+    const filterType = isRevenue ? "income" : "expense";
+    router.push(`/ledger?type=${filterType}`);
+  };
+
   return (
     <div className="relative group">
       <div
-        className={`w-8 ${isHovered ? hoverColor : baseColor} rounded-t cursor-pointer transition-all duration-500 ease-out`}
+        className={`w-8 ${isHovered ? hoverColor : baseColor} rounded-t cursor-pointer transition-all duration-500 ease-out btn-press`}
         style={{
           height: isLoaded ? `${(value / maxValue) * 100}px` : "0px",
           transitionDelay: `${delay}ms`,
@@ -187,7 +195,11 @@ function BarWithTooltip({
         }}
         onMouseEnter={() => onHover(id)}
         onMouseLeave={() => onHover(null)}
-        role="presentation"
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && handleClick()}
+        aria-label={`${tooltipLabel}: ${formattedValue} دينار - انقر للتفاصيل`}
       />
       {/* Tooltip */}
       <div
@@ -198,6 +210,7 @@ function BarWithTooltip({
       >
         <div className="font-semibold">{formattedValue} {DASHBOARD_LABELS.currency}</div>
         <div className={`${tooltipLabelColor} text-[10px]`}>{tooltipLabel}</div>
+        <div className="text-[9px] text-slate-400 mt-1">انقر للتفاصيل ←</div>
         <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
       </div>
     </div>
