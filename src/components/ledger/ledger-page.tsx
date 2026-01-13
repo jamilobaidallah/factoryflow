@@ -18,7 +18,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { useUser } from "@/firebase/provider";
-import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
+import { TableSkeleton } from "@/components/ui/loading-skeleton";
 
 // Types and hooks
 import {
@@ -35,7 +35,6 @@ import { useLedgerOperations } from "./hooks/useLedgerOperations";
 import { ledgerPageReducer, initialLedgerPageState } from "./reducers/ledgerPageReducer";
 
 // Core components (loaded immediately)
-import { LedgerStats } from "./components/LedgerStats";
 import { LedgerTable } from "./components/LedgerTable";
 
 // Lazy-loaded components (dialogs - only loaded when needed)
@@ -96,8 +95,7 @@ export default function LedgerPage() {
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
 
   // Data and operations hooks
-  // Separate loading states: dataLoading for table (fast), statsLoading for stats cards (slower)
-  const { entries, allEntriesForStats, clients, partners, totalCount, totalPages, loading: dataLoading, statsLoading } = useLedgerData({
+  const { entries, allEntriesForStats, clients, partners, totalCount, totalPages, loading: dataLoading } = useLedgerData({
     pageSize: state.pagination.pageSize,
     currentPage: state.pagination.currentPage,
   });
@@ -225,11 +223,6 @@ export default function LedgerPage() {
       });
     }
   }, [user, filterEntries, toast]);
-
-  // Handle unpaid card click - set view mode to unpaid
-  const handleUnpaidClick = useCallback(() => {
-    setViewMode("unpaid");
-  }, [setViewMode]);
 
   // Perform the actual ledger entry submission (after advance allocation check)
   const performActualSubmit = useCallback(async (allocations: AdvanceAllocationResult[] = []) => {
@@ -425,15 +418,6 @@ export default function LedgerPage() {
           </Button>
         </PermissionGate>
       </div>
-
-      {/* Unpaid Receivables Card - uses statsLoading to load independently from table */}
-      {statsLoading ? (
-        <div className="max-w-sm">
-          <StatCardSkeleton />
-        </div>
-      ) : (
-        <LedgerStats entries={allEntriesForStats} onUnpaidClick={handleUnpaidClick} />
-      )}
 
       {/* Filters */}
       {!dataLoading && (

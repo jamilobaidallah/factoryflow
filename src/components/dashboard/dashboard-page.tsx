@@ -13,6 +13,7 @@ import {
   DashboardBarChart,
   DashboardDonutChart,
   DashboardTransactions,
+  DashboardUnpaidCard,
 } from "./components";
 import type {
   ViewMode,
@@ -212,6 +213,12 @@ export default function DashboardPage() {
         availableMonths={availableMonths}
         onViewModeChange={setSummaryView}
         onMonthChange={setSelectedMonth}
+      />
+
+      {/* Unpaid Receivables Card - Prominent amber card */}
+      <DashboardUnpaidCard
+        unpaidReceivables={unpaidReceivables}
+        unpaidPayables={unpaidPayables}
       />
 
       {/* Alerts + Chart Row */}
