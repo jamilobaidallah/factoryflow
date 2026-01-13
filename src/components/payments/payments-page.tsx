@@ -628,38 +628,34 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">المدفوعات</h1>
-          <p className="text-gray-600 mt-2">تتبع عمليات القبض والصرف</p>
-        </div>
-        <PermissionGate action="create" module="payments">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setIsMultiAllocationDialogOpen(true)}
-              aria-label="إضافة دفعة متعددة"
-            >
-              <Layers className="w-4 h-4" aria-hidden="true" />
-              دفعة متعددة
-            </Button>
-            <Button className="gap-2" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
-              <Plus className="w-4 h-4" aria-hidden="true" />
-              إضافة مدفوعة
-            </Button>
-          </div>
-        </PermissionGate>
-      </div>
-
-      {/* Compact Stats Bar with Integrated Search */}
+    <div className="space-y-4">
+      {/* Unified Header: Title + Stats + Search + Actions */}
       <PaymentsSummaryCards
         totalReceived={totalReceived}
         totalPaid={totalPaid}
         loading={dataLoading}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        actions={
+          <PermissionGate action="create" module="payments">
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-9"
+                onClick={() => setIsMultiAllocationDialogOpen(true)}
+                aria-label="إضافة دفعة متعددة"
+              >
+                <Layers className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">دفعة متعددة</span>
+              </Button>
+              <Button size="sm" className="gap-1.5 h-9" onClick={openAddDialog} aria-label="إضافة مدفوعة جديدة">
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">إضافة مدفوعة</span>
+              </Button>
+            </>
+          </PermissionGate>
+        }
       />
 
       <div className="space-y-4">
