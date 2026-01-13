@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { OutgoingChequesSummaryHeader } from "./components/OutgoingChequesSummaryHeader";
 
 // Types and hooks
 import { Cheque, ChequeFormData, initialChequeFormData } from "./types/cheques";
@@ -254,36 +255,39 @@ export default function OutgoingChequesPage() {
     setLoading(false);
   };
 
-  if (dataLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">الشيكات الصادرة</h1>
-            <p className="text-gray-600 mt-2">إدارة الشيكات الصادرة للموردين والدائنين</p>
-          </div>
-        </div>
-        <div className="text-center py-12">
-          <p className="text-gray-500">جاري تحميل البيانات...</p>
-        </div>
-      </div>
-    );
-  }
+  // Calculate summary statistics
+  const stats = useMemo(() => {
+    const pendingCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.PENDING);
+    const clearedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CASHED);
+    const returnedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.RETURNED || c.status === CHEQUE_STATUS_AR.BOUNCED);
+    const endorsedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.ENDORSED);
+    const cancelledCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CANCELLED);
+
+    return {
+      pendingCount: pendingCheques.length,
+      pendingValue: pendingCheques.reduce((sum, c) => sum + c.amount, 0),
+      clearedCount: clearedCheques.length,
+      clearedValue: clearedCheques.reduce((sum, c) => sum + c.amount, 0),
+      returnedCount: returnedCheques.length,
+      endorsedCount: endorsedCheques.length,
+      cancelledCount: cancelledCheques.length,
+    };
+  }, [cheques]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">الشيكات الصادرة</h1>
-          <p className="text-gray-600 mt-2">إدارة الشيكات الصادرة للموردين والدائنين</p>
-        </div>
-        <PermissionGate action="create" module="cheques">
-          <Button className="gap-2" onClick={openAddDialog}>
-            <Plus className="w-4 h-4" />
-            إضافة شيك صادر
-          </Button>
-        </PermissionGate>
-      </div>
+      <OutgoingChequesSummaryHeader
+        stats={stats}
+        loading={dataLoading}
+        actions={
+          <PermissionGate action="create" module="cheques">
+            <Button size="sm" className="gap-2" onClick={openAddDialog}>
+              <Plus className="w-4 h-4" />
+              إضافة شيك صادر
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       <OutgoingChequesTable
         cheques={cheques}

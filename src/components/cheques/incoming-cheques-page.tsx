@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
@@ -23,6 +22,8 @@ import { ImageViewerDialog } from "./components/IncomingChequeDialogs";
 import { EndorsementAllocationDialog } from "./components/EndorsementAllocationDialog";
 import { PaymentDateModal } from "./components/PaymentDateModal";
 import { MultiAllocationDialog } from "@/components/payments/MultiAllocationDialog";
+import { IncomingChequesSummaryHeader } from "./components/IncomingChequesSummaryHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { doc, updateDoc } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { useUser } from "@/firebase/provider";
@@ -294,58 +295,25 @@ export default function IncomingChequesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">الشيكات الواردة</h1>
-          <p className="text-gray-600 mt-2">إدارة الشيكات الواردة من العملاء مع إمكانية التظهير</p>
-        </div>
-        <PermissionGate action="create" module="cheques">
-          <Button className="gap-2" onClick={openAddDialog}>
-            <Plus className="w-4 h-4" />
-            إضافة شيك وارد
-          </Button>
-        </PermissionGate>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">قيد الانتظار</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{pendingCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalPendingValue.toFixed(2)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">تم الصرف</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{clearedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{totalClearedValue.toFixed(2)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">مجيّر</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{endorsedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">تم تظهيرها للموردين</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">مرفوض</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{bouncedCheques.length}</div>
-            <p className="text-xs text-gray-500 mt-1">شيكات مرتجعة</p>
-          </CardContent>
-        </Card>
-      </div>
+      <IncomingChequesSummaryHeader
+        stats={{
+          pendingCount: pendingCheques.length,
+          pendingValue: totalPendingValue,
+          clearedCount: clearedCheques.length,
+          clearedValue: totalClearedValue,
+          endorsedCount: endorsedCheques.length,
+          bouncedCount: bouncedCheques.length,
+        }}
+        loading={dataLoading}
+        actions={
+          <PermissionGate action="create" module="cheques">
+            <Button size="sm" className="gap-2" onClick={openAddDialog}>
+              <Plus className="w-4 h-4" />
+              إضافة شيك وارد
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       <Card>
         <CardHeader>
