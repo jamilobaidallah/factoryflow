@@ -100,6 +100,10 @@ export interface DashboardSummaryCardsProps {
   availableMonths: MonthOption[];
   onViewModeChange: (mode: ViewMode) => void;
   onMonthChange: (month: string) => void;
+  /** Unpaid receivables data for the 4th card */
+  unpaidReceivables?: AlertData;
+  /** Unpaid payables data for the 4th card */
+  unpaidPayables?: AlertData;
 }
 
 /** Props for DashboardAlerts component */

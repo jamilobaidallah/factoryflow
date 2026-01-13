@@ -13,7 +13,6 @@ import {
   DashboardBarChart,
   DashboardDonutChart,
   DashboardTransactions,
-  DashboardUnpaidCard,
 } from "./components";
 import type {
   ViewMode,
@@ -205,7 +204,7 @@ export default function DashboardPage() {
       {/* Hero Cash Balance */}
       <DashboardHero cashBalance={cashBalance} isAnimating={isAnimating} />
 
-      {/* Financial Summary Section */}
+      {/* Financial Summary Section - 4 cards in one row */}
       <DashboardSummaryCards
         summaryData={summaryData}
         viewMode={summaryView}
@@ -213,10 +212,6 @@ export default function DashboardPage() {
         availableMonths={availableMonths}
         onViewModeChange={setSummaryView}
         onMonthChange={setSelectedMonth}
-      />
-
-      {/* Unpaid Receivables Card - Prominent amber card */}
-      <DashboardUnpaidCard
         unpaidReceivables={unpaidReceivables}
         unpaidPayables={unpaidPayables}
       />
