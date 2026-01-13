@@ -308,7 +308,7 @@ export default function InvoicesPage() {
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-800">قائمة الفواتير</h2>
         <div className="card-modern overflow-hidden">
-          <Table>
+          <Table containerClassName="max-h-[70vh]">
             <TableHeader sticky className="bg-slate-50">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="text-right font-semibold text-slate-700">
