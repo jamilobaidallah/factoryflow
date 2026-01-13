@@ -426,12 +426,9 @@ export default function LedgerPage() {
         </PermissionGate>
       </div>
 
-      {/* Summary Cards - uses statsLoading to load independently from table */}
+      {/* Unpaid Receivables Card - uses statsLoading to load independently from table */}
       {statsLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
+        <div className="max-w-sm">
           <StatCardSkeleton />
         </div>
       ) : (

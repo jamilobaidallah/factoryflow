@@ -33,5 +33,9 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
-playwright-report/ 
-test-results/ 
+playwright-report/
+test-results/
+
+# Claude Code temp files
+nul
+tmpclaude-*
