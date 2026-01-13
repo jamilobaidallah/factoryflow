@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -65,72 +64,9 @@ export function OutgoingChequesTable({
     }
   };
 
-  // Calculate summary statistics
-  const pendingCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.PENDING);
-  const cashedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CASHED);
-  const bouncedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.RETURNED);
-  const cancelledCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CANCELLED);
-  const endorsedCheques = cheques.filter(c => c.isEndorsedCheque);
-
-  const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
-  const totalCashedValue = cashedCheques.reduce((sum, c) => sum + c.amount, 0);
-  const totalBouncedValue = bouncedCheques.reduce((sum, c) => sum + c.amount, 0);
-  const totalEndorsedValue = endorsedCheques.reduce((sum, c) => sum + c.amount, 0);
-
   return (
-    <>
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-        <Card className="card-modern">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">قيد الانتظار</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{pendingCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalPendingValue)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card className="card-modern">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">تم الصرف</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{cashedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalCashedValue)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card className="card-modern">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">مرتجع</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{bouncedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalBouncedValue)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card className="card-modern">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">شيكات مظهرة</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{endorsedCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">{formatNumber(totalEndorsedValue)} دينار</p>
-          </CardContent>
-        </Card>
-        <Card className="card-modern">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">ملغي</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{cancelledCheques.length}</div>
-            <p className="text-xs text-slate-500 mt-1">شيكات ملغاة</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Cheques Table */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">سجل الشيكات الصادرة ({cheques.length})</h2>
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-slate-800">سجل الشيكات الصادرة ({cheques.length})</h2>
         {cheques.length === 0 ? (
           <p className="text-slate-500 text-center py-12">
             لا توجد شيكات صادرة مسجلة. اضغط على &quot;إضافة شيك صادر&quot; للبدء.
@@ -286,7 +222,6 @@ export function OutgoingChequesTable({
             </Table>
           </div>
         )}
-      </div>
-    </>
+    </div>
   );
 }

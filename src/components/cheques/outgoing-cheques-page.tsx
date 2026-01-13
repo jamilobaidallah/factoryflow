@@ -260,7 +260,8 @@ export default function OutgoingChequesPage() {
     const pendingCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.PENDING);
     const clearedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CASHED);
     const returnedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.RETURNED || c.status === CHEQUE_STATUS_AR.BOUNCED);
-    const endorsedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.ENDORSED);
+    // Endorsed cheques are incoming cheques that were endorsed to this page (flagged with isEndorsedCheque)
+    const endorsedCheques = cheques.filter(c => c.isEndorsedCheque);
     const cancelledCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.CANCELLED);
 
     return {
