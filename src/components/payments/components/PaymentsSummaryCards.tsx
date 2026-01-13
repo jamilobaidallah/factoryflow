@@ -39,36 +39,36 @@ function PaymentsSummaryCardsComponent({
           {/* Divider - Desktop only */}
           <div className="hidden lg:block w-px h-12 bg-slate-200 mx-2" />
 
-          {/* Stats - Compact Inline */}
+          {/* Stats - Readable Size */}
           <div className="flex items-center gap-3 flex-wrap">
             {loading ? (
               <>
-                <div className="h-10 w-32 bg-slate-200 rounded-lg animate-pulse" />
-                <div className="h-10 w-32 bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 w-40 bg-slate-200 rounded-lg animate-pulse" />
+                <div className="h-14 w-40 bg-slate-200 rounded-lg animate-pulse" />
               </>
             ) : (
               <>
                 {/* Total Received */}
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50/80 rounded-lg border border-emerald-100">
-                  <div className="flex items-center justify-center w-7 h-7 bg-emerald-100 rounded-md">
-                    <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50/80 rounded-lg border border-emerald-100">
+                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 rounded-lg">
+                    <ArrowDownLeft className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wide text-emerald-600/70 font-medium leading-none">المقبوضات</span>
-                    <span className="text-sm font-bold text-emerald-700 tabular-nums leading-tight">
+                    <span className="text-xs text-emerald-600/80 font-medium">المقبوضات</span>
+                    <span className="text-lg font-bold text-emerald-700 tabular-nums leading-tight">
                       {formatNumber(totalReceived)}
                     </span>
                   </div>
                 </div>
 
                 {/* Total Paid */}
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-50/80 rounded-lg border border-rose-100">
-                  <div className="flex items-center justify-center w-7 h-7 bg-rose-100 rounded-md">
-                    <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" strokeWidth={2.5} />
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-rose-50/80 rounded-lg border border-rose-100">
+                  <div className="flex items-center justify-center w-10 h-10 bg-rose-100 rounded-lg">
+                    <ArrowUpRight className="w-5 h-5 text-rose-600" strokeWidth={2.5} />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wide text-rose-600/70 font-medium leading-none">المصروفات</span>
-                    <span className="text-sm font-bold text-rose-700 tabular-nums leading-tight">
+                    <span className="text-xs text-rose-600/80 font-medium">المصروفات</span>
+                    <span className="text-lg font-bold text-rose-700 tabular-nums leading-tight">
                       {formatNumber(totalPaid)}
                     </span>
                   </div>
