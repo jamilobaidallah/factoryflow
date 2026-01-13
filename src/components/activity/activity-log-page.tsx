@@ -178,8 +178,8 @@ export default function ActivityLogPage() {
           ) : (
             <div className="card-modern overflow-hidden">
               <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                <TableHeader sticky className="bg-slate-50">
+                  <TableRow className="hover:bg-transparent">
                     <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700">المستخدم</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700">الإجراء</TableHead>

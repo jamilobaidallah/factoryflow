@@ -580,8 +580,8 @@ export const LedgerTable = memo(function LedgerTable({
 
       {/* Desktop: Table Layout */}
       <div className="hidden md:block overflow-hidden">
-        <Table>
-          <TableHeader className="bg-slate-50">
+        <Table containerClassName="max-h-[70vh]">
+          <TableHeader sticky className="bg-slate-50">
             <TableRow className="hover:bg-transparent">
               <TableHead className="font-semibold text-slate-600">التاريخ</TableHead>
               <TableHead className="font-semibold text-slate-600">الوصف</TableHead>

@@ -309,8 +309,8 @@ export default function InvoicesPage() {
         <h2 className="text-lg font-semibold text-slate-800">قائمة الفواتير</h2>
         <div className="card-modern overflow-hidden">
           <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+            <TableHeader sticky className="bg-slate-50">
+              <TableRow className="hover:bg-transparent">
                 <TableHead className="text-right font-semibold text-slate-700">
                   <button
                     onClick={() => handleSort("invoiceNumber")}

@@ -93,8 +93,8 @@ function PaymentsTableComponent({
       </div>
       <div className="card-modern overflow-hidden">
         <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+          <TableHeader sticky className="bg-slate-50">
+            <TableRow className="hover:bg-transparent">
               <TableHead className="text-right font-semibold text-slate-700">التاريخ</TableHead>
               <TableHead className="text-right font-semibold text-slate-700">اسم العميل</TableHead>
               <TableHead className="text-right font-semibold text-slate-700">النوع</TableHead>
