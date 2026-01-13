@@ -6,17 +6,20 @@
  */
 
 import { cn } from "@/lib/utils";
+import { CSSProperties } from "react";
 
 interface SkeletonProps {
   className?: string;
   /** Use shimmer animation instead of pulse */
   shimmer?: boolean;
+  /** Optional inline styles */
+  style?: CSSProperties;
 }
 
 /**
  * Base skeleton component with shimmer or pulse animation
  */
-export function Skeleton({ className, shimmer = true }: SkeletonProps) {
+export function Skeleton({ className, shimmer = true, style }: SkeletonProps) {
   return (
     <div
       className={cn(
@@ -24,6 +27,7 @@ export function Skeleton({ className, shimmer = true }: SkeletonProps) {
         shimmer ? "skeleton-shimmer" : "animate-pulse bg-slate-200",
         className
       )}
+      style={style}
     />
   );
 }
