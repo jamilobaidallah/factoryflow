@@ -118,7 +118,7 @@ function ClientCardComponent({
       {/* View details indicator */}
       <div className="flex items-center justify-center mt-3 text-xs text-slate-400 group-hover:text-blue-500 transition-colors">
         <span>عرض التفاصيل</span>
-        <ChevronLeft className="w-3.5 h-3.5 mr-0.5 transform group-hover:-translate-x-1 transition-transform" />
+        <ChevronLeft className="w-3.5 h-3.5 ml-0.5 transform group-hover:-translate-x-1 transition-transform" />
       </div>
     </article>
   );
