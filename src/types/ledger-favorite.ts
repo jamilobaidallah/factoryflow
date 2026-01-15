@@ -16,6 +16,7 @@ export interface LedgerFavorite {
   associatedParty: string;
   ownerName?: string;
   reference?: string;
+  description?: string; // The main description field
   notes?: string;
 
   // Settlement option
@@ -39,6 +40,7 @@ export interface CreateLedgerFavoriteData {
   associatedParty: string;
   ownerName?: string;
   reference?: string;
+  description?: string;
   notes?: string;
   immediateSettlement: boolean;
 }

@@ -63,6 +63,7 @@ export async function saveFavorite(
     // Only add optional fields if they have values
     if (formData.ownerName) favoriteData.ownerName = formData.ownerName;
     if (formData.reference) favoriteData.reference = formData.reference;
+    if (formData.description) favoriteData.description = formData.description;
     if (formData.notes) favoriteData.notes = formData.notes;
 
     const docRef = await addDoc(favoritesRef, favoriteData);
@@ -181,7 +182,7 @@ export async function incrementFavoriteUsage(
  */
 export function favoriteToFormData(favorite: LedgerFavorite): LedgerFormData {
   return {
-    description: favorite.notes || "",
+    description: favorite.description || "",
     amount: favorite.amount.toString(),
     category: favorite.category,
     subCategory: favorite.subCategory,
