@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Star } from "lucide-react";
 import { StepBasicInfo } from "../steps/StepBasicInfo";
 import { StepPartyARAP } from "../steps/StepPartyARAP";
 import { StepRelatedRecords } from "../steps/StepRelatedRecords";
@@ -59,6 +60,7 @@ export function LedgerFormDialog() {
     setFixedAssetFormData,
     createInvoice,
     setCreateInvoice,
+    onSaveFavorite,
   } = useLedgerFormContext();
 
   // Get all clients from ledger, partners, AND clients collection for dropdown
@@ -369,6 +371,20 @@ export function LedgerFormDialog() {
               <Button type="button" variant="outline" onClick={onClose}>
                 إلغاء
               </Button>
+
+              {/* Save as Favorite button - only on final step for new entries */}
+              {!editingEntry && step === totalSteps && onSaveFavorite && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onSaveFavorite}
+                  className="gap-2"
+                  disabled={!formData.category || !formData.amount}
+                >
+                  <Star className="h-4 w-4 text-amber-500" />
+                  حفظ كمفضلة
+                </Button>
+              )}
 
               {/* For editing: show save button */}
               {editingEntry ? (

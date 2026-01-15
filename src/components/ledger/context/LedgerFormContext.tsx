@@ -78,6 +78,9 @@ export interface LedgerFormContextValue {
   // Invoice creation bridge
   createInvoice?: boolean;
   setCreateInvoice?: (value: boolean) => void;
+
+  // Favorites
+  onSaveFavorite?: () => void;
 }
 
 const LedgerFormContext = createContext<LedgerFormContextValue | undefined>(undefined);
