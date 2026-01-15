@@ -41,6 +41,12 @@ export function SaveFavoriteDialog({
       return;
     }
 
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      setError("المبلغ غير صحيح");
+      return;
+    }
+
     const success = await saveFavoriteFromForm(name.trim(), formData, entryType);
     if (success) {
       setName("");

@@ -99,7 +99,8 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
           toast({ title: result.error || "فشل حذف المفضلة", variant: "destructive" });
           return false;
         }
-      } catch {
+      } catch (error) {
+        console.error("Delete favorite error:", error);
         toast({ title: "حدث خطأ غير متوقع", variant: "destructive" });
         return false;
       }
@@ -112,8 +113,9 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
     (favorite: LedgerFavorite): LedgerFormData => {
       // Increment usage in background (don't await)
       if (ownerId) {
-        incrementFavoriteUsage(ownerId, favorite.id).catch(() => {
-          // Silently ignore usage tracking errors
+        incrementFavoriteUsage(ownerId, favorite.id).catch((error) => {
+          // Log but don't interrupt - usage tracking is non-critical
+          console.error("Failed to increment favorite usage:", error);
         });
       }
 

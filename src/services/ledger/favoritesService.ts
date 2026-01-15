@@ -22,6 +22,7 @@ import type { LedgerFormData } from "@/components/ledger/types/ledger";
 import { COLLECTIONS, QUERY_LIMITS } from "@/lib/constants";
 import { handleError } from "@/lib/error-handling";
 import type { ServiceResult } from "./types";
+import Decimal from "decimal.js-light";
 
 /**
  * Get the favorites collection reference for a user
@@ -51,7 +52,7 @@ export async function saveFavorite(
     const favoriteData: Record<string, unknown> = {
       name,
       type: entryType,
-      amount: parseFloat(formData.amount) || 0,
+      amount: new Decimal(formData.amount || 0).toNumber(),
       category: formData.category,
       subCategory: formData.subCategory,
       associatedParty: formData.associatedParty || "",

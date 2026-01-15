@@ -331,7 +331,8 @@ export default function LedgerPage() {
   const openSaveFavoriteDialog = useCallback(() => dispatch({ type: "OPEN_SAVE_FAVORITE_DIALOG" }), []);
 
   // Handle selecting a favorite - pre-fills the form
-  const handleSelectFavorite = useCallback((formData: LedgerFormData) => {
+  const handleSelectFavorite = useCallback((formData: LedgerFormData, _entryType: string) => {
+    // entryType is passed but not used as the form determines type from category
     dispatch({ type: "USE_FAVORITE", payload: { formData } });
   }, []);
 

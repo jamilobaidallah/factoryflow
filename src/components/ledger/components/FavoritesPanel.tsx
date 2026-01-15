@@ -130,6 +130,7 @@ function FavoriteCard({
     <button
       type="button"
       onClick={onSelect}
+      aria-label={`استخدام المفضلة: ${favorite.name}`}
       className="w-full text-right p-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors group"
     >
       <div className="flex items-start justify-between gap-3">
@@ -180,6 +181,7 @@ function FavoriteCard({
         <Button
           variant="ghost"
           size="icon"
+          aria-label={`حذف المفضلة: ${favorite.name}`}
           className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-danger-600 hover:bg-danger-50"
           onClick={onDelete}
         >
