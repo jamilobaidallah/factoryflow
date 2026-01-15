@@ -23,6 +23,7 @@ import { TableSkeleton } from "@/components/ui/loading-skeleton";
 // Types and hooks
 import {
   LedgerEntry,
+  LedgerFormData,
   initialPaymentFormData,
   initialChequeRelatedFormData,
   initialInventoryRelatedFormData,

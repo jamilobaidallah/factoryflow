@@ -16,9 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLedgerFavorites } from "@/hooks/useLedgerFavorites";
 import type { LedgerFavorite } from "@/types/ledger-favorite";
 import type { LedgerFormData } from "../types/ledger";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, cn } from "@/lib/utils";
 import { TRANSACTION_TYPES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
 
 interface FavoritesPanelProps {
   isOpen: boolean;

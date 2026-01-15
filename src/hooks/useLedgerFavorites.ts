@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useUser } from "@/components/UserContext";
+import { useUser } from "@/firebase/provider";
 import { queryKeys } from "@/hooks/firebase-query/keys";
 import type { LedgerFavorite } from "@/types/ledger-favorite";
 import type { LedgerFormData } from "@/components/ledger/types/ledger";
@@ -15,7 +15,7 @@ import {
   incrementFavoriteUsage,
   favoriteToFormData,
 } from "@/services/ledger/favoritesService";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 
 interface UseLedgerFavoritesReturn {
   favorites: LedgerFavorite[];
@@ -57,7 +57,7 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
   const saveFavoriteFromForm = useCallback(
     async (name: string, formData: LedgerFormData, entryType: string): Promise<boolean> => {
       if (!ownerId) {
-        toast.error("حدث خطأ: لم يتم العثور على المستخدم");
+        toast({ title: "حدث خطأ: لم يتم العثور على المستخدم", variant: "destructive" });
         return false;
       }
 
@@ -66,11 +66,11 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
         const result = await saveFavorite(ownerId, name, formData, entryType);
 
         if (result.success) {
-          toast.success("تم حفظ المفضلة بنجاح");
+          toast({ title: "تم حفظ المفضلة بنجاح" });
           queryClient.invalidateQueries({ queryKey: queryKeys.favorites.all(ownerId) });
           return true;
         } else {
-          toast.error(result.error || "فشل حفظ المفضلة");
+          toast({ title: result.error || "فشل حفظ المفضلة", variant: "destructive" });
           return false;
         }
       } finally {
@@ -84,7 +84,7 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
   const removeFavorite = useCallback(
     async (favoriteId: string): Promise<boolean> => {
       if (!ownerId) {
-        toast.error("حدث خطأ: لم يتم العثور على المستخدم");
+        toast({ title: "حدث خطأ: لم يتم العثور على المستخدم", variant: "destructive" });
         return false;
       }
 
@@ -92,15 +92,15 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
         const result = await deleteFavorite(ownerId, favoriteId);
 
         if (result.success) {
-          toast.success("تم حذف المفضلة");
+          toast({ title: "تم حذف المفضلة" });
           queryClient.invalidateQueries({ queryKey: queryKeys.favorites.all(ownerId) });
           return true;
         } else {
-          toast.error(result.error || "فشل حذف المفضلة");
+          toast({ title: result.error || "فشل حذف المفضلة", variant: "destructive" });
           return false;
         }
       } catch {
-        toast.error("حدث خطأ غير متوقع");
+        toast({ title: "حدث خطأ غير متوقع", variant: "destructive" });
         return false;
       }
     },
