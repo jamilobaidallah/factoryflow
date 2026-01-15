@@ -47,20 +47,23 @@ export async function saveFavorite(
   try {
     const favoritesRef = getFavoritesCollection(userId);
 
-    const favoriteData: Omit<LedgerFavorite, "id"> = {
+    // Build favorite data - exclude undefined values (Firestore doesn't accept them)
+    const favoriteData: Record<string, unknown> = {
       name,
       type: entryType,
       amount: parseFloat(formData.amount) || 0,
       category: formData.category,
       subCategory: formData.subCategory,
-      associatedParty: formData.associatedParty,
-      ownerName: formData.ownerName || undefined,
-      reference: formData.reference || undefined,
-      notes: formData.notes || undefined,
+      associatedParty: formData.associatedParty || "",
       immediateSettlement: formData.immediateSettlement,
       usageCount: 0,
       createdAt: Timestamp.now(),
     };
+
+    // Only add optional fields if they have values
+    if (formData.ownerName) favoriteData.ownerName = formData.ownerName;
+    if (formData.reference) favoriteData.reference = formData.reference;
+    if (formData.notes) favoriteData.notes = formData.notes;
 
     const docRef = await addDoc(favoritesRef, favoriteData);
 
