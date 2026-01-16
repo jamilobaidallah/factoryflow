@@ -17,6 +17,8 @@ import {
   isPaidStatus,
   TRANSACTION_TYPES,
 } from "@/components/ledger/utils/ledger-helpers";
+import { BalanceSheetTab } from "../tabs/BalanceSheetTab";
+import { TrialBalanceTab } from "../tabs/TrialBalanceTab";
 
 // Aging bucket labels - moved outside component for performance
 const AGING_BUCKET_LABELS = {
@@ -175,10 +177,10 @@ function ReportsInlineReportComponent({
           <IncomeStatementReport filteredData={filteredData} />
         )}
         {reportId === "balancesheet" && (
-          <BalanceSheetPlaceholder />
+          <BalanceSheetTab asOfDate={dateRange.end} />
         )}
         {reportId === "trialbalance" && (
-          <TrialBalancePlaceholder />
+          <TrialBalanceTab onExportCSV={() => {}} />
         )}
         {reportId === "aging" && (
           <AgingReport ledgerEntries={ledgerEntries} dateRange={dateRange} />
@@ -860,56 +862,6 @@ function CashFlowReport({
           {isTotalPositive
             ? "تدفق نقدي إيجابي - إجمالي الوارد يتجاوز إجمالي الصادر"
             : "تدفق نقدي سلبي - إجمالي الصادر يتجاوز إجمالي الوارد"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Balance Sheet Placeholder - Links to full report
- */
-function BalanceSheetPlaceholder() {
-  return (
-    <div className="text-center py-8">
-      <div className="text-4xl mb-4">📋</div>
-      <h4 className="text-lg font-semibold text-slate-800 mb-2">الميزانية العمومية</h4>
-      <p className="text-sm text-slate-500 mb-4">
-        تقرير شامل للأصول والخصوم وحقوق الملكية
-      </p>
-      <p className="text-xs text-slate-400">
-        يتم حساب الميزانية من القيود اليومية - تأكد من صحة التسجيل المحاسبي
-      </p>
-      <div className="mt-6 p-4 bg-slate-100 rounded-lg">
-        <p className="text-sm text-slate-600">
-          <strong>ملاحظة:</strong> الميزانية العمومية تعتمد على القيود اليومية (Journal Entries).
-          <br />
-          تأكد من تصحيح أي قيود خاطئة قبل مراجعة الميزانية.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Trial Balance Placeholder - Links to full report
- */
-function TrialBalancePlaceholder() {
-  return (
-    <div className="text-center py-8">
-      <div className="text-4xl mb-4">⚖️</div>
-      <h4 className="text-lg font-semibold text-slate-800 mb-2">ميزان المراجعة</h4>
-      <p className="text-sm text-slate-500 mb-4">
-        أرصدة جميع الحسابات مع التحقق من توازن المدين والدائن
-      </p>
-      <p className="text-xs text-slate-400">
-        يجب أن يتساوى إجمالي المدين مع إجمالي الدائن
-      </p>
-      <div className="mt-6 p-4 bg-teal-100 rounded-lg">
-        <p className="text-sm text-teal-700">
-          <strong>ملاحظة:</strong> ميزان المراجعة يعرض أرصدة الحسابات من القيود اليومية.
-          <br />
-          إذا كان هناك فرق بين المدين والدائن، فهناك خطأ في التسجيل.
         </p>
       </div>
     </div>
