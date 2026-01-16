@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries, diagnoseCashDiscrepancy, CashDiscrepancyDiagnostic } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -55,6 +55,8 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
     discrepancy: number;
   } | null>(null);
   const [deletingUnmatched, setDeletingUnmatched] = useState(false);
+  const [diagnosingCash, setDiagnosingCash] = useState(false);
+  const [cashDiagnostic, setCashDiagnostic] = useState<CashDiscrepancyDiagnostic | null>(null);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -430,6 +432,49 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleDiagnoseCashDiscrepancy = async () => {
+    if (!user) return;
+
+    setDiagnosingCash(true);
+    setCashDiagnostic(null);
+
+    try {
+      const result = await diagnoseCashDiscrepancy(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        setCashDiagnostic(result.data);
+
+        if (Math.abs(result.data.discrepancy) < 0.01) {
+          toast({
+            title: "لا يوجد فرق في النقدية",
+            description: "رصيد النقدية في الميزانية يتطابق مع التدفق النقدي",
+          });
+        } else {
+          toast({
+            title: "تم اكتشاف فرق في النقدية",
+            description: `الفرق: ${formatNumber(result.data.discrepancy)} دينار`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تشخيص النقدية",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Cash discrepancy diagnosis failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء التشخيص",
+        variant: "destructive",
+      });
+    } finally {
+      setDiagnosingCash(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -545,6 +590,17 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <AlertTriangle className="w-4 h-4 ml-2 text-amber-600" />
                 {findingUnmatched ? "جاري البحث..." : "قيود نقدية غير متطابقة"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDiagnoseCashDiscrepancy}
+                disabled={diagnosingCash}
+                title="مقارنة النقدية بين الميزانية والتدفق النقدي"
+                className="border-red-300 hover:bg-red-50"
+              >
+                <Search className="w-4 h-4 ml-2 text-red-600" />
+                {diagnosingCash ? "جاري التشخيص..." : "تشخيص فرق النقدية"}
               </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />
@@ -1047,6 +1103,197 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
                     هذا سيخفض رصيد النقدية في الميزانية العمومية بمقدار {formatNumber(unmatchedSummary?.discrepancy || 0)} دينار.
                   </p>
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cash Discrepancy Diagnostic Section */}
+      {cashDiagnostic && (
+        <Card className="border-red-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-red-700">
+                <Search className="w-5 h-5" />
+                تشخيص فرق النقدية بين الميزانية والتدفق النقدي
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCashDiagnostic(null)}
+              >
+                إغلاق
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Comparison */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {/* Balance Sheet Cash */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-700 mb-3">الميزانية العمومية (القيود)</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>مدين النقدية:</span>
+                    <span className="font-mono">{formatNumber(cashDiagnostic.journalCashDebits)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>دائن النقدية:</span>
+                    <span className="font-mono">({formatNumber(cashDiagnostic.journalCashCredits)})</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-1">
+                    <span>الرصيد:</span>
+                    <span className="font-mono text-blue-700">{formatNumber(cashDiagnostic.journalCashBalance)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cash Flow Calculation */}
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-green-700 mb-3">التدفق النقدي (المدفوعات + التمويل)</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>تحصيلات (قبض):</span>
+                    <span className="font-mono text-green-600">+{formatNumber(cashDiagnostic.paymentCashIn)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>مصروفات (صرف):</span>
+                    <span className="font-mono text-red-600">-{formatNumber(cashDiagnostic.paymentCashOut)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>صافي المدفوعات:</span>
+                    <span className="font-mono">{formatNumber(cashDiagnostic.paymentNetCash)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1">
+                    <span>تمويل داخل:</span>
+                    <span className="font-mono text-green-600">+{formatNumber(cashDiagnostic.financingCashIn)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>تمويل خارج:</span>
+                    <span className="font-mono text-red-600">-{formatNumber(cashDiagnostic.financingCashOut)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-1">
+                    <span>الرصيد المحسوب:</span>
+                    <span className="font-mono text-green-700">{formatNumber(cashDiagnostic.calculatedCashBalance)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Discrepancy */}
+              <div className={`p-4 rounded-lg ${Math.abs(cashDiagnostic.discrepancy) < 0.01 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <h4 className={`font-semibold mb-3 ${Math.abs(cashDiagnostic.discrepancy) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>
+                  الفرق
+                </h4>
+                <div className="text-center">
+                  <p className={`text-3xl font-bold ${Math.abs(cashDiagnostic.discrepancy) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatNumber(cashDiagnostic.discrepancy)}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {Math.abs(cashDiagnostic.discrepancy) < 0.01
+                      ? 'الأرقام متطابقة!'
+                      : 'الميزانية - التدفق النقدي'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Skipped Payments */}
+            {cashDiagnostic.paymentsSkipped.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-semibold text-amber-700 mb-2">
+                  مدفوعات تم تجاوزها في التدفق النقدي ({cashDiagnostic.paymentsSkipped.length})
+                </h4>
+                <div className="max-h-40 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>النوع</TableHead>
+                        <TableHead className="text-left">المبلغ</TableHead>
+                        <TableHead>السبب</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashDiagnostic.paymentsSkipped.slice(0, 20).map((payment, idx) => (
+                        <TableRow key={idx} className="bg-amber-50/50">
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {payment.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-left font-mono">
+                            {formatNumber(payment.amount)}
+                          </TableCell>
+                          <TableCell className="text-xs text-amber-700">
+                            {payment.reason}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {/* Journal Entries with Cash */}
+            {cashDiagnostic.journalEntriesWithCash.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-blue-700 mb-2">
+                  قيود تؤثر على النقدية ({cashDiagnostic.journalEntriesWithCash.length})
+                </h4>
+                <div className="max-h-60 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>التاريخ</TableHead>
+                        <TableHead>الوصف</TableHead>
+                        <TableHead className="text-left">مدين</TableHead>
+                        <TableHead className="text-left">دائن</TableHead>
+                        <TableHead>نوع الارتباط</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashDiagnostic.journalEntriesWithCash.slice(0, 50).map((entry, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {formatDate(entry.date)}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate" title={entry.description}>
+                            {entry.description}
+                          </TableCell>
+                          <TableCell className="text-left font-mono text-green-600">
+                            {entry.debit > 0 ? formatNumber(entry.debit) : '-'}
+                          </TableCell>
+                          <TableCell className="text-left font-mono text-red-600">
+                            {entry.credit > 0 ? formatNumber(entry.credit) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {entry.linkedDocumentType || (entry.linkedTransactionId ? 'معاملة' : entry.linkedPaymentId ? 'دفعة' : 'غير مرتبط')}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {cashDiagnostic.journalEntriesWithCash.length > 50 && (
+                    <p className="text-sm text-gray-500 mt-2 text-center">
+                      عرض أول 50 من {cashDiagnostic.journalEntriesWithCash.length} قيد
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Analysis Summary */}
+            {Math.abs(cashDiagnostic.discrepancy) >= 0.01 && (
+              <div className="mt-4 p-4 bg-red-50 rounded-lg">
+                <h4 className="font-semibold text-red-700 mb-2">تحليل الفرق</h4>
+                <p className="text-sm text-red-800">
+                  الفرق {formatNumber(cashDiagnostic.discrepancy)} دينار يعني أن هناك قيود محاسبية تؤثر على النقدية ولكن لا يوجد لها مدفوعات مقابلة في سجل المدفوعات، أو العكس.
+                  <br /><br />
+                  راجع قائمة &quot;قيود تؤثر على النقدية&quot; وقارنها بسجل المدفوعات للعثور على مصدر الفرق.
+                </p>
               </div>
             )}
           </CardContent>

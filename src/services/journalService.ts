@@ -2468,3 +2468,241 @@ export async function migrateEndorsedChequeJournalEntries(
     };
   }
 }
+
+// ============================================================================
+// Cash Discrepancy Diagnostic
+// ============================================================================
+
+export interface CashDiscrepancyDiagnostic {
+  // Balance Sheet calculation (from journal entries)
+  journalCashDebits: number;
+  journalCashCredits: number;
+  journalCashBalance: number;
+
+  // Cash Flow calculation (from payments)
+  paymentCashIn: number;    // قبض receipts
+  paymentCashOut: number;   // صرف disbursements
+  paymentNetCash: number;
+
+  // Financing activities (equity + loans from ledger)
+  financingCashIn: number;
+  financingCashOut: number;
+  financingNetCash: number;
+
+  // Calculated total
+  calculatedCashBalance: number;  // paymentNetCash + financingNetCash
+
+  // Discrepancy
+  discrepancy: number;  // journalCashBalance - calculatedCashBalance
+
+  // Details for investigation
+  journalEntriesWithCash: {
+    id: string;
+    date: Date;
+    description: string;
+    debit: number;
+    credit: number;
+    linkedTransactionId?: string;
+    linkedPaymentId?: string;
+    linkedDocumentType?: string;
+  }[];
+
+  paymentsSkipped: {
+    id: string;
+    type: string;
+    amount: number;
+    reason: string;
+  }[];
+}
+
+/**
+ * Diagnose cash discrepancy between Balance Sheet and Cash Flow Statement
+ *
+ * Balance Sheet Cash = Sum of all journal entry DR/CR to account 1000
+ * Cash Flow Cash = Payments (receipts - disbursements) + Financing (equity + loans from ledger)
+ *
+ * If they don't match, this function helps identify what's different.
+ */
+export async function diagnoseCashDiscrepancy(
+  userId: string
+): Promise<ServiceResult<CashDiscrepancyDiagnostic>> {
+  try {
+    validateUserId(userId);
+
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+
+    // Get all posted journal entries
+    const journalSnapshot = await getDocs(query(journalRef, where('status', '==', 'posted')));
+
+    // Calculate journal cash balance
+    let journalCashDebits = 0;
+    let journalCashCredits = 0;
+    const journalEntriesWithCash: CashDiscrepancyDiagnostic['journalEntriesWithCash'] = [];
+
+    journalSnapshot.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      const lines = data.lines || [];
+      let entryDebit = 0;
+      let entryCredit = 0;
+
+      for (const line of lines) {
+        if (line.accountCode === ACCOUNT_CODES.CASH) {
+          entryDebit += line.debit || 0;
+          entryCredit += line.credit || 0;
+        }
+      }
+
+      if (entryDebit > 0 || entryCredit > 0) {
+        journalCashDebits = safeAdd(journalCashDebits, entryDebit);
+        journalCashCredits = safeAdd(journalCashCredits, entryCredit);
+
+        journalEntriesWithCash.push({
+          id: docSnap.id,
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+          description: data.description || '',
+          debit: entryDebit,
+          credit: entryCredit,
+          linkedTransactionId: data.linkedTransactionId,
+          linkedPaymentId: data.linkedPaymentId,
+          linkedDocumentType: data.linkedDocumentType,
+        });
+      }
+    });
+
+    const journalCashBalance = safeSubtract(journalCashDebits, journalCashCredits);
+
+    // Get all payments
+    const paymentsSnapshot = await getDocs(paymentsRef);
+
+    // Get all ledger entries (for checking advance transactions)
+    const ledgerSnapshot = await getDocs(ledgerRef);
+    const ledgerByTransactionId = new Map<string, { type: string; category: string }>();
+    ledgerSnapshot.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        ledgerByTransactionId.set(data.transactionId, {
+          type: data.type || '',
+          category: data.category || '',
+        });
+      }
+    });
+
+    // Calculate payment cash flow (same logic as useReportsCalculations)
+    let paymentCashIn = 0;
+    let paymentCashOut = 0;
+    const paymentsSkipped: CashDiscrepancyDiagnostic['paymentsSkipped'] = [];
+
+    paymentsSnapshot.docs.forEach(docSnap => {
+      const payment = docSnap.data();
+
+      // Skip endorsed cheques and no-cash-movement payments
+      if (payment.isEndorsement || payment.noCashMovement) {
+        paymentsSkipped.push({
+          id: docSnap.id,
+          type: payment.type,
+          amount: payment.amount,
+          reason: payment.isEndorsement ? 'isEndorsement=true' : 'noCashMovement=true',
+        });
+        return;
+      }
+
+      // Skip payments linked to advance transactions
+      if (payment.linkedTransactionId) {
+        const linkedEntry = ledgerByTransactionId.get(payment.linkedTransactionId);
+        if (linkedEntry) {
+          const isAdvance = linkedEntry.category === 'سلفة عميل' ||
+                           linkedEntry.category === 'سلفة مورد' ||
+                           linkedEntry.category === 'Customer Advance' ||
+                           linkedEntry.category === 'Supplier Advance';
+          if (isAdvance) {
+            paymentsSkipped.push({
+              id: docSnap.id,
+              type: payment.type,
+              amount: payment.amount,
+              reason: `Linked to advance transaction (${linkedEntry.category})`,
+            });
+            return;
+          }
+        }
+      }
+
+      if (payment.type === 'قبض') {
+        paymentCashIn = safeAdd(paymentCashIn, payment.amount);
+      } else if (payment.type === 'صرف') {
+        paymentCashOut = safeAdd(paymentCashOut, payment.amount);
+      }
+    });
+
+    const paymentNetCash = safeSubtract(paymentCashIn, paymentCashOut);
+
+    // Calculate financing activities (equity + loans from ledger)
+    let financingCashIn = 0;
+    let financingCashOut = 0;
+
+    ledgerSnapshot.docs.forEach(docSnap => {
+      const entry = docSnap.data();
+      const type = entry.type || '';
+      const category = entry.category || '';
+      const subCategory = entry.subCategory || '';
+      const amount = entry.amount || 0;
+
+      // Equity transactions
+      if (type === 'حركة رأس مال' || category === 'رأس المال' || category === 'Owner Equity') {
+        if (subCategory === 'رأس مال مالك' || subCategory === 'Owner Capital') {
+          financingCashIn = safeAdd(financingCashIn, amount);
+        } else if (subCategory === 'سحوبات المالك' || subCategory === 'Owner Drawings') {
+          financingCashOut = safeAdd(financingCashOut, amount);
+        }
+      }
+
+      // Loan transactions
+      if (type === 'قرض' || category === 'قروض ممنوحة' || category === 'قروض مستلمة') {
+        // Loans received or loan collections = cash in
+        if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض' ||
+            subCategory === 'Loan Receipt' || subCategory === 'Loan Collection') {
+          financingCashIn = safeAdd(financingCashIn, amount);
+        }
+        // Loans given or loan repayments = cash out
+        else if (subCategory === 'منح قرض' || subCategory === 'سداد قرض' ||
+                 subCategory === 'Loan Given' || subCategory === 'Loan Repayment' ||
+                 category === 'قروض ممنوحة') {
+          financingCashOut = safeAdd(financingCashOut, amount);
+        }
+      }
+    });
+
+    const financingNetCash = safeSubtract(financingCashIn, financingCashOut);
+    const calculatedCashBalance = safeAdd(paymentNetCash, financingNetCash);
+    const discrepancy = safeSubtract(journalCashBalance, calculatedCashBalance);
+
+    // Sort journal entries by debit amount descending
+    journalEntriesWithCash.sort((a, b) => b.debit - a.debit);
+
+    return {
+      success: true,
+      data: {
+        journalCashDebits: roundCurrency(journalCashDebits),
+        journalCashCredits: roundCurrency(journalCashCredits),
+        journalCashBalance: roundCurrency(journalCashBalance),
+        paymentCashIn: roundCurrency(paymentCashIn),
+        paymentCashOut: roundCurrency(paymentCashOut),
+        paymentNetCash: roundCurrency(paymentNetCash),
+        financingCashIn: roundCurrency(financingCashIn),
+        financingCashOut: roundCurrency(financingCashOut),
+        financingNetCash: roundCurrency(financingNetCash),
+        calculatedCashBalance: roundCurrency(calculatedCashBalance),
+        discrepancy: roundCurrency(discrepancy),
+        journalEntriesWithCash,
+        paymentsSkipped,
+      },
+    };
+  } catch (error) {
+    console.error('Error diagnosing cash discrepancy:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to diagnose cash discrepancy',
+    };
+  }
+}
