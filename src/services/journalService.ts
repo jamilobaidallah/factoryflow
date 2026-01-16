@@ -2959,7 +2959,16 @@ export async function detailedCashAudit(
       };
 
       // Check if there's a matching journal entry
-      const matchingJournal = journalByLinkedPayment.get(docSnap.id);
+      // Strategy 1: Match via linkedTransactionId (ledger entry → journal AND payment)
+      // Both payment and journal entry link to the same ledger entry via transactionId
+      let matchingJournal: CashAuditEntry | undefined;
+      if (payment.linkedTransactionId) {
+        matchingJournal = journalByLinkedTransaction.get(payment.linkedTransactionId);
+      }
+      // Strategy 2: Match via linkedPaymentId (payment → its own journal entry)
+      if (!matchingJournal) {
+        matchingJournal = journalByLinkedPayment.get(docSnap.id);
+      }
       if (matchingJournal) {
         entry.hasMatchingJournal = true;
         entry.matchStatus = 'matched';
