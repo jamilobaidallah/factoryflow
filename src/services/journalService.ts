@@ -1366,44 +1366,52 @@ export async function auditJournalEntries(
           subCategory: data.subCategory || '',
         });
       }
-      // Calculate cash totals from ledger (paid items only affect cash)
-      // Include all transaction types that affect cash
-      if (data.status === 'مدفوع' || data.status === 'paid') {
-        const type = data.type || '';
-        const category = data.category || '';
-        const subCategory = data.subCategory || '';
-        const amount = data.amount || 0;
+      // Calculate cash totals from ledger
+      const type = data.type || '';
+      const category = data.category || '';
+      const subCategory = data.subCategory || '';
+      const amount = data.amount || 0;
+      const isPaid = data.status === 'مدفوع' || data.status === 'paid';
 
+      // Check for equity transaction (always affects cash immediately, no status check)
+      const isEquity = type === 'حركة رأس مال' || category === 'رأس المال' || category === 'Owner Equity';
+      // Check for loan transaction (always affects cash immediately, no status check)
+      const isLoan = type === 'قرض' || category === 'قروض ممنوحة' || category === 'قروض مستلمة';
+
+      // Equity transactions - always immediate cash movement
+      if (isEquity) {
+        if (subCategory === 'سحوبات المالك' || category === 'سحوبات المالك') {
+          totalLedgerCashOut += amount;
+        } else {
+          // Capital contribution (رأس المال)
+          totalLedgerCashIn += amount;
+        }
+      }
+      // Loan transactions - always immediate cash movement
+      else if (isLoan) {
+        // Cash IN: استلام قرض (receiving loan), تحصيل قرض (collecting from borrower)
+        // Cash OUT: منح قرض (giving loan), سداد قرض (repaying loan)
+        if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض') {
+          totalLedgerCashIn += amount;
+        } else if (subCategory === 'منح قرض' || subCategory === 'سداد قرض') {
+          totalLedgerCashOut += amount;
+        } else {
+          // Fallback based on category
+          if (category === 'قروض مستلمة') {
+            totalLedgerCashIn += amount; // We received a loan
+          } else if (category === 'قروض ممنوحة') {
+            totalLedgerCashOut += amount; // We gave a loan
+          }
+        }
+      }
+      // Income/Expense - only count if paid (immediate settlement)
+      else if (isPaid) {
         if (type === 'دخل') {
           // Income = cash IN
           totalLedgerCashIn += amount;
         } else if (type === 'مصروف') {
           // Expense = cash OUT
           totalLedgerCashOut += amount;
-        } else if (type === 'حركة رأس مال') {
-          // Equity: Capital contribution = cash IN, Drawings = cash OUT
-          if (subCategory === 'سحوبات المالك' || category === 'سحوبات المالك') {
-            totalLedgerCashOut += amount;
-          } else {
-            // Capital contribution (رأس المال)
-            totalLedgerCashIn += amount;
-          }
-        } else if (type === 'قرض') {
-          // Loans: direction depends on subcategory
-          // Cash IN: استلام قرض (receiving loan), تحصيل قرض (collecting from borrower)
-          // Cash OUT: منح قرض (giving loan), سداد قرض (repaying loan)
-          if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض') {
-            totalLedgerCashIn += amount;
-          } else if (subCategory === 'منح قرض' || subCategory === 'سداد قرض') {
-            totalLedgerCashOut += amount;
-          } else {
-            // Fallback based on category
-            if (category === 'قروض مستلمة') {
-              totalLedgerCashIn += amount; // We received a loan
-            } else if (category === 'قروض ممنوحة') {
-              totalLedgerCashOut += amount; // We gave a loan
-            }
-          }
         }
       }
     });
