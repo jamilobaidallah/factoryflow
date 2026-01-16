@@ -21,8 +21,6 @@ describe('useLedgerForm', () => {
         date: getTodayDate(),
         associatedParty: "",
         ownerName: "",
-        reference: "",
-        notes: "",
         trackARAP: true, // Default to "آجل" (credit) for new entries
         immediateSettlement: false,
       });
@@ -305,8 +303,6 @@ describe('useLedgerForm', () => {
       date: new Date("2025-01-15"),
       createdAt: new Date("2025-01-15"),
       associatedParty: "عميل أ",
-      reference: "REF-001",
-      notes: "ملاحظات اختبار",
       isARAPEntry: true,
     };
 
@@ -322,8 +318,6 @@ describe('useLedgerForm', () => {
       expect(result.current.formData.category).toBe("مبيعات");
       expect(result.current.formData.subCategory).toBe("منتجات");
       expect(result.current.formData.associatedParty).toBe("عميل أ");
-      expect(result.current.formData.reference).toBe("REF-001");
-      expect(result.current.formData.notes).toBe("ملاحظات اختبار");
     });
 
     it('should set trackARAP based on isARAPEntry', () => {
@@ -356,8 +350,6 @@ describe('useLedgerForm', () => {
         category: "مبيعات",
         subCategory: "خدمات",
         associatedParty: "",
-        reference: "",
-        notes: "",
         date: new Date("2025-01-16"),
         createdAt: new Date("2025-01-16"),
       };
@@ -369,8 +361,6 @@ describe('useLedgerForm', () => {
       });
 
       expect(result.current.formData.associatedParty).toBe("");
-      expect(result.current.formData.reference).toBe("");
-      expect(result.current.formData.notes).toBe("");
       expect(result.current.formData.trackARAP).toBe(false);
     });
 
@@ -532,8 +522,6 @@ describe('useLedgerForm', () => {
         category: "مبيعات",
         subCategory: "منتجات",
         associatedParty: "عميل أ",
-        reference: "REF-001",
-        notes: "",
         date: new Date("2025-01-15"),
         createdAt: new Date("2025-01-15"),
       };

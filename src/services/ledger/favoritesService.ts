@@ -63,9 +63,7 @@ export async function saveFavorite(
 
     // Only add optional fields if they have values
     if (formData.ownerName) favoriteData.ownerName = formData.ownerName;
-    if (formData.reference) favoriteData.reference = formData.reference;
     if (formData.description) favoriteData.description = formData.description;
-    if (formData.notes) favoriteData.notes = formData.notes;
 
     const docRef = await addDoc(favoritesRef, favoriteData);
 
@@ -190,8 +188,6 @@ export function favoriteToFormData(favorite: LedgerFavorite): LedgerFormData {
     associatedParty: favorite.associatedParty,
     ownerName: favorite.ownerName || "",
     date: new Date().toISOString().split("T")[0], // Always use today's date
-    reference: favorite.reference || "",
-    notes: favorite.notes || "",
     immediateSettlement: favorite.immediateSettlement,
     trackARAP: !favorite.immediateSettlement, // Inverse of immediateSettlement
   };

@@ -368,8 +368,6 @@ export class LedgerService {
         associatedParty: formData.associatedParty,
         ownerName: formData.ownerName || "",
         date: entryDate,
-        reference: formData.reference,
-        notes: formData.notes,
         createdAt: new Date(),
         immediateSettlement: formData.immediateSettlement ?? true,
         isARAPEntry: false,
@@ -482,8 +480,6 @@ export class LedgerService {
         associatedParty: formData.associatedParty,
         ownerName: formData.ownerName || "",
         date: new Date(formData.date),
-        reference: formData.reference,
-        notes: formData.notes,
         createdAt: new Date(),
         immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
         isARAPEntry: shouldTrackARAP,
@@ -701,8 +697,6 @@ export class LedgerService {
         associatedParty: formData.associatedParty,
         ownerName: formData.ownerName || "",
         date: new Date(formData.date),
-        reference: formData.reference,
-        notes: formData.notes,
       };
 
       // Fetch current entry to check if AR/AP recalculation is needed
@@ -831,7 +825,6 @@ export class LedgerService {
             clientName: newClientName,
             amount: newAmount,
             date: new Date(formData.date),
-            notes: formData.notes || paymentDoc.data().notes,
             category: formData.category,
             subCategory: formData.subCategory,
           });

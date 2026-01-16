@@ -24,8 +24,6 @@ describe("Cheque Handlers", () => {
     associatedParty: "عميل اختبار",
     description: "معاملة اختبار",
     ownerName: "",
-    reference: "",
-    notes: "",
     trackARAP: false,
     immediateSettlement: false,
     ...overrides,

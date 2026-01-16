@@ -96,25 +96,6 @@ export function StepBasicInfo({
         </div>
       </div>
 
-      {/* Reference & Notes */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="reference">رقم المرجع (اختياري)</Label>
-          <Input
-            id="reference"
-            value={formData.reference}
-            onChange={(e) => onUpdate({ reference: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="notes">ملاحظات (اختياري)</Label>
-          <Input
-            id="notes"
-            value={formData.notes}
-            onChange={(e) => onUpdate({ notes: e.target.value })}
-          />
-        </div>
-      </div>
     </>
   );
 }

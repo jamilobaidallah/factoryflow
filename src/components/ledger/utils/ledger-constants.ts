@@ -33,8 +33,6 @@ export interface LedgerEntry {
     associatedParty: string;
     ownerName?: string;
     date: Date;
-    reference: string;
-    notes: string;
     createdAt: Date;
     // AR/AP Tracking Fields
     totalPaid?: number;

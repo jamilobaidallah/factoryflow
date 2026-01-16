@@ -14,8 +14,6 @@ export interface LedgerFormState {
   date: string;
   associatedParty: string;
   ownerName: string;
-  reference: string;
-  notes: string;
   trackARAP: boolean;
   immediateSettlement: boolean;
 }
@@ -105,8 +103,6 @@ const initialFormData: LedgerFormState = {
   date: new Date().toISOString().split("T")[0],
   associatedParty: "",
   ownerName: "",
-  reference: "",
-  notes: "",
   trackARAP: true, // Default to "آجل" (credit) for new entries
   immediateSettlement: false,
 };
@@ -246,8 +242,6 @@ export function useLedgerForm(editingEntry?: LedgerEntry | null) {
         : new Date(entry.date).toISOString().split("T")[0],
       associatedParty: entry.associatedParty || "",
       ownerName: entry.ownerName || "",
-      reference: entry.reference || "",
-      notes: entry.notes || "",
       trackARAP: entry.isARAPEntry || false,
       immediateSettlement: false,
     });

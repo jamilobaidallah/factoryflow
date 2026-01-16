@@ -40,8 +40,6 @@ describe("Advance Handlers", () => {
     associatedParty: "عميل اختبار",
     description: "فاتورة مبيعات",
     ownerName: "",
-    reference: "",
-    notes: "",
     trackARAP: true,
     immediateSettlement: false,
     ...overrides,

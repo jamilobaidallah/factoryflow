@@ -12,8 +12,6 @@ export interface LedgerEntry {
   associatedParty: string;
   ownerName?: string;
   date: Date;
-  reference: string;
-  notes: string;
   createdAt: Date;
   // AR/AP Tracking Fields
   totalPaid?: number;
@@ -50,8 +48,6 @@ export interface LedgerFormData {
   date: string;
   associatedParty: string;
   ownerName: string;
-  reference: string;
-  notes: string;
   trackARAP: boolean;
   immediateSettlement: boolean;
 }
@@ -203,8 +199,6 @@ export const initialLedgerFormData: LedgerFormData = {
   associatedParty: "",
   ownerName: "",
   date: new Date().toISOString().split("T")[0],
-  reference: "",
-  notes: "",
   immediateSettlement: false,
   trackARAP: true, // Default to "آجل" (credit) for new entries
 };

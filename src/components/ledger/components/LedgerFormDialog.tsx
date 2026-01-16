@@ -267,7 +267,7 @@ export function LedgerFormDialog() {
         )}
 
         <form onSubmit={handleFormSubmit}>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 px-2">
             {/* ===== STEP 1: Basic Info ===== */}
             {(step === 1 || editingEntry) && (
               <StepBasicInfo

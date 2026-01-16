@@ -214,8 +214,6 @@ const createMockFormData = (overrides: Partial<LedgerFormData> = {}): LedgerForm
   associatedParty: 'Test Client',
   ownerName: '',
   date: '2024-01-15',
-  reference: '',
-  notes: '',
   trackARAP: false,
   immediateSettlement: true,
   ...overrides,
@@ -1171,12 +1169,12 @@ describe('LedgerService', () => {
       );
     });
 
-    it('should handle special characters in notes', async () => {
+    it('should handle special characters in description', async () => {
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
 
       const formData = createMockFormData({
-        notes: 'Special chars: @#$%^&*()_+-=[]{}|;\':",./<>?',
+        description: 'Special chars: @#$%^&*()_+-=[]{}|;\':",./<>?',
       });
 
       const result = await service.createSimpleLedgerEntry(formData);

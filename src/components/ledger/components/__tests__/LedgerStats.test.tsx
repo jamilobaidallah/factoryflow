@@ -23,8 +23,6 @@ describe('LedgerStats', () => {
     category: 'مبيعات',
     subCategory: 'منتجات',
     associatedParty: 'عميل أ',
-    reference: 'REF-001',
-    notes: '',
     date: new Date('2025-01-15'),
     createdAt: new Date('2025-01-15'),
   };
@@ -38,8 +36,6 @@ describe('LedgerStats', () => {
     category: 'مصروفات',
     subCategory: 'رواتب',
     associatedParty: 'مورد أ',
-    reference: 'REF-002',
-    notes: '',
     date: new Date('2025-01-16'),
     createdAt: new Date('2025-01-16'),
   };
@@ -53,8 +49,6 @@ describe('LedgerStats', () => {
     category: 'مبيعات',
     subCategory: 'خدمات',
     associatedParty: 'عميل ب',
-    reference: 'REF-003',
-    notes: '',
     date: new Date('2025-01-17'),
     createdAt: new Date('2025-01-17'),
     isARAPEntry: true,
@@ -72,8 +66,6 @@ describe('LedgerStats', () => {
     category: 'رأس المال',
     subCategory: 'رأس مال مالك',
     associatedParty: '',
-    reference: 'REF-004',
-    notes: '',
     date: new Date('2025-01-18'),
     createdAt: new Date('2025-01-18'),
   };

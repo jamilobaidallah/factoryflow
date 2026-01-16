@@ -35,8 +35,6 @@ const createMockFormData = (overrides: Partial<LedgerFormData> = {}): LedgerForm
   associatedParty: 'Test Client',
   ownerName: '',
   date: '2024-01-15',
-  reference: '',
-  notes: '',
   trackARAP: false,
   immediateSettlement: true,
   ...overrides,

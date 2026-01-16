@@ -15,9 +15,7 @@ export interface LedgerFavorite {
   subCategory: string;
   associatedParty: string;
   ownerName?: string;
-  reference?: string;
   description?: string; // The main description field
-  notes?: string;
 
   // Settlement option
   immediateSettlement: boolean;
@@ -39,9 +37,7 @@ export interface CreateLedgerFavoriteData {
   subCategory: string;
   associatedParty: string;
   ownerName?: string;
-  reference?: string;
   description?: string;
-  notes?: string;
   immediateSettlement: boolean;
 }
 

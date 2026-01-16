@@ -361,8 +361,6 @@ export function ledgerPageReducer(
               : new Date(entry.date).toISOString().split("T")[0],
             associatedParty: entry.associatedParty || "",
             ownerName: entry.ownerName || "",
-            reference: entry.reference || "",
-            notes: entry.notes || "",
             trackARAP: entry.isARAPEntry || false,
             immediateSettlement: false,
           },

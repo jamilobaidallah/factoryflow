@@ -224,8 +224,6 @@ export interface LedgerEntry {
   category: string;
   subCategory: string;
   associatedParty: string;
-  reference?: string;
-  notes?: string;
   isARAPEntry: boolean;
   totalPaid?: number;
   remainingBalance?: number;

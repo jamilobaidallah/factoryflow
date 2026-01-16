@@ -89,8 +89,6 @@ describe("Inventory Handlers", () => {
     associatedParty: "مورد المواد",
     description: "شراء مواد خام",
     ownerName: "",
-    reference: "",
-    notes: "",
     trackARAP: false,
     immediateSettlement: false,
     ...overrides,
