@@ -35,7 +35,7 @@ export function FixedAssetFormDialog({
   onSubmit,
 }: FixedAssetFormDialogProps) {
   // Check if depreciation has been run - if so, disable critical fields
-  const hasDepreciation = editingAsset && editingAsset.accumulatedDepreciation > 0;
+  const hasDepreciation = !!(editingAsset && editingAsset.accumulatedDepreciation > 0);
 
   // Calculate monthly depreciation using safe currency utilities
   const monthlyDepreciation = formData.purchaseCost && formData.salvageValue && formData.usefulLifeYears
