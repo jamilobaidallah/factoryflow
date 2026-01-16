@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Trash2, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Trash2, Search, AlertTriangle, ChevronDown, ChevronUp, Wrench } from "lucide-react";
 import {
   useBalanceSheet,
   formatBalanceSheetAmount,
@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -45,6 +45,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [auditResult, setAuditResult] = useState<JournalAuditResult | null>(null);
   const [showAuditDetails, setShowAuditDetails] = useState(false);
   const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
+  const [migratingLoans, setMigratingLoans] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -222,6 +223,62 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleMigrateLoanEntries = async () => {
+    if (!user) return;
+
+    const confirmed = window.confirm(
+      `سيتم تصحيح قيود القروض التي تم تسجيلها كمصروفات.\n\nالقروض الممنوحة (قروض ممنوحة) يجب أن تكون أصل (1600)\nالقروض المستلمة (قروض مستلمة) يجب أن تكون التزام (2300)\n\nهل تريد المتابعة؟`
+    );
+
+    if (!confirmed) return;
+
+    setMigratingLoans(true);
+    try {
+      const result = await migrateLoanJournalEntries(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        const { corrected, skipped, errors } = result.data;
+
+        if (corrected.length > 0) {
+          toast({
+            title: "تم تصحيح قيود القروض",
+            description: `تم تصحيح ${corrected.length} قيد. تم تخطي ${skipped.length} قيد (صحيح بالفعل).`,
+          });
+          refresh();
+        } else if (skipped.length > 0) {
+          toast({
+            title: "لا حاجة للتصحيح",
+            description: `جميع قيود القروض صحيحة (${skipped.length} قيد).`,
+          });
+        } else {
+          toast({
+            title: "لا توجد قيود للتصحيح",
+            description: "لم يتم العثور على قيود قروض تحتاج تصحيح.",
+          });
+        }
+
+        if (errors.length > 0) {
+          console.error("Loan migration errors:", errors);
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تصحيح قيود القروض",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Loan migration failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تصحيح قيود القروض",
+        variant: "destructive",
+      });
+    } finally {
+      setMigratingLoans(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -306,6 +363,16 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <Trash2 className="w-4 h-4 ml-2" />
                 {cleaningUp ? "جاري التنظيف..." : "تنظيف القيود اليتيمة"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMigrateLoanEntries}
+                disabled={migratingLoans}
+                title="تصحيح قيود القروض التي تم تسجيلها كمصروفات"
+              >
+                <Wrench className="w-4 h-4 ml-2" />
+                {migratingLoans ? "جاري التصحيح..." : "تصحيح قيود القروض"}
               </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />

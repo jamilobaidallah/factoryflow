@@ -1665,3 +1665,196 @@ export async function cleanupDuplicateJournalEntries(
     };
   }
 }
+
+// ============================================================================
+// Loan Journal Entry Migration
+// ============================================================================
+
+export interface LoanMigrationResult {
+  corrected: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+/**
+ * Migrate loan journal entries from incorrect expense mapping to correct loan accounts
+ *
+ * Problem: Loan transactions (type "قرض") were falling through to default expense mapping
+ * - DR Other Expenses (5530), CR Cash (1000)
+ *
+ * Correct mapping:
+ * - Loan Given (قروض ممنوحة): DR Loans Receivable (1600), CR Cash (1000)
+ * - Loan Received (قروض مستلمة): DR Cash (1000), CR Loans Payable (2300)
+ *
+ * This function creates correcting journal entries:
+ * - For loan given wrongly recorded as expense: DR Loans Receivable (1600), CR Expense (5xxx)
+ * - For loan received wrongly recorded as expense: DR Expense (5xxx), CR Loans Payable (2300)
+ */
+export async function migrateLoanJournalEntries(
+  userId: string
+): Promise<ServiceResult<LoanMigrationResult>> {
+  try {
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+
+    // Find all loan transactions (type = "قرض")
+    const loanQuery = query(ledgerRef, where('type', '==', 'قرض'));
+    const loanSnapshot = await getDocs(loanQuery);
+
+    const corrected: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const ledgerDoc of loanSnapshot.docs) {
+      const ledgerData = ledgerDoc.data();
+      const transactionId = ledgerData.transactionId;
+      const category = ledgerData.category || '';
+      const amount = ledgerData.amount || 0;
+
+      if (!transactionId) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Find journal entries linked to this transaction
+      const journalQuery = query(journalRef, where('linkedTransactionId', '==', transactionId));
+      const journalSnapshot = await getDocs(journalQuery);
+
+      if (journalSnapshot.empty) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Check if the journal entry has an expense debit (wrong mapping)
+      const journalDoc = journalSnapshot.docs[0];
+      const journalData = journalDoc.data();
+      const lines = journalData.lines || [];
+
+      // Find the debit line
+      const debitLine = lines.find((line: JournalLine) => line.debit > 0);
+      if (!debitLine) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Check if it's an expense account (starts with 5) - this is wrong for loans
+      const isExpenseAccount = debitLine.accountCode.startsWith('5');
+
+      // Also check if it's already correctly mapped to loan accounts
+      const isLoansReceivable = debitLine.accountCode === ACCOUNT_CODES.LOANS_RECEIVABLE;
+      const isLoansPayable = lines.some((line: JournalLine) =>
+        line.credit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_PAYABLE
+      );
+      const isCashDebit = debitLine.accountCode === ACCOUNT_CODES.CASH;
+
+      // Skip if already correctly recorded
+      if (isLoansReceivable || isLoansPayable || (isCashDebit && lines.some((line: JournalLine) =>
+        line.credit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_PAYABLE
+      ))) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // If not an expense account, skip (some other mapping)
+      if (!isExpenseAccount && !isCashDebit) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Determine correct correction based on loan category
+      const isLoanGiven = category === 'قروض ممنوحة';
+      const isLoanReceived = category === 'قروض مستلمة';
+
+      if (!isLoanGiven && !isLoanReceived) {
+        // Unknown category, skip
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      let correctionLines: JournalLine[];
+      let description: string;
+
+      if (isLoanGiven && isExpenseAccount) {
+        // Wrong: DR Expense (5xxx), CR Cash
+        // Correction: DR Loans Receivable (1600), CR Expense (5xxx)
+        description = `تصحيح قيد قرض ممنوح: ${ledgerData.description || transactionId}`;
+        correctionLines = [
+          {
+            accountCode: ACCOUNT_CODES.LOANS_RECEIVABLE,
+            accountName: 'Loans Receivable',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+            description: `تصحيح: قرض ممنوح - ${ledgerData.description || ''}`,
+            debit: amount,
+            credit: 0,
+          },
+          {
+            accountCode: debitLine.accountCode,
+            accountName: debitLine.accountCode,
+            accountNameAr: debitLine.accountNameAr || 'مصروفات',
+            description: `تصحيح: عكس تسجيل مصروف خاطئ`,
+            debit: 0,
+            credit: amount,
+          },
+        ];
+      } else if (isLoanReceived && isExpenseAccount) {
+        // Wrong: DR Expense (5xxx), CR Cash (for loan received this makes no sense)
+        // Correct should be: DR Cash, CR Loans Payable
+        // Correction: DR Expense (reverse), CR Loans Payable (correct)
+        description = `تصحيح قيد قرض مستلم: ${ledgerData.description || transactionId}`;
+        correctionLines = [
+          {
+            accountCode: debitLine.accountCode,
+            accountName: debitLine.accountCode,
+            accountNameAr: debitLine.accountNameAr || 'مصروفات',
+            description: `تصحيح: عكس تسجيل مصروف خاطئ`,
+            debit: amount,
+            credit: 0,
+          },
+          {
+            accountCode: ACCOUNT_CODES.LOANS_PAYABLE,
+            accountName: 'Loans Payable',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+            description: `تصحيح: قرض مستلم - ${ledgerData.description || ''}`,
+            debit: 0,
+            credit: amount,
+          },
+        ];
+      } else {
+        // Unknown case, skip
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      try {
+        const result = await createJournalEntry(
+          userId,
+          description,
+          new Date(),
+          correctionLines,
+          transactionId,
+          undefined,
+          'ledger' // Link as ledger correction
+        );
+
+        if (result.success) {
+          corrected.push(ledgerDoc.id);
+        } else {
+          errors.push(`${ledgerDoc.id}: ${result.error}`);
+        }
+      } catch (err) {
+        errors.push(`${ledgerDoc.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { corrected, skipped, errors },
+    };
+  } catch (error) {
+    console.error('Error migrating loan journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to migrate loan journal entries',
+    };
+  }
+}

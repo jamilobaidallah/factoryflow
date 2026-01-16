@@ -8,6 +8,7 @@
 
 import { ACCOUNT_CODES } from '@/types/accounting';
 import { TRANSACTION_TYPES } from './constants';
+import { LOAN_CATEGORIES, LOAN_SUBCATEGORIES } from '@/components/ledger/utils/ledger-helpers';
 
 /**
  * Mapping result for a ledger entry
@@ -98,6 +99,8 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.DEPRECIATION_EXPENSE]: 'مصاريف الإهلاك',
   [ACCOUNT_CODES.OTHER_EXPENSES]: 'مصاريف أخرى',
   [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
+  [ACCOUNT_CODES.LOANS_RECEIVABLE]: 'قروض ممنوحة',
+  [ACCOUNT_CODES.LOANS_PAYABLE]: 'قروض مستلمة',
   // Sub-accounts
   '4010': 'مبيعات منتجات',
   '4110': 'مبيعات خدمات',
@@ -175,6 +178,57 @@ export function getAccountMappingForLedgerEntry(
         creditAccountNameAr: getAccountNameAr(equityAccount),
       };
     }
+  }
+
+  // Loan transaction (قرض) - special handling for loans
+  if (type === TRANSACTION_TYPES.LOAN) {
+    // Loan Given (منح قرض) - We lend money: DR Loans Receivable (Asset), CR Cash
+    if (category === LOAN_CATEGORIES.GIVEN || subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN) {
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    }
+
+    // Loan Collection (تحصيل قرض) - Borrower repays us: DR Cash, CR Loans Receivable
+    if (subCategory === LOAN_SUBCATEGORIES.LOAN_COLLECTION) {
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+      };
+    }
+
+    // Loan Received (استلام قرض) - We borrow money: DR Cash, CR Loans Payable (Liability)
+    if (category === LOAN_CATEGORIES.RECEIVED || subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT) {
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+      };
+    }
+
+    // Loan Repayment (سداد قرض) - We repay our debt: DR Loans Payable, CR Cash
+    if (subCategory === LOAN_SUBCATEGORIES.LOAN_REPAYMENT) {
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    }
+
+    // Fallback for loan type without specific subcategory - treat as loan given
+    return {
+      debitAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+      creditAccount: ACCOUNT_CODES.CASH,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+    };
   }
 
   // Income transaction
