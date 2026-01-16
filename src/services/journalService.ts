@@ -1716,7 +1716,7 @@ export async function migrateLoanJournalEntries(
         continue;
       }
 
-      // Find journal entries linked to this transaction
+      // Find ALL journal entries linked to this transaction
       const journalQuery = query(journalRef, where('linkedTransactionId', '==', transactionId));
       const journalSnapshot = await getDocs(journalQuery);
 
@@ -1725,41 +1725,48 @@ export async function migrateLoanJournalEntries(
         continue;
       }
 
-      // Check if the journal entry has an expense debit (wrong mapping)
-      const journalDoc = journalSnapshot.docs[0];
-      const journalData = journalDoc.data();
-      const lines = journalData.lines || [];
+      // Check ALL journal entries for this transaction to see if any has correct loan mapping
+      // This prevents creating duplicate corrections
+      let hasCorrectMapping = false;
+      let originalWrongEntry: { doc: typeof journalSnapshot.docs[0], debitLine: JournalLine, isExpenseAccount: boolean } | null = null;
 
-      // Find the debit line
-      const debitLine = lines.find((line: JournalLine) => line.debit > 0);
-      if (!debitLine) {
+      for (const jDoc of journalSnapshot.docs) {
+        const jData = jDoc.data();
+        const jLines = jData.lines || [];
+
+        // Check if this entry has loan accounts (correct mapping or correction entry)
+        const hasLoansReceivable = jLines.some((line: JournalLine) =>
+          line.debit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_RECEIVABLE
+        );
+        const hasLoansPayable = jLines.some((line: JournalLine) =>
+          line.credit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_PAYABLE
+        );
+
+        if (hasLoansReceivable || hasLoansPayable) {
+          hasCorrectMapping = true;
+          break;
+        }
+
+        // Check if this is the original wrong entry (expense debit)
+        const debitLine = jLines.find((line: JournalLine) => line.debit > 0);
+        if (debitLine && debitLine.accountCode.startsWith('5') && !originalWrongEntry) {
+          originalWrongEntry = { doc: jDoc, debitLine, isExpenseAccount: true };
+        }
+      }
+
+      // Skip if already correctly recorded (has loan account in any entry)
+      if (hasCorrectMapping) {
         skipped.push(ledgerDoc.id);
         continue;
       }
 
-      // Check if it's an expense account (starts with 5) - this is wrong for loans
-      const isExpenseAccount = debitLine.accountCode.startsWith('5');
-
-      // Also check if it's already correctly mapped to loan accounts
-      const isLoansReceivable = debitLine.accountCode === ACCOUNT_CODES.LOANS_RECEIVABLE;
-      const isLoansPayable = lines.some((line: JournalLine) =>
-        line.credit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_PAYABLE
-      );
-      const isCashDebit = debitLine.accountCode === ACCOUNT_CODES.CASH;
-
-      // Skip if already correctly recorded
-      if (isLoansReceivable || isLoansPayable || (isCashDebit && lines.some((line: JournalLine) =>
-        line.credit > 0 && line.accountCode === ACCOUNT_CODES.LOANS_PAYABLE
-      ))) {
+      // If no wrong entry found, skip
+      if (!originalWrongEntry) {
         skipped.push(ledgerDoc.id);
         continue;
       }
 
-      // If not an expense account, skip (some other mapping)
-      if (!isExpenseAccount && !isCashDebit) {
-        skipped.push(ledgerDoc.id);
-        continue;
-      }
+      const { debitLine, isExpenseAccount } = originalWrongEntry;
 
       // Determine correct correction based on loan category
       const isLoanGiven = category === 'قروض ممنوحة';
