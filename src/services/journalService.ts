@@ -2736,3 +2736,367 @@ export async function diagnoseCashDiscrepancy(
     };
   }
 }
+
+// ============================================================================
+// Detailed Cash Audit - Cross-reference Journal Entries vs Cash Flow Sources
+// ============================================================================
+
+export interface CashAuditEntry {
+  // Source info
+  source: 'journal' | 'payment' | 'financing';
+  sourceId: string;
+
+  // Transaction details
+  date: Date;
+  description: string;
+  amount: number;
+  direction: 'in' | 'out';
+
+  // Cross-reference
+  linkedTransactionId?: string;
+  linkedPaymentId?: string;
+  linkedDocumentType?: string;
+
+  // Match status
+  hasMatchingJournal: boolean;
+  hasMatchingCashFlow: boolean;
+  matchStatus: 'matched' | 'journal_only' | 'cashflow_only';
+}
+
+export interface DetailedCashAudit {
+  // All entries affecting cash (both sides)
+  allEntries: CashAuditEntry[];
+
+  // Entries only in Balance Sheet (journal entries with no cash flow match)
+  journalOnlyEntries: CashAuditEntry[];
+  journalOnlyTotal: number;
+
+  // Entries only in Cash Flow (payments/financing with no journal match)
+  cashFlowOnlyEntries: CashAuditEntry[];
+  cashFlowOnlyTotal: number;
+
+  // Matched entries
+  matchedEntries: CashAuditEntry[];
+  matchedTotal: number;
+
+  // Summary
+  balanceSheetCash: number;
+  cashFlowCash: number;
+  discrepancy: number;
+}
+
+/**
+ * Detailed Cash Audit - Cross-references every entry that affects cash
+ *
+ * This function compares:
+ * 1. Journal entries with DR/CR to Cash (1000) account
+ * 2. Payments (قبض/صرف) that contribute to Cash Flow
+ * 3. Financing transactions (equity/loans) from ledger
+ *
+ * It identifies:
+ * - Entries that exist in journal but not in cash flow calculation
+ * - Entries that exist in cash flow but not in journal
+ * - Matched entries (exist in both)
+ */
+export async function detailedCashAudit(
+  userId: string
+): Promise<ServiceResult<DetailedCashAudit>> {
+  try {
+    validateUserId(userId);
+
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+
+    // Get all data
+    const [journalSnapshot, paymentsSnapshot, ledgerSnapshot] = await Promise.all([
+      getDocs(query(journalRef, where('status', '==', 'posted'))),
+      getDocs(paymentsRef),
+      getDocs(ledgerRef),
+    ]);
+
+    // Build ledger lookup for advance checking
+    const ledgerByTransactionId = new Map<string, {
+      id: string;
+      type: string;
+      category: string;
+      subCategory: string;
+      amount: number;
+      description: string;
+      date: Date;
+    }>();
+
+    ledgerSnapshot.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        ledgerByTransactionId.set(data.transactionId, {
+          id: docSnap.id,
+          type: data.type || '',
+          category: data.category || '',
+          subCategory: data.subCategory || '',
+          amount: data.amount || 0,
+          description: data.description || '',
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+        });
+      }
+    });
+
+    // Helper functions (same as in diagnoseCashDiscrepancy)
+    const isAdvanceTransaction = (category?: string): boolean => {
+      return category === 'سلفة عميل' || category === 'سلفة مورد';
+    };
+
+    const isEquityTransaction = (type?: string, category?: string): boolean => {
+      return type === 'حركة رأس مال' ||
+             category === 'رأس المال' ||
+             category === 'Owner Equity';
+    };
+
+    const isLoanTransaction = (type?: string, category?: string): boolean => {
+      return type === 'قرض' ||
+             category === 'قروض مستلمة' ||
+             category === 'قروض ممنوحة';
+    };
+
+    const isCapitalContribution = (subCategory?: string): boolean => {
+      return subCategory === 'رأس مال مالك';
+    };
+
+    const isOwnerDrawing = (subCategory?: string): boolean => {
+      return subCategory === 'سحوبات المالك';
+    };
+
+    const getLoanCashDirection = (subCategory?: string): 'in' | 'out' | null => {
+      if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض') return 'in';
+      if (subCategory === 'منح قرض' || subCategory === 'سداد قرض') return 'out';
+      return null;
+    };
+
+    // =====================================================================
+    // STEP 1: Collect all journal entries affecting Cash
+    // =====================================================================
+    const journalCashEntries: CashAuditEntry[] = [];
+    const journalByLinkedTransaction = new Map<string, CashAuditEntry>();
+    const journalByLinkedPayment = new Map<string, CashAuditEntry>();
+
+    journalSnapshot.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      const lines = data.lines || [];
+      let cashDebit = 0;
+      let cashCredit = 0;
+
+      for (const line of lines) {
+        if (line.accountCode === ACCOUNT_CODES.CASH) {
+          cashDebit += line.debit || 0;
+          cashCredit += line.credit || 0;
+        }
+      }
+
+      if (cashDebit > 0 || cashCredit > 0) {
+        const netAmount = cashDebit - cashCredit;
+        const entry: CashAuditEntry = {
+          source: 'journal',
+          sourceId: docSnap.id,
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+          description: data.description || '',
+          amount: Math.abs(netAmount),
+          direction: netAmount >= 0 ? 'in' : 'out',
+          linkedTransactionId: data.linkedTransactionId,
+          linkedPaymentId: data.linkedPaymentId,
+          linkedDocumentType: data.linkedDocumentType,
+          hasMatchingJournal: true,
+          hasMatchingCashFlow: false, // Will be updated later
+          matchStatus: 'journal_only', // Will be updated later
+        };
+
+        journalCashEntries.push(entry);
+
+        // Index by linked IDs for cross-reference
+        if (data.linkedTransactionId) {
+          journalByLinkedTransaction.set(data.linkedTransactionId, entry);
+        }
+        if (data.linkedPaymentId) {
+          journalByLinkedPayment.set(data.linkedPaymentId, entry);
+        }
+      }
+    });
+
+    // =====================================================================
+    // STEP 2: Collect all payments that affect Cash Flow
+    // =====================================================================
+    const paymentCashEntries: CashAuditEntry[] = [];
+
+    paymentsSnapshot.docs.forEach(docSnap => {
+      const payment = docSnap.data();
+
+      // Skip endorsed cheques and no-cash-movement payments (same as Cash Flow)
+      if (payment.isEndorsement || payment.noCashMovement) {
+        return;
+      }
+
+      // Skip payments linked to advance transactions
+      if (payment.linkedTransactionId) {
+        const linkedEntry = ledgerByTransactionId.get(payment.linkedTransactionId);
+        if (linkedEntry && isAdvanceTransaction(linkedEntry.category)) {
+          return;
+        }
+      }
+
+      const direction = payment.type === 'قبض' ? 'in' : 'out';
+
+      const entry: CashAuditEntry = {
+        source: 'payment',
+        sourceId: docSnap.id,
+        date: payment.date?.toDate ? payment.date.toDate() : new Date(payment.date),
+        description: `${payment.type} - ${payment.associatedParty || 'غير محدد'}`,
+        amount: payment.amount || 0,
+        direction,
+        linkedTransactionId: payment.linkedTransactionId,
+        linkedPaymentId: docSnap.id,
+        hasMatchingJournal: false,
+        hasMatchingCashFlow: true,
+        matchStatus: 'cashflow_only',
+      };
+
+      // Check if there's a matching journal entry
+      const matchingJournal = journalByLinkedPayment.get(docSnap.id);
+      if (matchingJournal) {
+        entry.hasMatchingJournal = true;
+        entry.matchStatus = 'matched';
+        matchingJournal.hasMatchingCashFlow = true;
+        matchingJournal.matchStatus = 'matched';
+      }
+
+      paymentCashEntries.push(entry);
+    });
+
+    // =====================================================================
+    // STEP 3: Collect financing transactions (equity + loans from ledger)
+    // =====================================================================
+    const financingCashEntries: CashAuditEntry[] = [];
+
+    ledgerSnapshot.docs.forEach(docSnap => {
+      const entry = docSnap.data();
+      const type = entry.type || '';
+      const category = entry.category || '';
+      const subCategory = entry.subCategory || '';
+      const amount = entry.amount || 0;
+      const transactionId = entry.transactionId;
+
+      let direction: 'in' | 'out' | null = null;
+      let description = '';
+
+      // Equity transactions
+      if (isEquityTransaction(type, category)) {
+        if (isCapitalContribution(subCategory)) {
+          direction = 'in';
+          description = 'رأس مال مالك';
+        } else if (isOwnerDrawing(subCategory)) {
+          direction = 'out';
+          description = 'سحوبات المالك';
+        }
+      }
+
+      // Loan transactions
+      if (isLoanTransaction(type, category)) {
+        direction = getLoanCashDirection(subCategory);
+        description = subCategory || category;
+      }
+
+      if (direction) {
+        const auditEntry: CashAuditEntry = {
+          source: 'financing',
+          sourceId: docSnap.id,
+          date: entry.date?.toDate ? entry.date.toDate() : new Date(entry.date),
+          description: `${description} - ${entry.associatedParty || entry.description || ''}`,
+          amount,
+          direction,
+          linkedTransactionId: transactionId,
+          hasMatchingJournal: false,
+          hasMatchingCashFlow: true,
+          matchStatus: 'cashflow_only',
+        };
+
+        // Check if there's a matching journal entry
+        if (transactionId) {
+          const matchingJournal = journalByLinkedTransaction.get(transactionId);
+          if (matchingJournal) {
+            auditEntry.hasMatchingJournal = true;
+            auditEntry.matchStatus = 'matched';
+            matchingJournal.hasMatchingCashFlow = true;
+            matchingJournal.matchStatus = 'matched';
+          }
+        }
+
+        financingCashEntries.push(auditEntry);
+      }
+    });
+
+    // =====================================================================
+    // STEP 4: Categorize entries
+    // =====================================================================
+    const allEntries = [...journalCashEntries, ...paymentCashEntries, ...financingCashEntries];
+
+    // Journal entries with no matching cash flow source
+    const journalOnlyEntries = journalCashEntries.filter(e => e.matchStatus === 'journal_only');
+
+    // Cash flow entries (payments + financing) with no matching journal
+    const cashFlowOnlyEntries = [
+      ...paymentCashEntries.filter(e => e.matchStatus === 'cashflow_only'),
+      ...financingCashEntries.filter(e => e.matchStatus === 'cashflow_only'),
+    ];
+
+    // Matched entries
+    const matchedEntries = journalCashEntries.filter(e => e.matchStatus === 'matched');
+
+    // Calculate totals
+    const journalOnlyTotal = journalOnlyEntries.reduce((sum, e) => {
+      return e.direction === 'in' ? safeAdd(sum, e.amount) : safeSubtract(sum, e.amount);
+    }, 0);
+
+    const cashFlowOnlyTotal = cashFlowOnlyEntries.reduce((sum, e) => {
+      return e.direction === 'in' ? safeAdd(sum, e.amount) : safeSubtract(sum, e.amount);
+    }, 0);
+
+    const matchedTotal = matchedEntries.reduce((sum, e) => {
+      return e.direction === 'in' ? safeAdd(sum, e.amount) : safeSubtract(sum, e.amount);
+    }, 0);
+
+    // Calculate overall cash balances
+    const balanceSheetCash = journalCashEntries.reduce((sum, e) => {
+      return e.direction === 'in' ? safeAdd(sum, e.amount) : safeSubtract(sum, e.amount);
+    }, 0);
+
+    const cashFlowCash = [...paymentCashEntries, ...financingCashEntries].reduce((sum, e) => {
+      return e.direction === 'in' ? safeAdd(sum, e.amount) : safeSubtract(sum, e.amount);
+    }, 0);
+
+    const discrepancy = safeSubtract(balanceSheetCash, cashFlowCash);
+
+    // Sort entries by amount (largest first)
+    journalOnlyEntries.sort((a, b) => b.amount - a.amount);
+    cashFlowOnlyEntries.sort((a, b) => b.amount - a.amount);
+
+    return {
+      success: true,
+      data: {
+        allEntries,
+        journalOnlyEntries,
+        journalOnlyTotal: roundCurrency(journalOnlyTotal),
+        cashFlowOnlyEntries,
+        cashFlowOnlyTotal: roundCurrency(cashFlowOnlyTotal),
+        matchedEntries,
+        matchedTotal: roundCurrency(matchedTotal),
+        balanceSheetCash: roundCurrency(balanceSheetCash),
+        cashFlowCash: roundCurrency(cashFlowCash),
+        discrepancy: roundCurrency(discrepancy),
+      },
+    };
+  } catch (error) {
+    console.error('Error performing detailed cash audit:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to perform detailed cash audit',
+    };
+  }
+}

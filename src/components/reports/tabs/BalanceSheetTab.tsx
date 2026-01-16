@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries, diagnoseCashDiscrepancy, CashDiscrepancyDiagnostic } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries, diagnoseCashDiscrepancy, CashDiscrepancyDiagnostic, detailedCashAudit, DetailedCashAudit, CashAuditEntry } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -57,6 +57,8 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [deletingUnmatched, setDeletingUnmatched] = useState(false);
   const [diagnosingCash, setDiagnosingCash] = useState(false);
   const [cashDiagnostic, setCashDiagnostic] = useState<CashDiscrepancyDiagnostic | null>(null);
+  const [auditingCash, setAuditingCash] = useState(false);
+  const [cashAuditResult, setCashAuditResult] = useState<DetailedCashAudit | null>(null);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -475,6 +477,49 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleDetailedCashAudit = async () => {
+    if (!user) return;
+
+    setAuditingCash(true);
+    setCashAuditResult(null);
+
+    try {
+      const result = await detailedCashAudit(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        setCashAuditResult(result.data);
+
+        if (Math.abs(result.data.discrepancy) < 0.01) {
+          toast({
+            title: "لا يوجد فرق في النقدية",
+            description: `تمت مراجعة ${result.data.allEntries.length} قيد - جميعها متطابقة`,
+          });
+        } else {
+          toast({
+            title: "تم اكتشاف فرق في النقدية",
+            description: `الفرق: ${formatNumber(result.data.discrepancy)} دينار - ${result.data.journalOnlyEntries.length} قيد في الميزانية فقط`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تدقيق النقدية",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Detailed cash audit failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء التدقيق",
+        variant: "destructive",
+      });
+    } finally {
+      setAuditingCash(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -601,6 +646,17 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <Search className="w-4 h-4 ml-2 text-red-600" />
                 {diagnosingCash ? "جاري التشخيص..." : "تشخيص فرق النقدية"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDetailedCashAudit}
+                disabled={auditingCash}
+                title="تدقيق تفصيلي لكل قيد نقدي ومقارنته مع التدفق النقدي"
+                className="border-purple-300 hover:bg-purple-50"
+              >
+                <Search className="w-4 h-4 ml-2 text-purple-600" />
+                {auditingCash ? "جاري التدقيق..." : "تدقيق تفصيلي للنقدية"}
               </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />
@@ -1293,6 +1349,230 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
                   الفرق {formatNumber(cashDiagnostic.discrepancy)} دينار يعني أن هناك قيود محاسبية تؤثر على النقدية ولكن لا يوجد لها مدفوعات مقابلة في سجل المدفوعات، أو العكس.
                   <br /><br />
                   راجع قائمة &quot;قيود تؤثر على النقدية&quot; وقارنها بسجل المدفوعات للعثور على مصدر الفرق.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detailed Cash Audit Section */}
+      {cashAuditResult && (
+        <Card className="border-purple-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-purple-700">
+                <Search className="w-5 h-5" />
+                تدقيق تفصيلي للنقدية - مقارنة قيود الميزانية مع مصادر التدفق النقدي
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCashAuditResult(null)}
+              >
+                إغلاق
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-700 text-sm mb-2">الميزانية (قيود)</h4>
+                <p className="text-2xl font-bold text-blue-700">{formatNumber(cashAuditResult.balanceSheetCash)}</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-green-700 text-sm mb-2">التدفق النقدي</h4>
+                <p className="text-2xl font-bold text-green-700">{formatNumber(cashAuditResult.cashFlowCash)}</p>
+              </div>
+              <div className={`p-4 rounded-lg ${Math.abs(cashAuditResult.discrepancy) < 0.01 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <h4 className={`font-semibold text-sm mb-2 ${Math.abs(cashAuditResult.discrepancy) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>
+                  الفرق
+                </h4>
+                <p className={`text-2xl font-bold ${Math.abs(cashAuditResult.discrepancy) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>
+                  {formatNumber(cashAuditResult.discrepancy)}
+                </p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-purple-700 text-sm mb-2">متطابقة</h4>
+                <p className="text-2xl font-bold text-purple-700">{cashAuditResult.matchedEntries.length}</p>
+                <p className="text-xs text-purple-600">قيد</p>
+              </div>
+            </div>
+
+            {/* Journal Only Entries - These are the problem entries */}
+            {cashAuditResult.journalOnlyEntries.length > 0 && (
+              <div className="mb-6">
+                <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  قيود في الميزانية فقط (بدون مصدر تدفق نقدي) - {cashAuditResult.journalOnlyEntries.length} قيد
+                  <Badge variant="destructive" className="mr-2">
+                    إجمالي: {formatNumber(cashAuditResult.journalOnlyTotal)}
+                  </Badge>
+                </h4>
+                <p className="text-sm text-red-600 mb-3">
+                  هذه القيود تؤثر على النقدية في الميزانية لكن لا يوجد لها مدفوعات أو معاملات تمويلية مقابلة في التدفق النقدي. هذا هو مصدر الفرق.
+                </p>
+                <div className="max-h-60 overflow-y-auto border border-red-200 rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-red-50">
+                        <TableHead>التاريخ</TableHead>
+                        <TableHead>الوصف</TableHead>
+                        <TableHead>الاتجاه</TableHead>
+                        <TableHead className="text-left">المبلغ</TableHead>
+                        <TableHead>نوع الارتباط</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashAuditResult.journalOnlyEntries.map((entry, idx) => (
+                        <TableRow key={idx} className="bg-red-50/30">
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {formatDate(entry.date)}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate" title={entry.description}>
+                            {entry.description}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={entry.direction === 'in' ? 'default' : 'destructive'} className="text-xs">
+                              {entry.direction === 'in' ? 'وارد' : 'صادر'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`text-left font-mono ${entry.direction === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                            {entry.direction === 'in' ? '+' : '-'}{formatNumber(entry.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {entry.linkedDocumentType || (entry.linkedTransactionId ? 'معاملة' : entry.linkedPaymentId ? 'دفعة' : 'غير مرتبط')}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {/* Cash Flow Only Entries */}
+            {cashAuditResult.cashFlowOnlyEntries.length > 0 && (
+              <div className="mb-6">
+                <h4 className="font-semibold text-amber-700 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  مصادر تدفق نقدي بدون قيود (مدفوعات/تمويل) - {cashAuditResult.cashFlowOnlyEntries.length} معاملة
+                  <Badge variant="outline" className="border-amber-500 text-amber-700 mr-2">
+                    إجمالي: {formatNumber(cashAuditResult.cashFlowOnlyTotal)}
+                  </Badge>
+                </h4>
+                <p className="text-sm text-amber-600 mb-3">
+                  هذه المدفوعات أو المعاملات التمويلية موجودة في التدفق النقدي لكن لا يوجد لها قيود محاسبية مقابلة تؤثر على حساب النقدية.
+                </p>
+                <div className="max-h-40 overflow-y-auto border border-amber-200 rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-amber-50">
+                        <TableHead>المصدر</TableHead>
+                        <TableHead>التاريخ</TableHead>
+                        <TableHead>الوصف</TableHead>
+                        <TableHead>الاتجاه</TableHead>
+                        <TableHead className="text-left">المبلغ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashAuditResult.cashFlowOnlyEntries.slice(0, 20).map((entry, idx) => (
+                        <TableRow key={idx} className="bg-amber-50/30">
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {entry.source === 'payment' ? 'دفعة' : 'تمويل'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {formatDate(entry.date)}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate" title={entry.description}>
+                            {entry.description}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={entry.direction === 'in' ? 'default' : 'destructive'} className="text-xs">
+                              {entry.direction === 'in' ? 'وارد' : 'صادر'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`text-left font-mono ${entry.direction === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                            {entry.direction === 'in' ? '+' : '-'}{formatNumber(entry.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {cashAuditResult.cashFlowOnlyEntries.length > 20 && (
+                    <p className="text-sm text-gray-500 py-2 text-center bg-amber-50/50">
+                      عرض أول 20 من {cashAuditResult.cashFlowOnlyEntries.length} معاملة
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Matched Entries (Collapsed by default) */}
+            {cashAuditResult.matchedEntries.length > 0 && (
+              <div>
+                <details className="group">
+                  <summary className="font-semibold text-green-700 mb-2 cursor-pointer flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    قيود متطابقة - {cashAuditResult.matchedEntries.length} قيد
+                    <Badge variant="outline" className="border-green-500 text-green-700 mr-2">
+                      إجمالي: {formatNumber(cashAuditResult.matchedTotal)}
+                    </Badge>
+                    <span className="text-xs text-gray-500">(اضغط للتوسيع)</span>
+                  </summary>
+                  <div className="max-h-40 overflow-y-auto border border-green-200 rounded-lg mt-2">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-green-50">
+                          <TableHead>التاريخ</TableHead>
+                          <TableHead>الوصف</TableHead>
+                          <TableHead>الاتجاه</TableHead>
+                          <TableHead className="text-left">المبلغ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cashAuditResult.matchedEntries.slice(0, 20).map((entry, idx) => (
+                          <TableRow key={idx} className="bg-green-50/30">
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {formatDate(entry.date)}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[200px] truncate" title={entry.description}>
+                              {entry.description}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={entry.direction === 'in' ? 'default' : 'destructive'} className="text-xs">
+                                {entry.direction === 'in' ? 'وارد' : 'صادر'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={`text-left font-mono ${entry.direction === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                              {entry.direction === 'in' ? '+' : '-'}{formatNumber(entry.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {cashAuditResult.matchedEntries.length > 20 && (
+                      <p className="text-sm text-gray-500 py-2 text-center bg-green-50/50">
+                        عرض أول 20 من {cashAuditResult.matchedEntries.length} قيد
+                      </p>
+                    )}
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {/* All OK Message */}
+            {cashAuditResult.journalOnlyEntries.length === 0 && cashAuditResult.cashFlowOnlyEntries.length === 0 && (
+              <div className="p-4 bg-green-50 rounded-lg text-center">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-green-600" />
+                <h4 className="font-semibold text-green-700">جميع القيود متطابقة!</h4>
+                <p className="text-sm text-green-600">
+                  لا توجد قيود في الميزانية بدون مصدر تدفق نقدي، ولا توجد مصادر تدفق نقدي بدون قيود.
                 </p>
               </div>
             )}
