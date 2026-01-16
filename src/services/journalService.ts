@@ -63,6 +63,8 @@ import {
 
 const getAccountsPath = (userId: string) => `users/${userId}/accounts`;
 const getJournalEntriesPath = (userId: string) => `users/${userId}/journal_entries`;
+const getLedgerPath = (userId: string) => `users/${userId}/ledger`;
+const getPaymentsPath = (userId: string) => `users/${userId}/payments`;
 
 // ============================================================================
 // Result Types
@@ -1145,6 +1147,111 @@ export async function migrateFixedAssetJournalEntries(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to migrate fixed asset journal entries',
+    };
+  }
+}
+
+// ============================================================================
+// Orphaned Journal Entry Cleanup
+// ============================================================================
+
+export interface OrphanCleanupResult {
+  orphanedByTransaction: string[];
+  orphanedByPayment: string[];
+  deleted: string[];
+  errors: string[];
+}
+
+/**
+ * Find and optionally delete orphaned journal entries
+ * Orphaned entries are those linked to transactions/payments that no longer exist
+ */
+export async function cleanupOrphanedJournalEntries(
+  userId: string,
+  dryRun: boolean = true
+): Promise<ServiceResult<OrphanCleanupResult>> {
+  try {
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+
+    // Get all journal entries
+    const journalSnapshot = await getDocs(journalRef);
+
+    // Get all ledger transaction IDs
+    const ledgerSnapshot = await getDocs(ledgerRef);
+    const validTransactionIds = new Set<string>();
+    ledgerSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        validTransactionIds.add(data.transactionId);
+      }
+    });
+
+    // Get all payment IDs
+    const paymentsSnapshot = await getDocs(paymentsRef);
+    const validPaymentIds = new Set<string>();
+    paymentsSnapshot.docs.forEach((docSnap) => {
+      validPaymentIds.add(docSnap.id);
+    });
+
+    const orphanedByTransaction: string[] = [];
+    const orphanedByPayment: string[] = [];
+    const deleted: string[] = [];
+    const errors: string[] = [];
+
+    // Find orphaned entries
+    for (const docSnap of journalSnapshot.docs) {
+      const data = docSnap.data();
+      const linkedTransactionId = data.linkedTransactionId;
+      const linkedPaymentId = data.linkedPaymentId;
+
+      let isOrphaned = false;
+      let orphanReason = '';
+
+      // Check if linked transaction exists
+      if (linkedTransactionId && !validTransactionIds.has(linkedTransactionId)) {
+        isOrphaned = true;
+        orphanReason = 'transaction';
+        orphanedByTransaction.push(docSnap.id);
+      }
+
+      // Check if linked payment exists
+      if (linkedPaymentId && !validPaymentIds.has(linkedPaymentId)) {
+        isOrphaned = true;
+        orphanReason = 'payment';
+        if (!orphanedByTransaction.includes(docSnap.id)) {
+          orphanedByPayment.push(docSnap.id);
+        }
+      }
+
+      // Delete if not a dry run
+      if (isOrphaned && !dryRun) {
+        try {
+          const batch = writeBatch(firestore);
+          batch.delete(docSnap.ref);
+          await batch.commit();
+          deleted.push(docSnap.id);
+        } catch (err) {
+          errors.push(`Failed to delete ${docSnap.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        orphanedByTransaction,
+        orphanedByPayment,
+        deleted,
+        errors,
+      },
+    };
+  } catch (error) {
+    console.error('Error cleaning up orphaned journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to cleanup orphaned journal entries',
     };
   }
 }
