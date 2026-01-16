@@ -1615,12 +1615,42 @@ export async function cleanupDuplicateJournalEntries(
     entriesByTransaction.forEach((entries, transactionId) => {
       if (entries.length > 1) {
         duplicateTransactions.push(transactionId);
-        // Sort by createdAt, keep the oldest (first), delete the rest
-        entries.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        // Skip the first (oldest), delete the rest
-        for (let i = 1; i < entries.length; i++) {
-          entriesToDelete.push(entries[i].id);
-        }
+
+        // IMPORTANT: For correction entries (e.g., loan migrations), we need BOTH:
+        // - Original entry (wrong accounts like 5530)
+        // - Correction entry (correct accounts like 1600)
+        // These are NOT duplicates - they work together to fix the accounting.
+        //
+        // True duplicates have the SAME account codes (created by double-clicking, etc.)
+        // We only delete true duplicates, not correction entries.
+
+        // Get account codes from each entry to distinguish corrections from duplicates
+        const entriesWithAccounts = entries.map(e => {
+          const entryDoc = journalSnapshot.docs.find(d => d.id === e.id);
+          const lines = entryDoc?.data().lines || [];
+          const accountCodes = lines.map((l: JournalLine) => l.accountCode).sort().join(',');
+          return { ...e, accountCodes };
+        });
+
+        // Group by account codes to find true duplicates (same accounts = real duplicate)
+        const byAccounts = new Map<string, typeof entriesWithAccounts>();
+        entriesWithAccounts.forEach(entry => {
+          if (!byAccounts.has(entry.accountCodes)) {
+            byAccounts.set(entry.accountCodes, []);
+          }
+          byAccounts.get(entry.accountCodes)!.push(entry);
+        });
+
+        // Only delete true duplicates (same accounts), keep oldest of each group
+        byAccounts.forEach((group) => {
+          if (group.length > 1) {
+            // Sort by createdAt, keep oldest, delete rest
+            group.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            for (let i = 1; i < group.length; i++) {
+              entriesToDelete.push(group[i].id);
+            }
+          }
+        });
       }
     });
 
