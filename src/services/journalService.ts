@@ -134,7 +134,8 @@ export async function hasChartOfAccounts(userId: string): Promise<boolean> {
 
 /**
  * Seed default Chart of Accounts for a user
- * Only runs if accounts collection is empty
+ * Seeds all accounts if none exist, or adds missing accounts to existing charts.
+ * This ensures new accounts added to chart-of-accounts.ts are available to existing users.
  * @throws {ValidationError} if userId is invalid
  */
 export async function seedChartOfAccounts(
@@ -143,19 +144,49 @@ export async function seedChartOfAccounts(
   try {
     validateUserId(userId);
 
-    // Check if already seeded
-    const exists = await hasChartOfAccounts(userId);
-    if (exists) {
-      return { success: true, data: 0 };
-    }
-
-    const batch = writeBatch(firestore);
     const accountsRef = collection(firestore, getAccountsPath(userId));
     const defaultAccounts = getDefaultAccountsForSeeding();
 
-    for (const account of defaultAccounts) {
+    // Get existing account codes
+    const existingSnapshot = await getDocs(accountsRef);
+    const existingCodes = new Set<string>();
+    existingSnapshot.docs.forEach(docSnap => {
+      existingCodes.add(docSnap.data().code);
+    });
+
+    // If no accounts exist, seed all (first time setup)
+    if (existingCodes.size === 0) {
+      const batch = writeBatch(firestore);
+      for (const account of defaultAccounts) {
+        const docRef = doc(accountsRef);
+        const accountData = {
+          code: account.code,
+          name: account.name,
+          nameAr: account.nameAr,
+          type: account.type,
+          normalBalance: account.normalBalance,
+          isActive: account.isActive,
+          createdAt: Timestamp.fromDate(account.createdAt),
+          parentCode: account.parentCode ?? null,
+          description: account.description ?? null,
+        };
+        batch.set(docRef, accountData);
+      }
+      await batch.commit();
+      return { success: true, data: defaultAccounts.length };
+    }
+
+    // Find missing accounts (existing users who need new accounts)
+    const missingAccounts = defaultAccounts.filter(a => !existingCodes.has(a.code));
+
+    if (missingAccounts.length === 0) {
+      return { success: true, data: 0 }; // All accounts exist
+    }
+
+    // Add missing accounts
+    const batch = writeBatch(firestore);
+    for (const account of missingAccounts) {
       const docRef = doc(accountsRef);
-      // Use null for optional fields (Firestore rejects undefined but accepts null)
       const accountData = {
         code: account.code,
         name: account.name,
@@ -169,9 +200,15 @@ export async function seedChartOfAccounts(
       };
       batch.set(docRef, accountData);
     }
-
     await batch.commit();
-    return { success: true, data: defaultAccounts.length };
+
+    // Log for tracking when missing accounts are added (migration scenario)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Added ${missingAccounts.length} missing accounts:`,
+        missingAccounts.map(a => a.code));
+    }
+
+    return { success: true, data: missingAccounts.length };
   } catch (error) {
     console.error('Error seeding chart of accounts:', error);
     return {
