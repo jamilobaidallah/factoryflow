@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -46,6 +46,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [showAuditDetails, setShowAuditDetails] = useState(false);
   const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
   const [migratingLoans, setMigratingLoans] = useState(false);
+  const [migratingEndorsements, setMigratingEndorsements] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -279,6 +280,62 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleMigrateEndorsedCheques = async () => {
+    if (!user) return;
+
+    const confirmed = window.confirm(
+      `سيتم تصحيح قيود الشيكات المظهرة التي تم تسجيلها بشكل خاطئ.\n\nالشيكات المظهرة لا تحرك النقدية الفعلية - الشيك ينتقل مباشرة للجهة الثالثة.\nسيتم عكس قيود النقدية الخاطئة.\n\nهل تريد المتابعة؟`
+    );
+
+    if (!confirmed) return;
+
+    setMigratingEndorsements(true);
+    try {
+      const result = await migrateEndorsedChequeJournalEntries(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        const { corrected, skipped, errors } = result.data;
+
+        if (corrected.length > 0) {
+          toast({
+            title: "تم تصحيح قيود الشيكات المظهرة",
+            description: `تم تصحيح ${corrected.length} قيد. تم تخطي ${skipped.length} قيد (صحيح بالفعل).`,
+          });
+          refresh();
+        } else if (skipped.length > 0) {
+          toast({
+            title: "لا حاجة للتصحيح",
+            description: `جميع قيود الشيكات المظهرة صحيحة (${skipped.length} قيد).`,
+          });
+        } else {
+          toast({
+            title: "لا توجد قيود للتصحيح",
+            description: "لم يتم العثور على قيود شيكات مظهرة تحتاج تصحيح.",
+          });
+        }
+
+        if (errors.length > 0) {
+          console.error("Endorsed cheque migration errors:", errors);
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تصحيح قيود الشيكات المظهرة",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Endorsed cheque migration failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تصحيح قيود الشيكات المظهرة",
+        variant: "destructive",
+      });
+    } finally {
+      setMigratingEndorsements(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -373,6 +430,16 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <Wrench className="w-4 h-4 ml-2" />
                 {migratingLoans ? "جاري التصحيح..." : "تصحيح قيود القروض"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMigrateEndorsedCheques}
+                disabled={migratingEndorsements}
+                title="تصحيح قيود الشيكات المظهرة التي تم تسجيلها بشكل خاطئ"
+              >
+                <Wrench className="w-4 h-4 ml-2" />
+                {migratingEndorsements ? "جاري التصحيح..." : "تصحيح قيود التظهير"}
               </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />

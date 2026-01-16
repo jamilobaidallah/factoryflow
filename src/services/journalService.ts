@@ -65,6 +65,7 @@ const getAccountsPath = (userId: string) => `users/${userId}/accounts`;
 const getJournalEntriesPath = (userId: string) => `users/${userId}/journal_entries`;
 const getLedgerPath = (userId: string) => `users/${userId}/ledger`;
 const getPaymentsPath = (userId: string) => `users/${userId}/payments`;
+const getChequesPath = (userId: string) => `users/${userId}/cheques`;
 
 // ============================================================================
 // Result Types
@@ -1962,6 +1963,154 @@ export async function migrateLoanJournalEntries(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to migrate loan journal entries',
+    };
+  }
+}
+
+// ============================================================================
+// Endorsed Cheque Journal Entry Migration
+// ============================================================================
+
+export interface EndorsedChequeMigrationResult {
+  corrected: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+/**
+ * Migrate endorsed cheque journal entries that incorrectly hit Cash account
+ *
+ * Problem: Endorsed cheques created journal entries: DR Cash (1000), CR Revenue (4000)
+ * But endorsed cheques don't actually move cash - they transfer directly to third party.
+ *
+ * This function creates correcting journal entries to reverse the incorrect cash entries:
+ * - For each endorsed cheque with DR Cash: Create DR Revenue, CR Cash (reverse the entry)
+ *
+ * After this migration, Balance Sheet cash will match Cash Flow Statement cash.
+ */
+export async function migrateEndorsedChequeJournalEntries(
+  userId: string
+): Promise<ServiceResult<EndorsedChequeMigrationResult>> {
+  try {
+    const chequesRef = collection(firestore, getChequesPath(userId));
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+
+    // Find all endorsed cheques (accountingType === 'endorsed')
+    const endorsedQuery = query(chequesRef, where('accountingType', '==', 'endorsed'));
+    const endorsedSnapshot = await getDocs(endorsedQuery);
+
+    const corrected: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const chequeDoc of endorsedSnapshot.docs) {
+      const chequeData = chequeDoc.data();
+      const linkedTransactionId = chequeData.linkedTransactionId;
+      const amount = chequeData.amount || 0;
+      const chequeNumber = chequeData.chequeNumber || '';
+
+      if (!linkedTransactionId) {
+        skipped.push(chequeDoc.id);
+        continue;
+      }
+
+      // Find journal entries linked to this transaction
+      const journalQuery = query(journalRef, where('linkedTransactionId', '==', linkedTransactionId));
+      const journalSnapshot = await getDocs(journalQuery);
+
+      if (journalSnapshot.empty) {
+        skipped.push(chequeDoc.id);
+        continue;
+      }
+
+      // Check if any journal entry has DR Cash (1000) - this is the incorrect entry
+      let incorrectCashEntry: { doc: typeof journalSnapshot.docs[0], amount: number } | null = null;
+      let alreadyCorrected = false;
+
+      for (const jDoc of journalSnapshot.docs) {
+        const jData = jDoc.data();
+        const jLines = jData.lines || [];
+        const jDescription = jData.description || '';
+
+        // Check if this is already a correction entry
+        if (jDescription.includes('تصحيح قيد تظهير') || jData.linkedDocumentType === 'endorsement_correction') {
+          alreadyCorrected = true;
+          break;
+        }
+
+        // Find if this entry has DR Cash (incorrect for endorsement)
+        const cashDebitLine = jLines.find((line: JournalLine) =>
+          line.debit > 0 && line.accountCode === ACCOUNT_CODES.CASH
+        );
+
+        if (cashDebitLine && !incorrectCashEntry) {
+          incorrectCashEntry = { doc: jDoc, amount: cashDebitLine.debit };
+        }
+      }
+
+      // Skip if already corrected
+      if (alreadyCorrected) {
+        skipped.push(chequeDoc.id);
+        continue;
+      }
+
+      // Skip if no incorrect cash entry found
+      if (!incorrectCashEntry) {
+        skipped.push(chequeDoc.id);
+        continue;
+      }
+
+      // Create correction entry: DR Revenue, CR Cash (reverse the incorrect entry)
+      const description = `تصحيح قيد تظهير شيك رقم ${chequeNumber}: عكس قيد النقدية الخاطئ`;
+      const correctionLines: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.SALES_REVENUE,
+          accountName: 'Sales Revenue',
+          accountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_REVENUE),
+          description: `تصحيح: عكس إيراد تظهير شيك ${chequeNumber}`,
+          debit: incorrectCashEntry.amount,
+          credit: 0,
+        },
+        {
+          accountCode: ACCOUNT_CODES.CASH,
+          accountName: 'Cash',
+          accountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+          description: `تصحيح: عكس نقدية تظهير شيك ${chequeNumber}`,
+          debit: 0,
+          credit: incorrectCashEntry.amount,
+        },
+      ];
+
+      try {
+        const result = await createJournalEntry(
+          userId,
+          description,
+          new Date(),
+          correctionLines,
+          linkedTransactionId,
+          undefined,
+          'endorsement_correction'
+        );
+
+        if (result.success) {
+          corrected.push(chequeDoc.id);
+        } else {
+          errors.push(`${chequeDoc.id}: ${result.error}`);
+        }
+      } catch (err) {
+        errors.push(`${chequeDoc.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { corrected, skipped, errors },
+    };
+  } catch (error) {
+    console.error('Error migrating endorsed cheque journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to migrate endorsed cheque journal entries',
     };
   }
 }

@@ -600,31 +600,46 @@ export class LedgerService {
         }
       }
 
+      // Check if this transaction has endorsed cheques (which shouldn't hit cash)
+      // Endorsed cheques transfer directly to third party - no actual cash movement
+      const hasEndorsedIncomingCheque =
+        (options.hasIncomingCheck && options.checkFormData?.accountingType === 'endorsed') ||
+        (options.incomingChequesList?.some(c => c.accountingType === 'endorsed'));
+
+      const hasEndorsedOutgoingCheque =
+        (options.hasOutgoingCheck && options.outgoingCheckFormData?.accountingType === 'endorsed') ||
+        (options.outgoingChequesList?.some(c => c.accountingType === 'endorsed'));
+
+      const hasEndorsedCheque = hasEndorsedIncomingCheque || hasEndorsedOutgoingCheque;
+
       // Add journal entry to batch (atomic with ledger entry)
-      // IMPORTANT: Fixed assets require special accounting treatment
-      // They should be capitalized (DR Fixed Assets) not expensed (DR Expense)
-      if (options.hasFixedAsset) {
-        // Use fixed asset purchase journal entry: DR Fixed Assets (1500), CR Cash/AP
-        addFixedAssetPurchaseJournalEntryToBatch(batch, this.userId, {
-          description: formData.description,
-          amount: totalAmount,
-          date: new Date(formData.date),
-          linkedTransactionId: transactionId,
-          isPaidImmediately: formData.immediateSettlement || !formData.trackARAP,
-        });
-      } else {
-        // Standard journal entry based on entry type
-        addJournalEntryToBatch(batch, this.userId, {
-          transactionId,
-          description: formData.description,
-          amount: totalAmount,
-          type: entryType,
-          category: formData.category,
-          subCategory: formData.subCategory,
-          date: new Date(formData.date),
-          isARAPEntry: formData.trackARAP,
-          immediateSettlement: formData.immediateSettlement,
-        });
+      // IMPORTANT: Skip journal entries for endorsed cheques - they don't move cash
+      // The endorsement is recorded via noCashMovement payments instead
+      // Fixed assets require special accounting treatment (capitalized, not expensed)
+      if (!hasEndorsedCheque) {
+        if (options.hasFixedAsset) {
+          // Use fixed asset purchase journal entry: DR Fixed Assets (1500), CR Cash/AP
+          addFixedAssetPurchaseJournalEntryToBatch(batch, this.userId, {
+            description: formData.description,
+            amount: totalAmount,
+            date: new Date(formData.date),
+            linkedTransactionId: transactionId,
+            isPaidImmediately: formData.immediateSettlement || !formData.trackARAP,
+          });
+        } else {
+          // Standard journal entry based on entry type
+          addJournalEntryToBatch(batch, this.userId, {
+            transactionId,
+            description: formData.description,
+            amount: totalAmount,
+            type: entryType,
+            category: formData.category,
+            subCategory: formData.subCategory,
+            date: new Date(formData.date),
+            isARAPEntry: formData.trackARAP,
+            immediateSettlement: formData.immediateSettlement,
+          });
+        }
       }
 
       // Add COGS journal entry to batch if applicable
