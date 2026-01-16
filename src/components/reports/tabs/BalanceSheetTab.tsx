@@ -29,7 +29,7 @@ import {
 import { formatDate } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -47,14 +47,39 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
 
     setCleaningUp(true);
     try {
-      // First do a dry run to see what will be deleted
-      const dryRunResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, true);
+      // First get diagnostics to understand the situation
+      const diagResult = await diagnoseJournalEntries(user.dataOwnerId);
+
+      if (diagResult.success && diagResult.data) {
+        const diag = diagResult.data;
+        const cashAccount = diag.entriesByAccount['1000'] || diag.entriesByAccount['1100'];
+
+        // Show diagnostic info
+        const diagMsg = `تشخيص القيود المحاسبية:
+- إجمالي القيود: ${diag.totalEntries}
+- مرتبطة بمعاملات: ${diag.linkedToTransaction}
+- مرتبطة بمدفوعات: ${diag.linkedToPayment}
+- بدون ارتباط: ${diag.unlinked}
+- يتيمة (معاملات محذوفة): ${diag.orphanedByTransaction}
+- يتيمة (مدفوعات محذوفة): ${diag.orphanedByPayment}
+${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixed(2)} - دائن ${cashAccount.credits.toFixed(2)} = ${(cashAccount.debits - cashAccount.credits).toFixed(2)}` : ''}
+
+هل تريد حذف القيود اليتيمة؟`;
+
+        if (!window.confirm(diagMsg)) {
+          setCleaningUp(false);
+          return;
+        }
+      }
+
+      // Do a dry run to see what will be deleted
+      const dryRunResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, true, false);
 
       if (dryRunResult.success && dryRunResult.data) {
-        const { orphanedByTransaction, orphanedByPayment } = dryRunResult.data;
+        const { orphanedByTransaction, orphanedByPayment, unlinkedEntries } = dryRunResult.data;
         const totalOrphaned = orphanedByTransaction.length + orphanedByPayment.length;
 
-        if (totalOrphaned === 0) {
+        if (totalOrphaned === 0 && unlinkedEntries.length === 0) {
           toast({
             title: "لا توجد قيود يتيمة",
             description: "جميع القيود المحاسبية مرتبطة بمعاملات صحيحة.",
@@ -63,19 +88,21 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
           return;
         }
 
-        // Confirm before deleting
-        if (!window.confirm(`تم العثور على ${totalOrphaned} قيد يتيم. هل تريد حذفها؟`)) {
-          setCleaningUp(false);
-          return;
+        // Ask about unlinked entries if any
+        let includeUnlinked = false;
+        if (unlinkedEntries.length > 0) {
+          includeUnlinked = window.confirm(
+            `يوجد ${unlinkedEntries.length} قيد بدون ارتباط (تم إنشاؤها يدوياً أو أثناء التطوير).\n\nهل تريد حذفها أيضاً؟`
+          );
         }
 
         // Now actually delete them
-        const deleteResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, false);
+        const deleteResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, false, includeUnlinked);
 
         if (deleteResult.success && deleteResult.data) {
           toast({
             title: "تم التنظيف بنجاح",
-            description: `تم حذف ${deleteResult.data.deleted.length} قيد يتيم.`,
+            description: `تم حذف ${deleteResult.data.deleted.length} قيد.`,
           });
           // Refresh the balance sheet to show updated numbers
           refresh();

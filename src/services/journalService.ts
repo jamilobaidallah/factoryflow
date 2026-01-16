@@ -1158,17 +1158,129 @@ export async function migrateFixedAssetJournalEntries(
 export interface OrphanCleanupResult {
   orphanedByTransaction: string[];
   orphanedByPayment: string[];
+  unlinkedEntries: string[];
   deleted: string[];
   errors: string[];
+}
+
+export interface JournalDiagnostics {
+  totalEntries: number;
+  linkedToTransaction: number;
+  linkedToPayment: number;
+  unlinked: number;
+  orphanedByTransaction: number;
+  orphanedByPayment: number;
+  entriesByAccount: Record<string, { debits: number; credits: number; count: number }>;
+}
+
+/**
+ * Diagnose journal entries to understand what's affecting the balance
+ */
+export async function diagnoseJournalEntries(
+  userId: string
+): Promise<ServiceResult<JournalDiagnostics>> {
+  try {
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+
+    // Get all data
+    const [journalSnapshot, ledgerSnapshot, paymentsSnapshot] = await Promise.all([
+      getDocs(journalRef),
+      getDocs(ledgerRef),
+      getDocs(paymentsRef),
+    ]);
+
+    // Build valid ID sets
+    const validTransactionIds = new Set<string>();
+    ledgerSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        validTransactionIds.add(data.transactionId);
+      }
+    });
+
+    const validPaymentIds = new Set<string>();
+    paymentsSnapshot.docs.forEach((docSnap) => {
+      validPaymentIds.add(docSnap.id);
+    });
+
+    // Analyze entries
+    let linkedToTransaction = 0;
+    let linkedToPayment = 0;
+    let unlinked = 0;
+    let orphanedByTransaction = 0;
+    let orphanedByPayment = 0;
+    const entriesByAccount: Record<string, { debits: number; credits: number; count: number }> = {};
+
+    journalSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      const lines = data.lines || [];
+
+      // Track links
+      const hasTransactionLink = !!data.linkedTransactionId;
+      const hasPaymentLink = !!data.linkedPaymentId;
+
+      if (hasTransactionLink) {
+        linkedToTransaction++;
+        if (!validTransactionIds.has(data.linkedTransactionId)) {
+          orphanedByTransaction++;
+        }
+      }
+
+      if (hasPaymentLink) {
+        linkedToPayment++;
+        if (!validPaymentIds.has(data.linkedPaymentId)) {
+          orphanedByPayment++;
+        }
+      }
+
+      if (!hasTransactionLink && !hasPaymentLink) {
+        unlinked++;
+      }
+
+      // Track by account
+      lines.forEach((line: JournalLine) => {
+        const code = line.accountCode;
+        if (!entriesByAccount[code]) {
+          entriesByAccount[code] = { debits: 0, credits: 0, count: 0 };
+        }
+        entriesByAccount[code].debits += line.debit || 0;
+        entriesByAccount[code].credits += line.credit || 0;
+        entriesByAccount[code].count++;
+      });
+    });
+
+    return {
+      success: true,
+      data: {
+        totalEntries: journalSnapshot.size,
+        linkedToTransaction,
+        linkedToPayment,
+        unlinked,
+        orphanedByTransaction,
+        orphanedByPayment,
+        entriesByAccount,
+      },
+    };
+  } catch (error) {
+    console.error('Error diagnosing journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to diagnose journal entries',
+    };
+  }
 }
 
 /**
  * Find and optionally delete orphaned journal entries
  * Orphaned entries are those linked to transactions/payments that no longer exist
+ * Also includes entries with no links at all (created during development)
  */
 export async function cleanupOrphanedJournalEntries(
   userId: string,
-  dryRun: boolean = true
+  dryRun: boolean = true,
+  includeUnlinked: boolean = false
 ): Promise<ServiceResult<OrphanCleanupResult>> {
   try {
     const journalRef = collection(firestore, getJournalEntriesPath(userId));
@@ -1197,6 +1309,7 @@ export async function cleanupOrphanedJournalEntries(
 
     const orphanedByTransaction: string[] = [];
     const orphanedByPayment: string[] = [];
+    const unlinkedEntries: string[] = [];
     const deleted: string[] = [];
     const errors: string[] = [];
 
@@ -1206,27 +1319,32 @@ export async function cleanupOrphanedJournalEntries(
       const linkedTransactionId = data.linkedTransactionId;
       const linkedPaymentId = data.linkedPaymentId;
 
-      let isOrphaned = false;
-      let orphanReason = '';
+      let shouldDelete = false;
 
       // Check if linked transaction exists
       if (linkedTransactionId && !validTransactionIds.has(linkedTransactionId)) {
-        isOrphaned = true;
-        orphanReason = 'transaction';
+        shouldDelete = true;
         orphanedByTransaction.push(docSnap.id);
       }
 
       // Check if linked payment exists
       if (linkedPaymentId && !validPaymentIds.has(linkedPaymentId)) {
-        isOrphaned = true;
-        orphanReason = 'payment';
+        shouldDelete = true;
         if (!orphanedByTransaction.includes(docSnap.id)) {
           orphanedByPayment.push(docSnap.id);
         }
       }
 
+      // Check for unlinked entries (no transaction or payment link)
+      if (!linkedTransactionId && !linkedPaymentId) {
+        unlinkedEntries.push(docSnap.id);
+        if (includeUnlinked) {
+          shouldDelete = true;
+        }
+      }
+
       // Delete if not a dry run
-      if (isOrphaned && !dryRun) {
+      if (shouldDelete && !dryRun) {
         try {
           const batch = writeBatch(firestore);
           batch.delete(docSnap.ref);
@@ -1243,6 +1361,7 @@ export async function cleanupOrphanedJournalEntries(
       data: {
         orphanedByTransaction,
         orphanedByPayment,
+        unlinkedEntries,
         deleted,
         errors,
       },
