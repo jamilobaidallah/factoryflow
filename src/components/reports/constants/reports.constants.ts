@@ -99,6 +99,22 @@ export const QUICK_REPORTS: QuickReport[] = [
     link: '/reports/income-statement',
   },
   {
+    id: 'balancesheet',
+    icon: '📋',
+    title: 'الميزانية العمومية',
+    description: 'الأصول والخصوم وحقوق الملكية',
+    color: 'slate',
+    link: '/reports/balance-sheet',
+  },
+  {
+    id: 'trialbalance',
+    icon: '⚖️',
+    title: 'ميزان المراجعة',
+    description: 'أرصدة جميع الحسابات',
+    color: 'teal',
+    link: '/reports/trial-balance',
+  },
+  {
     id: 'aging',
     icon: '👥',
     title: 'أعمار الذمم',

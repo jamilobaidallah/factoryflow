@@ -60,7 +60,7 @@ export interface QuickReport {
   icon: string;
   title: string;
   description: string;
-  color: 'emerald' | 'blue' | 'amber' | 'purple';
+  color: 'emerald' | 'blue' | 'amber' | 'purple' | 'slate' | 'teal';
   link?: string;
 }
 

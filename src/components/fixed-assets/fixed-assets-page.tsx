@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingDown } from "lucide-react";
+import { Plus, TrendingDown, Wrench } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
+import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
+import { migrateFixedAssetJournalEntries } from "@/services/journalService";
 
 // Types and hooks
 import {
@@ -27,6 +30,8 @@ import { DepreciationDialog } from "./components/DepreciationDialog";
 
 export default function FixedAssetsPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
+  const { user } = useUser();
+  const { toast } = useToast();
 
   // Data and operations hooks
   const { assets, loading: dataLoading } = useFixedAssetsData();
@@ -37,6 +42,7 @@ export default function FixedAssetsPage() {
   const [isDepreciationDialogOpen, setIsDepreciationDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null);
   const [loading, setLoading] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FixedAssetFormData>(initialFormData);
@@ -112,6 +118,62 @@ export default function FixedAssetsPage() {
     );
   };
 
+  const handleMigrateJournalEntries = () => {
+    if (!user) return;
+
+    confirm(
+      "تصحيح القيود المحاسبية",
+      "سيتم إنشاء قيود تصحيحية للأصول الثابتة التي تم تسجيلها كمصروفات بدلاً من أصول. هل تريد المتابعة؟",
+      async () => {
+        setMigrating(true);
+        try {
+          const result = await migrateFixedAssetJournalEntries(user.dataOwnerId);
+
+          if (result.success && result.data) {
+            const { corrected, skipped, errors } = result.data;
+
+            if (corrected.length > 0) {
+              toast({
+                title: "تم التصحيح بنجاح",
+                description: `تم تصحيح ${corrected.length} قيد محاسبي. تم تخطي ${skipped.length} قيد (صحيح بالفعل).`,
+              });
+            } else if (skipped.length > 0) {
+              toast({
+                title: "لا حاجة للتصحيح",
+                description: `جميع القيود صحيحة (${skipped.length} قيد).`,
+              });
+            } else {
+              toast({
+                title: "لا توجد قيود للتصحيح",
+                description: "لم يتم العثور على أصول ثابتة مرتبطة بقيود محاسبية.",
+              });
+            }
+
+            if (errors.length > 0) {
+              console.error("Migration errors:", errors);
+            }
+          } else {
+            toast({
+              title: "خطأ",
+              description: result.error || "فشل تصحيح القيود المحاسبية",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          console.error("Migration failed:", error);
+          toast({
+            title: "خطأ",
+            description: "حدث خطأ أثناء تصحيح القيود",
+            variant: "destructive",
+          });
+        } finally {
+          setMigrating(false);
+        }
+      },
+      "warning"
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -121,6 +183,16 @@ export default function FixedAssetsPage() {
         </div>
         <PermissionGate action="create" module="fixed-assets">
           <div className="flex gap-2">
+            <Button
+              className="gap-2"
+              variant="outline"
+              size="sm"
+              onClick={handleMigrateJournalEntries}
+              disabled={migrating}
+            >
+              <Wrench className="w-4 h-4" />
+              {migrating ? "جاري التصحيح..." : "تصحيح القيود"}
+            </Button>
             <Button
               className="gap-2"
               variant="outline"

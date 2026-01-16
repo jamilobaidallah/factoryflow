@@ -21,7 +21,7 @@ function ReportsQuickAccessComponent({
         </h3>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {QUICK_REPORTS.map((report, index) => (
           <QuickReportCard
             key={report.id}
@@ -57,6 +57,8 @@ function QuickReportCard({
     blue: { border: 'border-blue-500', bg: 'bg-blue-50' },
     amber: { border: 'border-amber-500', bg: 'bg-amber-50' },
     purple: { border: 'border-purple-500', bg: 'bg-purple-50' },
+    slate: { border: 'border-slate-500', bg: 'bg-slate-50' },
+    teal: { border: 'border-teal-500', bg: 'bg-teal-50' },
   };
 
   const colors = colorClasses[report.color];
