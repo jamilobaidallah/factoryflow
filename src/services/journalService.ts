@@ -1772,6 +1772,116 @@ export async function findUnmatchedCashJournalEntries(
 }
 
 /**
+ * Delete unmatched cash journal entries
+ * These are journal entries with DR Cash that don't have properly matched ledger transactions
+ * (e.g., linked to unpaid ledger entries that shouldn't have created cash journal entries)
+ */
+export async function deleteUnmatchedCashJournalEntries(
+  userId: string,
+  dryRun: boolean = true
+): Promise<ServiceResult<{
+  found: number;
+  deleted: number;
+  totalCashDebitRemoved: number;
+  errors: string[];
+  deletedEntries: { journalId: string; description: string; cashDebit: number }[];
+}>> {
+  try {
+    validateUserId(userId);
+
+    // First find the unmatched entries
+    const findResult = await findUnmatchedCashJournalEntries(userId);
+    if (!findResult.success || !findResult.data) {
+      return {
+        success: false,
+        error: findResult.error || 'Failed to find unmatched entries',
+      };
+    }
+
+    const { unmatchedEntries, totalUnmatchedCashDebit } = findResult.data;
+
+    if (unmatchedEntries.length === 0) {
+      return {
+        success: true,
+        data: {
+          found: 0,
+          deleted: 0,
+          totalCashDebitRemoved: 0,
+          errors: [],
+          deletedEntries: [],
+        },
+      };
+    }
+
+    if (dryRun) {
+      return {
+        success: true,
+        data: {
+          found: unmatchedEntries.length,
+          deleted: 0,
+          totalCashDebitRemoved: totalUnmatchedCashDebit,
+          errors: [],
+          deletedEntries: unmatchedEntries.map(e => ({
+            journalId: e.journalId,
+            description: e.description,
+            cashDebit: e.cashDebit,
+          })),
+        },
+      };
+    }
+
+    // Actually delete the entries
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const errors: string[] = [];
+    const deletedEntries: { journalId: string; description: string; cashDebit: number }[] = [];
+    let totalRemoved = 0;
+
+    // Delete in batches of 500 (Firestore limit)
+    const batchSize = 500;
+    for (let i = 0; i < unmatchedEntries.length; i += batchSize) {
+      const batch = writeBatch(firestore);
+      const batchEntries = unmatchedEntries.slice(i, i + batchSize);
+
+      for (const entry of batchEntries) {
+        const docRef = doc(journalRef, entry.journalId);
+        batch.delete(docRef);
+      }
+
+      try {
+        await batch.commit();
+        for (const entry of batchEntries) {
+          deletedEntries.push({
+            journalId: entry.journalId,
+            description: entry.description,
+            cashDebit: entry.cashDebit,
+          });
+          totalRemoved += entry.cashDebit;
+        }
+      } catch (err) {
+        errors.push(`Batch ${Math.floor(i / batchSize) + 1} failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        found: unmatchedEntries.length,
+        deleted: deletedEntries.length,
+        totalCashDebitRemoved: totalRemoved,
+        errors,
+        deletedEntries,
+      },
+    };
+  } catch (error) {
+    console.error('Error deleting unmatched cash journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete unmatched entries',
+    };
+  }
+}
+
+/**
  * Find and optionally delete orphaned journal entries
  * Orphaned entries are those linked to transactions/payments that no longer exist
  * Also includes entries with no links at all (created during development)

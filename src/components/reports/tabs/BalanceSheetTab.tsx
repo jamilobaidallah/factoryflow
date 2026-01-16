@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -54,6 +54,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
     totalMatchedCashDebits: number;
     discrepancy: number;
   } | null>(null);
+  const [deletingUnmatched, setDeletingUnmatched] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -385,6 +386,47 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
       });
     } finally {
       setFindingUnmatched(false);
+    }
+  };
+
+  const handleDeleteUnmatchedCashEntries = async () => {
+    if (!user || !unmatchedEntries || unmatchedEntries.length === 0) return;
+
+    const confirmed = window.confirm(
+      `سيتم حذف ${unmatchedEntries.length} قيد محاسبي غير متطابق.\n\nهذه القيود تم إنشاؤها لمعاملات غير مدفوعة ولا يجب أن تؤثر على رصيد النقدية.\n\nإجمالي مدين النقدية الذي سيتم إزالته: ${formatNumber(unmatchedSummary?.discrepancy || 0)} دينار\n\nهل تريد المتابعة؟`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingUnmatched(true);
+    try {
+      const result = await deleteUnmatchedCashJournalEntries(user.dataOwnerId, false);
+
+      if (result.success && result.data) {
+        toast({
+          title: "تم حذف القيود غير المتطابقة",
+          description: `تم حذف ${result.data.deleted} قيد. تم إزالة ${formatNumber(result.data.totalCashDebitRemoved)} من مدين النقدية.`,
+        });
+        // Clear the unmatched entries list and refresh
+        setUnmatchedEntries(null);
+        setUnmatchedSummary(null);
+        refresh();
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل حذف القيود غير المتطابقة",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Delete unmatched entries failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء الحذف",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingUnmatched(false);
     }
   };
 
@@ -984,16 +1026,27 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
             )}
 
             {unmatchedEntries.length > 0 && (
-              <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  <strong>ملاحظة:</strong> هذه القيود تزيد من رصيد النقدية في الميزانية العمومية
-                  بدون وجود معاملة مصدرية مدفوعة تبررها. قد تحتاج إلى:
-                </p>
-                <ul className="text-sm text-amber-700 mt-2 mr-4 list-disc">
-                  <li>حذف القيود اليتيمة (إذا كانت مرتبطة بمعاملات محذوفة)</li>
-                  <li>تحديث حالة المعاملة إلى &quot;مدفوع&quot; إذا تم السداد فعلاً</li>
-                  <li>إنشاء قيد عكسي لتصحيح الخطأ</li>
-                </ul>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-amber-800">
+                    <strong>ملاحظة:</strong> هذه القيود تم إنشاؤها لمعاملات غير مدفوعة - يمكن حذفها بأمان.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteUnmatchedCashEntries}
+                    disabled={deletingUnmatched}
+                  >
+                    <Trash2 className="w-4 h-4 ml-2" />
+                    {deletingUnmatched ? "جاري الحذف..." : `حذف ${unmatchedEntries.length} قيد`}
+                  </Button>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-lg">
+                  <p className="text-sm text-amber-700">
+                    سيتم حذف القيود المحاسبية التي تم إنشاؤها خطأً لمعاملات غير مدفوعة.
+                    هذا سيخفض رصيد النقدية في الميزانية العمومية بمقدار {formatNumber(unmatchedSummary?.discrepancy || 0)} دينار.
+                  </p>
+                </div>
               </div>
             )}
           </CardContent>
