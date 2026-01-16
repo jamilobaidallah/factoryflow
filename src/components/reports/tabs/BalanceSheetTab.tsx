@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries, diagnoseCashDiscrepancy, CashDiscrepancyDiagnostic, detailedCashAudit, DetailedCashAudit, CashAuditEntry } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, migrateARAPJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry, deleteUnmatchedCashJournalEntries, diagnoseCashDiscrepancy, CashDiscrepancyDiagnostic, detailedCashAudit, DetailedCashAudit, CashAuditEntry } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -59,6 +59,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [cashDiagnostic, setCashDiagnostic] = useState<CashDiscrepancyDiagnostic | null>(null);
   const [auditingCash, setAuditingCash] = useState(false);
   const [cashAuditResult, setCashAuditResult] = useState<DetailedCashAudit | null>(null);
+  const [migratingARAP, setMigratingARAP] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -520,6 +521,62 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleMigrateARAPEntries = async () => {
+    if (!user) return;
+
+    const confirmed = window.confirm(
+      `سيتم تصحيح قيود الذمم المدينة/الدائنة التي تم تسجيلها بشكل خاطئ.\n\nالمعاملات غير المدفوعة (جزئياً أو كلياً) يجب أن تستخدم حساب الذمم بدلاً من النقدية.\nسيتم نقل المبالغ من حساب النقدية إلى حساب الذمم المناسب.\n\nهل تريد المتابعة؟`
+    );
+
+    if (!confirmed) return;
+
+    setMigratingARAP(true);
+    try {
+      const result = await migrateARAPJournalEntries(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        const { corrected, skipped, errors } = result.data;
+
+        if (corrected.length > 0) {
+          toast({
+            title: "تم تصحيح قيود الذمم",
+            description: `تم تصحيح ${corrected.length} قيد. تم تخطي ${skipped.length} قيد (صحيح بالفعل).`,
+          });
+          refresh();
+        } else if (skipped.length > 0) {
+          toast({
+            title: "لا حاجة للتصحيح",
+            description: `جميع قيود الذمم صحيحة (${skipped.length} قيد).`,
+          });
+        } else {
+          toast({
+            title: "لا توجد قيود للتصحيح",
+            description: "لم يتم العثور على قيود ذمم تحتاج تصحيح.",
+          });
+        }
+
+        if (errors.length > 0) {
+          console.error("AR/AP migration errors:", errors);
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تصحيح قيود الذمم",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("AR/AP migration failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تصحيح قيود الذمم",
+        variant: "destructive",
+      });
+    } finally {
+      setMigratingARAP(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -624,6 +681,17 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <Wrench className="w-4 h-4 ml-2" />
                 {migratingEndorsements ? "جاري التصحيح..." : "تصحيح قيود التظهير"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMigrateARAPEntries}
+                disabled={migratingARAP}
+                title="تصحيح قيود الذمم المدينة/الدائنة التي تستخدم حساب النقدية بشكل خاطئ"
+                className="border-orange-300 hover:bg-orange-50"
+              >
+                <Wrench className="w-4 h-4 ml-2 text-orange-600" />
+                {migratingARAP ? "جاري التصحيح..." : "تصحيح قيود الذمم"}
               </Button>
               <Button
                 variant="outline"

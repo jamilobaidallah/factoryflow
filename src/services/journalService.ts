@@ -2470,6 +2470,220 @@ export async function migrateEndorsedChequeJournalEntries(
 }
 
 // ============================================================================
+// AR/AP Journal Entry Migration
+// ============================================================================
+
+export interface ARAPJournalMigrationResult {
+  corrected: string[];  // Ledger entry IDs that were corrected
+  skipped: string[];    // Ledger entry IDs that were skipped (already correct or no issue)
+  errors: string[];     // Errors encountered
+}
+
+/**
+ * Migrate AR/AP tracked ledger entries that have incorrect Cash journal entries
+ *
+ * Problem: Some ledger entries are marked as AR/AP tracked (isARAPEntry: true, paymentStatus: partial/unpaid)
+ * but their journal entries incorrectly hit Cash instead of AR/AP.
+ *
+ * This happens when:
+ * 1. Entry was created before AR/AP tracking was properly implemented
+ * 2. Entry was created with immediateSettlement flag incorrectly set
+ *
+ * Correct accounting for AR/AP tracked entries:
+ * - Income: DR AR (1200), CR Revenue - NOT DR Cash
+ * - Expense: DR Expense, CR AP (2000) - NOT CR Cash
+ *
+ * This function creates correcting journal entries:
+ * - For income with incorrect DR Cash: Create DR Revenue, CR Cash (reverse), then DR AR, CR Revenue (correct)
+ *   Simplified: DR AR (1200), CR Cash (1000) - moves debit from Cash to AR
+ * - For expense with incorrect CR Cash: Create DR Cash, CR Expense (reverse), then DR Expense, CR AP (correct)
+ *   Simplified: DR Cash (1000), CR AP (2000) - moves credit from Cash to AP
+ */
+export async function migrateARAPJournalEntries(
+  userId: string
+): Promise<ServiceResult<ARAPJournalMigrationResult>> {
+  try {
+    validateUserId(userId);
+
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+
+    // Find all AR/AP tracked entries that are not fully paid
+    // These are entries where isARAPEntry is true and paymentStatus is 'unpaid' or 'partial'
+    const arapQuery = query(
+      ledgerRef,
+      where('isARAPEntry', '==', true)
+    );
+    const arapSnapshot = await getDocs(arapQuery);
+
+    const corrected: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const ledgerDoc of arapSnapshot.docs) {
+      const ledgerData = ledgerDoc.data();
+      const transactionId = ledgerData.transactionId;
+      const entryType = ledgerData.type; // 'دخل' or 'مصروف'
+      const paymentStatus = ledgerData.paymentStatus;
+      const amount = ledgerData.amount || 0;
+      const description = ledgerData.description || '';
+
+      // Only process entries that aren't fully paid
+      // Fully paid entries might have legitimate Cash entries from the actual payments
+      if (paymentStatus === 'paid') {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      if (!transactionId) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Find journal entries linked to this transaction
+      const journalQuery = query(journalRef, where('linkedTransactionId', '==', transactionId));
+      const journalSnapshot = await getDocs(journalQuery);
+
+      if (journalSnapshot.empty) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Check journal entries for incorrect Cash entries
+      let incorrectCashEntry: { doc: typeof journalSnapshot.docs[0], cashAmount: number, direction: 'debit' | 'credit' } | null = null;
+      let alreadyCorrected = false;
+
+      for (const jDoc of journalSnapshot.docs) {
+        const jData = jDoc.data();
+        const jLines = jData.lines || [];
+        const jDescription = jData.description || '';
+
+        // Check if this is already a correction entry
+        if (jDescription.includes('تصحيح قيد ذمم') || jData.linkedDocumentType === 'arap_correction') {
+          alreadyCorrected = true;
+          break;
+        }
+
+        // For Income entries: incorrect if Cash is DEBITED (should be AR debited)
+        // For Expense entries: incorrect if Cash is CREDITED (should be AP credited)
+        for (const line of jLines as JournalLine[]) {
+          if (line.accountCode === ACCOUNT_CODES.CASH) {
+            if (entryType === 'دخل' && line.debit > 0) {
+              // Income with DR Cash - should be DR AR
+              incorrectCashEntry = { doc: jDoc, cashAmount: line.debit, direction: 'debit' };
+              break;
+            } else if (entryType === 'مصروف' && line.credit > 0) {
+              // Expense with CR Cash - should be CR AP
+              incorrectCashEntry = { doc: jDoc, cashAmount: line.credit, direction: 'credit' };
+              break;
+            }
+          }
+        }
+
+        if (incorrectCashEntry) break;
+      }
+
+      // Skip if already corrected
+      if (alreadyCorrected) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Skip if no incorrect cash entry found
+      if (!incorrectCashEntry) {
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      // Create correction entry
+      let correctionLines: JournalLine[];
+      let correctionDescription: string;
+
+      if (entryType === 'دخل' && incorrectCashEntry.direction === 'debit') {
+        // Income: Move debit from Cash to AR
+        // DR AR, CR Cash (transfers the debit balance from Cash to AR)
+        correctionDescription = `تصحيح قيد ذمم مدينة: ${description}`;
+        correctionLines = [
+          {
+            accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+            accountName: 'Accounts Receivable',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+            description: `تصحيح: تحويل من نقدية إلى ذمم مدينة`,
+            debit: incorrectCashEntry.cashAmount,
+            credit: 0,
+          },
+          {
+            accountCode: ACCOUNT_CODES.CASH,
+            accountName: 'Cash',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+            description: `تصحيح: إلغاء قيد نقدية خاطئ`,
+            debit: 0,
+            credit: incorrectCashEntry.cashAmount,
+          },
+        ];
+      } else if (entryType === 'مصروف' && incorrectCashEntry.direction === 'credit') {
+        // Expense: Move credit from Cash to AP
+        // DR Cash, CR AP (transfers the credit balance from Cash to AP)
+        correctionDescription = `تصحيح قيد ذمم دائنة: ${description}`;
+        correctionLines = [
+          {
+            accountCode: ACCOUNT_CODES.CASH,
+            accountName: 'Cash',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+            description: `تصحيح: إلغاء قيد نقدية خاطئ`,
+            debit: incorrectCashEntry.cashAmount,
+            credit: 0,
+          },
+          {
+            accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+            accountName: 'Accounts Payable',
+            accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+            description: `تصحيح: تحويل من نقدية إلى ذمم دائنة`,
+            debit: 0,
+            credit: incorrectCashEntry.cashAmount,
+          },
+        ];
+      } else {
+        // Unknown case, skip
+        skipped.push(ledgerDoc.id);
+        continue;
+      }
+
+      try {
+        const result = await createJournalEntry(
+          userId,
+          correctionDescription,
+          new Date(),
+          correctionLines,
+          transactionId,
+          undefined,
+          'arap_correction'
+        );
+
+        if (result.success) {
+          corrected.push(ledgerDoc.id);
+        } else {
+          errors.push(`${ledgerDoc.id}: ${result.error}`);
+        }
+      } catch (err) {
+        errors.push(`${ledgerDoc.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { corrected, skipped, errors },
+    };
+  } catch (error) {
+    console.error('Error migrating AR/AP journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to migrate AR/AP journal entries',
+    };
+  }
+}
+
+// ============================================================================
 // Cash Discrepancy Diagnostic
 // ============================================================================
 
