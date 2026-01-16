@@ -220,8 +220,37 @@ export function useLedgerStatsSubscription() {
 }
 
 /**
+ * Singleton cursor store for ledger pagination
+ * Cursors must be stored outside the hook to persist across re-renders and hook re-instantiations.
+ * Using a ref inside the hook doesn't work because when currentPage changes, the cursor
+ * for the previous page may not be available if the hook re-runs before the cursor was stored.
+ */
+const ledgerCursorStore = {
+  cursors: new Map<string, Map<number, DocumentSnapshot>>(),
+
+  getCursors(ownerId: string): Map<number, DocumentSnapshot> {
+    if (!this.cursors.has(ownerId)) {
+      this.cursors.set(ownerId, new Map());
+    }
+    return this.cursors.get(ownerId)!;
+  },
+
+  setCursor(ownerId: string, page: number, doc: DocumentSnapshot) {
+    this.getCursors(ownerId).set(page, doc);
+  },
+
+  getCursor(ownerId: string, page: number): DocumentSnapshot | undefined {
+    return this.getCursors(ownerId).get(page);
+  },
+
+  clear(ownerId: string) {
+    this.cursors.delete(ownerId);
+  }
+};
+
+/**
  * Hook for paginated ledger entries with cursor-based pagination
- * Maintains cursor map in ref to enable page navigation
+ * Uses a singleton cursor store to ensure cursors persist across re-renders
  */
 export function useLedgerEntriesSubscription(options: {
   pageSize?: number;
@@ -231,7 +260,6 @@ export function useLedgerEntriesSubscription(options: {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const unsubscribeRef = useRef<(() => void) | null>(null);
-  const pageCursorsRef = useRef<Map<number, DocumentSnapshot>>(new Map());
   const lastDocRef = useRef<DocumentSnapshot | null>(null);
 
   const ownerId = user?.dataOwnerId;
@@ -249,14 +277,16 @@ export function useLedgerEntriesSubscription(options: {
 
     const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
 
-    // Get cursor for current page (from previous page)
+    // Get cursor for current page (from previous page's last document)
+    // For page 2, we need the last document from page 1, etc.
     const startAfterDoc = currentPage > 1
-      ? pageCursorsRef.current.get(currentPage - 1) || null
-      : null;
+      ? ledgerCursorStore.getCursor(ownerId, currentPage - 1)
+      : undefined;
 
     // Build query with optional cursor
+    // Only use startAfter if we have a valid cursor for the previous page
     const q = startAfterDoc
-      ? query(ledgerRef, orderBy('date', 'desc'), limit(pageSize), startAfter(startAfterDoc))
+      ? query(ledgerRef, orderBy('date', 'desc'), startAfter(startAfterDoc), limit(pageSize))
       : query(ledgerRef, orderBy('date', 'desc'), limit(pageSize));
 
     unsubscribeRef.current = onSnapshot(
@@ -268,10 +298,11 @@ export function useLedgerEntriesSubscription(options: {
         }));
         const data = transform(docs);
 
-        // Store cursor for this page
-        const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
+        // Store the last document of this page as the cursor for pagination
+        // This cursor will be used as startAfter for the next page
+        const lastVisible = snapshot.docs[snapshot.docs.length - 1];
         if (lastVisible) {
-          pageCursorsRef.current.set(currentPage, lastVisible);
+          ledgerCursorStore.setCursor(ownerId, currentPage, lastVisible);
           lastDocRef.current = lastVisible;
         }
 
