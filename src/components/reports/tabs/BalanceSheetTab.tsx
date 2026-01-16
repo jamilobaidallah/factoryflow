@@ -9,6 +9,7 @@
  * Verifies: Assets = Liabilities + Equity
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,12 +21,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import {
   useBalanceSheet,
   formatBalanceSheetAmount,
 } from "../hooks/useBalanceSheet";
 import { formatDate } from "@/lib/date-utils";
+import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
+import { cleanupOrphanedJournalEntries } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -33,7 +37,73 @@ interface BalanceSheetTabProps {
 }
 
 export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps) {
+  const { user } = useUser();
+  const { toast } = useToast();
   const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
+  const [cleaningUp, setCleaningUp] = useState(false);
+
+  const handleCleanupOrphanedEntries = async () => {
+    if (!user) return;
+
+    setCleaningUp(true);
+    try {
+      // First do a dry run to see what will be deleted
+      const dryRunResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, true);
+
+      if (dryRunResult.success && dryRunResult.data) {
+        const { orphanedByTransaction, orphanedByPayment } = dryRunResult.data;
+        const totalOrphaned = orphanedByTransaction.length + orphanedByPayment.length;
+
+        if (totalOrphaned === 0) {
+          toast({
+            title: "لا توجد قيود يتيمة",
+            description: "جميع القيود المحاسبية مرتبطة بمعاملات صحيحة.",
+          });
+          setCleaningUp(false);
+          return;
+        }
+
+        // Confirm before deleting
+        if (!window.confirm(`تم العثور على ${totalOrphaned} قيد يتيم. هل تريد حذفها؟`)) {
+          setCleaningUp(false);
+          return;
+        }
+
+        // Now actually delete them
+        const deleteResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, false);
+
+        if (deleteResult.success && deleteResult.data) {
+          toast({
+            title: "تم التنظيف بنجاح",
+            description: `تم حذف ${deleteResult.data.deleted.length} قيد يتيم.`,
+          });
+          // Refresh the balance sheet to show updated numbers
+          refresh();
+        } else {
+          toast({
+            title: "خطأ",
+            description: deleteResult.error || "فشل حذف القيود اليتيمة",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: dryRunResult.error || "فشل البحث عن القيود اليتيمة",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Cleanup failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء التنظيف",
+        variant: "destructive",
+      });
+    } finally {
+      setCleaningUp(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -100,6 +170,16 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCleanupOrphanedEntries}
+                disabled={cleaningUp}
+                title="حذف القيود المحاسبية المرتبطة بمعاملات محذوفة"
+              >
+                <Trash2 className="w-4 h-4 ml-2" />
+                {cleaningUp ? "جاري التنظيف..." : "تنظيف القيود اليتيمة"}
+              </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />
                 تحديث

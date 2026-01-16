@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingDown, Wrench, Trash2 } from "lucide-react";
+import { Plus, TrendingDown, Wrench } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { migrateFixedAssetJournalEntries, cleanupOrphanedJournalEntries } from "@/services/journalService";
+import { migrateFixedAssetJournalEntries } from "@/services/journalService";
 
 // Types and hooks
 import {
@@ -43,7 +43,6 @@ export default function FixedAssetsPage() {
   const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null);
   const [loading, setLoading] = useState(false);
   const [migrating, setMigrating] = useState(false);
-  const [cleaningUp, setCleaningUp] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FixedAssetFormData>(initialFormData);
@@ -119,68 +118,6 @@ export default function FixedAssetsPage() {
     );
   };
 
-  const handleCleanupOrphanedEntries = () => {
-    if (!user) return;
-
-    confirm(
-      "تنظيف القيود اليتيمة",
-      "سيتم البحث عن قيود محاسبية مرتبطة بمعاملات محذوفة وحذفها. هل تريد المتابعة؟",
-      async () => {
-        setCleaningUp(true);
-        try {
-          // First do a dry run to see what will be deleted
-          const dryRunResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, true);
-
-          if (dryRunResult.success && dryRunResult.data) {
-            const { orphanedByTransaction, orphanedByPayment } = dryRunResult.data;
-            const totalOrphaned = orphanedByTransaction.length + orphanedByPayment.length;
-
-            if (totalOrphaned === 0) {
-              toast({
-                title: "لا توجد قيود يتيمة",
-                description: "جميع القيود المحاسبية مرتبطة بمعاملات صحيحة.",
-              });
-              setCleaningUp(false);
-              return;
-            }
-
-            // Now actually delete them
-            const deleteResult = await cleanupOrphanedJournalEntries(user.dataOwnerId, false);
-
-            if (deleteResult.success && deleteResult.data) {
-              toast({
-                title: "تم التنظيف بنجاح",
-                description: `تم حذف ${deleteResult.data.deleted.length} قيد يتيم (${orphanedByTransaction.length} من معاملات محذوفة، ${orphanedByPayment.length} من مدفوعات محذوفة).`,
-              });
-            } else {
-              toast({
-                title: "خطأ",
-                description: deleteResult.error || "فشل حذف القيود اليتيمة",
-                variant: "destructive",
-              });
-            }
-          } else {
-            toast({
-              title: "خطأ",
-              description: dryRunResult.error || "فشل البحث عن القيود اليتيمة",
-              variant: "destructive",
-            });
-          }
-        } catch (error) {
-          console.error("Cleanup failed:", error);
-          toast({
-            title: "خطأ",
-            description: "حدث خطأ أثناء التنظيف",
-            variant: "destructive",
-          });
-        } finally {
-          setCleaningUp(false);
-        }
-      },
-      "warning"
-    );
-  };
-
   const handleMigrateJournalEntries = () => {
     if (!user) return;
 
@@ -246,16 +183,6 @@ export default function FixedAssetsPage() {
         </div>
         <PermissionGate action="create" module="fixed-assets">
           <div className="flex gap-2">
-            <Button
-              className="gap-2"
-              variant="outline"
-              size="sm"
-              onClick={handleCleanupOrphanedEntries}
-              disabled={cleaningUp}
-            >
-              <Trash2 className="w-4 h-4" />
-              {cleaningUp ? "جاري التنظيف..." : "تنظيف القيود اليتيمة"}
-            </Button>
             <Button
               className="gap-2"
               variant="outline"
