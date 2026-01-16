@@ -1550,6 +1550,228 @@ export async function auditJournalEntries(
 }
 
 /**
+ * Interface for unmatched cash journal entry
+ */
+export interface UnmatchedCashEntry {
+  journalId: string;
+  entryNumber: string;
+  date: Date;
+  description: string;
+  cashDebit: number;
+  cashCredit: number;
+  linkedTransactionId?: string;
+  linkedPaymentId?: string;
+  linkedDocumentType?: string;
+  reason: string;
+  ledgerDetails?: {
+    type: string;
+    category: string;
+    subCategory: string;
+    status: string;
+    amount: number;
+  };
+}
+
+/**
+ * Find journal entries with DR Cash that don't have matching ledger transactions
+ * This helps identify entries that inflate Balance Sheet Cash without proper source
+ */
+export async function findUnmatchedCashJournalEntries(
+  userId: string
+): Promise<ServiceResult<{
+  unmatchedEntries: UnmatchedCashEntry[];
+  totalUnmatchedCashDebit: number;
+  totalUnmatchedCashCredit: number;
+  summary: {
+    totalJournalCashDebits: number;
+    totalMatchedCashDebits: number;
+    discrepancy: number;
+  };
+}>> {
+  try {
+    validateUserId(userId);
+
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+
+    // Get all data
+    const [journalSnapshot, ledgerSnapshot, paymentsSnapshot] = await Promise.all([
+      getDocs(journalRef),
+      getDocs(ledgerRef),
+      getDocs(paymentsRef),
+    ]);
+
+    // Build ledger map by transactionId
+    const ledgerByTransactionId = new Map<string, {
+      amount: number;
+      type: string;
+      category: string;
+      subCategory: string;
+      status: string;
+    }>();
+
+    ledgerSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        ledgerByTransactionId.set(data.transactionId, {
+          amount: data.amount || 0,
+          type: data.type || '',
+          category: data.category || '',
+          subCategory: data.subCategory || '',
+          status: data.status || '',
+        });
+      }
+    });
+
+    // Build payments map
+    const paymentsById = new Map<string, {
+      amount: number;
+      type: string;
+      isEndorsement?: boolean;
+      noCashMovement?: boolean;
+    }>();
+
+    paymentsSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      paymentsById.set(docSnap.id, {
+        amount: data.amount || 0,
+        type: data.type || '',
+        isEndorsement: data.isEndorsement,
+        noCashMovement: data.noCashMovement,
+      });
+    });
+
+    const unmatchedEntries: UnmatchedCashEntry[] = [];
+    let totalJournalCashDebits = 0;
+    let totalMatchedCashDebits = 0;
+    let totalUnmatchedCashDebit = 0;
+    let totalUnmatchedCashCredit = 0;
+
+    // Process each journal entry
+    journalSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      const lines = data.lines || [];
+      const linkedTransactionId = data.linkedTransactionId;
+      const linkedPaymentId = data.linkedPaymentId;
+      const linkedDocumentType = data.linkedDocumentType;
+
+      // Calculate cash movements in this journal entry
+      let cashDebit = 0;
+      let cashCredit = 0;
+
+      lines.forEach((line: JournalLine) => {
+        if (line.accountCode === '1000' || line.accountCode === '1100') {
+          cashDebit += line.debit || 0;
+          cashCredit += line.credit || 0;
+        }
+      });
+
+      // Skip entries with no cash movement
+      if (cashDebit === 0 && cashCredit === 0) {
+        return;
+      }
+
+      totalJournalCashDebits += cashDebit;
+
+      // Determine if this entry is properly matched
+      let isMatched = false;
+      let reason = '';
+      let ledgerDetails: UnmatchedCashEntry['ledgerDetails'];
+
+      if (linkedTransactionId && ledgerByTransactionId.has(linkedTransactionId)) {
+        const ledger = ledgerByTransactionId.get(linkedTransactionId)!;
+        ledgerDetails = ledger;
+
+        // Check if ledger entry should have cash movement
+        const type = ledger.type;
+        const category = ledger.category;
+        const subCategory = ledger.subCategory;
+        const status = ledger.status;
+        const isPaid = status === 'مدفوع' || status === 'paid';
+
+        // Equity transactions always have cash movement
+        const isEquity = type === 'حركة رأس مال' || category === 'رأس المال' || category === 'Owner Equity';
+        // Loan transactions always have cash movement
+        const isLoan = type === 'قرض' || category === 'قروض ممنوحة' || category === 'قروض مستلمة';
+
+        if (isEquity || isLoan) {
+          isMatched = true; // Equity/Loan always affects cash
+        } else if (isPaid) {
+          isMatched = true; // Income/Expense that is paid affects cash
+        } else {
+          // Has ledger entry but it's NOT paid - should not have cash journal entry
+          reason = `Ledger entry exists but status is "${status}" (not paid) - journal entry should not debit cash`;
+        }
+      } else if (linkedPaymentId && paymentsById.has(linkedPaymentId)) {
+        const payment = paymentsById.get(linkedPaymentId)!;
+        if (payment.isEndorsement || payment.noCashMovement) {
+          // Endorsement payment - journal entry should NOT debit cash
+          reason = 'Linked to endorsement payment (noCashMovement=true) - journal entry should not debit cash';
+        } else {
+          isMatched = true; // Regular payment, cash movement is correct
+        }
+      } else if (linkedTransactionId && !ledgerByTransactionId.has(linkedTransactionId)) {
+        // Linked to a transaction ID that doesn't exist in ledger (orphan)
+        reason = `Linked to transaction "${linkedTransactionId}" which no longer exists in ledger`;
+      } else if (linkedPaymentId && !paymentsById.has(linkedPaymentId)) {
+        // Linked to a payment ID that doesn't exist (orphan)
+        reason = `Linked to payment "${linkedPaymentId}" which no longer exists`;
+      } else if (!linkedTransactionId && !linkedPaymentId) {
+        // No link at all
+        reason = 'No linkedTransactionId or linkedPaymentId - unlinked journal entry';
+      } else {
+        reason = 'Unknown matching issue';
+      }
+
+      if (isMatched) {
+        totalMatchedCashDebits += cashDebit;
+      } else {
+        totalUnmatchedCashDebit += cashDebit;
+        totalUnmatchedCashCredit += cashCredit;
+
+        unmatchedEntries.push({
+          journalId: docSnap.id,
+          entryNumber: data.entryNumber || '',
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+          description: data.description || '',
+          cashDebit,
+          cashCredit,
+          linkedTransactionId,
+          linkedPaymentId,
+          linkedDocumentType,
+          reason,
+          ledgerDetails,
+        });
+      }
+    });
+
+    // Sort by cash debit amount descending to show biggest discrepancies first
+    unmatchedEntries.sort((a, b) => b.cashDebit - a.cashDebit);
+
+    return {
+      success: true,
+      data: {
+        unmatchedEntries,
+        totalUnmatchedCashDebit,
+        totalUnmatchedCashCredit,
+        summary: {
+          totalJournalCashDebits,
+          totalMatchedCashDebits,
+          discrepancy: totalUnmatchedCashDebit,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('Error finding unmatched cash journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to find unmatched entries',
+    };
+  }
+}
+
+/**
  * Find and optionally delete orphaned journal entries
  * Orphaned entries are those linked to transactions/payments that no longer exist
  * Also includes entries with no links at all (created during development)

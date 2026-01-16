@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult, migrateLoanJournalEntries, migrateEndorsedChequeJournalEntries, findUnmatchedCashJournalEntries, UnmatchedCashEntry } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -47,6 +47,13 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
   const [migratingLoans, setMigratingLoans] = useState(false);
   const [migratingEndorsements, setMigratingEndorsements] = useState(false);
+  const [findingUnmatched, setFindingUnmatched] = useState(false);
+  const [unmatchedEntries, setUnmatchedEntries] = useState<UnmatchedCashEntry[] | null>(null);
+  const [unmatchedSummary, setUnmatchedSummary] = useState<{
+    totalJournalCashDebits: number;
+    totalMatchedCashDebits: number;
+    discrepancy: number;
+  } | null>(null);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -336,6 +343,51 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleFindUnmatchedCashEntries = async () => {
+    if (!user) return;
+
+    setFindingUnmatched(true);
+    setUnmatchedEntries(null);
+    setUnmatchedSummary(null);
+
+    try {
+      const result = await findUnmatchedCashJournalEntries(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        setUnmatchedEntries(result.data.unmatchedEntries);
+        setUnmatchedSummary(result.data.summary);
+
+        if (result.data.unmatchedEntries.length === 0) {
+          toast({
+            title: "لا توجد قيود غير متطابقة",
+            description: "جميع قيود النقدية متطابقة مع معاملات السجل.",
+          });
+        } else {
+          toast({
+            title: `تم العثور على ${result.data.unmatchedEntries.length} قيد`,
+            description: `إجمالي الفرق في النقدية: ${formatNumber(result.data.totalUnmatchedCashDebit)} دينار`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل البحث عن القيود غير المتطابقة",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Find unmatched entries failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء البحث",
+        variant: "destructive",
+      });
+    } finally {
+      setFindingUnmatched(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -440,6 +492,17 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               >
                 <Wrench className="w-4 h-4 ml-2" />
                 {migratingEndorsements ? "جاري التصحيح..." : "تصحيح قيود التظهير"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFindUnmatchedCashEntries}
+                disabled={findingUnmatched}
+                title="البحث عن قيود النقدية التي لا تتطابق مع معاملات السجل"
+                className="border-amber-300 hover:bg-amber-50"
+              >
+                <AlertTriangle className="w-4 h-4 ml-2 text-amber-600" />
+                {findingUnmatched ? "جاري البحث..." : "قيود نقدية غير متطابقة"}
               </Button>
               <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="w-4 h-4 ml-2" />
@@ -816,6 +879,121 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
                     <p className="text-green-700 font-medium">جميع القيود متطابقة مع المعاملات المصدرية</p>
                   </div>
                 )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unmatched Cash Entries Section */}
+      {unmatchedEntries && (
+        <Card className="border-red-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-red-700">
+                <XCircle className="w-5 h-5" />
+                قيود النقدية غير المتطابقة ({unmatchedEntries.length})
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setUnmatchedEntries(null)}
+              >
+                إغلاق
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Summary */}
+            {unmatchedSummary && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-blue-50 p-3 rounded-lg text-center">
+                  <p className="text-xs text-gray-600">إجمالي مدين النقدية</p>
+                  <p className="text-lg font-bold text-blue-700">
+                    {formatNumber(unmatchedSummary.totalJournalCashDebits)}
+                  </p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg text-center">
+                  <p className="text-xs text-gray-600">المطابق</p>
+                  <p className="text-lg font-bold text-green-700">
+                    {formatNumber(unmatchedSummary.totalMatchedCashDebits)}
+                  </p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg text-center">
+                  <p className="text-xs text-gray-600">الفرق (غير متطابق)</p>
+                  <p className="text-lg font-bold text-red-700">
+                    {formatNumber(unmatchedSummary.discrepancy)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {unmatchedEntries.length === 0 ? (
+              <div className="text-center py-4 bg-green-50 rounded-lg">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-green-600 mb-2" />
+                <p className="text-green-700 font-medium">جميع قيود النقدية متطابقة!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>التاريخ</TableHead>
+                      <TableHead>الوصف</TableHead>
+                      <TableHead className="text-left">مدين النقدية</TableHead>
+                      <TableHead>السبب</TableHead>
+                      <TableHead>تفاصيل السجل</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unmatchedEntries.map((entry, idx) => (
+                      <TableRow key={idx} className="bg-red-50/50">
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {formatDate(entry.date)}
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[200px] truncate" title={entry.description}>
+                          {entry.description || entry.entryNumber}
+                        </TableCell>
+                        <TableCell className="text-left font-mono font-bold text-red-600">
+                          {formatNumber(entry.cashDebit)}
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[250px]">
+                          <span className="text-amber-700">{entry.reason}</span>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {entry.ledgerDetails ? (
+                            <div>
+                              <Badge variant="outline" className="text-xs mb-1">
+                                {entry.ledgerDetails.type}
+                              </Badge>
+                              <div className="text-gray-500">
+                                الحالة: {entry.ledgerDetails.status || 'غير محدد'}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">
+                              {entry.linkedDocumentType || 'غير مرتبط'}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {unmatchedEntries.length > 0 && (
+              <div className="mt-4 p-3 bg-amber-50 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>ملاحظة:</strong> هذه القيود تزيد من رصيد النقدية في الميزانية العمومية
+                  بدون وجود معاملة مصدرية مدفوعة تبررها. قد تحتاج إلى:
+                </p>
+                <ul className="text-sm text-amber-700 mt-2 mr-4 list-disc">
+                  <li>حذف القيود اليتيمة (إذا كانت مرتبطة بمعاملات محذوفة)</li>
+                  <li>تحديث حالة المعاملة إلى &quot;مدفوع&quot; إذا تم السداد فعلاً</li>
+                  <li>إنشاء قيد عكسي لتصحيح الخطأ</li>
+                </ul>
               </div>
             )}
           </CardContent>
