@@ -1419,6 +1419,11 @@ export async function auditJournalEntries(
         amount: data.amount || 0,
         type: data.type || '',
       });
+      // Skip payments that don't move cash (endorsements, etc.)
+      // This matches the Cash Flow Statement calculation logic
+      if (data.isEndorsement || data.noCashMovement) {
+        return;
+      }
       if (data.type === 'قبض') {
         totalPaymentCashIn += data.amount || 0;
       } else if (data.type === 'صرف') {
