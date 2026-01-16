@@ -236,7 +236,7 @@ export function LedgerFormDialog() {
 
         {/* Step Progress Indicator - Only for new entries */}
         {!editingEntry && (
-          <div className="mb-4">
+          <div className="mb-4 px-4">
             {/* Step labels */}
             <div className="flex justify-between text-xs text-gray-500 mb-2">
               <span className={cn(step >= 1 && "text-primary font-medium")}>
@@ -267,7 +267,7 @@ export function LedgerFormDialog() {
         )}
 
         <form onSubmit={handleFormSubmit}>
-          <div className="grid gap-4 py-4 px-2">
+          <div className="grid gap-4 py-4 px-4">
             {/* ===== STEP 1: Basic Info ===== */}
             {(step === 1 || editingEntry) && (
               <StepBasicInfo
@@ -352,7 +352,7 @@ export function LedgerFormDialog() {
 
           {/* Validation Error Message */}
           {stepError && (
-            <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-md">
+            <div className="p-3 mb-4 mx-4 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-600">{stepError}</p>
             </div>
           )}
