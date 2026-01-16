@@ -1608,7 +1608,8 @@ export async function findUnmatchedCashJournalEntries(
       type: string;
       category: string;
       subCategory: string;
-      status: string;
+      paymentStatus: string;
+      immediateSettlement: boolean;
     }>();
 
     ledgerSnapshot.docs.forEach((docSnap) => {
@@ -1619,7 +1620,8 @@ export async function findUnmatchedCashJournalEntries(
           type: data.type || '',
           category: data.category || '',
           subCategory: data.subCategory || '',
-          status: data.status || '',
+          paymentStatus: data.paymentStatus || '',
+          immediateSettlement: data.immediateSettlement ?? false,
         });
       }
     });
@@ -1681,14 +1683,21 @@ export async function findUnmatchedCashJournalEntries(
 
       if (linkedTransactionId && ledgerByTransactionId.has(linkedTransactionId)) {
         const ledger = ledgerByTransactionId.get(linkedTransactionId)!;
-        ledgerDetails = ledger;
+        ledgerDetails = {
+          type: ledger.type,
+          category: ledger.category,
+          subCategory: ledger.subCategory,
+          status: ledger.paymentStatus || (ledger.immediateSettlement ? 'immediate' : ''),
+          amount: ledger.amount,
+        };
 
         // Check if ledger entry should have cash movement
         const type = ledger.type;
         const category = ledger.category;
-        const subCategory = ledger.subCategory;
-        const status = ledger.status;
-        const isPaid = status === 'مدفوع' || status === 'paid';
+        const { paymentStatus, immediateSettlement } = ledger;
+
+        // Cash is affected if: immediateSettlement=true OR paymentStatus=paid
+        const isPaidOrImmediate = immediateSettlement || paymentStatus === 'paid';
 
         // Equity transactions always have cash movement
         const isEquity = type === 'حركة رأس مال' || category === 'رأس المال' || category === 'Owner Equity';
@@ -1697,11 +1706,11 @@ export async function findUnmatchedCashJournalEntries(
 
         if (isEquity || isLoan) {
           isMatched = true; // Equity/Loan always affects cash
-        } else if (isPaid) {
-          isMatched = true; // Income/Expense that is paid affects cash
+        } else if (isPaidOrImmediate) {
+          isMatched = true; // Income/Expense that is paid or immediate settlement affects cash
         } else {
-          // Has ledger entry but it's NOT paid - should not have cash journal entry
-          reason = `Ledger entry exists but status is "${status}" (not paid) - journal entry should not debit cash`;
+          // Has ledger entry but it's NOT paid and NOT immediate - should not have cash journal entry
+          reason = `Ledger entry exists but paymentStatus="${paymentStatus}", immediateSettlement=${immediateSettlement} (not paid/immediate) - journal entry should not debit cash`;
         }
       } else if (linkedPaymentId && paymentsById.has(linkedPaymentId)) {
         const payment = paymentsById.get(linkedPaymentId)!;
