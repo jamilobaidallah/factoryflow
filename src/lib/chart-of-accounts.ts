@@ -154,6 +154,16 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Accumulated depreciation on fixed assets (contra-asset)'
   ),
 
+  // Loans Receivable - قروض ممنوحة
+  defineAccount(
+    ACCOUNT_CODES.LOANS_RECEIVABLE,
+    'Loans Receivable',
+    'قروض ممنوحة',
+    'asset',
+    undefined,
+    'Loans given to others (money we are owed)'
+  ),
+
   // ═══════════════════════════════════════════════════════════════════════════
   // LIABILITIES (2000-2999) - الالتزامات
   // ═══════════════════════════════════════════════════════════════════════════
@@ -183,12 +193,12 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Cheques and promissory notes payable'
   ),
   defineAccount(
-    '2300',
+    ACCOUNT_CODES.LOANS_PAYABLE,
     'Loans Payable',
-    'قروض مستحقة',
+    'قروض مستلمة',
     'liability',
     undefined,
-    'Bank loans and other borrowings'
+    'Loans received from others (money we owe)'
   ),
   defineAccount(
     '2400',
