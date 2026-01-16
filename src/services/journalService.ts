@@ -2638,8 +2638,42 @@ export async function diagnoseCashDiscrepancy(
     const paymentNetCash = safeSubtract(paymentCashIn, paymentCashOut);
 
     // Calculate financing activities (equity + loans from ledger)
+    // This MUST match exactly what useReportsCalculations.ts does!
     let financingCashIn = 0;
     let financingCashOut = 0;
+
+    // Import the same helper functions used by useReportsCalculations
+    const isEquityTransaction = (type?: string, category?: string): boolean => {
+      return type === 'حركة رأس مال' ||
+             category === 'رأس المال' ||
+             category === 'Owner Equity';
+    };
+
+    const isLoanTransaction = (type?: string, category?: string): boolean => {
+      return type === 'قرض' ||
+             category === 'قروض مستلمة' ||
+             category === 'قروض ممنوحة';
+    };
+
+    const isCapitalContribution = (subCategory?: string): boolean => {
+      return subCategory === 'رأس مال مالك';
+    };
+
+    const isOwnerDrawing = (subCategory?: string): boolean => {
+      return subCategory === 'سحوبات المالك';
+    };
+
+    const getLoanCashDirection = (subCategory?: string): 'in' | 'out' | null => {
+      // Cash IN: receiving a loan, or collecting loan repayment from someone
+      if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض') {
+        return 'in';
+      }
+      // Cash OUT: giving a loan, or repaying a loan we owe
+      if (subCategory === 'منح قرض' || subCategory === 'سداد قرض') {
+        return 'out';
+      }
+      return null;
+    };
 
     ledgerSnapshot.docs.forEach(docSnap => {
       const entry = docSnap.data();
@@ -2648,28 +2682,24 @@ export async function diagnoseCashDiscrepancy(
       const subCategory = entry.subCategory || '';
       const amount = entry.amount || 0;
 
-      // Equity transactions
-      if (type === 'حركة رأس مال' || category === 'رأس المال' || category === 'Owner Equity') {
-        if (subCategory === 'رأس مال مالك' || subCategory === 'Owner Capital') {
+      // Equity transactions (exact same logic as useReportsCalculations)
+      if (isEquityTransaction(type, category)) {
+        if (isCapitalContribution(subCategory)) {
           financingCashIn = safeAdd(financingCashIn, amount);
-        } else if (subCategory === 'سحوبات المالك' || subCategory === 'Owner Drawings') {
+        } else if (isOwnerDrawing(subCategory)) {
           financingCashOut = safeAdd(financingCashOut, amount);
         }
       }
 
-      // Loan transactions
-      if (type === 'قرض' || category === 'قروض ممنوحة' || category === 'قروض مستلمة') {
-        // Loans received or loan collections = cash in
-        if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض' ||
-            subCategory === 'Loan Receipt' || subCategory === 'Loan Collection') {
+      // Loan transactions (exact same logic as useReportsCalculations)
+      if (isLoanTransaction(type, category)) {
+        const cashDirection = getLoanCashDirection(subCategory);
+        if (cashDirection === 'in') {
           financingCashIn = safeAdd(financingCashIn, amount);
-        }
-        // Loans given or loan repayments = cash out
-        else if (subCategory === 'منح قرض' || subCategory === 'سداد قرض' ||
-                 subCategory === 'Loan Given' || subCategory === 'Loan Repayment' ||
-                 category === 'قروض ممنوحة') {
+        } else if (cashDirection === 'out') {
           financingCashOut = safeAdd(financingCashOut, amount);
         }
+        // Note: if cashDirection is null, the amount is NOT counted (same as real calculation)
       }
     });
 
