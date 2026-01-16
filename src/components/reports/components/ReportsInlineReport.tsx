@@ -588,10 +588,12 @@ function ExpenseAnalysisReport({
       if (!isExpenseType(entry.type)) {
         return;
       }
-      // Exclude equity, advances, and loans from expense analysis
+      // Exclude equity, advances, loans, and fixed assets from expense analysis
+      // Fixed assets are capitalized (balance sheet), not expensed (P&L)
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
-          isLoanTransaction(entry.type, entry.category)) {
+          isLoanTransaction(entry.type, entry.category) ||
+          entry.category === 'أصول ثابتة') {
         return;
       }
 

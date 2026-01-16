@@ -199,10 +199,12 @@ export function useReportsCalculations({
 
     ledgerEntries.forEach((entry) => {
       // EXCLUDE non-P&L transactions using helper functions
+      // Fixed assets (أصول ثابتة) are capitalized to balance sheet, not expensed to P&L
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
-          isLoanTransaction(entry.type, entry.category)) {
-        return; // Skip owner equity, advance, and loan transactions
+          isLoanTransaction(entry.type, entry.category) ||
+          entry.category === 'أصول ثابتة') {
+        return; // Skip owner equity, advance, loan, and fixed asset transactions
       }
 
       if (entry.type === "دخل") {
