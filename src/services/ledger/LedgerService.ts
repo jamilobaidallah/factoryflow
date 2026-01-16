@@ -54,6 +54,7 @@ import {
 import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
+  addFixedAssetPurchaseJournalEntryToBatch,
   createJournalEntryForBadDebt,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
@@ -600,17 +601,31 @@ export class LedgerService {
       }
 
       // Add journal entry to batch (atomic with ledger entry)
-      addJournalEntryToBatch(batch, this.userId, {
-        transactionId,
-        description: formData.description,
-        amount: totalAmount,
-        type: entryType,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        date: new Date(formData.date),
-        isARAPEntry: formData.trackARAP,
-        immediateSettlement: formData.immediateSettlement,
-      });
+      // IMPORTANT: Fixed assets require special accounting treatment
+      // They should be capitalized (DR Fixed Assets) not expensed (DR Expense)
+      if (options.hasFixedAsset) {
+        // Use fixed asset purchase journal entry: DR Fixed Assets (1500), CR Cash/AP
+        addFixedAssetPurchaseJournalEntryToBatch(batch, this.userId, {
+          description: formData.description,
+          amount: totalAmount,
+          date: new Date(formData.date),
+          linkedTransactionId: transactionId,
+          isPaidImmediately: formData.immediateSettlement || !formData.trackARAP,
+        });
+      } else {
+        // Standard journal entry based on entry type
+        addJournalEntryToBatch(batch, this.userId, {
+          transactionId,
+          description: formData.description,
+          amount: totalAmount,
+          type: entryType,
+          category: formData.category,
+          subCategory: formData.subCategory,
+          date: new Date(formData.date),
+          isARAPEntry: formData.trackARAP,
+          immediateSettlement: formData.immediateSettlement,
+        });
+      }
 
       // Add COGS journal entry to batch if applicable
       if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {

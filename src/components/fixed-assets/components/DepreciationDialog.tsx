@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FixedAsset, DepreciationPeriod } from "../types/fixed-assets";
+import { safeSubtract, safeAdd, roundCurrency } from "@/lib/currency";
 
 interface DepreciationDialogProps {
   isOpen: boolean;
@@ -33,7 +34,25 @@ export function DepreciationDialog({
   onRunDepreciation,
 }: DepreciationDialogProps) {
   const activeAssets = assets.filter(a => a.status === "active");
-  const expectedDepreciation = activeAssets.reduce((sum, a) => sum + a.monthlyDepreciation, 0);
+
+  // Calculate expected depreciation matching actual logic in runDepreciation
+  // Skip fully depreciated assets and cap at remaining depreciable amount
+  const expectedDepreciation = activeAssets.reduce((sum, asset) => {
+    const depreciableTotal = safeSubtract(asset.purchaseCost, asset.salvageValue);
+    // Skip fully depreciated assets
+    if (asset.accumulatedDepreciation >= depreciableTotal) {
+      return sum;
+    }
+    const remainingDepreciable = safeSubtract(depreciableTotal, asset.accumulatedDepreciation);
+    const actualDepreciation = Math.min(asset.monthlyDepreciation, remainingDepreciable);
+    return safeAdd(sum, actualDepreciation);
+  }, 0);
+
+  // Count assets that will actually be depreciated
+  const assetsToDepreciate = activeAssets.filter(asset => {
+    const depreciableTotal = safeSubtract(asset.purchaseCost, asset.salvageValue);
+    return asset.accumulatedDepreciation < depreciableTotal;
+  }).length;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -79,11 +98,21 @@ export function DepreciationDialog({
           <div className="bg-gray-50 p-4 rounded-lg space-y-2">
             <div className="text-sm text-gray-600">
               <strong>عدد الأصول النشطة:</strong> {activeAssets.length}
+              {assetsToDepreciate !== activeAssets.length && (
+                <span className="text-gray-400 mr-2">
+                  ({assetsToDepreciate} قابلة للاستهلاك)
+                </span>
+              )}
             </div>
             <div className="text-sm text-gray-600">
               <strong>إجمالي الاستهلاك المتوقع:</strong>{" "}
-              {expectedDepreciation.toFixed(2)} دينار
+              {roundCurrency(expectedDepreciation).toFixed(2)} دينار
             </div>
+            {assetsToDepreciate === 0 && activeAssets.length > 0 && (
+              <div className="text-xs text-warning-600 mt-2">
+                جميع الأصول مستهلكة بالكامل
+              </div>
+            )}
             <div className="text-xs text-gray-500 mt-2">
               سيتم إضافة قيد تلقائي في دفتر الأستاذ
             </div>
@@ -97,7 +126,7 @@ export function DepreciationDialog({
           >
             إلغاء
           </Button>
-          <Button onClick={onRunDepreciation} disabled={loading}>
+          <Button onClick={onRunDepreciation} disabled={loading || assetsToDepreciate === 0}>
             {loading ? "جاري التسجيل..." : "تسجيل الاستهلاك"}
           </Button>
         </DialogFooter>

@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FixedAsset } from "../types/fixed-assets";
+import { sumAmounts, roundCurrency } from "@/lib/currency";
 
 interface FixedAssetsStatsCardsProps {
   assets: FixedAsset[];
@@ -9,9 +10,11 @@ interface FixedAssetsStatsCardsProps {
 
 export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
   const activeAssets = assets.filter(a => a.status === "active");
-  const totalOriginalCost = activeAssets.reduce((sum, a) => sum + (a.purchaseCost || 0), 0);
-  const totalAccumulatedDepreciation = activeAssets.reduce((sum, a) => sum + (a.accumulatedDepreciation || 0), 0);
-  const totalBookValue = activeAssets.reduce((sum, a) => sum + (a.bookValue || 0), 0);
+
+  // Use safe currency utilities to avoid floating-point errors
+  const totalOriginalCost = sumAmounts(activeAssets.map(a => a.purchaseCost || 0));
+  const totalAccumulatedDepreciation = sumAmounts(activeAssets.map(a => a.accumulatedDepreciation || 0));
+  const totalBookValue = sumAmounts(activeAssets.map(a => a.bookValue || 0));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -31,7 +34,7 @@ export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-green-600">
-            {totalOriginalCost.toFixed(0)} د
+            {roundCurrency(totalOriginalCost).toFixed(0)} د
           </div>
         </CardContent>
       </Card>
@@ -41,7 +44,7 @@ export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-orange-600">
-            {totalAccumulatedDepreciation.toFixed(0)} د
+            {roundCurrency(totalAccumulatedDepreciation).toFixed(0)} د
           </div>
         </CardContent>
       </Card>
@@ -51,7 +54,7 @@ export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-purple-600">
-            {totalBookValue.toFixed(0)} د
+            {roundCurrency(totalBookValue).toFixed(0)} د
           </div>
         </CardContent>
       </Card>

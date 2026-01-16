@@ -5,6 +5,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { parseAmount, safeSubtract, safeDivide, safeMultiply, roundCurrency } from "@/lib/currency";
 
 export interface FixedAssetFormCardProps {
   formData: {
@@ -21,17 +22,22 @@ export function FixedAssetFormCard({
   onUpdate,
   entryAmount,
 }: FixedAssetFormCardProps) {
-  // Calculate monthly depreciation
+  // Calculate monthly depreciation using safe currency utilities
   const calculateMonthlyDepreciation = (): string => {
-    const amount = parseFloat(entryAmount || "0");
-    const salvage = parseFloat(formData.salvageValue || "0");
-    const years = parseFloat(formData.usefulLifeYears || "0");
+    const amount = parseAmount(entryAmount || "0");
+    const salvage = parseAmount(formData.salvageValue || "0");
+    const years = parseAmount(formData.usefulLifeYears || "0");
 
     if (years <= 0) {
       return "0.00";
     }
 
-    return ((amount - salvage) / (years * 12)).toFixed(2);
+    const monthlyDepreciation = safeDivide(
+      safeSubtract(amount, salvage),
+      safeMultiply(years, 12)
+    );
+
+    return roundCurrency(monthlyDepreciation).toFixed(2);
   };
 
   const showDepreciation = formData.usefulLifeYears && formData.salvageValue;

@@ -41,6 +41,7 @@ import {
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
   getAccountMappingForBadDebt,
+  getAccountMappingForFixedAssetPurchase,
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
@@ -410,6 +411,25 @@ export async function createJournalEntryForDepreciation(
 }
 
 /**
+ * Create journal entry for fixed asset purchase
+ * DR Fixed Assets (1500), CR Cash (1100) or AP (2100)
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForFixedAssetPurchase(
+  userId: string,
+  description: string,
+  amount: number,
+  date: Date,
+  isPaidImmediately: boolean,
+  linkedTransactionId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+  const mapping = getAccountMappingForFixedAssetPurchase(isPaidImmediately);
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'fixed_asset');
+}
+
+/**
  * Create journal entry for bad debt writeoff
  * DR Bad Debt Expense, CR Accounts Receivable
  * @throws {ValidationError} if amount is invalid
@@ -565,6 +585,56 @@ export function addCOGSJournalEntryToBatch(
     data.date,
     data.linkedTransactionId ?? null,
     'inventory'
+  );
+}
+
+/**
+ * Data required for adding a fixed asset purchase journal entry to a batch
+ */
+export interface FixedAssetPurchaseJournalEntryBatchData {
+  description: string;
+  amount: number;
+  date: Date;
+  linkedTransactionId?: string;
+  isPaidImmediately: boolean;
+}
+
+/**
+ * Add a Fixed Asset Purchase journal entry to an existing WriteBatch.
+ * Use this when creating a fixed asset through the ledger to ensure correct capitalization.
+ *
+ * Creates: DR Fixed Assets (1500), CR Cash (1100) or AP (2100)
+ *
+ * @throws {ValidationError} if inputs are invalid or entry is unbalanced
+ */
+export function addFixedAssetPurchaseJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  data: FixedAssetPurchaseJournalEntryBatchData
+): void {
+  validateUserId(userId);
+  validateAmount(data.amount);
+  validateDescription(data.description);
+  validateDate(data.date);
+
+  const mapping = getAccountMappingForFixedAssetPurchase(data.isPaidImmediately);
+  const lines = createJournalLines(mapping, data.amount, data.description);
+
+  const validation = validateJournalEntry(lines);
+  if (!validation.isValid) {
+    throw new ValidationError(
+      `Fixed asset purchase journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
+    );
+  }
+
+  addValidatedJournalEntryToBatch(
+    batch,
+    userId,
+    lines,
+    data.description,
+    data.date,
+    data.linkedTransactionId ?? null,
+    'fixed_asset'
   );
 }
 
@@ -949,4 +1019,130 @@ export async function deleteJournalEntriesByPayment(
   paymentId: string
 ): Promise<ServiceResult<number>> {
   return deleteJournalEntriesByField(userId, 'linkedPaymentId', paymentId);
+}
+
+/**
+ * Migrate existing fixed assets that were incorrectly recorded as expenses
+ * Creates correcting journal entries: DR Fixed Assets (1500), CR Expense (5xxx)
+ *
+ * This function:
+ * 1. Finds all fixed assets with linkedTransactionId
+ * 2. Finds the related journal entry
+ * 3. If the journal entry debits an expense account (5xxx), creates a correction
+ *
+ * @returns Array of corrected transaction IDs
+ */
+export async function migrateFixedAssetJournalEntries(
+  userId: string
+): Promise<ServiceResult<{ corrected: string[]; skipped: string[]; errors: string[] }>> {
+  try {
+    const fixedAssetsPath = `users/${userId}/fixed_assets`;
+    const fixedAssetsRef = collection(firestore, fixedAssetsPath);
+    const assetsSnapshot = await getDocs(query(fixedAssetsRef, where('linkedTransactionId', '!=', null)));
+
+    const corrected: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const assetDoc of assetsSnapshot.docs) {
+      const asset = assetDoc.data();
+      const transactionId = asset.linkedTransactionId;
+
+      if (!transactionId) {
+        skipped.push(assetDoc.id);
+        continue;
+      }
+
+      // Find journal entries linked to this transaction
+      const journalRef = collection(firestore, getJournalEntriesPath(userId));
+      const journalQuery = query(journalRef, where('linkedTransactionId', '==', transactionId));
+      const journalSnapshot = await getDocs(journalQuery);
+
+      if (journalSnapshot.empty) {
+        skipped.push(assetDoc.id);
+        continue;
+      }
+
+      // Check if the journal entry debits an expense account
+      const journalDoc = journalSnapshot.docs[0];
+      const journalData = journalDoc.data();
+      const lines = journalData.lines || [];
+
+      // Find the debit line
+      const debitLine = lines.find((line: JournalLine) => line.debit > 0);
+      if (!debitLine) {
+        skipped.push(assetDoc.id);
+        continue;
+      }
+
+      // Check if it's an expense account (starts with 5)
+      const isExpenseAccount = debitLine.accountCode.startsWith('5');
+
+      // Also check if Fixed Assets account is already correctly debited
+      const isAlreadyFixedAsset = debitLine.accountCode === ACCOUNT_CODES.FIXED_ASSETS;
+
+      if (isAlreadyFixedAsset) {
+        skipped.push(assetDoc.id);
+        continue;
+      }
+
+      if (!isExpenseAccount) {
+        skipped.push(assetDoc.id);
+        continue;
+      }
+
+      // Create correcting journal entry
+      // DR Fixed Assets (1500), CR Expense (5xxx)
+      const amount = asset.purchaseCost || debitLine.debit;
+      const expenseAccountCode = debitLine.accountCode;
+
+      const correctionLines: JournalLine[] = [
+        {
+          accountCode: ACCOUNT_CODES.FIXED_ASSETS,
+          accountNameAr: getAccountNameAr(ACCOUNT_CODES.FIXED_ASSETS),
+          description: `تصحيح: شراء أصل ثابت - ${asset.assetName || 'غير معروف'}`,
+          debit: amount,
+          credit: 0,
+        },
+        {
+          accountCode: expenseAccountCode,
+          accountNameAr: debitLine.accountNameAr || 'مصروفات',
+          description: `تصحيح: عكس تسجيل مصروف خاطئ - ${asset.assetName || 'غير معروف'}`,
+          debit: 0,
+          credit: amount,
+        },
+      ];
+
+      try {
+        const result = await createJournalEntry(
+          userId,
+          `تصحيح قيد أصل ثابت: ${asset.assetName || transactionId}`,
+          new Date(),
+          correctionLines,
+          transactionId,
+          undefined,
+          'fixed_asset_correction'
+        );
+
+        if (result.success) {
+          corrected.push(assetDoc.id);
+        } else {
+          errors.push(`${assetDoc.id}: ${result.error}`);
+        }
+      } catch (err) {
+        errors.push(`${assetDoc.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { corrected, skipped, errors },
+    };
+  } catch (error) {
+    console.error('Error migrating fixed asset journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to migrate fixed asset journal entries',
+    };
+  }
 }

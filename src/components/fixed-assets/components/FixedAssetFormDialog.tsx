@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FixedAsset, FixedAssetFormData, ASSET_CATEGORIES } from "../types/fixed-assets";
+import { parseAmount, safeSubtract, safeDivide, safeMultiply, roundCurrency } from "@/lib/currency";
+import { AlertTriangle } from "lucide-react";
 
 interface FixedAssetFormDialogProps {
   isOpen: boolean;
@@ -32,8 +34,15 @@ export function FixedAssetFormDialog({
   setFormData,
   onSubmit,
 }: FixedAssetFormDialogProps) {
+  // Check if depreciation has been run - if so, disable critical fields
+  const hasDepreciation = editingAsset && editingAsset.accumulatedDepreciation > 0;
+
+  // Calculate monthly depreciation using safe currency utilities
   const monthlyDepreciation = formData.purchaseCost && formData.salvageValue && formData.usefulLifeYears
-    ? (parseFloat(formData.purchaseCost) - parseFloat(formData.salvageValue)) / (parseFloat(formData.usefulLifeYears) * 12)
+    ? safeDivide(
+        safeSubtract(parseAmount(formData.purchaseCost), parseAmount(formData.salvageValue)),
+        safeMultiply(parseAmount(formData.usefulLifeYears), 12)
+      )
     : 0;
 
   return (
@@ -47,6 +56,18 @@ export function FixedAssetFormDialog({
         </DialogHeader>
         <form onSubmit={onSubmit}>
           <div className="grid gap-4 py-4">
+            {/* Warning message when editing asset after depreciation */}
+            {hasDepreciation && (
+              <div className="bg-warning-50 border border-warning-200 p-4 rounded-lg flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-warning-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-warning-700">
+                  <p className="font-medium mb-1">لا يمكن تعديل البيانات المالية</p>
+                  <p>تم تسجيل استهلاك لهذا الأصل. لا يمكن تعديل التكلفة أو قيمة الخردة أو العمر الإنتاجي.</p>
+                  <p>يمكنك تعديل الموقع والملاحظات والبيانات الأخرى فقط.</p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="assetName">اسم الأصل *</Label>
               <Input
@@ -91,6 +112,7 @@ export function FixedAssetFormDialog({
                     setFormData({ ...formData, purchaseDate: e.target.value })
                   }
                   required
+                  disabled={hasDepreciation}
                 />
               </div>
               <div className="space-y-2">
@@ -105,6 +127,7 @@ export function FixedAssetFormDialog({
                   }
                   required
                   placeholder="120000"
+                  disabled={hasDepreciation}
                 />
               </div>
             </div>
@@ -122,6 +145,7 @@ export function FixedAssetFormDialog({
                   }
                   required
                   placeholder="20000"
+                  disabled={hasDepreciation}
                 />
               </div>
               <div className="space-y-2">
@@ -136,9 +160,45 @@ export function FixedAssetFormDialog({
                   }
                   required
                   placeholder="5"
+                  disabled={hasDepreciation}
                 />
               </div>
             </div>
+
+            {/* Payment method selector - only for new assets */}
+            {!editingAsset && (
+              <div className="space-y-2">
+                <Label>طريقة الدفع *</Label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="cash"
+                      checked={formData.paymentMethod === "cash"}
+                      onChange={(e) =>
+                        setFormData({ ...formData, paymentMethod: e.target.value as 'cash' | 'credit' })
+                      }
+                      className="h-4 w-4"
+                    />
+                    <span className="text-sm">نقداً</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="credit"
+                      checked={formData.paymentMethod === "credit"}
+                      onChange={(e) =>
+                        setFormData({ ...formData, paymentMethod: e.target.value as 'cash' | 'credit' })
+                      }
+                      className="h-4 w-4"
+                    />
+                    <span className="text-sm">آجل (ذمم دائنة)</span>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {monthlyDepreciation > 0 && (
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -146,7 +206,7 @@ export function FixedAssetFormDialog({
                   الاستهلاك الشهري المحسوب:
                 </div>
                 <div className="text-2xl font-bold text-blue-600">
-                  {monthlyDepreciation.toFixed(2)} دينار/شهر
+                  {roundCurrency(monthlyDepreciation).toFixed(2)} دينار/شهر
                 </div>
               </div>
             )}

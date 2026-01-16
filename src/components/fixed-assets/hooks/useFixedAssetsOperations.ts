@@ -17,7 +17,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
 import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
-import { createJournalEntryForDepreciation } from "@/services/journalService";
+import { createJournalEntryForDepreciation, createJournalEntryForFixedAssetPurchase } from "@/services/journalService";
 import { logActivity } from "@/services/activityLogService";
 
 // Helper function to generate unique asset number
@@ -123,6 +123,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         });
       } else {
         const assetNumber = generateAssetNumber();
+        const transactionId = generateTransactionId();
         const docRef = await addDoc(assetsRef, {
           assetNumber: assetNumber,
           assetName: formData.assetName,
@@ -139,8 +140,36 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           serialNumber: formData.serialNumber,
           supplier: formData.supplier,
           notes: formData.notes,
+          linkedTransactionId: transactionId,
           createdAt: new Date(),
         });
+
+        // Create journal entry for fixed asset purchase
+        // DR Fixed Assets (1500), CR Cash (1100) or AP (2100)
+        let journalCreated = true;
+        try {
+          const isPaidImmediately = formData.paymentMethod === 'cash';
+          const journalResult = await createJournalEntryForFixedAssetPurchase(
+            user.dataOwnerId,
+            `شراء أصل ثابت: ${formData.assetName}`,
+            purchaseCost,
+            new Date(formData.purchaseDate),
+            isPaidImmediately,
+            transactionId
+          );
+
+          if (!journalResult.success) {
+            journalCreated = false;
+            console.error(
+              "Fixed asset purchase journal entry failed:",
+              transactionId,
+              journalResult.error
+            );
+          }
+        } catch (err) {
+          journalCreated = false;
+          console.error("Failed to create fixed asset purchase journal entry:", transactionId, err);
+        }
 
         // Log activity for create
         logActivity(user.dataOwnerId, {
@@ -155,13 +184,23 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
             depreciationRate: monthlyDepreciation,
             assetName: formData.assetName,
             category: formData.category,
+            paymentMethod: formData.paymentMethod,
           },
         });
 
-        toast({
-          title: "تمت الإضافة بنجاح",
-          description: `تم إضافة الأصل الثابت - ${assetNumber}`,
-        });
+        // Show appropriate toast based on journal entry result
+        if (journalCreated) {
+          toast({
+            title: "تمت الإضافة بنجاح",
+            description: `تم إضافة الأصل الثابت - ${assetNumber}`,
+          });
+        } else {
+          toast({
+            title: "تحذير",
+            description: "تم إضافة الأصل الثابت لكن فشل إنشاء القيد المحاسبي. يرجى مراجعة السجلات.",
+            variant: "destructive",
+          });
+        }
       }
 
       return true;
@@ -352,7 +391,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       if (totalDepreciation > 0) {
         try {
           const journalResult = await createJournalEntryForDepreciation(
-            user.uid,
+            user.dataOwnerId,
             `استهلاك أصول ثابتة - ${periodLabel}`,
             totalDepreciation,
             new Date(),

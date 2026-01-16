@@ -86,7 +86,7 @@ export interface JournalEntry {
   status: JournalEntryStatus;
   linkedTransactionId?: string;   // Links to original ledger entry
   linkedPaymentId?: string;       // Links to payment if applicable
-  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory';
+  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'fixed_asset' | 'fixed_asset_correction';
   reversedById?: string;          // If reversed, ID of reversing entry
   reversesEntryId?: string;       // If this reverses another entry
   createdAt: Date;
@@ -105,7 +105,7 @@ export interface JournalEntryDocument {
   status: JournalEntryStatus;
   linkedTransactionId?: string;
   linkedPaymentId?: string;
-  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory';
+  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'fixed_asset' | 'fixed_asset_correction';
   reversedById?: string;
   reversesEntryId?: string;
   createdAt: Date;

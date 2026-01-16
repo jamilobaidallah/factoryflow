@@ -43,6 +43,7 @@ export interface FixedAssetFormData {
   purchaseCost: string;
   salvageValue: string;
   usefulLifeYears: string;
+  paymentMethod: 'cash' | 'credit';
   location: string;
   serialNumber: string;
   supplier: string;
@@ -72,6 +73,7 @@ export const initialFormData: FixedAssetFormData = {
   purchaseCost: "",
   salvageValue: "",
   usefulLifeYears: "",
+  paymentMethod: "cash",
   location: "",
   serialNumber: "",
   supplier: "",
