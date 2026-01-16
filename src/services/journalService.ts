@@ -1173,6 +1173,27 @@ export interface JournalDiagnostics {
   entriesByAccount: Record<string, { debits: number; credits: number; count: number }>;
 }
 
+export interface JournalMismatch {
+  journalId: string;
+  linkedId: string;
+  linkType: 'transaction' | 'payment';
+  journalCashAmount: number;
+  sourceAmount: number;
+  difference: number;
+  description: string;
+}
+
+export interface JournalAuditResult {
+  totalJournalCashDebits: number;
+  totalJournalCashCredits: number;
+  totalLedgerCashIn: number;
+  totalLedgerCashOut: number;
+  totalPaymentCashIn: number;
+  totalPaymentCashOut: number;
+  mismatches: JournalMismatch[];
+  duplicates: { transactionId: string; count: number; journalIds: string[] }[];
+}
+
 /**
  * Diagnose journal entries to understand what's affecting the balance
  */
@@ -1268,6 +1289,178 @@ export async function diagnoseJournalEntries(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to diagnose journal entries',
+    };
+  }
+}
+
+/**
+ * Audit journal entries vs source data to find discrepancies
+ * Compares journal entry cash amounts with ledger/payment amounts
+ */
+export async function auditJournalEntries(
+  userId: string
+): Promise<ServiceResult<JournalAuditResult>> {
+  try {
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const ledgerRef = collection(firestore, getLedgerPath(userId));
+    const paymentsRef = collection(firestore, getPaymentsPath(userId));
+
+    // Get all data
+    const [journalSnapshot, ledgerSnapshot, paymentsSnapshot] = await Promise.all([
+      getDocs(journalRef),
+      getDocs(ledgerRef),
+      getDocs(paymentsRef),
+    ]);
+
+    // Build ledger map by transactionId
+    const ledgerByTransactionId = new Map<string, { amount: number; type: string; category: string; status: string }>();
+    let totalLedgerCashIn = 0;
+    let totalLedgerCashOut = 0;
+
+    ledgerSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.transactionId) {
+        ledgerByTransactionId.set(data.transactionId, {
+          amount: data.amount || 0,
+          type: data.type || '',
+          category: data.category || '',
+          status: data.status || '',
+        });
+      }
+      // Calculate cash totals from ledger (paid items only affect cash)
+      if (data.status === 'مدفوع' || data.status === 'paid') {
+        if (data.type === 'دخل') {
+          totalLedgerCashIn += data.amount || 0;
+        } else if (data.type === 'مصروف') {
+          totalLedgerCashOut += data.amount || 0;
+        }
+      }
+    });
+
+    // Build payment map by ID
+    const paymentsById = new Map<string, { amount: number; type: string }>();
+    let totalPaymentCashIn = 0;
+    let totalPaymentCashOut = 0;
+
+    paymentsSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      paymentsById.set(docSnap.id, {
+        amount: data.amount || 0,
+        type: data.type || '',
+      });
+      if (data.type === 'قبض') {
+        totalPaymentCashIn += data.amount || 0;
+      } else if (data.type === 'صرف') {
+        totalPaymentCashOut += data.amount || 0;
+      }
+    });
+
+    // Track journal entries by linked transaction for duplicate detection
+    const journalsByTransaction = new Map<string, string[]>();
+
+    let totalJournalCashDebits = 0;
+    let totalJournalCashCredits = 0;
+    const mismatches: JournalMismatch[] = [];
+
+    // Analyze each journal entry
+    journalSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      const lines = data.lines || [];
+      const linkedTransactionId = data.linkedTransactionId;
+      const linkedPaymentId = data.linkedPaymentId;
+
+      // Track cash movements in this journal entry
+      let journalCashDebit = 0;
+      let journalCashCredit = 0;
+
+      lines.forEach((line: JournalLine) => {
+        // Cash accounts: 1000 (النقدية) or 1100 (النقدية في الصندوق)
+        if (line.accountCode === '1000' || line.accountCode === '1100') {
+          journalCashDebit += line.debit || 0;
+          journalCashCredit += line.credit || 0;
+        }
+      });
+
+      totalJournalCashDebits += journalCashDebit;
+      totalJournalCashCredits += journalCashCredit;
+
+      // Track duplicates
+      if (linkedTransactionId) {
+        if (!journalsByTransaction.has(linkedTransactionId)) {
+          journalsByTransaction.set(linkedTransactionId, []);
+        }
+        journalsByTransaction.get(linkedTransactionId)!.push(docSnap.id);
+      }
+
+      // Check for amount mismatches with ledger
+      if (linkedTransactionId && ledgerByTransactionId.has(linkedTransactionId)) {
+        const ledgerEntry = ledgerByTransactionId.get(linkedTransactionId)!;
+        const journalCashAmount = journalCashDebit > 0 ? journalCashDebit : journalCashCredit;
+
+        // Only compare cash amounts for paid transactions
+        if ((ledgerEntry.status === 'مدفوع' || ledgerEntry.status === 'paid') &&
+            Math.abs(journalCashAmount - ledgerEntry.amount) > 0.01) {
+          mismatches.push({
+            journalId: docSnap.id,
+            linkedId: linkedTransactionId,
+            linkType: 'transaction',
+            journalCashAmount,
+            sourceAmount: ledgerEntry.amount,
+            difference: journalCashAmount - ledgerEntry.amount,
+            description: data.description || '',
+          });
+        }
+      }
+
+      // Check for amount mismatches with payments
+      if (linkedPaymentId && paymentsById.has(linkedPaymentId)) {
+        const payment = paymentsById.get(linkedPaymentId)!;
+        const journalCashAmount = journalCashDebit > 0 ? journalCashDebit : journalCashCredit;
+
+        if (Math.abs(journalCashAmount - payment.amount) > 0.01) {
+          mismatches.push({
+            journalId: docSnap.id,
+            linkedId: linkedPaymentId,
+            linkType: 'payment',
+            journalCashAmount,
+            sourceAmount: payment.amount,
+            difference: journalCashAmount - payment.amount,
+            description: data.description || '',
+          });
+        }
+      }
+    });
+
+    // Find duplicates
+    const duplicates: { transactionId: string; count: number; journalIds: string[] }[] = [];
+    journalsByTransaction.forEach((journalIds, transactionId) => {
+      if (journalIds.length > 1) {
+        duplicates.push({
+          transactionId,
+          count: journalIds.length,
+          journalIds,
+        });
+      }
+    });
+
+    return {
+      success: true,
+      data: {
+        totalJournalCashDebits,
+        totalJournalCashCredits,
+        totalLedgerCashIn,
+        totalLedgerCashOut,
+        totalPaymentCashIn,
+        totalPaymentCashOut,
+        mismatches,
+        duplicates,
+      },
+    };
+  } catch (error) {
+    console.error('Error auditing journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to audit journal entries',
     };
   }
 }

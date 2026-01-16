@@ -21,15 +21,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Trash2, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import {
   useBalanceSheet,
   formatBalanceSheetAmount,
 } from "../hooks/useBalanceSheet";
-import { formatDate } from "@/lib/date-utils";
+import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, JournalAuditResult } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -41,6 +41,9 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const { toast } = useToast();
   const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [auditing, setAuditing] = useState(false);
+  const [auditResult, setAuditResult] = useState<JournalAuditResult | null>(null);
+  const [showAuditDetails, setShowAuditDetails] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -132,6 +135,52 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
     }
   };
 
+  const handleAuditJournalEntries = async () => {
+    if (!user) return;
+
+    setAuditing(true);
+    setAuditResult(null);
+    try {
+      const result = await auditJournalEntries(user.dataOwnerId);
+
+      if (result.success && result.data) {
+        setAuditResult(result.data);
+        setShowAuditDetails(true);
+
+        const { mismatches, duplicates } = result.data;
+        const totalIssues = mismatches.length + duplicates.length;
+
+        if (totalIssues === 0) {
+          toast({
+            title: "لا توجد مشاكل",
+            description: "جميع القيود المحاسبية متطابقة مع المعاملات المصدرية.",
+          });
+        } else {
+          toast({
+            title: "تم العثور على مشاكل",
+            description: `${mismatches.length} قيد غير متطابق، ${duplicates.length} قيد مكرر`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل تدقيق القيود المحاسبية",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Audit failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء التدقيق",
+        variant: "destructive",
+      });
+    } finally {
+      setAuditing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -197,6 +246,16 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAuditJournalEntries}
+                disabled={auditing}
+                title="تدقيق القيود المحاسبية ومقارنتها بالمعاملات"
+              >
+                <Search className="w-4 h-4 ml-2" />
+                {auditing ? "جاري التدقيق..." : "تدقيق القيود"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -398,6 +457,181 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
           </div>
         </CardContent>
       </Card>
+
+      {/* Audit Results Section */}
+      {auditResult && (
+        <Card className="border-amber-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle className="w-5 h-5" />
+                نتائج تدقيق القيود المحاسبية
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+              >
+                {showAuditDetails ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-blue-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">إجمالي مدين النقدية (القيود)</p>
+                <p className="text-lg font-bold text-blue-700">
+                  {formatNumber(auditResult.totalJournalCashDebits)}
+                </p>
+              </div>
+              <div className="bg-red-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">إجمالي دائن النقدية (القيود)</p>
+                <p className="text-lg font-bold text-red-700">
+                  {formatNumber(auditResult.totalJournalCashCredits)}
+                </p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">إجمالي النقد الداخل (السجل)</p>
+                <p className="text-lg font-bold text-green-700">
+                  {formatNumber(auditResult.totalLedgerCashIn + auditResult.totalPaymentCashIn)}
+                </p>
+              </div>
+              <div className="bg-orange-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">إجمالي النقد الخارج (السجل)</p>
+                <p className="text-lg font-bold text-orange-700">
+                  {formatNumber(auditResult.totalLedgerCashOut + auditResult.totalPaymentCashOut)}
+                </p>
+              </div>
+            </div>
+
+            {/* Expected vs Actual */}
+            <div className="bg-gray-50 p-3 rounded-lg mb-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">رصيد النقدية من القيود: </span>
+                  <span className="font-bold">
+                    {formatNumber(auditResult.totalJournalCashDebits - auditResult.totalJournalCashCredits)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">رصيد النقدية المتوقع: </span>
+                  <span className="font-bold">
+                    {formatNumber(
+                      (auditResult.totalLedgerCashIn + auditResult.totalPaymentCashIn) -
+                      (auditResult.totalLedgerCashOut + auditResult.totalPaymentCashOut)
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {showAuditDetails && (
+              <div className="space-y-4">
+                {/* Mismatches */}
+                {auditResult.mismatches.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+                      <XCircle className="w-4 h-4" />
+                      قيود غير متطابقة ({auditResult.mismatches.length})
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>الوصف</TableHead>
+                            <TableHead>النوع</TableHead>
+                            <TableHead className="text-left">مبلغ القيد</TableHead>
+                            <TableHead className="text-left">مبلغ المصدر</TableHead>
+                            <TableHead className="text-left">الفرق</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {auditResult.mismatches.slice(0, 20).map((mismatch, idx) => (
+                            <TableRow key={idx} className="bg-red-50/50">
+                              <TableCell className="text-sm">
+                                {mismatch.description || mismatch.linkedId.substring(0, 8) + "..."}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {mismatch.linkType === 'transaction' ? 'معاملة' : 'دفعة'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-left font-mono">
+                                {formatNumber(mismatch.journalCashAmount)}
+                              </TableCell>
+                              <TableCell className="text-left font-mono">
+                                {formatNumber(mismatch.sourceAmount)}
+                              </TableCell>
+                              <TableCell className="text-left font-mono text-red-600">
+                                {mismatch.difference > 0 ? '+' : ''}{formatNumber(mismatch.difference)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {auditResult.mismatches.length > 20 && (
+                        <p className="text-sm text-gray-500 mt-2 text-center">
+                          عرض أول 20 من {auditResult.mismatches.length} قيد غير متطابق
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Duplicates */}
+                {auditResult.duplicates.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-amber-700 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      قيود مكررة ({auditResult.duplicates.length})
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>معرف المعاملة</TableHead>
+                            <TableHead className="text-left">عدد القيود</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {auditResult.duplicates.slice(0, 10).map((dup, idx) => (
+                            <TableRow key={idx} className="bg-amber-50/50">
+                              <TableCell className="font-mono text-sm">
+                                {dup.transactionId.substring(0, 16)}...
+                              </TableCell>
+                              <TableCell className="text-left font-bold text-amber-700">
+                                {dup.count}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {auditResult.duplicates.length > 10 && (
+                        <p className="text-sm text-gray-500 mt-2 text-center">
+                          عرض أول 10 من {auditResult.duplicates.length} معاملة مكررة
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* No issues */}
+                {auditResult.mismatches.length === 0 && auditResult.duplicates.length === 0 && (
+                  <div className="text-center py-4 bg-green-50 rounded-lg">
+                    <CheckCircle2 className="w-8 h-8 mx-auto text-green-600 mb-2" />
+                    <p className="text-green-700 font-medium">جميع القيود متطابقة مع المعاملات المصدرية</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
