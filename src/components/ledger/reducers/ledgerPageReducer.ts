@@ -38,6 +38,8 @@ export interface LedgerPageState {
     quickInvoice: boolean;
     writeOff: boolean;
     advanceAllocation: boolean;
+    favorites: boolean;
+    saveFavorite: boolean;
   };
 
   // Selected/editing data
@@ -96,6 +98,8 @@ export const initialLedgerPageState: LedgerPageState = {
     quickInvoice: false,
     writeOff: false,
     advanceAllocation: false,
+    favorites: false,
+    saveFavorite: false,
   },
   data: {
     editingEntry: null,
@@ -152,6 +156,11 @@ export type LedgerPageAction =
   | { type: "CLOSE_ADVANCE_ALLOCATION_DIALOG" }
   | { type: "SET_ADVANCE_ALLOCATIONS"; payload: AdvanceAllocationResult[] }
   | { type: "CLEAR_ADVANCE_ALLOCATIONS" }
+  | { type: "OPEN_FAVORITES_PANEL" }
+  | { type: "CLOSE_FAVORITES_PANEL" }
+  | { type: "OPEN_SAVE_FAVORITE_DIALOG" }
+  | { type: "CLOSE_SAVE_FAVORITE_DIALOG" }
+  | { type: "USE_FAVORITE"; payload: { formData: LedgerFormData } }
 
   // Data actions
   | { type: "SET_EDITING_ENTRY"; payload: LedgerEntry | null }
@@ -290,6 +299,41 @@ export function ledgerPageReducer(
       return {
         ...state,
         advanceAllocation: { pendingSubmission: false, allocations: [] },
+      };
+
+    case "OPEN_FAVORITES_PANEL":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, favorites: true },
+      };
+
+    case "CLOSE_FAVORITES_PANEL":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, favorites: false },
+      };
+
+    case "OPEN_SAVE_FAVORITE_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, saveFavorite: true },
+      };
+
+    case "CLOSE_SAVE_FAVORITE_DIALOG":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, saveFavorite: false },
+      };
+
+    case "USE_FAVORITE":
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, favorites: false, form: true },
+        form: {
+          ...state.form,
+          formData: action.payload.formData,
+        },
+        data: { ...state.data, editingEntry: null },
       };
 
     // Data

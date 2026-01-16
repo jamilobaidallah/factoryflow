@@ -224,6 +224,7 @@ export const COLLECTIONS = {
   PRODUCTION: 'production',
   FIXED_ASSETS: 'fixed-assets',
   INVOICES: 'invoices',
+  LEDGER_FAVORITES: 'ledger-favorites',
 } as const;
 
 // Error Messages
@@ -315,6 +316,8 @@ export const QUERY_LIMITS = {
   ADVANCES: 500,
   /** Maximum overtime entries to fetch */
   OVERTIME_ENTRIES: 1000,
+  /** Maximum favorites to fetch */
+  LEDGER_FAVORITES: 50,
 } as const;
 
 // Employee Advances

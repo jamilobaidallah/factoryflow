@@ -3,7 +3,7 @@
 import { useReducer, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Pagination,
@@ -23,6 +23,7 @@ import { TableSkeleton } from "@/components/ui/loading-skeleton";
 // Types and hooks
 import {
   LedgerEntry,
+  LedgerFormData,
   initialPaymentFormData,
   initialChequeRelatedFormData,
   initialInventoryRelatedFormData,
@@ -44,6 +45,8 @@ const QuickPayDialog = dynamic(() => import("./components/QuickPayDialog").then(
 const WriteOffDialog = dynamic(() => import("./components/WriteOffDialog").then(m => ({ default: m.WriteOffDialog })), { ssr: false });
 const QuickInvoiceDialog = dynamic(() => import("./components/QuickInvoiceDialog").then(m => ({ default: m.QuickInvoiceDialog })), { ssr: false });
 const AdvanceAllocationDialog = dynamic(() => import("./components/AdvanceAllocationDialog").then(m => ({ default: m.AdvanceAllocationDialog })), { ssr: false });
+const FavoritesPanel = dynamic(() => import("./components/FavoritesPanel").then(m => ({ default: m.FavoritesPanel })), { ssr: false });
+const SaveFavoriteDialog = dynamic(() => import("./components/SaveFavoriteDialog").then(m => ({ default: m.SaveFavoriteDialog })), { ssr: false });
 
 // Context
 import { LedgerFormProvider, LedgerFormContextValue } from "./context/LedgerFormContext";
@@ -324,6 +327,14 @@ export default function LedgerPage() {
   const openRelatedDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_RELATED_DIALOG", payload: entry }), []);
   const openQuickPayDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_QUICK_PAY_DIALOG", payload: entry }), []);
   const openWriteOffDialog = useCallback((entry: LedgerEntry) => dispatch({ type: "OPEN_WRITE_OFF_DIALOG", payload: entry }), []);
+  const openFavoritesPanel = useCallback(() => dispatch({ type: "OPEN_FAVORITES_PANEL" }), []);
+  const openSaveFavoriteDialog = useCallback(() => dispatch({ type: "OPEN_SAVE_FAVORITE_DIALOG" }), []);
+
+  // Handle selecting a favorite - pre-fills the form
+  const handleSelectFavorite = useCallback((formData: LedgerFormData, _entryType: string) => {
+    // entryType is passed but not used as the form determines type from category
+    dispatch({ type: "USE_FAVORITE", payload: { formData } });
+  }, []);
 
   const handleAddPayment = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,6 +409,7 @@ export default function LedgerPage() {
     setFixedAssetFormData: (data) => dispatch({ type: "SET_FIXED_ASSET_FORM_DATA", payload: data }),
     createInvoice: state.ui.createInvoice,
     setCreateInvoice: (value) => dispatch({ type: "SET_CREATE_INVOICE", payload: value }),
+    onSaveFavorite: openSaveFavoriteDialog,
   };
 
   return (
@@ -409,13 +421,23 @@ export default function LedgerPage() {
           <p className="text-slate-500 text-sm mt-1">تسجيل وإدارة جميع الحركات المالية</p>
         </div>
         <PermissionGate action="create" module="ledger">
-          <Button
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
-            onClick={openAddDialog}
-          >
-            <Plus className="w-5 h-5" />
-            إضافة حركة مالية
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={openFavoritesPanel}
+            >
+              <Star className="w-5 h-5 text-amber-500" />
+              المفضلات
+            </Button>
+            <Button
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
+              onClick={openAddDialog}
+            >
+              <Plus className="w-5 h-5" />
+              إضافة حركة مالية
+            </Button>
+          </div>
         </PermissionGate>
       </div>
 
@@ -590,6 +612,21 @@ export default function LedgerPage() {
         }
         partyName={state.form.formData.associatedParty}
         isCustomer={advanceType === "customer"}
+      />
+
+      {/* Favorites Panel - bottom sheet for quick entry */}
+      <FavoritesPanel
+        isOpen={state.dialogs.favorites}
+        onClose={() => dispatch({ type: "CLOSE_FAVORITES_PANEL" })}
+        onSelectFavorite={handleSelectFavorite}
+      />
+
+      {/* Save as Favorite Dialog */}
+      <SaveFavoriteDialog
+        isOpen={state.dialogs.saveFavorite}
+        onClose={() => dispatch({ type: "CLOSE_SAVE_FAVORITE_DIALOG" })}
+        formData={state.form.formData}
+        entryType={currentEntryType}
       />
 
       {confirmationDialog}

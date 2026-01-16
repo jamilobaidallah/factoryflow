@@ -59,6 +59,11 @@ export const queryKeys = {
     all: (ownerId: string) => ['inventory', ownerId] as const,
     items: (ownerId: string) => ['inventory', ownerId, 'items'] as const,
   },
+
+  // Ledger Favorites queries
+  favorites: {
+    all: (ownerId: string) => ['favorites', ownerId] as const,
+  },
 } as const;
 
 // Type helper for query keys
