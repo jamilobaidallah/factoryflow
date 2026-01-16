@@ -29,7 +29,7 @@ import {
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, JournalAuditResult } from "@/services/journalService";
+import { cleanupOrphanedJournalEntries, diagnoseJournalEntries, auditJournalEntries, cleanupDuplicateJournalEntries, JournalAuditResult } from "@/services/journalService";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -44,6 +44,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
   const [auditing, setAuditing] = useState(false);
   const [auditResult, setAuditResult] = useState<JournalAuditResult | null>(null);
   const [showAuditDetails, setShowAuditDetails] = useState(false);
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
 
   const handleCleanupOrphanedEntries = async () => {
     if (!user) return;
@@ -178,6 +179,46 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
       });
     } finally {
       setAuditing(false);
+    }
+  };
+
+  const handleCleanupDuplicates = async () => {
+    if (!user || !auditResult || auditResult.duplicates.length === 0) return;
+
+    const confirmed = window.confirm(
+      `سيتم حذف ${auditResult.duplicates.reduce((sum, d) => sum + d.count - 1, 0)} قيد مكرر من ${auditResult.duplicates.length} معاملة.\n\nسيتم الاحتفاظ بالقيد الأقدم لكل معاملة وحذف القيود المكررة.\n\nهل تريد المتابعة؟`
+    );
+
+    if (!confirmed) return;
+
+    setCleaningDuplicates(true);
+    try {
+      const result = await cleanupDuplicateJournalEntries(user.dataOwnerId, false);
+
+      if (result.success && result.data) {
+        toast({
+          title: "تم حذف القيود المكررة",
+          description: `تم حذف ${result.data.entriesDeleted} قيد مكرر من ${result.data.transactionsAffected.length} معاملة.`,
+        });
+        // Clear audit result and refresh
+        setAuditResult(null);
+        refresh();
+      } else {
+        toast({
+          title: "خطأ",
+          description: result.error || "فشل حذف القيود المكررة",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Cleanup duplicates failed:", err);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء حذف القيود المكررة",
+        variant: "destructive",
+      });
+    } finally {
+      setCleaningDuplicates(false);
     }
   };
 
@@ -586,10 +627,24 @@ ${cashAccount ? `\nحساب النقدية: مدين ${cashAccount.debits.toFixe
                 {/* Duplicates */}
                 {auditResult.duplicates.length > 0 && (
                   <div>
-                    <h4 className="font-semibold text-amber-700 mb-2 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      قيود مكررة ({auditResult.duplicates.length})
-                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-amber-700 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        قيود مكررة ({auditResult.duplicates.length})
+                      </h4>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleCleanupDuplicates}
+                        disabled={cleaningDuplicates}
+                      >
+                        <Trash2 className="w-4 h-4 ml-2" />
+                        {cleaningDuplicates ? "جاري الحذف..." : "حذف القيود المكررة"}
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">
+                      سيتم الاحتفاظ بالقيد الأقدم لكل معاملة وحذف {auditResult.duplicates.reduce((sum, d) => sum + d.count - 1, 0)} قيد مكرر
+                    </p>
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>

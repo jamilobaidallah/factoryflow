@@ -1567,3 +1567,101 @@ export async function cleanupOrphanedJournalEntries(
     };
   }
 }
+
+/**
+ * Result type for duplicate cleanup
+ */
+export interface DuplicateCleanupResult {
+  duplicatesFound: number;
+  entriesDeleted: number;
+  transactionsAffected: string[];
+  errors: string[];
+}
+
+/**
+ * Clean up duplicate journal entries
+ * Keeps the oldest entry for each transaction and deletes duplicates
+ */
+export async function cleanupDuplicateJournalEntries(
+  userId: string,
+  dryRun: boolean = true
+): Promise<ServiceResult<DuplicateCleanupResult>> {
+  try {
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const journalSnapshot = await getDocs(journalRef);
+
+    // Group journal entries by linkedTransactionId
+    const entriesByTransaction = new Map<string, { id: string; createdAt: Date }[]>();
+
+    journalSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      const linkedTransactionId = data.linkedTransactionId;
+
+      if (linkedTransactionId) {
+        if (!entriesByTransaction.has(linkedTransactionId)) {
+          entriesByTransaction.set(linkedTransactionId, []);
+        }
+        entriesByTransaction.get(linkedTransactionId)!.push({
+          id: docSnap.id,
+          createdAt: data.createdAt?.toDate?.() || new Date(0),
+        });
+      }
+    });
+
+    // Find duplicates (transactions with more than one journal entry)
+    const duplicateTransactions: string[] = [];
+    const entriesToDelete: string[] = [];
+
+    entriesByTransaction.forEach((entries, transactionId) => {
+      if (entries.length > 1) {
+        duplicateTransactions.push(transactionId);
+        // Sort by createdAt, keep the oldest (first), delete the rest
+        entries.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        // Skip the first (oldest), delete the rest
+        for (let i = 1; i < entries.length; i++) {
+          entriesToDelete.push(entries[i].id);
+        }
+      }
+    });
+
+    const errors: string[] = [];
+    let entriesDeleted = 0;
+
+    if (!dryRun && entriesToDelete.length > 0) {
+      // Delete in batches of 500 (Firestore limit)
+      const batchSize = 500;
+      for (let i = 0; i < entriesToDelete.length; i += batchSize) {
+        const batch = writeBatch(firestore);
+        const batchEntries = entriesToDelete.slice(i, i + batchSize);
+
+        for (const entryId of batchEntries) {
+          const entryRef = doc(firestore, getJournalEntriesPath(userId), entryId);
+          batch.delete(entryRef);
+        }
+
+        try {
+          await batch.commit();
+          entriesDeleted += batchEntries.length;
+        } catch (err) {
+          errors.push(`Batch delete failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        duplicatesFound: entriesToDelete.length,
+        entriesDeleted: dryRun ? 0 : entriesDeleted,
+        transactionsAffected: duplicateTransactions,
+        errors,
+      },
+    };
+  } catch (error) {
+    console.error('Error cleaning up duplicate journal entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to cleanup duplicate journal entries',
+    };
+  }
+}
