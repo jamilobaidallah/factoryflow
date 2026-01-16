@@ -1313,7 +1313,7 @@ export async function auditJournalEntries(
     ]);
 
     // Build ledger map by transactionId
-    const ledgerByTransactionId = new Map<string, { amount: number; type: string; category: string; status: string }>();
+    const ledgerByTransactionId = new Map<string, { amount: number; type: string; category: string; status: string; subCategory: string }>();
     let totalLedgerCashIn = 0;
     let totalLedgerCashOut = 0;
 
@@ -1325,14 +1325,47 @@ export async function auditJournalEntries(
           type: data.type || '',
           category: data.category || '',
           status: data.status || '',
+          subCategory: data.subCategory || '',
         });
       }
       // Calculate cash totals from ledger (paid items only affect cash)
+      // Include all transaction types that affect cash
       if (data.status === 'مدفوع' || data.status === 'paid') {
-        if (data.type === 'دخل') {
-          totalLedgerCashIn += data.amount || 0;
-        } else if (data.type === 'مصروف') {
-          totalLedgerCashOut += data.amount || 0;
+        const type = data.type || '';
+        const category = data.category || '';
+        const subCategory = data.subCategory || '';
+        const amount = data.amount || 0;
+
+        if (type === 'دخل') {
+          // Income = cash IN
+          totalLedgerCashIn += amount;
+        } else if (type === 'مصروف') {
+          // Expense = cash OUT
+          totalLedgerCashOut += amount;
+        } else if (type === 'حركة رأس مال') {
+          // Equity: Capital contribution = cash IN, Drawings = cash OUT
+          if (subCategory === 'سحوبات المالك' || category === 'سحوبات المالك') {
+            totalLedgerCashOut += amount;
+          } else {
+            // Capital contribution (رأس المال)
+            totalLedgerCashIn += amount;
+          }
+        } else if (type === 'قرض') {
+          // Loans: direction depends on subcategory
+          // Cash IN: استلام قرض (receiving loan), تحصيل قرض (collecting from borrower)
+          // Cash OUT: منح قرض (giving loan), سداد قرض (repaying loan)
+          if (subCategory === 'استلام قرض' || subCategory === 'تحصيل قرض') {
+            totalLedgerCashIn += amount;
+          } else if (subCategory === 'منح قرض' || subCategory === 'سداد قرض') {
+            totalLedgerCashOut += amount;
+          } else {
+            // Fallback based on category
+            if (category === 'قروض مستلمة') {
+              totalLedgerCashIn += amount; // We received a loan
+            } else if (category === 'قروض ممنوحة') {
+              totalLedgerCashOut += amount; // We gave a loan
+            }
+          }
         }
       }
     });
