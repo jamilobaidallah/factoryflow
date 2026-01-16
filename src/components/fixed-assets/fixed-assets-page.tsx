@@ -63,6 +63,7 @@ export default function FixedAssetsPage() {
       purchaseCost: (asset.purchaseCost || 0).toString(),
       salvageValue: (asset.salvageValue || 0).toString(),
       usefulLifeYears: ((asset.usefulLifeMonths || 0) / 12).toString(),
+      paymentMethod: "cash", // Default for existing assets (not editable anyway)
       location: asset.location || "",
       serialNumber: asset.serialNumber || "",
       supplier: asset.supplier || "",

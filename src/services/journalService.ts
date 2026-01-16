@@ -487,7 +487,7 @@ function addValidatedJournalEntryToBatch(
   description: string,
   date: Date,
   linkedTransactionId: string | null,
-  linkedDocumentType: 'ledger' | 'inventory'
+  linkedDocumentType: 'ledger' | 'inventory' | 'fixed_asset'
 ): void {
   const journalRef = collection(firestore, getJournalEntriesPath(userId));
   const docRef = doc(journalRef);
@@ -1099,6 +1099,7 @@ export async function migrateFixedAssetJournalEntries(
       const correctionLines: JournalLine[] = [
         {
           accountCode: ACCOUNT_CODES.FIXED_ASSETS,
+          accountName: ACCOUNT_CODES.FIXED_ASSETS,
           accountNameAr: getAccountNameAr(ACCOUNT_CODES.FIXED_ASSETS),
           description: `تصحيح: شراء أصل ثابت - ${asset.assetName || 'غير معروف'}`,
           debit: amount,
@@ -1106,6 +1107,7 @@ export async function migrateFixedAssetJournalEntries(
         },
         {
           accountCode: expenseAccountCode,
+          accountName: expenseAccountCode,
           accountNameAr: debitLine.accountNameAr || 'مصروفات',
           description: `تصحيح: عكس تسجيل مصروف خاطئ - ${asset.assetName || 'غير معروف'}`,
           debit: 0,
