@@ -142,7 +142,7 @@ export const DASHBOARD_LABELS = {
 } as const;
 
 /** Categories to exclude from P&L calculations (for backward compatibility with old data) */
-export const EXCLUDED_CATEGORIES = ["رأس المال", "Owner Equity", "سلفة مورد", "سلفة عميل", "قروض مستلمة", "قروض ممنوحة"] as const;
+export const EXCLUDED_CATEGORIES = ["رأس المال", "Owner Equity", "سلفة مورد", "سلفة عميل", "قروض مستلمة", "قروض ممنوحة", "أصول ثابتة"] as const;
 
 /** Income type identifiers in Arabic */
 export const INCOME_TYPES = ["دخل", "إيراد"] as const;
