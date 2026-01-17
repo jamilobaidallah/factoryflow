@@ -39,7 +39,7 @@ import {
 } from "../hooks/useBalanceSheet";
 import { formatDate } from "@/lib/date-utils";
 import { rebuildJournalFromSources, JournalRebuildResult } from "@/services/journalService";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/firebase/provider";
 import { toast } from "sonner";
 
 interface BalanceSheetTabProps {
