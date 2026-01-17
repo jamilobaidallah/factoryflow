@@ -40,7 +40,7 @@ import {
 import { formatDate } from "@/lib/date-utils";
 import { rebuildJournalFromSources, JournalRebuildResult } from "@/services/journalService";
 import { useAuth } from "@/firebase/provider";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -50,12 +50,17 @@ interface BalanceSheetTabProps {
 export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps) {
   const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
   const { user } = useAuth();
+  const { toast } = useToast();
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildResult, setRebuildResult] = useState<JournalRebuildResult | null>(null);
 
   const handleRebuild = async () => {
     if (!user?.dataOwnerId) {
-      toast.error("خطأ في المصادقة");
+      toast({
+        title: "خطأ",
+        description: "خطأ في المصادقة",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -64,16 +69,25 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
       const result = await rebuildJournalFromSources(user.dataOwnerId);
       if (result.success && result.data) {
         setRebuildResult(result.data);
-        toast.success(
-          `تم إعادة بناء القيود المحاسبية: ${result.data.createdFromLedger} من الدفتر، ${result.data.createdFromPayments} من المدفوعات`
-        );
+        toast({
+          title: "تم بنجاح",
+          description: `تم إعادة بناء القيود المحاسبية: ${result.data.createdFromLedger} من الدفتر، ${result.data.createdFromPayments} من المدفوعات`,
+        });
         // Refresh balance sheet after rebuild
         refresh();
       } else {
-        toast.error(`فشل إعادة البناء: ${result.error}`);
+        toast({
+          title: "خطأ",
+          description: `فشل إعادة البناء: ${result.error}`,
+          variant: "destructive",
+        });
       }
     } catch (err) {
-      toast.error("حدث خطأ أثناء إعادة البناء");
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء إعادة البناء",
+        variant: "destructive",
+      });
       console.error(err);
     } finally {
       setRebuilding(false);
