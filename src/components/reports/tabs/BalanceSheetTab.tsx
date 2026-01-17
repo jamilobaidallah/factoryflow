@@ -9,6 +9,7 @@
  * Verifies: Assets = Liabilities + Equity
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,12 +21,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, Wrench } from "lucide-react";
 import {
   useBalanceSheet,
   formatBalanceSheetAmount,
 } from "../hooks/useBalanceSheet";
 import { formatDate } from "@/lib/date-utils";
+import { rebuildJournalFromSources, JournalRebuildResult } from "@/services/journalService";
+import { useAuth } from "@/contexts/auth-context";
+import { toast } from "sonner";
 
 interface BalanceSheetTabProps {
   asOfDate?: Date;
@@ -34,6 +49,51 @@ interface BalanceSheetTabProps {
 
 export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps) {
   const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
+  const { user } = useAuth();
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState<JournalRebuildResult | null>(null);
+
+  const handleRebuild = async () => {
+    if (!user?.dataOwnerId) {
+      toast.error("خطأ في المصادقة");
+      return;
+    }
+
+    setRebuilding(true);
+    try {
+      const result = await rebuildJournalFromSources(user.dataOwnerId);
+      if (result.success && result.data) {
+        setRebuildResult(result.data);
+        toast.success(
+          `تم إعادة بناء القيود المحاسبية: ${result.data.createdFromLedger} من الدفتر، ${result.data.createdFromPayments} من المدفوعات`
+        );
+        // Refresh balance sheet after rebuild
+        refresh();
+      } else {
+        toast.error(`فشل إعادة البناء: ${result.error}`);
+      }
+    } catch (err) {
+      toast.error("حدث خطأ أثناء إعادة البناء");
+      console.error(err);
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
+  const downloadBackup = () => {
+    if (!rebuildResult?.backupData) return;
+    const blob = new Blob([JSON.stringify(rebuildResult.backupData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = rebuildResult.backupFileName || "journal_backup.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -110,6 +170,49 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
                   تصدير CSV
                 </Button>
               )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                    disabled={rebuilding}
+                  >
+                    {rebuilding ? (
+                      <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                    ) : (
+                      <Wrench className="w-4 h-4 ml-2" />
+                    )}
+                    إعادة بناء القيود
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent dir="rtl">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>إعادة بناء القيود المحاسبية</AlertDialogTitle>
+                    <AlertDialogDescription className="text-right space-y-2">
+                      <p>
+                        سيتم حذف جميع القيود المحاسبية الحالية وإعادة إنشائها من:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 mr-4">
+                        <li>دفتر الأستاذ (الإيرادات والمصروفات)</li>
+                        <li>سجل المدفوعات (القبض والصرف)</li>
+                      </ul>
+                      <p className="text-orange-600 font-medium">
+                        ⚠️ هذا الإجراء لا يمكن التراجع عنه. سيتم حفظ نسخة احتياطية.
+                      </p>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter className="flex-row-reverse gap-2">
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleRebuild}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      إعادة البناء
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </CardHeader>
@@ -289,6 +392,73 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
               </Card>
             </div>
           </div>
+
+          {/* Rebuild Results Section */}
+          {rebuildResult && (
+            <div className="mt-6 pt-4 border-t">
+              <Card className="bg-orange-50 border-orange-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base text-orange-700">
+                    نتائج إعادة البناء
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-orange-700">
+                        {rebuildResult.deletedCount}
+                      </p>
+                      <p className="text-sm text-gray-600">قيود محذوفة</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-700">
+                        {rebuildResult.createdFromLedger}
+                      </p>
+                      <p className="text-sm text-gray-600">من الدفتر</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-700">
+                        {rebuildResult.createdFromPayments}
+                      </p>
+                      <p className="text-sm text-gray-600">من المدفوعات</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-500">
+                        {rebuildResult.skippedEndorsed + rebuildResult.skippedNonCash}
+                      </p>
+                      <p className="text-sm text-gray-600">تم تخطيها</p>
+                    </div>
+                  </div>
+                  {rebuildResult.errors.length > 0 && (
+                    <div className="mt-4 p-3 bg-red-50 rounded border border-red-200">
+                      <p className="text-sm text-red-700 font-medium mb-2">
+                        أخطاء ({rebuildResult.errors.length}):
+                      </p>
+                      <ul className="text-xs text-red-600 space-y-1 max-h-32 overflow-y-auto">
+                        {rebuildResult.errors.slice(0, 10).map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                        {rebuildResult.errors.length > 10 && (
+                          <li>... و {rebuildResult.errors.length - 10} أخطاء أخرى</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadBackup}
+                      className="text-orange-600"
+                    >
+                      <Download className="w-4 h-4 ml-2" />
+                      تحميل النسخة الاحتياطية
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
