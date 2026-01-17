@@ -39,7 +39,7 @@ import {
 } from "../hooks/useBalanceSheet";
 import { formatDate } from "@/lib/date-utils";
 import { rebuildJournalFromSources, JournalRebuildResult } from "@/services/journalService";
-import { useAuth } from "@/firebase/provider";
+import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 
 interface BalanceSheetTabProps {
@@ -49,7 +49,7 @@ interface BalanceSheetTabProps {
 
 export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps) {
   const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
-  const { user } = useAuth();
+  const { user } = useUser();
   const { toast } = useToast();
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildResult, setRebuildResult] = useState<JournalRebuildResult | null>(null);
