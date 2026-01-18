@@ -1359,10 +1359,22 @@ export async function rebuildJournalFromSources(
     const paymentsSnapshot = await getDocs(query(paymentsRef, limit(5000)));
     console.log(`Found ${paymentsSnapshot.docs.length} payment records`);
 
+    // Build a map of ledger entries that used AR/AP (have clientId)
+    // Only payments for these entries should create Cash journal entries
+    const ledgerEntriesWithARAPMap = new Map<string, boolean>();
+    for (const docSnap of ledgerSnapshot.docs) {
+      const ledgerEntry = docSnap.data();
+      // Entry uses AR/AP if it has a clientId AND is income/expense type
+      const isARAPEntry = !!ledgerEntry.clientId &&
+        (ledgerEntry.type === 'دخل' || ledgerEntry.type === 'إيراد' || ledgerEntry.type === 'مصروف');
+      ledgerEntriesWithARAPMap.set(docSnap.id, isARAPEntry);
+    }
+
     // Step 6: Create journal entries from payments
     console.log('Step 6: Creating journal entries from payments...');
     let paymentBatch = writeBatch(firestore);
     batchCount = 0;
+    let skippedNonARAPPayments = 0;
 
     for (const docSnap of paymentsSnapshot.docs) {
       const payment = docSnap.data();
@@ -1373,6 +1385,25 @@ export async function rebuildJournalFromSources(
         if (payment.isEndorsement) {
           result.skippedEndorsed++;
           continue;
+        }
+
+        // Skip payments with noCashMovement flag
+        if (payment.noCashMovement) {
+          result.skippedEndorsed++;
+          continue;
+        }
+
+        // CRITICAL FIX: Only create payment journal entries for AR/AP tracked transactions
+        // If the linked ledger entry didn't use AR/AP (no clientId), then the ledger entry
+        // already hit Cash directly, and we shouldn't create another Cash entry
+        const linkedLedgerId = payment.ledgerEntryId;
+        if (linkedLedgerId) {
+          const isARAPEntry = ledgerEntriesWithARAPMap.get(linkedLedgerId);
+          if (isARAPEntry === false) {
+            // Linked ledger entry didn't use AR/AP, skip this payment
+            skippedNonARAPPayments++;
+            continue;
+          }
         }
 
         const amount = payment.amount || 0;
@@ -1452,7 +1483,7 @@ export async function rebuildJournalFromSources(
 
     console.log('Journal rebuild complete!');
     console.log(`Summary: ${result.createdFromLedger} from ledger, ${result.createdFromPayments} from payments`);
-    console.log(`Skipped: ${result.skippedEndorsed} endorsed, ${result.skippedNonCash} non-cash`);
+    console.log(`Skipped: ${result.skippedEndorsed} endorsed, ${result.skippedNonCash} non-cash, ${skippedNonARAPPayments} non-AR/AP payments`);
     if (result.errors.length > 0) {
       console.log(`Errors: ${result.errors.length}`);
     }
