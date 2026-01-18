@@ -122,6 +122,22 @@ export const QUICK_REPORTS: QuickReport[] = [
     color: 'purple',
     link: '/reports/cashflow',
   },
+  {
+    id: 'aging',
+    icon: '👥',
+    title: 'أعمار الذمم',
+    description: 'تحليل المستحقات',
+    color: 'emerald',
+    link: '/reports/aging',
+  },
+  {
+    id: 'expenses',
+    icon: '📊',
+    title: 'تحليل المصروفات',
+    description: 'تفصيل حسب الفئة والفرعية',
+    color: 'purple',
+    link: '/reports/expenses',
+  },
 ];
 
 // Category colors for charts (matching dashboard)

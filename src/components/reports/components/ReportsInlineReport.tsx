@@ -121,6 +121,16 @@ function ReportsInlineReportComponent({
       icon: <BarChart3 className="w-5 h-5" />,
       color: "purple",
     },
+    aging: {
+      title: "أعمار الذمم",
+      icon: <Clock className="w-5 h-5" />,
+      color: "emerald",
+    },
+    expenses: {
+      title: "تحليل المصروفات",
+      icon: <PieChart className="w-5 h-5" />,
+      color: "purple",
+    },
   };
 
   const config = reportConfig[reportId];
