@@ -1347,7 +1347,9 @@ export async function rebuildJournalFromSources(
           totalDebits: roundCurrency(amount),
           totalCredits: roundCurrency(amount),
           status: 'posted',
-          linkedTransactionId: entryId,
+          // Use transactionId (e.g., S-B63907-649) not entryId (Firestore doc ID)
+          // This ensures delete operations can find and clean up journal entries
+          linkedTransactionId: ledgerEntry.transactionId || entryId,
           linkedPaymentId: null,
           linkedDocumentType: 'ledger',
           createdAt: Timestamp.fromDate(now),
