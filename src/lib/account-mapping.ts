@@ -30,13 +30,17 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'شراء بضاعة جاهزة': '5030',
 
   // Operating Expenses - مصاريف تشغيلية
-  'مصاريف تشغيلية': ACCOUNT_CODES.SALARIES_EXPENSE,
+  // Fallback to OTHER_EXPENSES for unmapped subcategories (not Salaries)
+  'مصاريف تشغيلية': ACCOUNT_CODES.OTHER_EXPENSES,
   'رواتب': ACCOUNT_CODES.SALARIES_EXPENSE,
   'إيجار': ACCOUNT_CODES.RENT_EXPENSE,
   'كهرباء وماء': '5310',
   'صيانة': '5410',
   'تسويق': '5420',
   'قرطاسية': '5430',
+  'رحلة عمل': '5530', // Business trips → Other expenses
+  'عينات مجانية': '5530', // Free samples → Other expenses
+  'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS
 
   // General Expenses - مصاريف عامة
   'مصاريف عامة': ACCOUNT_CODES.OTHER_EXPENSES,
