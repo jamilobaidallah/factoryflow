@@ -106,6 +106,8 @@ export const CATEGORIES: Category[] = [
             "مواد خام",
             "شحن",
             "شراء بضاعة جاهزة",
+            "عينات مجانية",       // Free samples - inventory given away
+            "هدر وتالف",          // Wastage and spoilage - inventory consumed
         ]
     },
     {
@@ -120,8 +122,6 @@ export const CATEGORIES: Category[] = [
             "رحلة عمل",
             "نقل بضاعة",
             "تسويق وإعلان",
-            "عينات مجانية",       // Free samples for marketing
-            "هدر وتالف",          // Wastage and spoilage
             "مصاريف إدارية",
             "اتصالات وإنترنت",
             "مصاريف مكتبية",
