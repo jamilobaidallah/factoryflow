@@ -46,7 +46,7 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'قرطاسية': ACCOUNT_CODES.OFFICE_SUPPLIES,
   'مصاريف مكتبية': ACCOUNT_CODES.OFFICE_SUPPLIES, // Office expenses → Office Supplies
   'وقود ومواصلات': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Fuel & transportation
-  'رحلة عمل': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Business trips → Transportation
+  'رحلة عمل': ACCOUNT_CODES.TRAVEL_EXPENSE, // Business trips → Travel Expense (separate from transportation)
   'مصاريف إدارية': ACCOUNT_CODES.ADMIN_EXPENSE, // Administrative expenses
   'اتصالات وإنترنت': ACCOUNT_CODES.COMMUNICATIONS_EXPENSE, // Communications
   'مستهلكات': ACCOUNT_CODES.OFFICE_SUPPLIES, // Consumables → Office Supplies
@@ -122,6 +122,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.MARKETING_EXPENSE]: 'مصاريف تسويق',
   [ACCOUNT_CODES.OFFICE_SUPPLIES]: 'قرطاسية ومستلزمات مكتبية',
   [ACCOUNT_CODES.TRANSPORTATION_EXPENSE]: 'وقود ومواصلات',
+  [ACCOUNT_CODES.TRAVEL_EXPENSE]: 'سفر وضيافة',
   [ACCOUNT_CODES.ADMIN_EXPENSE]: 'مصاريف إدارية',
   [ACCOUNT_CODES.COMMUNICATIONS_EXPENSE]: 'اتصالات وإنترنت',
   [ACCOUNT_CODES.SMALL_EQUIPMENT]: 'أدوات ومعدات صغيرة',

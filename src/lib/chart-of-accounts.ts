@@ -455,6 +455,14 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Fuel, transportation, and vehicle expenses'
   ),
   defineAccount(
+    ACCOUNT_CODES.TRAVEL_EXPENSE,
+    'Travel Expense',
+    'سفر وضيافة',
+    'expense',
+    undefined,
+    'Business trips, travel, and entertainment expenses'
+  ),
+  defineAccount(
     ACCOUNT_CODES.ADMIN_EXPENSE,
     'Administrative Expense',
     'مصاريف إدارية',
