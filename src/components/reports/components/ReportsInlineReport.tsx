@@ -51,6 +51,7 @@ interface LedgerEntry {
   isARAPEntry?: boolean;
   totalDiscount?: number;
   writeoffAmount?: number;
+  immediateSettlement?: boolean;
 }
 
 interface Payment {
@@ -361,8 +362,8 @@ function AgingReport({
         return;
       }
 
-      // Skip if fully paid
-      if (isPaidStatus(entry.paymentStatus)) {
+      // Skip if fully paid OR immediate settlement (cash transaction)
+      if (isPaidStatus(entry.paymentStatus) || entry.immediateSettlement) {
         return;
       }
 
