@@ -24,6 +24,14 @@ jest.mock('@/lib/constants', () => ({
   PAYMENT_TYPES: { RECEIPT: 'قبض', DISBURSEMENT: 'صرف' },
 }));
 
+// Mock journalService to prevent Firebase config import
+jest.mock('@/services/journalService', () => ({
+  addPaymentJournalEntryToBatch: jest.fn(),
+}));
+
+import { addPaymentJournalEntryToBatch } from '@/services/journalService';
+const mockAddPaymentJournalEntryToBatch = addPaymentJournalEntryToBatch as jest.Mock;
+
 const mockDoc = doc as jest.Mock;
 
 // Helper to create mock form data
@@ -73,6 +81,7 @@ describe('Payment Handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDoc.mockReturnValue({ id: 'mock-payment-id' });
+    mockAddPaymentJournalEntryToBatch.mockClear();
   });
 
   // ============================================
@@ -346,6 +355,28 @@ describe('Payment Handlers', () => {
           })
         );
       });
+
+      it('should create journal entry for the payment', () => {
+        const formData = createMockFormData({
+          description: 'Invoice with partial payment',
+          category: 'مبيعات',
+          associatedParty: 'Customer C',
+        });
+        const ctx = createMockContext(formData, 'دخل');
+
+        handleInitialPaymentBatch(ctx, 500);
+
+        expect(mockAddPaymentJournalEntryToBatch).toHaveBeenCalledWith(
+          ctx.batch,
+          'test-user-123',
+          expect.objectContaining({
+            paymentId: 'mock-payment-id',
+            amount: 500,
+            paymentType: 'قبض',
+            linkedTransactionId: 'TXN-TEST-123',
+          })
+        );
+      });
     });
 
     describe('Expense (مصروف) Entries', () => {
@@ -415,22 +446,24 @@ describe('Payment Handlers', () => {
     });
 
     describe('Edge Cases', () => {
-      it('should not create payment for zero amount', () => {
+      it('should not create payment or journal entry for zero amount', () => {
         const formData = createMockFormData();
         const ctx = createMockContext(formData);
 
         handleInitialPaymentBatch(ctx, 0);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
+        expect(mockAddPaymentJournalEntryToBatch).not.toHaveBeenCalled();
       });
 
-      it('should not create payment for negative amount', () => {
+      it('should not create payment or journal entry for negative amount', () => {
         const formData = createMockFormData();
         const ctx = createMockContext(formData);
 
         handleInitialPaymentBatch(ctx, -50);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
+        expect(mockAddPaymentJournalEntryToBatch).not.toHaveBeenCalled();
       });
 
       it('should use "غير محدد" when associatedParty is empty', () => {

@@ -532,7 +532,8 @@ function addValidatedJournalEntryToBatch(
   description: string,
   date: Date,
   linkedTransactionId: string | null,
-  linkedDocumentType: 'ledger' | 'inventory'
+  linkedDocumentType: 'ledger' | 'inventory' | 'payment',
+  linkedPaymentId: string | null = null
 ): void {
   const journalRef = collection(firestore, getJournalEntriesPath(userId));
   const docRef = doc(journalRef);
@@ -546,7 +547,7 @@ function addValidatedJournalEntryToBatch(
     lines,
     status: 'posted' as const,
     linkedTransactionId,
-    linkedPaymentId: null,
+    linkedPaymentId,
     linkedDocumentType,
     createdAt: Timestamp.fromDate(now),
     postedAt: Timestamp.fromDate(now),
@@ -630,6 +631,57 @@ export function addCOGSJournalEntryToBatch(
     data.date,
     data.linkedTransactionId ?? null,
     'inventory'
+  );
+}
+
+/**
+ * Data required for adding a payment journal entry to a batch
+ */
+export interface PaymentJournalEntryBatchData {
+  paymentId: string;
+  description: string;
+  amount: number;
+  paymentType: 'قبض' | 'صرف';
+  date: Date;
+  linkedTransactionId?: string;
+}
+
+/**
+ * Add a payment journal entry to an existing WriteBatch.
+ * Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
+ * Use this for atomic operations where payment and journal must succeed together.
+ *
+ * @throws {ValidationError} if inputs are invalid or entry is unbalanced
+ */
+export function addPaymentJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  data: PaymentJournalEntryBatchData
+): void {
+  validateUserId(userId);
+  validateAmount(data.amount);
+  validateDescription(data.description);
+  validateDate(data.date);
+
+  const mapping = getAccountMappingForPayment(data.paymentType);
+  const lines = createJournalLines(mapping, data.amount, data.description);
+
+  const validation = validateJournalEntry(lines);
+  if (!validation.isValid) {
+    throw new ValidationError(
+      `Payment journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
+    );
+  }
+
+  addValidatedJournalEntryToBatch(
+    batch,
+    userId,
+    lines,
+    data.description,
+    data.date,
+    data.linkedTransactionId ?? null,
+    'payment',
+    data.paymentId
   );
 }
 

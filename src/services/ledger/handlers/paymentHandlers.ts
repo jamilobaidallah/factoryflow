@@ -5,6 +5,7 @@
 
 import { doc } from "firebase/firestore";
 import { PAYMENT_TYPES } from "@/lib/constants";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import type { HandlerContext } from "../types";
 
 // Advance categories - payment direction matches entry type now
@@ -69,28 +70,41 @@ export function handleImmediateSettlementBatch(
 
 /**
  * Handle initial payment batch operation
- * Creates a partial payment record when AR/AP tracking is enabled
+ * Creates a partial payment record and its journal entry when AR/AP tracking is enabled
  */
 export function handleInitialPaymentBatch(
   ctx: HandlerContext,
   paymentAmount: number
 ): void {
-  const { batch, transactionId, formData, entryType, refs } = ctx;
+  const { batch, transactionId, formData, entryType, refs, userId } = ctx;
 
   if (paymentAmount > 0) {
     const paymentDocRef = doc(refs.payments);
     const paymentType = getPaymentType(entryType, formData.category);
+    const paymentDescription = `دفعة أولية - ${formData.description}`;
 
+    // Create payment record
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: paymentAmount,
       type: paymentType,
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
-      notes: `دفعة أولية - ${formData.description}`,
+      notes: paymentDescription,
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+    });
+
+    // Create journal entry for the payment (double-entry accounting)
+    // Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
+    addPaymentJournalEntryToBatch(batch, userId, {
+      paymentId: paymentDocRef.id,
+      description: paymentDescription,
+      amount: paymentAmount,
+      paymentType: paymentType as 'قبض' | 'صرف',
+      date: new Date(formData.date),
+      linkedTransactionId: transactionId,
     });
   }
 }
