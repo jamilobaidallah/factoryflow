@@ -1180,48 +1180,42 @@ function getAccountMappingForRebuild(
     }
   }
 
-  // 5. Handle income transactions
+  // 5. Handle income transactions - use proper category-based mapping
   if (type === 'دخل' || type === 'إيراد') {
     // Check if this is an AR/AP tracked entry (has clientId)
     const isARAPEntry = !!clientId;
-
-    if (isARAPEntry) {
-      // ALWAYS use AR for tracked entries - payment journal handles Cash
-      return {
-        debitAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-        creditAccount: ACCOUNT_CODES.SALES_REVENUE,
-        skipEntry: false,
-      };
-    } else {
-      // No client = immediate cash transaction
-      return {
-        debitAccount: ACCOUNT_CODES.CASH,
-        creditAccount: ACCOUNT_CODES.SALES_REVENUE,
-        skipEntry: false,
-      };
-    }
+    // Use the proper category-based account mapping
+    const mapping = getAccountMappingForLedgerEntry(
+      type,
+      category,
+      subCategory,
+      isARAPEntry,
+      !isARAPEntry // immediateSettlement = true if no clientId (cash transaction)
+    );
+    return {
+      debitAccount: mapping.debitAccount,
+      creditAccount: mapping.creditAccount,
+      skipEntry: false,
+    };
   }
 
-  // 6. Handle expense transactions
+  // 6. Handle expense transactions - use proper category-based mapping
   if (type === 'مصروف') {
     // Check if this is an AR/AP tracked entry (has clientId)
     const isARAPEntry = !!clientId;
-
-    if (isARAPEntry) {
-      // ALWAYS use AP for tracked entries - payment journal handles Cash
-      return {
-        debitAccount: ACCOUNT_CODES.OTHER_EXPENSES,
-        creditAccount: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
-        skipEntry: false,
-      };
-    } else {
-      // No client = immediate cash transaction
-      return {
-        debitAccount: ACCOUNT_CODES.OTHER_EXPENSES,
-        creditAccount: ACCOUNT_CODES.CASH,
-        skipEntry: false,
-      };
-    }
+    // Use the proper category-based account mapping (e.g., TRAVEL_EXPENSE for رحلة عمل)
+    const mapping = getAccountMappingForLedgerEntry(
+      type,
+      category,
+      subCategory,
+      isARAPEntry,
+      !isARAPEntry // immediateSettlement = true if no clientId (cash transaction)
+    );
+    return {
+      debitAccount: mapping.debitAccount,
+      creditAccount: mapping.creditAccount,
+      skipEntry: false,
+    };
   }
 
   // Default fallback
