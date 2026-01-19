@@ -154,6 +154,16 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Accumulated depreciation on fixed assets (contra-asset)'
   ),
 
+  // Loans Receivable - قروض ممنوحة
+  defineAccount(
+    ACCOUNT_CODES.LOANS_RECEIVABLE,
+    'Loans Receivable',
+    'قروض ممنوحة',
+    'asset',
+    undefined,
+    'Loans given to customers, employees, or other parties'
+  ),
+
   // ═══════════════════════════════════════════════════════════════════════════
   // LIABILITIES (2000-2999) - الالتزامات
   // ═══════════════════════════════════════════════════════════════════════════
