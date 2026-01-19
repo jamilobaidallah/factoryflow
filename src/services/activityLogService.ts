@@ -32,8 +32,13 @@ export function logActivity(
   // Fire and forget - لا ننتظر النتيجة
   const activityRef = collection(firestore, `users/${ownerId}/activity_logs`);
 
+  // Filter out undefined values - Firestore doesn't accept undefined
+  const cleanInput = Object.fromEntries(
+    Object.entries(input).filter(([_, value]) => value !== undefined)
+  );
+
   addDoc(activityRef, {
-    ...input,
+    ...cleanInput,
     createdAt: Timestamp.now(),
   }).catch((error) => {
     // Log error but don't throw - activity logging should never break the main flow
