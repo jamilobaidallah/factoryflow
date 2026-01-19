@@ -106,6 +106,25 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid
         && isRoleOwner(request.auth.uid);
 
+      // Allow owner to CREATE a new team member's user document
+      // This happens when approving an access request
+      // The new document must have ownerId pointing to the creating owner
+      allow create: if isAuthenticated()
+        && isRoleOwner(request.auth.uid)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.role in ['accountant', 'viewer'];
+
+      // ============================================
+      // SUBCOLLECTIONS - Team Members
+      // ============================================
+
+      // Members collection - team members under this owner
+      // Owner can manage their team members
+      match /members/{memberId} {
+        allow read: if canAccessOwnerData(userId);
+        allow write: if isDataOwner(userId) && isRoleOwner(request.auth.uid);
+      }
+
       // ============================================
       // SUBCOLLECTIONS - Data Collections
       // ============================================
