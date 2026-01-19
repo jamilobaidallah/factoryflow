@@ -28,25 +28,39 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'مواد خام': '5010',
   'شحن': '5020',
   'شراء بضاعة جاهزة': '5030',
+  'نقل بضاعة': '5020', // Freight/shipping for goods → same as شحن
+  'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS (inventory consumed)
+  'عينات مجانية': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Free samples → COGS (inventory given away)
 
   // Operating Expenses - مصاريف تشغيلية
   // Fallback to OTHER_EXPENSES for unmapped subcategories (not Salaries)
   'مصاريف تشغيلية': ACCOUNT_CODES.OTHER_EXPENSES,
   'رواتب': ACCOUNT_CODES.SALARIES_EXPENSE,
+  'رواتب وأجور': ACCOUNT_CODES.SALARIES_EXPENSE,
   'إيجار': ACCOUNT_CODES.RENT_EXPENSE,
+  'إيجارات': ACCOUNT_CODES.RENT_EXPENSE,
   'كهرباء وماء': '5310',
-  'صيانة': '5410',
-  'تسويق': '5420',
-  'قرطاسية': '5430',
-  'رحلة عمل': '5530', // Business trips → Other expenses
-  'عينات مجانية': '5530', // Free samples → Other expenses
-  'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS
+  'صيانة': ACCOUNT_CODES.MAINTENANCE_EXPENSE,
+  'تسويق': ACCOUNT_CODES.MARKETING_EXPENSE,
+  'تسويق وإعلان': ACCOUNT_CODES.MARKETING_EXPENSE,
+  'قرطاسية': ACCOUNT_CODES.OFFICE_SUPPLIES,
+  'مصاريف مكتبية': ACCOUNT_CODES.OFFICE_SUPPLIES, // Office expenses → Office Supplies
+  'وقود ومواصلات': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Fuel & transportation
+  'رحلة عمل': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Business trips → Transportation
+  'مصاريف إدارية': ACCOUNT_CODES.ADMIN_EXPENSE, // Administrative expenses
+  'اتصالات وإنترنت': ACCOUNT_CODES.COMMUNICATIONS_EXPENSE, // Communications
+  'مستهلكات': ACCOUNT_CODES.OFFICE_SUPPLIES, // Consumables → Office Supplies
+  'أدوات ومعدات صغيرة': ACCOUNT_CODES.SMALL_EQUIPMENT, // Small tools & equipment
 
   // General Expenses - مصاريف عامة
   'مصاريف عامة': ACCOUNT_CODES.OTHER_EXPENSES,
-  'ضرائب': '5510',
-  'فوائد قروض': '5520',
-  'مصاريف أخرى': '5530',
+  'مصاريف أخرى': ACCOUNT_CODES.MISC_EXPENSES,
+  'مصاريف متنوعة': ACCOUNT_CODES.MISC_EXPENSES,
+  'مصاريف قانونية': ACCOUNT_CODES.PROFESSIONAL_FEES, // Legal fees
+  'تأمينات': ACCOUNT_CODES.INSURANCE_EXPENSE, // Insurance
+  'ضرائب': ACCOUNT_CODES.TAXES_EXPENSE,
+  'ضرائب ورسوم': ACCOUNT_CODES.TAXES_EXPENSE,
+  'فوائد قروض': ACCOUNT_CODES.LOAN_INTEREST_EXPENSE,
 };
 
 /**
@@ -104,24 +118,30 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.RENT_EXPENSE]: 'مصاريف الإيجار',
   [ACCOUNT_CODES.UTILITIES_EXPENSE]: 'مصاريف المرافق',
   [ACCOUNT_CODES.DEPRECIATION_EXPENSE]: 'مصاريف الإهلاك',
+  [ACCOUNT_CODES.MAINTENANCE_EXPENSE]: 'مصاريف صيانة',
+  [ACCOUNT_CODES.MARKETING_EXPENSE]: 'مصاريف تسويق',
+  [ACCOUNT_CODES.OFFICE_SUPPLIES]: 'قرطاسية ومستلزمات مكتبية',
+  [ACCOUNT_CODES.TRANSPORTATION_EXPENSE]: 'وقود ومواصلات',
+  [ACCOUNT_CODES.ADMIN_EXPENSE]: 'مصاريف إدارية',
+  [ACCOUNT_CODES.COMMUNICATIONS_EXPENSE]: 'اتصالات وإنترنت',
+  [ACCOUNT_CODES.SMALL_EQUIPMENT]: 'أدوات ومعدات صغيرة',
+  [ACCOUNT_CODES.PROFESSIONAL_FEES]: 'مصاريف قانونية ومهنية',
+  [ACCOUNT_CODES.INSURANCE_EXPENSE]: 'تأمينات',
   [ACCOUNT_CODES.OTHER_EXPENSES]: 'مصاريف أخرى',
+  [ACCOUNT_CODES.TAXES_EXPENSE]: 'ضرائب ورسوم',
+  [ACCOUNT_CODES.LOAN_INTEREST_EXPENSE]: 'فوائد قروض',
+  [ACCOUNT_CODES.MISC_EXPENSES]: 'مصاريف متنوعة',
   [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
-  // Sub-accounts
+  // Sub-accounts (legacy codes for backward compatibility)
   '4010': 'مبيعات منتجات',
   '4110': 'مبيعات خدمات',
   '4210': 'فوائد بنكية',
   '4220': 'بيع أصول',
   '4230': 'إيرادات متنوعة',
   '5010': 'مواد خام',
-  '5020': 'شحن',
+  '5020': 'شحن ونقل بضاعة',
   '5030': 'شراء بضاعة جاهزة',
   '5310': 'كهرباء وماء',
-  '5410': 'مصاريف صيانة',
-  '5420': 'مصاريف تسويق',
-  '5430': 'قرطاسية',
-  '5510': 'ضرائب',
-  '5520': 'فوائد قروض',
-  '5530': 'مصاريف متنوعة',
 };
 
 /**
@@ -393,4 +413,29 @@ export function getAccountMappingForAdvance(
  */
 export function isAdvanceCategory(category: string): boolean {
   return category === 'سلفة عميل' || category === 'سلفة مورد';
+}
+
+/**
+ * Fixed asset subcategories that should be capitalized to Balance Sheet
+ */
+const FIXED_ASSET_SUBCATEGORIES = [
+  'معدات وآلات',
+  'أثاث ومفروشات',
+  'سيارات ومركبات',
+  'مباني وعقارات',
+  'أجهزة كمبيوتر',
+] as const;
+
+/**
+ * Check if a category/subcategory is a fixed asset purchase
+ * Fixed assets should be capitalized to Balance Sheet, NOT expensed
+ */
+export function isFixedAssetCategory(category: string, subCategory?: string): boolean {
+  if (category === 'أصول ثابتة') {
+    return true;
+  }
+  if (subCategory && FIXED_ASSET_SUBCATEGORIES.includes(subCategory as typeof FIXED_ASSET_SUBCATEGORIES[number])) {
+    return true;
+  }
+  return false;
 }

@@ -42,7 +42,9 @@ import {
   getAccountMappingForDepreciation,
   getAccountMappingForBadDebt,
   getAccountMappingForAdvance,
+  getAccountMappingForFixedAssetPurchase,
   isAdvanceCategory,
+  isFixedAssetCategory,
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
@@ -1121,6 +1123,19 @@ function getAccountMappingForRebuild(
   // 3. Handle advance transactions (Balance Sheet, NOT P&L)
   if (isAdvanceCategory(category)) {
     const mapping = getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
+    return {
+      debitAccount: mapping.debitAccount,
+      creditAccount: mapping.creditAccount,
+      skipEntry: false,
+    };
+  }
+
+  // 3.5. Handle fixed asset purchases (Balance Sheet, NOT P&L expense)
+  // Fixed assets should be capitalized: DR Fixed Assets, CR Cash/AP
+  if (isFixedAssetCategory(category, subCategory)) {
+    // Check if this is an AR/AP tracked entry (has clientId = credit purchase)
+    const isPaidImmediately = !clientId;
+    const mapping = getAccountMappingForFixedAssetPurchase(isPaidImmediately);
     return {
       debitAccount: mapping.debitAccount,
       creditAccount: mapping.creditAccount,

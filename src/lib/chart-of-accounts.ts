@@ -423,7 +423,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Depreciation of fixed assets'
   ),
   defineAccount(
-    '5410',
+    ACCOUNT_CODES.MAINTENANCE_EXPENSE,
     'Maintenance Expense',
     'مصاريف صيانة',
     'expense',
@@ -431,7 +431,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Repairs and maintenance costs'
   ),
   defineAccount(
-    '5420',
+    ACCOUNT_CODES.MARKETING_EXPENSE,
     'Marketing Expense',
     'مصاريف تسويق',
     'expense',
@@ -439,12 +439,60 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Advertising and marketing costs'
   ),
   defineAccount(
-    '5430',
+    ACCOUNT_CODES.OFFICE_SUPPLIES,
     'Office Supplies',
     'قرطاسية',
     'expense',
     undefined,
     'Office supplies and stationery'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.TRANSPORTATION_EXPENSE,
+    'Transportation Expense',
+    'وقود ومواصلات',
+    'expense',
+    undefined,
+    'Fuel, transportation, and vehicle expenses'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.ADMIN_EXPENSE,
+    'Administrative Expense',
+    'مصاريف إدارية',
+    'expense',
+    undefined,
+    'General administrative expenses'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.COMMUNICATIONS_EXPENSE,
+    'Communications Expense',
+    'اتصالات وإنترنت',
+    'expense',
+    undefined,
+    'Phone, internet, and communication costs'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.SMALL_EQUIPMENT,
+    'Small Equipment',
+    'أدوات ومعدات صغيرة',
+    'expense',
+    undefined,
+    'Tools and equipment below capitalization threshold'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.PROFESSIONAL_FEES,
+    'Professional Fees',
+    'مصاريف قانونية',
+    'expense',
+    undefined,
+    'Legal, accounting, and professional services'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.INSURANCE_EXPENSE,
+    'Insurance Expense',
+    'تأمينات',
+    'expense',
+    undefined,
+    'Business insurance premiums'
   ),
 
   // General Expenses - مصاريف عامة
