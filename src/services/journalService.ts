@@ -147,7 +147,9 @@ export async function seedChartOfAccounts(
     // Check if already seeded
     const exists = await hasChartOfAccounts(userId);
     if (exists) {
-      return { success: true, data: 0 };
+      // Chart exists - check for and add any missing accounts (e.g., new accounts added to defaults)
+      const missingResult = await ensureMissingAccounts(userId);
+      return { success: true, data: missingResult.data || 0 };
     }
 
     const batch = writeBatch(firestore);
@@ -178,6 +180,65 @@ export async function seedChartOfAccounts(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to seed accounts',
+    };
+  }
+}
+
+/**
+ * Ensure all default accounts exist in the user's Chart of Accounts
+ * This adds any missing accounts that were added to the default chart after initial seeding.
+ * Useful when new account codes are added to the system (e.g., TRAVEL_EXPENSE 5445).
+ */
+export async function ensureMissingAccounts(
+  userId: string
+): Promise<ServiceResult<number>> {
+  try {
+    validateUserId(userId);
+
+    // Get existing accounts
+    const existingResult = await getAccounts(userId);
+    if (!existingResult.success || !existingResult.data) {
+      return { success: false, error: existingResult.error };
+    }
+
+    const existingCodes = new Set(existingResult.data.map(a => a.code));
+    const defaultAccounts = getDefaultAccountsForSeeding();
+
+    // Find accounts that don't exist yet
+    const missingAccounts = defaultAccounts.filter(a => !existingCodes.has(a.code));
+
+    if (missingAccounts.length === 0) {
+      return { success: true, data: 0 };
+    }
+
+    // Add missing accounts
+    const batch = writeBatch(firestore);
+    const accountsRef = collection(firestore, getAccountsPath(userId));
+
+    for (const account of missingAccounts) {
+      const docRef = doc(accountsRef);
+      const accountData = {
+        code: account.code,
+        name: account.name,
+        nameAr: account.nameAr,
+        type: account.type,
+        normalBalance: account.normalBalance,
+        isActive: account.isActive,
+        createdAt: Timestamp.fromDate(account.createdAt),
+        parentCode: account.parentCode ?? null,
+        description: account.description ?? null,
+      };
+      batch.set(docRef, accountData);
+    }
+
+    await batch.commit();
+    console.log(`Added ${missingAccounts.length} missing accounts:`, missingAccounts.map(a => `${a.code} ${a.nameAr}`));
+    return { success: true, data: missingAccounts.length };
+  } catch (error) {
+    console.error('Error ensuring missing accounts:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add missing accounts',
     };
   }
 }
