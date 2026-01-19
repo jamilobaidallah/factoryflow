@@ -41,6 +41,8 @@ import {
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
   getAccountMappingForBadDebt,
+  getAccountMappingForAdvance,
+  isAdvanceCategory,
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
@@ -1116,7 +1118,17 @@ function getAccountMappingForRebuild(
     }
   }
 
-  // 3. Handle loan transactions
+  // 3. Handle advance transactions (Balance Sheet, NOT P&L)
+  if (isAdvanceCategory(category)) {
+    const mapping = getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
+    return {
+      debitAccount: mapping.debitAccount,
+      creditAccount: mapping.creditAccount,
+      skipEntry: false,
+    };
+  }
+
+  // 4. Handle loan transactions
   if (isLoanTransaction(type, category)) {
     if (category === LOAN_CATEGORIES.RECEIVED) {
       if (subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT) {
@@ -1153,7 +1165,7 @@ function getAccountMappingForRebuild(
     }
   }
 
-  // 4. Handle income transactions
+  // 5. Handle income transactions
   if (type === 'دخل' || type === 'إيراد') {
     // Check if this is an AR/AP tracked entry (has clientId)
     const isARAPEntry = !!clientId;
@@ -1175,7 +1187,7 @@ function getAccountMappingForRebuild(
     }
   }
 
-  // 5. Handle expense transactions
+  // 6. Handle expense transactions
   if (type === 'مصروف') {
     // Check if this is an AR/AP tracked entry (has clientId)
     const isARAPEntry = !!clientId;

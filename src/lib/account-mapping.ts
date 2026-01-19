@@ -87,9 +87,11 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.FIXED_ASSETS]: 'الأصول الثابتة',
   [ACCOUNT_CODES.ACCUMULATED_DEPRECIATION]: 'مجمع الإهلاك',
   [ACCOUNT_CODES.LOANS_RECEIVABLE]: 'قروض ممنوحة',
+  [ACCOUNT_CODES.SUPPLIER_ADVANCES]: 'سلفات موردين',
   [ACCOUNT_CODES.ACCOUNTS_PAYABLE]: 'ذمم دائنة',
   [ACCOUNT_CODES.LOANS_PAYABLE]: 'قروض مستحقة',
   [ACCOUNT_CODES.ACCRUED_EXPENSES]: 'مصاريف مستحقة',
+  [ACCOUNT_CODES.CUSTOMER_ADVANCES]: 'سلفات عملاء',
   [ACCOUNT_CODES.NOTES_PAYABLE]: 'أوراق دفع',
   [ACCOUNT_CODES.OWNER_CAPITAL]: 'رأس المال',
   [ACCOUNT_CODES.OWNER_DRAWINGS]: 'سحوبات المالك',
@@ -353,4 +355,42 @@ export function getAccountMappingForBadDebt(): AccountMapping {
     debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.BAD_DEBT_EXPENSE),
     creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
   };
+}
+
+/**
+ * Get account mapping for advance transactions
+ *
+ * Advances are Balance Sheet items, NOT P&L:
+ * - Customer Advance (سلفة عميل): DR Cash, CR Customer Advances (Liability)
+ *   Customer pays us upfront → we owe them goods/services
+ * - Supplier Advance (سلفة مورد): DR Supplier Advances (Asset), CR Cash
+ *   We pay supplier upfront → they owe us goods/services
+ */
+export function getAccountMappingForAdvance(
+  advanceType: 'سلفة عميل' | 'سلفة مورد'
+): AccountMapping {
+  if (advanceType === 'سلفة عميل') {
+    // Customer advance: We receive cash, create liability (we owe them goods/services)
+    return {
+      debitAccount: ACCOUNT_CODES.CASH,
+      creditAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+    };
+  } else {
+    // Supplier advance: We pay cash, create asset (they owe us goods/services)
+    return {
+      debitAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+      creditAccount: ACCOUNT_CODES.CASH,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+    };
+  }
+}
+
+/**
+ * Check if a category is an advance category
+ */
+export function isAdvanceCategory(category: string): boolean {
+  return category === 'سلفة عميل' || category === 'سلفة مورد';
 }

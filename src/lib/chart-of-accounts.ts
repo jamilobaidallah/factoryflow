@@ -93,6 +93,14 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     undefined,
     'Expenses paid in advance'
   ),
+  defineAccount(
+    ACCOUNT_CODES.SUPPLIER_ADVANCES,
+    'Supplier Advances',
+    'سلفات موردين',
+    'asset',
+    undefined,
+    'Prepayments to suppliers for future goods/services'
+  ),
 
   // Fixed Assets - الأصول الثابتة
   defineAccount(
@@ -183,6 +191,14 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'liability',
     undefined,
     'Expenses incurred but not yet paid'
+  ),
+  defineAccount(
+    ACCOUNT_CODES.CUSTOMER_ADVANCES,
+    'Customer Advances',
+    'سلفات عملاء',
+    'liability',
+    undefined,
+    'Prepayments received from customers for future goods/services'
   ),
   defineAccount(
     ACCOUNT_CODES.NOTES_PAYABLE,

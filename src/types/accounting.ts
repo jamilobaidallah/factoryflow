@@ -239,6 +239,7 @@ export const ACCOUNT_CODES = {
   ACCOUNTS_RECEIVABLE: '1200',
   INVENTORY: '1300',
   PREPAID_EXPENSES: '1400',
+  SUPPLIER_ADVANCES: '1350',     // سلفات موردين (Supplier Prepayments - Asset)
   FIXED_ASSETS: '1500',
   ACCUMULATED_DEPRECIATION: '1510',
   LOANS_RECEIVABLE: '1600',      // قروض ممنوحة (Loans Given - Asset)
@@ -246,6 +247,7 @@ export const ACCOUNT_CODES = {
   // Liabilities
   ACCOUNTS_PAYABLE: '2000',
   ACCRUED_EXPENSES: '2100',
+  CUSTOMER_ADVANCES: '2150',     // سلفات عملاء (Customer Prepayments - Liability)
   NOTES_PAYABLE: '2200',
   LOANS_PAYABLE: '2300',         // قروض مستلمة (Loans Received - Liability)
 
