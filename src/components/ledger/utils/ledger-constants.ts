@@ -39,6 +39,7 @@ export interface LedgerEntry {
     remainingBalance?: number;
     paymentStatus?: "paid" | "unpaid" | "partial";
     isARAPEntry?: boolean;
+    immediateSettlement?: boolean;  // Whether entry was fully paid at creation (cash transaction)
     // Settlement Discount Fields
     totalDiscount?: number;           // Sum of all discounts given (خصم تسوية)
     // Bad Debt Write-off Fields
