@@ -133,6 +133,8 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.LOAN_INTEREST_EXPENSE]: 'فوائد قروض',
   [ACCOUNT_CODES.MISC_EXPENSES]: 'مصاريف متنوعة',
   [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
+  [ACCOUNT_CODES.SALES_DISCOUNT]: 'خصم المبيعات',
+  [ACCOUNT_CODES.PURCHASE_DISCOUNT]: 'خصم المشتريات',
   // Sub-accounts (legacy codes for backward compatibility)
   '4010': 'مبيعات منتجات',
   '4110': 'مبيعات خدمات',
@@ -388,6 +390,37 @@ export function getAccountMappingForBadDebt(): AccountMapping {
     debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.BAD_DEBT_EXPENSE),
     creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
   };
+}
+
+/**
+ * Get account mapping for settlement discount
+ *
+ * When a discount is given during settlement:
+ * - Income (AR) settlement discount:
+ *   DR Sales Discount (contra-revenue), CR Accounts Receivable
+ * - Expense (AP) settlement discount:
+ *   DR Accounts Payable, CR Purchase Discount (contra-expense)
+ */
+export function getAccountMappingForSettlementDiscount(
+  entryType: 'دخل' | 'مصروف'
+): AccountMapping {
+  if (entryType === 'دخل') {
+    // Income settlement: Sales discount reduces AR
+    return {
+      debitAccount: ACCOUNT_CODES.SALES_DISCOUNT,
+      creditAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_DISCOUNT),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+    };
+  } else {
+    // Expense settlement: Purchase discount reduces AP
+    return {
+      debitAccount: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+      creditAccount: ACCOUNT_CODES.PURCHASE_DISCOUNT,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.PURCHASE_DISCOUNT),
+    };
+  }
 }
 
 /**

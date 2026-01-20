@@ -41,6 +41,7 @@ import {
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
   getAccountMappingForBadDebt,
+  getAccountMappingForSettlementDiscount,
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
@@ -486,6 +487,26 @@ export async function createJournalEntryForBadDebt(
   const mapping = getAccountMappingForBadDebt();
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'ledger');
+}
+
+/**
+ * Create journal entry for settlement discount
+ * For income (AR): DR Sales Discount, CR Accounts Receivable
+ * For expense (AP): DR Accounts Payable, CR Purchase Discount
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForSettlementDiscount(
+  userId: string,
+  description: string,
+  amount: number,
+  entryType: 'دخل' | 'مصروف',
+  date: Date,
+  linkedTransactionId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+  const mapping = getAccountMappingForSettlementDiscount(entryType);
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'payment');
 }
 
 // ============================================================================

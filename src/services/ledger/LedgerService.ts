@@ -56,6 +56,8 @@ import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
   createJournalEntryForBadDebt,
+  createJournalEntryForPayment,
+  createJournalEntryForSettlementDiscount,
   addPaymentJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
@@ -1482,6 +1484,40 @@ export class LedgerService {
 
         transaction.update(entryRef, updateData);
       });
+
+      // Create journal entries for AR/AP settlements (outside transaction)
+      // Skip for advances (they have special handling) and loans
+      const isAdvance = isAdvanceTransaction(data.entryCategory);
+      const isLoan = data.entryType === "قرض";
+
+      if (data.isARAPEntry && !isAdvance && !isLoan) {
+        // Create journal entry for cash payment portion
+        if (data.amount > 0) {
+          await createJournalEntryForPayment(
+            this.userId,
+            paymentDocRef.id,
+            `دفعة تسوية - ${data.entryDescription}`,
+            data.amount,
+            paymentType as 'قبض' | 'صرف',
+            data.date || new Date(),
+            data.entryTransactionId
+          );
+        }
+
+        // Create journal entry for discount portion
+        if (discountAmount > 0) {
+          // Map entry type to settlement discount type
+          const discountEntryType = data.entryType === "دخل" ? "دخل" : "مصروف";
+          await createJournalEntryForSettlementDiscount(
+            this.userId,
+            `خصم تسوية - ${data.entryDescription}`,
+            discountAmount,
+            discountEntryType as 'دخل' | 'مصروف',
+            data.date || new Date(),
+            data.entryTransactionId
+          );
+        }
+      }
 
       return { success: true };
     } catch (error) {
