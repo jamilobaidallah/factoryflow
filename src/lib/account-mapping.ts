@@ -28,21 +28,39 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'مواد خام': '5010',
   'شحن': '5020',
   'شراء بضاعة جاهزة': '5030',
+  'نقل بضاعة': '5020', // Freight/shipping for goods → same as شحن
+  'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS (inventory consumed)
+  'عينات مجانية': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Free samples → COGS (inventory given away)
 
   // Operating Expenses - مصاريف تشغيلية
-  'مصاريف تشغيلية': ACCOUNT_CODES.SALARIES_EXPENSE,
+  // Fallback to OTHER_EXPENSES for unmapped subcategories (not Salaries)
+  'مصاريف تشغيلية': ACCOUNT_CODES.OTHER_EXPENSES,
   'رواتب': ACCOUNT_CODES.SALARIES_EXPENSE,
+  'رواتب وأجور': ACCOUNT_CODES.SALARIES_EXPENSE,
   'إيجار': ACCOUNT_CODES.RENT_EXPENSE,
+  'إيجارات': ACCOUNT_CODES.RENT_EXPENSE,
   'كهرباء وماء': '5310',
-  'صيانة': '5410',
-  'تسويق': '5420',
-  'قرطاسية': '5430',
+  'صيانة': ACCOUNT_CODES.MAINTENANCE_EXPENSE,
+  'تسويق': ACCOUNT_CODES.MARKETING_EXPENSE,
+  'تسويق وإعلان': ACCOUNT_CODES.MARKETING_EXPENSE,
+  'قرطاسية': ACCOUNT_CODES.OFFICE_SUPPLIES,
+  'مصاريف مكتبية': ACCOUNT_CODES.OFFICE_SUPPLIES, // Office expenses → Office Supplies
+  'وقود ومواصلات': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Fuel & transportation
+  'رحلة عمل': ACCOUNT_CODES.TRAVEL_EXPENSE, // Business trips → Travel Expense (separate from transportation)
+  'مصاريف إدارية': ACCOUNT_CODES.ADMIN_EXPENSE, // Administrative expenses
+  'اتصالات وإنترنت': ACCOUNT_CODES.COMMUNICATIONS_EXPENSE, // Communications
+  'مستهلكات': ACCOUNT_CODES.OFFICE_SUPPLIES, // Consumables → Office Supplies
+  'أدوات ومعدات صغيرة': ACCOUNT_CODES.SMALL_EQUIPMENT, // Small tools & equipment
 
   // General Expenses - مصاريف عامة
   'مصاريف عامة': ACCOUNT_CODES.OTHER_EXPENSES,
-  'ضرائب': '5510',
-  'فوائد قروض': '5520',
-  'مصاريف أخرى': '5530',
+  'مصاريف أخرى': ACCOUNT_CODES.MISC_EXPENSES,
+  'مصاريف متنوعة': ACCOUNT_CODES.MISC_EXPENSES,
+  'مصاريف قانونية': ACCOUNT_CODES.PROFESSIONAL_FEES, // Legal fees
+  'تأمينات': ACCOUNT_CODES.INSURANCE_EXPENSE, // Insurance
+  'ضرائب': ACCOUNT_CODES.TAXES_EXPENSE,
+  'ضرائب ورسوم': ACCOUNT_CODES.TAXES_EXPENSE,
+  'فوائد قروض': ACCOUNT_CODES.LOAN_INTEREST_EXPENSE,
 };
 
 /**
@@ -82,8 +100,12 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.PREPAID_EXPENSES]: 'مصاريف مدفوعة مقدماً',
   [ACCOUNT_CODES.FIXED_ASSETS]: 'الأصول الثابتة',
   [ACCOUNT_CODES.ACCUMULATED_DEPRECIATION]: 'مجمع الإهلاك',
+  [ACCOUNT_CODES.LOANS_RECEIVABLE]: 'قروض ممنوحة',
+  [ACCOUNT_CODES.SUPPLIER_ADVANCES]: 'سلفات موردين',
   [ACCOUNT_CODES.ACCOUNTS_PAYABLE]: 'ذمم دائنة',
+  [ACCOUNT_CODES.LOANS_PAYABLE]: 'قروض مستحقة',
   [ACCOUNT_CODES.ACCRUED_EXPENSES]: 'مصاريف مستحقة',
+  [ACCOUNT_CODES.CUSTOMER_ADVANCES]: 'سلفات عملاء',
   [ACCOUNT_CODES.NOTES_PAYABLE]: 'أوراق دفع',
   [ACCOUNT_CODES.OWNER_CAPITAL]: 'رأس المال',
   [ACCOUNT_CODES.OWNER_DRAWINGS]: 'سحوبات المالك',
@@ -96,24 +118,31 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.RENT_EXPENSE]: 'مصاريف الإيجار',
   [ACCOUNT_CODES.UTILITIES_EXPENSE]: 'مصاريف المرافق',
   [ACCOUNT_CODES.DEPRECIATION_EXPENSE]: 'مصاريف الإهلاك',
+  [ACCOUNT_CODES.MAINTENANCE_EXPENSE]: 'مصاريف صيانة',
+  [ACCOUNT_CODES.MARKETING_EXPENSE]: 'مصاريف تسويق',
+  [ACCOUNT_CODES.OFFICE_SUPPLIES]: 'قرطاسية ومستلزمات مكتبية',
+  [ACCOUNT_CODES.TRANSPORTATION_EXPENSE]: 'وقود ومواصلات',
+  [ACCOUNT_CODES.TRAVEL_EXPENSE]: 'سفر وضيافة',
+  [ACCOUNT_CODES.ADMIN_EXPENSE]: 'مصاريف إدارية',
+  [ACCOUNT_CODES.COMMUNICATIONS_EXPENSE]: 'اتصالات وإنترنت',
+  [ACCOUNT_CODES.SMALL_EQUIPMENT]: 'أدوات ومعدات صغيرة',
+  [ACCOUNT_CODES.PROFESSIONAL_FEES]: 'مصاريف قانونية ومهنية',
+  [ACCOUNT_CODES.INSURANCE_EXPENSE]: 'تأمينات',
   [ACCOUNT_CODES.OTHER_EXPENSES]: 'مصاريف أخرى',
+  [ACCOUNT_CODES.TAXES_EXPENSE]: 'ضرائب ورسوم',
+  [ACCOUNT_CODES.LOAN_INTEREST_EXPENSE]: 'فوائد قروض',
+  [ACCOUNT_CODES.MISC_EXPENSES]: 'مصاريف متنوعة',
   [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
-  // Sub-accounts
+  // Sub-accounts (legacy codes for backward compatibility)
   '4010': 'مبيعات منتجات',
   '4110': 'مبيعات خدمات',
   '4210': 'فوائد بنكية',
   '4220': 'بيع أصول',
   '4230': 'إيرادات متنوعة',
   '5010': 'مواد خام',
-  '5020': 'شحن',
+  '5020': 'شحن ونقل بضاعة',
   '5030': 'شراء بضاعة جاهزة',
   '5310': 'كهرباء وماء',
-  '5410': 'مصاريف صيانة',
-  '5420': 'مصاريف تسويق',
-  '5430': 'قرطاسية',
-  '5510': 'ضرائب',
-  '5520': 'فوائد قروض',
-  '5530': 'مصاريف متنوعة',
 };
 
 /**
@@ -175,6 +204,18 @@ export function getAccountMappingForLedgerEntry(
         creditAccountNameAr: getAccountNameAr(equityAccount),
       };
     }
+  }
+
+  // Check for advance transactions (Balance Sheet items, NOT P&L)
+  // Advances must be handled BEFORE income/expense routing
+  if (isAdvanceCategory(category)) {
+    return getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
+  }
+
+  // Check for loan transactions (Balance Sheet items, NOT P&L)
+  // Loans must be handled BEFORE income/expense routing
+  if (isLoanCategory(category)) {
+    return getAccountMappingForLoan(category, subCategory);
   }
 
   // Income transaction
@@ -347,4 +388,148 @@ export function getAccountMappingForBadDebt(): AccountMapping {
     debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.BAD_DEBT_EXPENSE),
     creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
   };
+}
+
+/**
+ * Get account mapping for advance transactions
+ *
+ * Advances are Balance Sheet items, NOT P&L:
+ * - Customer Advance (سلفة عميل): DR Cash, CR Customer Advances (Liability)
+ *   Customer pays us upfront → we owe them goods/services
+ * - Supplier Advance (سلفة مورد): DR Supplier Advances (Asset), CR Cash
+ *   We pay supplier upfront → they owe us goods/services
+ */
+export function getAccountMappingForAdvance(
+  advanceType: 'سلفة عميل' | 'سلفة مورد'
+): AccountMapping {
+  if (advanceType === 'سلفة عميل') {
+    // Customer advance: We receive cash, create liability (we owe them goods/services)
+    return {
+      debitAccount: ACCOUNT_CODES.CASH,
+      creditAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+    };
+  } else {
+    // Supplier advance: We pay cash, create asset (they owe us goods/services)
+    return {
+      debitAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+      creditAccount: ACCOUNT_CODES.CASH,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+    };
+  }
+}
+
+/**
+ * Check if a category is an advance category
+ */
+export function isAdvanceCategory(category: string): boolean {
+  return category === 'سلفة عميل' || category === 'سلفة مورد';
+}
+
+/**
+ * Loan category constants
+ */
+const LOAN_CATEGORIES = {
+  GIVEN: 'قروض ممنوحة',
+  RECEIVED: 'قروض مستلمة',
+} as const;
+
+const LOAN_SUBCATEGORIES = {
+  GIVE_LOAN: 'منح قرض',
+  RECEIVE_LOAN: 'استلام قرض',
+  COLLECT_LOAN: 'تحصيل قرض',
+  REPAY_LOAN: 'سداد قرض',
+} as const;
+
+/**
+ * Check if a category is a loan category
+ */
+export function isLoanCategory(category: string): boolean {
+  return category === LOAN_CATEGORIES.GIVEN || category === LOAN_CATEGORIES.RECEIVED;
+}
+
+/**
+ * Get account mapping for loan transactions
+ *
+ * Loans are Balance Sheet items, NOT P&L:
+ * - Loan Given (قروض ممنوحة):
+ *   - Initial (منح قرض): DR Loans Receivable, CR Cash (asset increases)
+ *   - Collection (تحصيل قرض): DR Cash, CR Loans Receivable (asset decreases)
+ * - Loan Received (قروض مستلمة):
+ *   - Initial (استلام قرض): DR Cash, CR Loans Payable (liability increases)
+ *   - Repayment (سداد قرض): DR Loans Payable, CR Cash (liability decreases)
+ */
+export function getAccountMappingForLoan(
+  category: string,
+  subCategory?: string
+): AccountMapping {
+  const isLoanGiven = category === LOAN_CATEGORIES.GIVEN;
+  const isInitialLoan = subCategory === LOAN_SUBCATEGORIES.GIVE_LOAN ||
+                        subCategory === LOAN_SUBCATEGORIES.RECEIVE_LOAN;
+
+  if (isLoanGiven) {
+    if (isInitialLoan) {
+      // Give loan: DR Loans Receivable, CR Cash (asset increases)
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    } else {
+      // Collect loan: DR Cash, CR Loans Receivable (asset decreases)
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+      };
+    }
+  } else {
+    // Loans Received
+    if (isInitialLoan) {
+      // Receive loan: DR Cash, CR Loans Payable (liability increases)
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+      };
+    } else {
+      // Repay loan: DR Loans Payable, CR Cash (liability decreases)
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    }
+  }
+}
+
+/**
+ * Fixed asset subcategories that should be capitalized to Balance Sheet
+ */
+const FIXED_ASSET_SUBCATEGORIES = [
+  'معدات وآلات',
+  'أثاث ومفروشات',
+  'سيارات ومركبات',
+  'مباني وعقارات',
+  'أجهزة كمبيوتر',
+] as const;
+
+/**
+ * Check if a category/subcategory is a fixed asset purchase
+ * Fixed assets should be capitalized to Balance Sheet, NOT expensed
+ */
+export function isFixedAssetCategory(category: string, subCategory?: string): boolean {
+  if (category === 'أصول ثابتة') {
+    return true;
+  }
+  if (subCategory && FIXED_ASSET_SUBCATEGORIES.includes(subCategory as typeof FIXED_ASSET_SUBCATEGORIES[number])) {
+    return true;
+  }
+  return false;
 }

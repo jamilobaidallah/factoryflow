@@ -1,8 +1,10 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { X, TrendingUp, TrendingDown, Clock, DollarSign, PieChart, BarChart3 } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Clock, DollarSign, PieChart, BarChart3, Scale, FileCheck } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
+import { BalanceSheetTab } from "../tabs/BalanceSheetTab";
+import { TrialBalanceTab } from "../tabs/TrialBalanceTab";
 import {
   isEquityTransaction,
   isLoanTransaction,
@@ -49,6 +51,7 @@ interface LedgerEntry {
   isARAPEntry?: boolean;
   totalDiscount?: number;
   writeoffAmount?: number;
+  immediateSettlement?: boolean;
 }
 
 interface Payment {
@@ -96,25 +99,37 @@ function ReportsInlineReportComponent({
     return null;
   }
 
-  const reportConfig: Record<string, { title: string; icon: React.ReactNode; color: string }> = {
+  const reportConfig: Record<string, { title: string; icon: React.ReactNode; color: string; fullPage?: boolean }> = {
     income: {
       title: "قائمة الدخل",
       icon: <TrendingUp className="w-5 h-5" />,
       color: "emerald",
     },
-    aging: {
-      title: "أعمار الذمم",
-      icon: <Clock className="w-5 h-5" />,
+    balancesheet: {
+      title: "الميزانية العمومية",
+      icon: <Scale className="w-5 h-5" />,
       color: "blue",
+      fullPage: true,
     },
-    expenses: {
-      title: "تحليل المصروفات",
-      icon: <PieChart className="w-5 h-5" />,
+    trialbalance: {
+      title: "ميزان المراجعة",
+      icon: <FileCheck className="w-5 h-5" />,
       color: "amber",
+      fullPage: true,
     },
     cashflow: {
       title: "التدفقات النقدية",
       icon: <BarChart3 className="w-5 h-5" />,
+      color: "purple",
+    },
+    aging: {
+      title: "أعمار الذمم",
+      icon: <Clock className="w-5 h-5" />,
+      color: "emerald",
+    },
+    expenses: {
+      title: "تحليل المصروفات",
+      icon: <PieChart className="w-5 h-5" />,
       color: "purple",
     },
   };
@@ -122,6 +137,31 @@ function ReportsInlineReportComponent({
   const config = reportConfig[reportId];
   if (!config) {
     return null;
+  }
+
+  // Balance Sheet and Trial Balance are full-page reports with their own hooks
+  if (config.fullPage) {
+    return (
+      <div className="animate-in slide-in-from-top-2 duration-300">
+        <div className="flex items-center justify-between p-4 bg-white rounded-t-xl border border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg bg-${config.color}-100 text-${config.color}-600`}>
+              {config.icon}
+            </div>
+            <h3 className="text-lg font-semibold text-slate-800">{config.title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="إغلاق"
+          >
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        {reportId === "balancesheet" && <BalanceSheetTab />}
+        {reportId === "trialbalance" && <TrialBalanceTab onExportCSV={() => {}} />}
+      </div>
+    );
   }
 
   const colorClasses: Record<string, string> = {
@@ -322,8 +362,8 @@ function AgingReport({
         return;
       }
 
-      // Skip if fully paid
-      if (isPaidStatus(entry.paymentStatus)) {
+      // Skip if fully paid OR immediate settlement (cash transaction)
+      if (isPaidStatus(entry.paymentStatus) || entry.immediateSettlement) {
         return;
       }
 

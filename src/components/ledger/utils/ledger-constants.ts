@@ -39,6 +39,7 @@ export interface LedgerEntry {
     remainingBalance?: number;
     paymentStatus?: "paid" | "unpaid" | "partial";
     isARAPEntry?: boolean;
+    immediateSettlement?: boolean;  // Whether entry was fully paid at creation (cash transaction)
     // Settlement Discount Fields
     totalDiscount?: number;           // Sum of all discounts given (خصم تسوية)
     // Bad Debt Write-off Fields
@@ -105,6 +106,8 @@ export const CATEGORIES: Category[] = [
             "مواد خام",
             "شحن",
             "شراء بضاعة جاهزة",
+            "عينات مجانية",       // Free samples - inventory given away
+            "هدر وتالف",          // Wastage and spoilage - inventory consumed
         ]
     },
     {
@@ -119,8 +122,6 @@ export const CATEGORIES: Category[] = [
             "رحلة عمل",
             "نقل بضاعة",
             "تسويق وإعلان",
-            "عينات مجانية",       // Free samples for marketing
-            "هدر وتالف",          // Wastage and spoilage
             "مصاريف إدارية",
             "اتصالات وإنترنت",
             "مصاريف مكتبية",

@@ -45,6 +45,7 @@ import {
   parseAmount,
   safeAdd,
   safeSubtract,
+  safeMultiply,
   roundCurrency,
 } from "@/lib/currency";
 import {
@@ -55,6 +56,7 @@ import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
   createJournalEntryForBadDebt,
+  addPaymentJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
@@ -319,10 +321,13 @@ export class LedgerService {
 
   /**
    * Get ALL ledger entries (for export purposes)
-   * No pagination limit - fetches all entries sorted by date ascending
+   * Safety limit of 10000 entries to prevent memory issues
+   * For larger datasets, consider adding date range filtering
    */
   async getAllLedgerEntries(): Promise<LedgerEntry[]> {
-    const q = query(this.ledgerRef, orderBy("date", "asc"));
+    // Safety limit to prevent unbounded queries on very large datasets
+    const MAX_EXPORT_ENTRIES = 10000;
+    const q = query(this.ledgerRef, orderBy("date", "asc"), limit(MAX_EXPORT_ENTRIES));
     const snapshot = await getDocs(q);
 
     const entries: LedgerEntry[] = [];
@@ -801,6 +806,9 @@ export class LedgerService {
       if (existingTransactionId) {
         const newClientName = formData.associatedParty || "غير محدد";
 
+        // Get current entry data once for use throughout this block
+        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+
         const paymentsQuery = query(
           this.paymentsRef,
           where("linkedTransactionId", "==", existingTransactionId)
@@ -808,27 +816,57 @@ export class LedgerService {
         const paymentsSnapshot = await getDocs(paymentsQuery);
 
         // First, delete journal entries for each payment being updated
-        for (const paymentDoc of paymentsSnapshot.docs) {
+        // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
+        const paymentJournalPromises = paymentsSnapshot.docs.map((paymentDoc) => {
           const paymentJournalQuery = query(
             this.journalEntriesRef,
             where("linkedPaymentId", "==", paymentDoc.id)
           );
-          const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+          return getDocs(paymentJournalQuery);
+        });
+        const paymentJournalSnapshots = await Promise.all(paymentJournalPromises);
+
+        // Add all payment journal deletions to batch
+        for (const paymentJournalSnapshot of paymentJournalSnapshots) {
           paymentJournalSnapshot.forEach((journalDoc) => {
             batch.delete(journalDoc.ref);
           });
         }
 
-        // Then update payment records (without recreating their journal entries)
-        paymentsSnapshot.docs.forEach((paymentDoc) => {
+        // Then update payment records and recreate their journal entries
+        for (const paymentDoc of paymentsSnapshot.docs) {
+          const paymentData = paymentDoc.data();
+
+          // Update the payment record
           batch.update(paymentDoc.ref, {
             clientName: newClientName,
-            amount: newAmount,
             date: new Date(formData.date),
             category: formData.category,
             subCategory: formData.subCategory,
+            // Note: Keep original payment amount, don't change to newAmount
+            // The payment amount was the amount actually paid, not the invoice total
           });
-        });
+
+          // Recreate the payment journal entry (DR Cash, CR AR for receipts)
+          // Only for standard AR/AP entries (income/expense with partial payments)
+          // Skip for:
+          // - Immediate settlements (no separate payment journal)
+          // - Advances (use Cash vs Advance accounts, not AR/AP)
+          // - Loans (use Cash vs Loans accounts, not AR/AP)
+          const isAdvance = isAdvanceTransaction(currentData?.category);
+          const isLoan = currentData?.type === 'قرض';
+          if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvance && !isLoan) {
+            const paymentType = paymentData.type as 'قبض' | 'صرف';
+            addPaymentJournalEntryToBatch(batch, this.userId, {
+              paymentId: paymentDoc.id,
+              description: paymentData.notes || `دفعة - ${formData.description}`,
+              amount: paymentData.amount,
+              paymentType: paymentType,
+              date: new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+            });
+          }
+        }
 
         // Also sync to linked cheques
         const chequesQuery = query(
@@ -843,6 +881,63 @@ export class LedgerService {
           });
         });
 
+        // Handle COGS entries for inventory sales
+        // COGS entries are auto-generated during sale and need to be deleted + recreated on edit
+        const cogsLedgerQuery = query(
+          this.ledgerRef,
+          where("transactionId", "==", `COGS-${existingTransactionId}`),
+          limit(1)
+        );
+        const cogsLedgerSnapshot = await getDocs(cogsLedgerQuery);
+
+        let cogsRecreationData: {
+          itemId: string;
+          itemName: string;
+          quantity: number;
+          originalCogsAmount: number; // Fallback if inventory deleted/zero price
+        } | null = null;
+
+        if (!cogsLedgerSnapshot.empty) {
+          // Capture original COGS amount before deletion (for fallback)
+          const originalCogsData = cogsLedgerSnapshot.docs[0].data();
+          const originalCogsAmount = originalCogsData?.amount || 0;
+
+          // Get inventory movement to find itemId and quantity
+          const movementQuery = query(
+            this.inventoryMovementsRef,
+            where("linkedTransactionId", "==", existingTransactionId),
+            limit(1)
+          );
+          const movementSnapshot = await getDocs(movementQuery);
+
+          // Delete old COGS ledger entry
+          cogsLedgerSnapshot.forEach((cogsDoc) => {
+            batch.delete(cogsDoc.ref);
+          });
+
+          // Delete old COGS journal entries (linkedDocumentType='inventory')
+          const cogsJournalQuery = query(
+            this.journalEntriesRef,
+            where("linkedTransactionId", "==", existingTransactionId),
+            where("linkedDocumentType", "==", "inventory")
+          );
+          const cogsJournalSnapshot = await getDocs(cogsJournalQuery);
+          cogsJournalSnapshot.forEach((journalDoc) => {
+            batch.delete(journalDoc.ref);
+          });
+
+          // Store movement data for COGS recreation
+          if (!movementSnapshot.empty) {
+            const movementData = movementSnapshot.docs[0].data();
+            cogsRecreationData = {
+              itemId: movementData.itemId,
+              itemName: movementData.itemName,
+              quantity: movementData.quantity,
+              originalCogsAmount, // Store original amount as fallback
+            };
+          }
+        }
+
         // Delete old journal entries and recreate with new values
         const journalQuery = query(
           this.journalEntriesRef,
@@ -850,15 +945,18 @@ export class LedgerService {
         );
         const journalSnapshot = await getDocs(journalQuery);
 
-        // Delete existing journal entries
+        // Delete existing journal entries (excluding COGS which were already deleted above)
         journalSnapshot.forEach((journalDoc) => {
-          batch.delete(journalDoc.ref);
+          const data = journalDoc.data();
+          // Skip COGS journals as they were already deleted
+          if (data?.linkedDocumentType !== 'inventory') {
+            batch.delete(journalDoc.ref);
+          }
         });
 
         // Recreate journal entry with new values (only if entry exists)
         // Use currentData flags to preserve original settlement type
         // For legacy entries without these fields, default to immediate settlement (cash)
-        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
         if (currentData) {
           addJournalEntryToBatch(batch, this.userId, {
             transactionId: existingTransactionId,
@@ -871,6 +969,69 @@ export class LedgerService {
             isARAPEntry: currentData.isARAPEntry ?? false,
             immediateSettlement: currentData.immediateSettlement ?? true,
           });
+        }
+
+        // Recreate COGS entries if we had them
+        if (cogsRecreationData) {
+          // Get current inventory cost
+          const inventoryRef = doc(
+            firestore,
+            `users/${this.userId}/inventory`,
+            cogsRecreationData.itemId
+          );
+          const inventorySnap = await getDoc(inventoryRef);
+          const currentUnitCost = inventorySnap.exists()
+            ? (inventorySnap.data()?.unitPrice || 0)
+            : 0;
+
+          // Calculate new COGS amount:
+          // - Use current inventory cost if available (recalculate)
+          // - Fall back to original COGS amount if inventory deleted or zero price
+          let newCogsAmount: number;
+          let cogsNotes: string;
+
+          if (currentUnitCost > 0) {
+            // Normal case: recalculate using current inventory cost
+            newCogsAmount = safeMultiply(cogsRecreationData.quantity, currentUnitCost);
+            cogsNotes = `حساب تلقائي: ${cogsRecreationData.quantity} × ${roundCurrency(currentUnitCost).toFixed(2)} = ${roundCurrency(newCogsAmount).toFixed(2)} دينار`;
+          } else if (cogsRecreationData.originalCogsAmount > 0) {
+            // Fallback: inventory item deleted or has zero price, use original amount
+            newCogsAmount = cogsRecreationData.originalCogsAmount;
+            cogsNotes = `تكلفة محفوظة (صنف محذوف أو بدون سعر): ${roundCurrency(newCogsAmount).toFixed(2)} دينار`;
+          } else {
+            // No valid COGS to recreate
+            newCogsAmount = 0;
+            cogsNotes = '';
+          }
+
+          // Only create COGS entry if we have a valid amount
+          if (newCogsAmount > 0) {
+            const cogsDescription = `تكلفة البضاعة المباعة - ${cogsRecreationData.itemName}`;
+
+            // Create new COGS ledger entry
+            const cogsDocRef = doc(this.ledgerRef);
+            batch.set(cogsDocRef, {
+              transactionId: `COGS-${existingTransactionId}`,
+              description: cogsDescription,
+              type: "مصروف",
+              amount: newCogsAmount,
+              category: "تكلفة البضاعة المباعة (COGS)",
+              subCategory: "مبيعات",
+              date: new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+              autoGenerated: true,
+              notes: cogsNotes,
+              createdAt: new Date(),
+            });
+
+            // Create new COGS journal entry
+            addCOGSJournalEntryToBatch(batch, this.userId, {
+              description: cogsDescription,
+              amount: newCogsAmount,
+              date: new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+            });
+          }
         }
       }
 

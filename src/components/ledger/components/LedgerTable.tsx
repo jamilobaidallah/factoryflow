@@ -252,9 +252,14 @@ const LedgerTableRow = memo(function LedgerTableRow({
       {/* Status */}
       <TableCell>
         {entry.type === "حركة رأس مال" ? (
-          // Equity transactions don't have payment status - show "completed" badge
+          // Equity transactions - show "completed" badge
           <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">
             مكتمل
+          </span>
+        ) : entry.immediateSettlement ? (
+          // Cash transactions (immediateSettlement) - show "paid" badge
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700">
+            مدفوع
           </span>
         ) : entry.isARAPEntry ? (
           <StatusBadge
@@ -416,9 +421,14 @@ const LedgerCard = memo(function LedgerCard({
       <div className="flex items-center gap-2 text-xs">
         <TypeBadge type={entry.type} />
         {entry.type === "حركة رأس مال" ? (
-          // Equity transactions don't have payment status - show "completed" badge
+          // Equity transactions - show "completed" badge
           <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">
             مكتمل
+          </span>
+        ) : entry.immediateSettlement ? (
+          // Cash transactions (immediateSettlement) - show "paid" badge
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700">
+            مدفوع
           </span>
         ) : entry.isARAPEntry ? (
           <StatusBadge
