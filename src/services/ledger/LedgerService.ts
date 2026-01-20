@@ -803,6 +803,9 @@ export class LedgerService {
       if (existingTransactionId) {
         const newClientName = formData.associatedParty || "غير محدد";
 
+        // Get current entry data once for use throughout this block
+        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+
         const paymentsQuery = query(
           this.paymentsRef,
           where("linkedTransactionId", "==", existingTransactionId)
@@ -841,7 +844,6 @@ export class LedgerService {
           // - Immediate settlements (no separate payment journal)
           // - Advances (use Cash vs Advance accounts, not AR/AP)
           // - Loans (use Cash vs Loans accounts, not AR/AP)
-          const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
           const isAdvance = isAdvanceTransaction(currentData?.category);
           const isLoan = currentData?.type === 'قرض';
           if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvance && !isLoan) {
@@ -938,7 +940,6 @@ export class LedgerService {
         // Recreate journal entry with new values (only if entry exists)
         // Use currentData flags to preserve original settlement type
         // For legacy entries without these fields, default to immediate settlement (cash)
-        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
         if (currentData) {
           addJournalEntryToBatch(batch, this.userId, {
             transactionId: existingTransactionId,
