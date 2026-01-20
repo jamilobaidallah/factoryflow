@@ -26,6 +26,7 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
+import { createJournalEntryForPayment } from "@/services/journalService";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -279,6 +280,23 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
 
           // Commit atomically
           await batch.commit();
+
+          // Create journal entry for the cheque payment (double-entry accounting)
+          // Disbursement: DR AP, CR Cash
+          try {
+            await createJournalEntryForPayment(
+              user.dataOwnerId,
+              paymentDocRef.id,
+              `صرف شيك صادر رقم ${formData.chequeNumber}`,
+              chequeAmount,
+              PAYMENT_TYPES.DISBURSEMENT as 'قبض' | 'صرف',
+              effectivePaymentDate,
+              formData.linkedTransactionId || undefined
+            );
+          } catch (journalError) {
+            console.error("Failed to create journal entry for cheque cashing:", journalError);
+            // Don't fail the whole operation - payment was already recorded
+          }
 
           toast({
             title: "تم التحديث بنجاح",

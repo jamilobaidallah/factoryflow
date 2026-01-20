@@ -6,6 +6,7 @@
 import { doc } from "firebase/firestore";
 import type { CheckFormData, OutgoingCheckFormData } from "@/components/ledger/types/ledger";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import type { HandlerContext } from "../types";
 
 /**
@@ -74,17 +75,31 @@ export function handleIncomingCheckBatch(
   // to avoid double payment. The settlement logic will handle it.
   if (accountingType === "cashed" && !formData.immediateSettlement) {
     const paymentDocRef = doc(refs.payments);
+    const paymentType = entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+    const paymentDescription = `شيك وارد رقم ${checkFormData.chequeNumber} - ${formData.description}`;
+
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
-      type: entryType === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT,
+      type: paymentType,
       method: "cheque",
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
-      notes: `شيك صرف رقم ${checkFormData.chequeNumber} - ${formData.description}`,
+      notes: paymentDescription,
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+    });
+
+    // Create journal entry for the cheque payment (double-entry accounting)
+    // Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
+    addPaymentJournalEntryToBatch(batch, ctx.userId, {
+      paymentId: paymentDocRef.id,
+      description: paymentDescription,
+      amount: chequeAmount,
+      paymentType: paymentType as 'قبض' | 'صرف',
+      date: new Date(formData.date),
+      linkedTransactionId: transactionId,
     });
   } else if (accountingType === "endorsed") {
     const receiptDocRef = doc(refs.payments);
@@ -174,6 +189,8 @@ export function handleOutgoingCheckBatch(
   // to avoid double payment. The settlement logic will handle it.
   if (accountingType === "cashed" && !formData.immediateSettlement) {
     const paymentDocRef = doc(refs.payments);
+    const paymentDescription = `شيك صادر رقم ${outgoingCheckFormData.chequeNumber} - ${formData.description}`;
+
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
       amount: chequeAmount,
@@ -181,10 +198,21 @@ export function handleOutgoingCheckBatch(
       method: "cheque",
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
-      notes: `شيك صرف رقم ${outgoingCheckFormData.chequeNumber} - ${formData.description}`,
+      notes: paymentDescription,
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+    });
+
+    // Create journal entry for the cheque payment (double-entry accounting)
+    // Disbursement: DR AP, CR Cash
+    addPaymentJournalEntryToBatch(batch, ctx.userId, {
+      paymentId: paymentDocRef.id,
+      description: paymentDescription,
+      amount: chequeAmount,
+      paymentType: PAYMENT_TYPES.DISBURSEMENT as 'قبض' | 'صرف',
+      date: new Date(formData.date),
+      linkedTransactionId: transactionId,
     });
   } else if (accountingType === "endorsed") {
     const paymentDocRef = doc(refs.payments);

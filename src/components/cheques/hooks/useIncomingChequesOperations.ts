@@ -26,6 +26,7 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
+import { createJournalEntryForPayment } from "@/services/journalService";
 
 /** Allocation entry for multi-allocation endorsement */
 interface EndorsementAllocation {
@@ -273,6 +274,23 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
           // Commit atomically
           await batch.commit();
+
+          // Create journal entry for the cheque receipt (double-entry accounting)
+          // Receipt: DR Cash, CR AR
+          try {
+            await createJournalEntryForPayment(
+              user.dataOwnerId,
+              paymentDocRef.id,
+              `تحصيل شيك وارد رقم ${formData.chequeNumber}`,
+              chequeAmount,
+              PAYMENT_TYPES.RECEIPT as 'قبض' | 'صرف',
+              effectivePaymentDate,
+              formData.linkedTransactionId || undefined
+            );
+          } catch (journalError) {
+            console.error("Failed to create journal entry for cheque cashing:", journalError);
+            // Don't fail the whole operation - payment was already recorded
+          }
         } else {
           // Simple update - no status change
           await updateDoc(chequeRef, updateData);

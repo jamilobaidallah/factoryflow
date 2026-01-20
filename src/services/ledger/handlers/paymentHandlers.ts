@@ -44,12 +44,15 @@ export function handleImmediateSettlementBatch(
   amount: number,
   method: "cash" | "cheque" = "cash"
 ): void {
-  const { batch, transactionId, formData, entryType, refs } = ctx;
+  const { batch, transactionId, formData, entryType, refs, userId } = ctx;
 
   if (amount > 0) {
     const paymentDocRef = doc(refs.payments);
     const isCheque = method === "cheque";
     const paymentType = getPaymentType(entryType, formData.category);
+    const paymentDescription = isCheque
+      ? `تسوية فورية بشيك - ${formData.description}`
+      : `تسوية فورية نقدية - ${formData.description}`;
 
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
@@ -58,12 +61,21 @@ export function handleImmediateSettlementBatch(
       method: method,
       linkedTransactionId: transactionId,
       date: new Date(formData.date),
-      notes: isCheque
-        ? `تسوية فورية بشيك - ${formData.description}`
-        : `تسوية فورية نقدية - ${formData.description}`,
+      notes: paymentDescription,
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+    });
+
+    // Create journal entry for the payment (double-entry accounting)
+    // Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
+    addPaymentJournalEntryToBatch(batch, userId, {
+      paymentId: paymentDocRef.id,
+      description: paymentDescription,
+      amount: amount,
+      paymentType: paymentType as 'قبض' | 'صرف',
+      date: new Date(formData.date),
+      linkedTransactionId: transactionId,
     });
   }
 }
