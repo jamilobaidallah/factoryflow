@@ -55,6 +55,7 @@ import {
   addJournalEntryToBatch,
   addCOGSJournalEntryToBatch,
   createJournalEntryForBadDebt,
+  addPaymentJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
@@ -819,16 +820,35 @@ export class LedgerService {
           });
         }
 
-        // Then update payment records (without recreating their journal entries)
-        paymentsSnapshot.docs.forEach((paymentDoc) => {
+        // Then update payment records and recreate their journal entries
+        for (const paymentDoc of paymentsSnapshot.docs) {
+          const paymentData = paymentDoc.data();
+
+          // Update the payment record
           batch.update(paymentDoc.ref, {
             clientName: newClientName,
-            amount: newAmount,
             date: new Date(formData.date),
             category: formData.category,
             subCategory: formData.subCategory,
+            // Note: Keep original payment amount, don't change to newAmount
+            // The payment amount was the amount actually paid, not the invoice total
           });
-        });
+
+          // Recreate the payment journal entry (DR Cash, CR AR for receipts)
+          // Only for AR/AP entries - cash entries don't have separate payment journals
+          const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+          if (currentData?.isARAPEntry && !currentData?.immediateSettlement) {
+            const paymentType = paymentData.type as 'قبض' | 'صرف';
+            addPaymentJournalEntryToBatch(batch, this.userId, {
+              paymentId: paymentDoc.id,
+              description: paymentData.notes || `دفعة - ${formData.description}`,
+              amount: paymentData.amount,
+              paymentType: paymentType,
+              date: new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+            });
+          }
+        }
 
         // Also sync to linked cheques
         const chequesQuery = query(
