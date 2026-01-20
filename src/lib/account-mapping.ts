@@ -206,6 +206,12 @@ export function getAccountMappingForLedgerEntry(
     }
   }
 
+  // Check for advance transactions (Balance Sheet items, NOT P&L)
+  // Advances must be handled BEFORE income/expense routing
+  if (isAdvanceCategory(category)) {
+    return getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
+  }
+
   // Income transaction
   if (type === TRANSACTION_TYPES.INCOME) {
     const revenueAccount =
