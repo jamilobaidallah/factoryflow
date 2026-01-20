@@ -205,6 +205,18 @@ const createMockBatch = () => ({
   commit: jest.fn(() => Promise.resolve()),
 });
 
+// Helper to create mock QuerySnapshot (Firebase-compatible)
+interface MockDoc {
+  ref: { id: string };
+  id: string;
+  data: () => Record<string, unknown>;
+}
+const createMockQuerySnapshot = (docs: MockDoc[] = []) => ({
+  docs,
+  empty: docs.length === 0,
+  forEach: (fn: (doc: MockDoc) => void) => docs.forEach(fn),
+});
+
 // Helper to create mock form data
 const createMockFormData = (overrides: Partial<LedgerFormData> = {}): LedgerFormData => ({
   description: 'Test transaction',
@@ -539,7 +551,8 @@ describe('LedgerService', () => {
           paymentStatus: 'partial',
         }),
       });
-      mockGetDocs.mockResolvedValue({ docs: [], forEach: jest.fn() });
+      // Use createMockQuerySnapshot to include 'empty' property
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
 
       const formData = createMockFormData({ amount: '1500' });
 
@@ -565,7 +578,8 @@ describe('LedgerService', () => {
           totalPaid: 300,
         }),
       });
-      mockGetDocs.mockResolvedValue({ docs: [], forEach: jest.fn() });
+      // Use createMockQuerySnapshot to include 'empty' property
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
 
       const formData = createMockFormData({ amount: '1000' });
 

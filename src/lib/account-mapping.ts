@@ -212,6 +212,12 @@ export function getAccountMappingForLedgerEntry(
     return getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
   }
 
+  // Check for loan transactions (Balance Sheet items, NOT P&L)
+  // Loans must be handled BEFORE income/expense routing
+  if (isLoanCategory(category)) {
+    return getAccountMappingForLoan(category, subCategory);
+  }
+
   // Income transaction
   if (type === TRANSACTION_TYPES.INCOME) {
     const revenueAccount =
@@ -420,6 +426,87 @@ export function getAccountMappingForAdvance(
  */
 export function isAdvanceCategory(category: string): boolean {
   return category === 'سلفة عميل' || category === 'سلفة مورد';
+}
+
+/**
+ * Loan category constants
+ */
+const LOAN_CATEGORIES = {
+  GIVEN: 'قروض ممنوحة',
+  RECEIVED: 'قروض مستلمة',
+} as const;
+
+const LOAN_SUBCATEGORIES = {
+  GIVE_LOAN: 'منح قرض',
+  RECEIVE_LOAN: 'استلام قرض',
+  COLLECT_LOAN: 'تحصيل قرض',
+  REPAY_LOAN: 'سداد قرض',
+} as const;
+
+/**
+ * Check if a category is a loan category
+ */
+export function isLoanCategory(category: string): boolean {
+  return category === LOAN_CATEGORIES.GIVEN || category === LOAN_CATEGORIES.RECEIVED;
+}
+
+/**
+ * Get account mapping for loan transactions
+ *
+ * Loans are Balance Sheet items, NOT P&L:
+ * - Loan Given (قروض ممنوحة):
+ *   - Initial (منح قرض): DR Loans Receivable, CR Cash (asset increases)
+ *   - Collection (تحصيل قرض): DR Cash, CR Loans Receivable (asset decreases)
+ * - Loan Received (قروض مستلمة):
+ *   - Initial (استلام قرض): DR Cash, CR Loans Payable (liability increases)
+ *   - Repayment (سداد قرض): DR Loans Payable, CR Cash (liability decreases)
+ */
+export function getAccountMappingForLoan(
+  category: string,
+  subCategory?: string
+): AccountMapping {
+  const isLoanGiven = category === LOAN_CATEGORIES.GIVEN;
+  const isInitialLoan = subCategory === LOAN_SUBCATEGORIES.GIVE_LOAN ||
+                        subCategory === LOAN_SUBCATEGORIES.RECEIVE_LOAN;
+
+  if (isLoanGiven) {
+    if (isInitialLoan) {
+      // Give loan: DR Loans Receivable, CR Cash (asset increases)
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    } else {
+      // Collect loan: DR Cash, CR Loans Receivable (asset decreases)
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_RECEIVABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_RECEIVABLE),
+      };
+    }
+  } else {
+    // Loans Received
+    if (isInitialLoan) {
+      // Receive loan: DR Cash, CR Loans Payable (liability increases)
+      return {
+        debitAccount: ACCOUNT_CODES.CASH,
+        creditAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+      };
+    } else {
+      // Repay loan: DR Loans Payable, CR Cash (liability decreases)
+      return {
+        debitAccount: ACCOUNT_CODES.LOANS_PAYABLE,
+        creditAccount: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.LOANS_PAYABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    }
+  }
 }
 
 /**
