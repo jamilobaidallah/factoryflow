@@ -321,10 +321,13 @@ export class LedgerService {
 
   /**
    * Get ALL ledger entries (for export purposes)
-   * No pagination limit - fetches all entries sorted by date ascending
+   * Safety limit of 10000 entries to prevent memory issues
+   * For larger datasets, consider adding date range filtering
    */
   async getAllLedgerEntries(): Promise<LedgerEntry[]> {
-    const q = query(this.ledgerRef, orderBy("date", "asc"));
+    // Safety limit to prevent unbounded queries on very large datasets
+    const MAX_EXPORT_ENTRIES = 10000;
+    const q = query(this.ledgerRef, orderBy("date", "asc"), limit(MAX_EXPORT_ENTRIES));
     const snapshot = await getDocs(q);
 
     const entries: LedgerEntry[] = [];
@@ -813,12 +816,18 @@ export class LedgerService {
         const paymentsSnapshot = await getDocs(paymentsQuery);
 
         // First, delete journal entries for each payment being updated
-        for (const paymentDoc of paymentsSnapshot.docs) {
+        // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
+        const paymentJournalPromises = paymentsSnapshot.docs.map((paymentDoc) => {
           const paymentJournalQuery = query(
             this.journalEntriesRef,
             where("linkedPaymentId", "==", paymentDoc.id)
           );
-          const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+          return getDocs(paymentJournalQuery);
+        });
+        const paymentJournalSnapshots = await Promise.all(paymentJournalPromises);
+
+        // Add all payment journal deletions to batch
+        for (const paymentJournalSnapshot of paymentJournalSnapshots) {
           paymentJournalSnapshot.forEach((journalDoc) => {
             batch.delete(journalDoc.ref);
           });

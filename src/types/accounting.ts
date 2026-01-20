@@ -179,6 +179,7 @@ export function getNormalBalance(type: AccountType): NormalBalance {
 
 /**
  * Calculate account balance based on normal balance side
+ * Uses safe arithmetic to prevent floating point errors in money calculations
  *
  * For debit-normal accounts: balance = debits - credits
  * For credit-normal accounts: balance = credits - debits
@@ -188,14 +189,22 @@ export function calculateAccountBalance(
   totalCredits: number,
   normalBalance: NormalBalance
 ): number {
+  // Use Decimal.js for precise money arithmetic
+  const Decimal = require('decimal.js-light');
+
+  const safeSubtract = (a: number, b: number): number => {
+    return new Decimal(a || 0).minus(b || 0).toNumber();
+  };
+
   if (normalBalance === 'debit') {
-    return totalDebits - totalCredits;
+    return safeSubtract(totalDebits, totalCredits);
   }
-  return totalCredits - totalDebits;
+  return safeSubtract(totalCredits, totalDebits);
 }
 
 /**
  * Validate journal entry lines (debits must equal credits)
+ * Uses safe arithmetic to prevent floating point errors in money calculations
  */
 export function validateJournalEntry(lines: JournalLine[]): {
   isValid: boolean;
@@ -203,9 +212,21 @@ export function validateJournalEntry(lines: JournalLine[]): {
   totalCredits: number;
   difference: number;
 } {
-  const totalDebits = lines.reduce((sum, line) => sum + line.debit, 0);
-  const totalCredits = lines.reduce((sum, line) => sum + line.credit, 0);
-  const difference = Math.abs(totalDebits - totalCredits);
+  // Import safeAdd and safeSubtract inline to avoid circular dependencies
+  // These use Decimal.js for precise money arithmetic
+  const Decimal = require('decimal.js-light');
+
+  const safeAdd = (a: number, b: number): number => {
+    return new Decimal(a || 0).plus(b || 0).toNumber();
+  };
+
+  const safeSubtract = (a: number, b: number): number => {
+    return new Decimal(a || 0).minus(b || 0).toNumber();
+  };
+
+  const totalDebits = lines.reduce((sum, line) => safeAdd(sum, line.debit), 0);
+  const totalCredits = lines.reduce((sum, line) => safeAdd(sum, line.credit), 0);
+  const difference = Math.abs(safeSubtract(totalDebits, totalCredits));
 
   // Allow for small floating point differences (use 0.001 tolerance)
   const isValid = difference < 0.001;
