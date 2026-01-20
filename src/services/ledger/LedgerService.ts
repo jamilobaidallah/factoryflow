@@ -835,9 +835,15 @@ export class LedgerService {
           });
 
           // Recreate the payment journal entry (DR Cash, CR AR for receipts)
-          // Only for AR/AP entries - cash entries don't have separate payment journals
+          // Only for standard AR/AP entries (income/expense with partial payments)
+          // Skip for:
+          // - Immediate settlements (no separate payment journal)
+          // - Advances (use Cash vs Advance accounts, not AR/AP)
+          // - Loans (use Cash vs Loans accounts, not AR/AP)
           const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
-          if (currentData?.isARAPEntry && !currentData?.immediateSettlement) {
+          const isAdvance = isAdvanceTransaction(currentData?.category);
+          const isLoan = currentData?.type === 'قرض';
+          if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvance && !isLoan) {
             const paymentType = paymentData.type as 'قبض' | 'صرف';
             addPaymentJournalEntryToBatch(batch, this.userId, {
               paymentId: paymentDoc.id,
