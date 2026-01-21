@@ -93,9 +93,10 @@ export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
 
 /**
  * Format currency for display
+ * Preserves sign for negative values (e.g., negative equity)
  */
 export function formatBalanceSheetAmount(amount: number): string {
-  const formatted = formatNumber(Math.abs(amount), 2);
+  const formatted = formatNumber(amount, 2);
   return `${formatted} دينار`;
 }
 
