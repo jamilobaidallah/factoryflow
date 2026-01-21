@@ -1,5 +1,25 @@
 "use client";
 
+/**
+ * Outgoing Cheques Operations Hook
+ *
+ * JOURNAL ENTRY PATTERN:
+ * This hook uses `createJournalEntryForPayment` which creates journal entries
+ * AFTER the main batch commits. This is necessary because:
+ * 1. The cheque/payment records must be saved first (batch commit)
+ * 2. Journal entry is created as a separate async operation
+ * 3. If journal creation fails, the main operation still succeeds
+ *
+ * To track journal entry status, payments include a `journalEntryCreated` flag:
+ * - Initially set to `false` when payment is created in batch
+ * - Updated to `true` after journal entry is successfully created
+ * - Remains `false` if journal entry fails (for reconciliation)
+ *
+ * This is different from handlers (chequeHandlers.ts, paymentHandlers.ts)
+ * which use `addPaymentJournalEntryToBatch` to add journal entries to the
+ * SAME batch for atomic all-or-nothing behavior.
+ */
+
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -232,7 +252,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           // Store the payment ID in the cheque for later reference
           updateData.linkedPaymentId = paymentDocRef.id;
 
-          // Add payment to batch
+          // Add payment to batch (journalEntryCreated: false initially, updated after async journal creation)
           batch.set(paymentDocRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
@@ -243,6 +263,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             date: effectivePaymentDate,
             notes: `صرف شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
+            journalEntryCreated: false, // Will be updated after async journal entry creation
           });
 
           // Update cheque in batch
@@ -293,9 +314,12 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
               effectivePaymentDate,
               formData.linkedTransactionId || undefined
             );
+            // Update payment record to mark journal entry as created
+            await updateDoc(paymentDocRef, { journalEntryCreated: true });
           } catch (journalError) {
             console.error("Failed to create journal entry for cheque cashing:", journalError);
             // Don't fail the whole operation - payment was already recorded
+            // journalEntryCreated remains false for reconciliation
           }
 
           toast({

@@ -1,6 +1,16 @@
 /**
  * Cheque Handlers
  * Batch operations for incoming and outgoing cheques
+ *
+ * JOURNAL ENTRY PATTERN:
+ * These handlers use `addPaymentJournalEntryToBatch` which adds journal entries
+ * to the SAME Firestore batch. This ensures atomicity - if any part fails,
+ * everything rolls back (cheque, payment, AND journal entry).
+ *
+ * This is different from the hooks (useIncomingChequesOperations, useOutgoingChequesOperations)
+ * which use `createJournalEntryForPayment` AFTER the batch commits. The hooks handle
+ * existing cheques where the main record is already saved, so journal entries are
+ * created as a separate async operation with graceful failure handling.
  */
 
 import { doc } from "firebase/firestore";
@@ -89,6 +99,7 @@ export function handleIncomingCheckBatch(
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+      journalEntryCreated: true, // Flag for reconciliation - journal entry in same batch
     });
 
     // Create journal entry for the cheque payment (double-entry accounting)
@@ -102,6 +113,8 @@ export function handleIncomingCheckBatch(
       linkedTransactionId: transactionId,
     });
   } else if (accountingType === "endorsed") {
+    // Endorsement payments don't create journal entries (noCashMovement: true)
+    // They represent AR/AP transfers, not actual cash movements
     const receiptDocRef = doc(refs.payments);
     batch.set(receiptDocRef, {
       clientName: formData.associatedParty || "غير محدد",
@@ -113,6 +126,7 @@ export function handleIncomingCheckBatch(
       createdAt: new Date(),
       isEndorsement: true,
       noCashMovement: true,
+      journalEntryCreated: false, // No journal entry for endorsement (no cash movement)
     });
 
     const disbursementDocRef = doc(refs.payments);
@@ -126,6 +140,7 @@ export function handleIncomingCheckBatch(
       createdAt: new Date(),
       isEndorsement: true,
       noCashMovement: true,
+      journalEntryCreated: false, // No journal entry for endorsement (no cash movement)
     });
   }
 }
@@ -202,6 +217,7 @@ export function handleOutgoingCheckBatch(
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+      journalEntryCreated: true, // Flag for reconciliation - journal entry in same batch
     });
 
     // Create journal entry for the cheque payment (double-entry accounting)
@@ -215,6 +231,7 @@ export function handleOutgoingCheckBatch(
       linkedTransactionId: transactionId,
     });
   } else if (accountingType === "endorsed") {
+    // Endorsed outgoing cheques - payment for AR/AP tracking but no journal entry
     const paymentDocRef = doc(refs.payments);
     batch.set(paymentDocRef, {
       clientName: formData.associatedParty || "غير محدد",
@@ -228,6 +245,7 @@ export function handleOutgoingCheckBatch(
       subCategory: formData.subCategory,
       createdAt: new Date(),
       isEndorsement: true,
+      journalEntryCreated: false, // Endorsed cheque - no journal entry (AR/AP only)
     });
   }
 }

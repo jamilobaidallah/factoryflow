@@ -1,6 +1,14 @@
 /**
  * Payment Handlers
  * Batch operations for immediate settlements and initial payments
+ *
+ * JOURNAL ENTRY PATTERN:
+ * These handlers use `addPaymentJournalEntryToBatch` which adds journal entries
+ * to the SAME Firestore batch. This ensures atomicity - if any part fails,
+ * everything rolls back (payment AND journal entry together).
+ *
+ * This is different from UI hooks which use `createJournalEntryForPayment` AFTER
+ * the batch commits, with graceful failure handling for journal entry creation.
  */
 
 import { doc } from "firebase/firestore";
@@ -65,6 +73,7 @@ export function handleImmediateSettlementBatch(
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+      journalEntryCreated: true, // Flag for reconciliation - journal entry in same batch
     });
 
     // Create journal entry for the payment (double-entry accounting)
@@ -106,6 +115,7 @@ export function handleInitialPaymentBatch(
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
+      journalEntryCreated: true, // Flag for reconciliation - journal entry in same batch
     });
 
     // Create journal entry for the payment (double-entry accounting)

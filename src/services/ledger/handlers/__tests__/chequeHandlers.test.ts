@@ -127,6 +127,7 @@ describe("Cheque Handlers", () => {
           type: PAYMENT_TYPES.RECEIPT,
           method: "cheque",
           linkedTransactionId: "TXN-TEST-123",
+          journalEntryCreated: true, // Flag for reconciliation
         });
 
         // Verify journal entry was created for double-entry accounting
@@ -419,6 +420,7 @@ describe("Cheque Handlers", () => {
           type: PAYMENT_TYPES.DISBURSEMENT,
           method: "cheque",
           linkedTransactionId: "TXN-TEST-123",
+          journalEntryCreated: true, // Flag for reconciliation
         });
 
         // Verify journal entry was created for double-entry accounting
