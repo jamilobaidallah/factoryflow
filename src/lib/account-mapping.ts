@@ -28,7 +28,7 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'مواد خام': '5010',
   'شحن': '5020',
   'شراء بضاعة جاهزة': '5030',
-  'نقل بضاعة': '5020', // Freight/shipping for goods → same as شحن
+  'نقل بضاعة': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Operating transport → 5440 (not COGS)
   'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS (inventory consumed)
   'عينات مجانية': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Free samples → COGS (inventory given away)
 
