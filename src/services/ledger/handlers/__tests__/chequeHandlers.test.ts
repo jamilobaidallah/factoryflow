@@ -8,11 +8,19 @@ import { handleIncomingCheckBatch, handleOutgoingCheckBatch } from "../chequeHan
 import type { HandlerContext } from "../../types";
 import type { CheckFormData, OutgoingCheckFormData, LedgerFormData } from "@/components/ledger/types/ledger";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 
 // Mock firebase/firestore
 jest.mock("firebase/firestore", () => ({
   doc: jest.fn(() => ({ id: `mock-doc-${Math.random().toString(36).substr(2, 9)}` })),
 }));
+
+// Mock journalService to avoid Firebase initialization and verify calls
+jest.mock("@/services/journalService", () => ({
+  addPaymentJournalEntryToBatch: jest.fn(),
+}));
+
+const mockAddPaymentJournalEntryToBatch = addPaymentJournalEntryToBatch as jest.Mock;
 
 describe("Cheque Handlers", () => {
   // Helper to create base form data
@@ -80,6 +88,11 @@ describe("Cheque Handlers", () => {
     };
   };
 
+  // Reset mocks before each test
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe("handleIncomingCheckBatch", () => {
     describe("Cashed Cheques (accountingType: cashed)", () => {
       it("should create cheque and payment for income entry", () => {
@@ -115,6 +128,18 @@ describe("Cheque Handlers", () => {
           method: "cheque",
           linkedTransactionId: "TXN-TEST-123",
         });
+
+        // Verify journal entry was created for double-entry accounting
+        expect(mockAddPaymentJournalEntryToBatch).toHaveBeenCalledTimes(1);
+        expect(mockAddPaymentJournalEntryToBatch).toHaveBeenCalledWith(
+          ctx.batch,
+          "test-user-123",
+          expect.objectContaining({
+            amount: 500,
+            paymentType: PAYMENT_TYPES.RECEIPT,
+            linkedTransactionId: "TXN-TEST-123",
+          })
+        );
       });
 
       it("should create cheque and disbursement payment for expense entry", () => {
@@ -147,7 +172,7 @@ describe("Cheque Handlers", () => {
     });
 
     describe("Postponed Cheques (accountingType: postponed)", () => {
-      it("should create cheque with PENDING status and no payment", () => {
+      it("should create cheque with PENDING status, no payment, and no journal entry", () => {
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ accountingType: "postponed" });
         const ctx = createMockContext(formData, "دخل");
@@ -162,6 +187,9 @@ describe("Cheque Handlers", () => {
           status: CHEQUE_STATUS_AR.PENDING,
           accountingType: "postponed",
         });
+
+        // No journal entry for postponed cheques (no cash movement yet)
+        expect(mockAddPaymentJournalEntryToBatch).not.toHaveBeenCalled();
       });
     });
 
@@ -392,22 +420,35 @@ describe("Cheque Handlers", () => {
           method: "cheque",
           linkedTransactionId: "TXN-TEST-123",
         });
+
+        // Verify journal entry was created for double-entry accounting
+        expect(mockAddPaymentJournalEntryToBatch).toHaveBeenCalledTimes(1);
+        expect(mockAddPaymentJournalEntryToBatch).toHaveBeenCalledWith(
+          ctx.batch,
+          "test-user-123",
+          expect.objectContaining({
+            amount: 750,
+            paymentType: PAYMENT_TYPES.DISBURSEMENT,
+            linkedTransactionId: "TXN-TEST-123",
+          })
+        );
       });
 
-      it("should create cheque but skip payment when immediateSettlement is true", () => {
+      it("should create cheque but skip payment and journal entry when immediateSettlement is true", () => {
         const formData = createBaseFormData({ immediateSettlement: true });
         const checkData = createOutgoingCheckFormData({ accountingType: "cashed" });
         const ctx = createMockContext(formData, "مصروف");
 
         handleOutgoingCheckBatch(ctx, checkData);
 
-        // Should only create cheque (no payment)
+        // Should only create cheque (no payment, no journal entry)
         expect(ctx.batch.set).toHaveBeenCalledTimes(1);
+        expect(mockAddPaymentJournalEntryToBatch).not.toHaveBeenCalled();
       });
     });
 
     describe("Postponed Cheques (accountingType: postponed)", () => {
-      it("should create cheque with PENDING status and no payment", () => {
+      it("should create cheque with PENDING status, no payment, and no journal entry", () => {
         const formData = createBaseFormData();
         const checkData = createOutgoingCheckFormData({ accountingType: "postponed" });
         const ctx = createMockContext(formData, "مصروف");
@@ -422,6 +463,9 @@ describe("Cheque Handlers", () => {
           status: CHEQUE_STATUS_AR.PENDING,
           accountingType: "postponed",
         });
+
+        // No journal entry for postponed cheques (no cash movement yet)
+        expect(mockAddPaymentJournalEntryToBatch).not.toHaveBeenCalled();
       });
     });
 
