@@ -58,6 +58,7 @@ import {
   createJournalEntryForBadDebt,
   createJournalEntryForPayment,
   createJournalEntryForSettlementDiscount,
+  createJournalEntryForEndorsement,
   addPaymentJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
@@ -694,6 +695,21 @@ export class LedgerService {
 
       const newAmount = parseAmount(formData.amount);
 
+      // Track payments with discounts for journal entry recreation after batch commit
+      // Declared at function level so it's accessible after batch.commit()
+      const paymentsWithDiscounts: Array<{
+        discountAmount: number;
+        description: string;
+      }> = [];
+
+      // Track endorsement payments for journal recreation after batch commit
+      // Endorsement journals need cheque lookup, so can't be in batch
+      const endorsementPaymentsToRecreate: Array<{
+        chequeId: string;
+        amount: number;
+        description: string;
+      }> = [];
+
       // Build update data
       const updateData: Record<string, unknown> = {
         description: formData.description,
@@ -855,18 +871,47 @@ export class LedgerService {
           // - Immediate settlements (no separate payment journal)
           // - Advances (use Cash vs Advance accounts, not AR/AP)
           // - Loans (use Cash vs Loans accounts, not AR/AP)
+          // - Zero-amount payments (discount-only settlements have no cash movement)
+          // - Endorsement payments (no cash movement, use DR AP, CR AR instead)
           const isAdvance = isAdvanceTransaction(currentData?.category);
           const isLoan = currentData?.type === 'قرض';
+          const isEndorsementPayment = paymentData.isEndorsement === true || paymentData.noCashMovement === true;
+          const paymentCashAmount = paymentData.amount || 0;
+          const paymentDiscountAmount = paymentData.discountAmount || 0;
+
           if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvance && !isLoan) {
-            const paymentType = paymentData.type as 'قبض' | 'صرف';
-            addPaymentJournalEntryToBatch(batch, this.userId, {
-              paymentId: paymentDoc.id,
-              description: paymentData.notes || `دفعة - ${formData.description}`,
-              amount: paymentData.amount,
-              paymentType: paymentType,
-              date: new Date(formData.date),
-              linkedTransactionId: existingTransactionId,
-            });
+            if (isEndorsementPayment) {
+              // Endorsement payment - track for journal recreation after batch commit
+              // These need DR AP, CR AR (not DR Cash) and require cheque lookup
+              if (paymentData.endorsementChequeId && paymentCashAmount > 0) {
+                endorsementPaymentsToRecreate.push({
+                  chequeId: paymentData.endorsementChequeId,
+                  amount: paymentCashAmount,
+                  description: paymentData.notes || `تظهير شيك - ${formData.description}`,
+                });
+              }
+            } else if (paymentCashAmount > 0) {
+              // Standard cash payment - create journal entry: DR Cash, CR AR
+              const paymentType = paymentData.type as 'قبض' | 'صرف';
+              addPaymentJournalEntryToBatch(batch, this.userId, {
+                paymentId: paymentDoc.id,
+                description: paymentData.notes || `دفعة - ${formData.description}`,
+                amount: paymentCashAmount,
+                paymentType: paymentType,
+                date: new Date(formData.date),
+                linkedTransactionId: existingTransactionId,
+              });
+            }
+
+            // Track discount for journal recreation after batch commit
+            // Journal: DR Sales Discount (4500), CR Accounts Receivable (1200) for income
+            // Journal: DR Accounts Payable (2100), CR Purchase Discount (4600) for expense
+            if (paymentDiscountAmount > 0) {
+              paymentsWithDiscounts.push({
+                discountAmount: paymentDiscountAmount,
+                description: paymentData.notes || `خصم تسوية - ${formData.description}`,
+              });
+            }
           }
         }
 
@@ -969,7 +1014,10 @@ export class LedgerService {
             subCategory: formData.subCategory,
             date: new Date(formData.date),
             isARAPEntry: currentData.isARAPEntry ?? false,
-            immediateSettlement: currentData.immediateSettlement ?? true,
+            // If isARAPEntry is true, default immediateSettlement to false (credit sale)
+            // If isARAPEntry is false/missing, default to true (cash sale)
+            // This ensures legacy entries without immediateSettlement field work correctly
+            immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
           });
         }
 
@@ -1038,6 +1086,49 @@ export class LedgerService {
       }
 
       await batch.commit();
+
+      // Create discount journal entries after batch commit (async, not in batch)
+      // This matches the pattern in addQuickPayment where journal creation is separate
+      // Each discount reduces AR (for income) or AP (for expense) and records the discount
+      if (paymentsWithDiscounts.length > 0 && existingTransactionId) {
+        const discountEntryType = entryType === "دخل" ? "دخل" : "مصروف";
+        for (const discountPayment of paymentsWithDiscounts) {
+          try {
+            await createJournalEntryForSettlementDiscount(
+              this.userId,
+              discountPayment.description,
+              discountPayment.discountAmount,
+              discountEntryType as 'دخل' | 'مصروف',
+              new Date(formData.date),
+              existingTransactionId
+            );
+          } catch (discountJournalError) {
+            // Log but don't fail - the main update was already committed
+            // This matches the pattern in addQuickPayment
+            console.error("Failed to create discount journal entry:", discountJournalError);
+          }
+        }
+      }
+
+      // Create endorsement journal entries after batch commit
+      // Endorsement journals use DR AP, CR AR (not DR Cash) for AR→AP transfer
+      if (endorsementPaymentsToRecreate.length > 0 && existingTransactionId) {
+        for (const endorsement of endorsementPaymentsToRecreate) {
+          try {
+            await createJournalEntryForEndorsement(
+              this.userId,
+              endorsement.description,
+              endorsement.amount,
+              new Date(formData.date),
+              endorsement.chequeId,
+              existingTransactionId
+            );
+          } catch (endorsementJournalError) {
+            // Log but don't fail - the main update was already committed
+            console.error("Failed to create endorsement journal entry:", endorsementJournalError);
+          }
+        }
+      }
 
       // Log activity (fire and forget - don't block the main operation)
       logActivity(this.userId, {

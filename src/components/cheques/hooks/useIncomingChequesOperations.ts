@@ -46,7 +46,12 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
-import { createJournalEntryForPayment } from "@/services/journalService";
+import {
+  createJournalEntryForPayment,
+  createJournalEntryForEndorsement,
+  createJournalEntryForClientAdvance,
+  createJournalEntryForSupplierAdvance,
+} from "@/services/journalService";
 
 /** Allocation entry for multi-allocation endorsement */
 interface EndorsementAllocation {
@@ -546,6 +551,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
+        journalEntryCreated: false, // Will be set to true after journal creation
       });
 
       // 4. Create payment record for supplier (decrease payable)
@@ -561,6 +567,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         isEndorsement: true,
         noCashMovement: true,
         endorsementChequeId: cheque.id,
+        journalEntryCreated: false, // Will be set to true after journal creation
       });
 
       // 5. Update ARAP for original client (if linked to a transaction)
@@ -629,6 +636,26 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
       // Commit atomically - all operations succeed or all fail
       await batch.commit();
+
+      // Create journal entry for endorsement (AR → AP transfer)
+      // ONE entry for the full cheque amount - allocations just track affected transactions
+      try {
+        await createJournalEntryForEndorsement(
+          user.dataOwnerId,
+          `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
+          cheque.amount,
+          effectiveDate,
+          cheque.id,
+          cheque.linkedTransactionId || ""
+        );
+
+        // Mark BOTH payments as having journal entry
+        await updateDoc(receiptDocRef, { journalEntryCreated: true });
+        await updateDoc(disbursementDocRef, { journalEntryCreated: true });
+      } catch (journalError) {
+        console.error("Failed to create endorsement journal entry:", journalError);
+        // Don't fail - endorsement succeeded, journal can be reconciled later
+      }
 
       toast({
         title: "تم التظهير بنجاح",
@@ -809,6 +836,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsementChequeId: cheque.id,
         isMultiAllocation: clientAllocations.length > 1,
         paidTransactionIds: clientTransactionIds,
+        journalEntryCreated: false, // Will be set to true after journal creation
       });
 
       // 4. Create disbursement payment for supplier (with allocations)
@@ -825,6 +853,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         endorsementChequeId: cheque.id,
         isMultiAllocation: supplierAllocations.length > 1,
         paidTransactionIds: supplierTransactionIds,
+        journalEntryCreated: false, // Will be set to true after journal creation
       });
 
       // 5. Create allocation subcollections for client payment
@@ -998,6 +1027,60 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
       // Commit atomically
       await batch.commit();
+
+      // Create journal entries for endorsement after batch commit
+      // ONE journal entry for the main endorsement (allocated amount)
+      // Plus separate journal entries for advances if any
+      try {
+        // Main endorsement journal - for the amount that settles AR/AP
+        // Use the smaller of clientTotalAllocated and supplierTotalAllocated
+        // This is the actual AR→AP transfer amount
+        const endorsementAmount = Math.min(clientTotalAllocated, supplierTotalAllocated);
+
+        if (endorsementAmount > 0) {
+          await createJournalEntryForEndorsement(
+            user.dataOwnerId,
+            `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
+            endorsementAmount,
+            effectiveDate,
+            cheque.id,
+            primaryClientTransactionId
+          );
+        }
+
+        // Client advance journal - if client paid more than they owed
+        // DR AR (we reduce AR less), CR Customer Advances (liability)
+        if (clientUnallocated > 0) {
+          await createJournalEntryForClientAdvance(
+            user.dataOwnerId,
+            `سلفة عميل - تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName}`,
+            clientUnallocated,
+            effectiveDate,
+            undefined,
+            cheque.id
+          );
+        }
+
+        // Supplier advance journal - if we prepaid supplier
+        // DR Supplier Advances (asset), CR AP (we reduce AP less)
+        if (supplierUnallocated > 0) {
+          await createJournalEntryForSupplierAdvance(
+            user.dataOwnerId,
+            `سلفة مورد - تظهير شيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
+            supplierUnallocated,
+            effectiveDate,
+            undefined,
+            cheque.id
+          );
+        }
+
+        // Mark BOTH payments as having journal entry
+        await updateDoc(receiptDocRef, { journalEntryCreated: true });
+        await updateDoc(disbursementDocRef, { journalEntryCreated: true });
+      } catch (journalError) {
+        console.error("Failed to create endorsement journal entries:", journalError);
+        // Don't fail - endorsement succeeded, journals can be reconciled later
+      }
 
       // Show appropriate toast message
       const advanceMessages: string[] = [];
@@ -1245,6 +1328,25 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
       // Commit atomically - all operations succeed or all fail
       await batch.commit();
+
+      // Delete endorsement journal entries after batch commit
+      // Query by linkedPaymentId (which stores chequeId) and linkedDocumentType='endorsement'
+      try {
+        const journalRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
+        const journalQuery = query(
+          journalRef,
+          where("linkedPaymentId", "==", cheque.id),
+          where("linkedDocumentType", "==", "endorsement")
+        );
+        const journalSnapshot = await getDocs(journalQuery);
+
+        for (const journalDoc of journalSnapshot.docs) {
+          await deleteDoc(journalDoc.ref);
+        }
+      } catch (journalError) {
+        console.error("Failed to delete endorsement journal entries:", journalError);
+        // Don't fail - the main cancellation succeeded
+      }
 
       toast({
         title: "تم إلغاء التظهير",

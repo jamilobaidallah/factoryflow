@@ -509,6 +509,155 @@ export async function createJournalEntryForSettlementDiscount(
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'payment');
 }
 
+/**
+ * Create journal entry for cheque endorsement
+ * Endorsement transfers AR to AP without cash movement:
+ * DR Accounts Payable (supplier debt reduced)
+ * CR Accounts Receivable (customer debt settled)
+ *
+ * @param chequeId - For linking to source document (stored in linkedPaymentId field)
+ * @param linkedTransactionId - Primary client transaction (for querying)
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForEndorsement(
+  userId: string,
+  description: string,
+  amount: number,
+  date: Date,
+  chequeId: string,
+  linkedTransactionId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+
+  const roundedAmount = roundCurrency(amount);
+  const lines: JournalLine[] = [
+    {
+      accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,  // 2000
+      accountName: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+      debit: roundedAmount,
+      credit: 0,
+      description,
+    },
+    {
+      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200
+      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+      debit: 0,
+      credit: roundedAmount,
+      description,
+    },
+  ];
+
+  return createJournalEntry(
+    userId,
+    description,
+    date,
+    lines,
+    linkedTransactionId,  // Primary link for querying
+    chequeId,             // Use linkedPaymentId field for cheque ID
+    'endorsement'
+  );
+}
+
+/**
+ * Create journal entry for client advance (from endorsement)
+ * Client overpaid via endorsed cheque, we owe them future credit
+ * DR Accounts Receivable (AR reduced less)
+ * CR Customer Advances (liability to client created)
+ *
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForClientAdvance(
+  userId: string,
+  description: string,
+  amount: number,
+  date: Date,
+  linkedTransactionId?: string,
+  chequeId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+
+  const roundedAmount = roundCurrency(amount);
+  const lines: JournalLine[] = [
+    {
+      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200
+      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+      debit: roundedAmount,
+      credit: 0,
+      description,
+    },
+    {
+      accountCode: ACCOUNT_CODES.CUSTOMER_ADVANCES,  // 2150
+      accountName: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+      debit: 0,
+      credit: roundedAmount,
+      description,
+    },
+  ];
+
+  return createJournalEntry(
+    userId,
+    description,
+    date,
+    lines,
+    linkedTransactionId,
+    chequeId,
+    'endorsement'
+  );
+}
+
+/**
+ * Create journal entry for supplier advance (from endorsement)
+ * We prepaid supplier via endorsed cheque, they owe us goods/services
+ * DR Supplier Advances (asset - prepayment created)
+ * CR Accounts Payable (AP reduced less)
+ *
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForSupplierAdvance(
+  userId: string,
+  description: string,
+  amount: number,
+  date: Date,
+  linkedTransactionId?: string,
+  chequeId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+
+  const roundedAmount = roundCurrency(amount);
+  const lines: JournalLine[] = [
+    {
+      accountCode: ACCOUNT_CODES.SUPPLIER_ADVANCES,  // 1350
+      accountName: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+      debit: roundedAmount,
+      credit: 0,
+      description,
+    },
+    {
+      accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,  // 2000
+      accountName: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+      debit: 0,
+      credit: roundedAmount,
+      description,
+    },
+  ];
+
+  return createJournalEntry(
+    userId,
+    description,
+    date,
+    lines,
+    linkedTransactionId,
+    chequeId,
+    'endorsement'
+  );
+}
+
 // ============================================================================
 // Batch Operations (for atomic transactions with ledger)
 // ============================================================================
