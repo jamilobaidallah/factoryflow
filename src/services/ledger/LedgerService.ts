@@ -994,7 +994,10 @@ export class LedgerService {
             subCategory: formData.subCategory,
             date: new Date(formData.date),
             isARAPEntry: currentData.isARAPEntry ?? false,
-            immediateSettlement: currentData.immediateSettlement ?? true,
+            // If isARAPEntry is true, default immediateSettlement to false (credit sale)
+            // If isARAPEntry is false/missing, default to true (cash sale)
+            // This ensures legacy entries without immediateSettlement field work correctly
+            immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
           });
         }
 
