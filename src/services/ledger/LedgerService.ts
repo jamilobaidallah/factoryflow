@@ -1217,27 +1217,74 @@ export class LedgerService {
       const entryRef = this.getLedgerDocRef(entry.id);
       batch.delete(entryRef);
 
-      // Delete related payments
+      // Delete related payments and their journal entries
+      // Bug #8: Cheque journal entries are linked by linkedPaymentId, not linkedTransactionId
+      // So we need to find payments first, then delete their associated journal entries
       const paymentsQuery = query(
         this.paymentsRef,
         where("linkedTransactionId", "==", entry.transactionId)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
+      const paymentIds: string[] = [];
       paymentsSnapshot.forEach((doc) => {
+        paymentIds.push(doc.id);
         batch.delete(doc.ref);
         deletedRelatedCount++;
       });
 
-      // Delete related cheques
+      // Delete journal entries linked to payments (cheque cashing creates journal entries with linkedPaymentId)
+      for (const paymentId of paymentIds) {
+        const paymentJournalQuery = query(
+          this.journalEntriesRef,
+          where("linkedPaymentId", "==", paymentId)
+        );
+        const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+        paymentJournalSnapshot.forEach((journalDoc) => {
+          batch.delete(journalDoc.ref);
+          deletedRelatedCount++;
+        });
+      }
+
+      // Delete related cheques and their associated payments/journal entries
+      // Bug #8: Cashed cheques create payments with linkedChequeId, which need cleanup
       const chequesQuery = query(
         this.chequesRef,
         where("linkedTransactionId", "==", entry.transactionId)
       );
       const chequesSnapshot = await getDocs(chequesQuery);
-      chequesSnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
+      const chequeIds: string[] = [];
+      chequesSnapshot.forEach((chequeDoc) => {
+        chequeIds.push(chequeDoc.id);
+        batch.delete(chequeDoc.ref);
         deletedRelatedCount++;
       });
+
+      // For each cheque, find and delete any payments created when cheque was cashed
+      // These payments are linked by linkedChequeId (not linkedTransactionId)
+      for (const chequeId of chequeIds) {
+        const chequePaymentQuery = query(
+          this.paymentsRef,
+          where("linkedChequeId", "==", chequeId)
+        );
+        const chequePaymentSnapshot = await getDocs(chequePaymentQuery);
+
+        for (const paymentDoc of chequePaymentSnapshot.docs) {
+          const paymentId = paymentDoc.id;
+          batch.delete(paymentDoc.ref);
+          deletedRelatedCount++;
+
+          // Delete journal entries linked to this payment
+          const paymentJournalQuery = query(
+            this.journalEntriesRef,
+            where("linkedPaymentId", "==", paymentId)
+          );
+          const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+          paymentJournalSnapshot.forEach((journalDoc) => {
+            batch.delete(journalDoc.ref);
+            deletedRelatedCount++;
+          });
+        }
+      }
 
       // Delete related fixed assets
       const fixedAssetsQuery = query(

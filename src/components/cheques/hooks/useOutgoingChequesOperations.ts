@@ -4,20 +4,24 @@
  * Outgoing Cheques Operations Hook
  *
  * JOURNAL ENTRY PATTERN:
- * This hook uses `createJournalEntryForPayment` which creates journal entries
- * AFTER the main batch commits. This is necessary because:
- * 1. The cheque/payment records must be saved first (batch commit)
- * 2. Journal entry is created as a separate async operation
- * 3. If journal creation fails, the main operation still succeeds
+ * This hook uses `addPaymentJournalEntryToBatch` to add journal entries to the
+ * SAME batch as cheque/payment records for atomic all-or-nothing behavior.
  *
- * To track journal entry status, payments include a `journalEntryCreated` flag:
- * - Initially set to `false` when payment is created in batch
- * - Updated to `true` after journal entry is successfully created
- * - Remains `false` if journal entry fails (for reconciliation)
+ * This ensures:
+ * - If any part fails, the entire operation rolls back
+ * - Journal entries are always created when payments are created
+ * - No orphaned payments without journal entries
  *
- * This is different from handlers (chequeHandlers.ts, paymentHandlers.ts)
- * which use `addPaymentJournalEntryToBatch` to add journal entries to the
- * SAME batch for atomic all-or-nothing behavior.
+ * VALIDATION RULES:
+ * - Cashed cheques cannot have their amount edited (would corrupt journal entries)
+ * - Cashed cheques cannot have their linked transaction changed (would corrupt ARAP)
+ * - Double-cashing is prevented by checking linkedPaymentId
+ *
+ * REVERSAL HANDLING:
+ * When a cashed cheque is bounced, returned, or reverted to pending:
+ * - Payment record is deleted
+ * - Journal entry is deleted
+ * - ARAP tracking is reversed
  */
 
 import { useUser } from "@/firebase/provider";
@@ -46,7 +50,7 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
-import { createJournalEntryForPayment } from "@/services/journalService";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -213,15 +217,48 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         const newStatus = formData.status;
         const pendingStatuses = [CHEQUE_STATUS_AR.PENDING, "pending"];
         const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
-        const bouncedOrRevertedStatuses = [CHEQUE_STATUS_AR.RETURNED, "bounced", CHEQUE_STATUS_AR.PENDING, "pending", CHEQUE_STATUS_AR.CANCELLED, "cancelled"];
+        const bouncedOrRevertedStatuses = [CHEQUE_STATUS_AR.RETURNED, "bounced", CHEQUE_STATUS_AR.BOUNCED, CHEQUE_STATUS_AR.PENDING, "pending", CHEQUE_STATUS_AR.CANCELLED, "cancelled"];
         const wasPending = pendingStatuses.includes(oldStatus);
         const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
         const isNowBouncedOrReverted = bouncedOrRevertedStatuses.includes(newStatus);
+        const chequeAmount = parseFloat(formData.amount);
 
-        // مهم: إنشاء سجل الدفع عند تحويل الشيك من معلق إلى تم الصرف
-        // Important: Create payment record when cheque changes from pending to cleared
+        // === VALIDATION: Prevent edits that would corrupt accounting on cashed cheques ===
+
+        // Bug #5: Prevent amount edits on cashed cheques
+        if (wasCleared && !isNowBouncedOrReverted && chequeAmount !== editingCheque.amount) {
+          toast({
+            title: "غير مسموح",
+            description: "لا يمكن تعديل مبلغ شيك تم صرفه. قم بإلغاء الصرف أولاً",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        // Bug #6: Prevent transaction link changes on cashed cheques
+        if (wasCleared && !isNowBouncedOrReverted &&
+            formData.linkedTransactionId !== editingCheque.linkedTransactionId) {
+          toast({
+            title: "غير مسموح",
+            description: "لا يمكن تغيير المعاملة المرتبطة بشيك تم صرفه. قم بإلغاء الصرف أولاً",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        // === PENDING → CASHED: Create payment and journal entry atomically ===
         if (wasPending && isNowCleared) {
+          // Bug #7: Prevent double-cashing (race condition)
+          if (editingCheque.linkedPaymentId) {
+            toast({
+              title: "تنبيه",
+              description: "تم صرف هذا الشيك مسبقاً",
+              variant: "destructive",
+            });
+            return false;
+          }
+
           // Validate state transition before proceeding
           try {
             validateTransition(oldStatus as ChequeStatusValue, newStatus as ChequeStatusValue);
@@ -247,12 +284,11 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           // Pre-generate payment document ref
           const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
           const paymentDocRef = doc(paymentsRef);
-          const chequeAmount = parseFloat(formData.amount);
 
           // Store the payment ID in the cheque for later reference
           updateData.linkedPaymentId = paymentDocRef.id;
 
-          // Add payment to batch (journalEntryCreated: false initially, updated after async journal creation)
+          // Add payment to batch with journalEntryCreated: true (journal is in same batch)
           batch.set(paymentDocRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
@@ -263,7 +299,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             date: effectivePaymentDate,
             notes: `صرف شيك رقم ${formData.chequeNumber}`,
             createdAt: new Date(),
-            journalEntryCreated: false, // Will be updated after async journal entry creation
+            journalEntryCreated: true, // Journal entry is in same atomic batch
           });
 
           // Update cheque in batch
@@ -299,28 +335,19 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             }
           }
 
-          // Commit atomically
-          await batch.commit();
+          // Add journal entry to SAME batch for atomic all-or-nothing behavior
+          // Disbursement: DR AP (2000), CR Cash (1000)
+          addPaymentJournalEntryToBatch(batch, user.dataOwnerId, {
+            paymentId: paymentDocRef.id,
+            description: `صرف شيك صادر رقم ${formData.chequeNumber}`,
+            amount: chequeAmount,
+            paymentType: PAYMENT_TYPES.DISBURSEMENT as 'قبض' | 'صرف',
+            date: effectivePaymentDate,
+            linkedTransactionId: formData.linkedTransactionId || undefined,
+          });
 
-          // Create journal entry for the cheque payment (double-entry accounting)
-          // Disbursement: DR AP, CR Cash
-          try {
-            await createJournalEntryForPayment(
-              user.dataOwnerId,
-              paymentDocRef.id,
-              `صرف شيك صادر رقم ${formData.chequeNumber}`,
-              chequeAmount,
-              PAYMENT_TYPES.DISBURSEMENT as 'قبض' | 'صرف',
-              effectivePaymentDate,
-              formData.linkedTransactionId || undefined
-            );
-            // Update payment record to mark journal entry as created
-            await updateDoc(paymentDocRef, { journalEntryCreated: true });
-          } catch (journalError) {
-            console.error("Failed to create journal entry for cheque cashing:", journalError);
-            // Don't fail the whole operation - payment was already recorded
-            // journalEntryCreated remains false for reconciliation
-          }
+          // Commit atomically - either ALL succeed or ALL fail
+          await batch.commit();
 
           toast({
             title: "تم التحديث بنجاح",
@@ -343,6 +370,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
               clientName: formData.clientName,
             },
           });
+        // === CASHED → BOUNCED/RETURNED/PENDING: Delete payment and journal entry ===
         } else if (wasCleared && isNowBouncedOrReverted) {
           // Validate state transition before proceeding
           try {
@@ -359,9 +387,9 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             throw error;
           }
 
-          // مهم: حذف سجل الدفع عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
-          // Important: Delete payment record when cheque is bounced or reverted
-          const chequeAmount = parseFloat(formData.amount);
+          // مهم: حذف سجل الدفع وقيد اليومية عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
+          // Important: Delete payment record AND journal entry when cheque is bounced or reverted
+          const reversalAmount = parseFloat(formData.amount);
 
           // Query payments before batch
           const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
@@ -378,12 +406,26 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
               paymentsRef,
               where("linkedTransactionId", "==", formData.linkedTransactionId.trim()),
               where("method", "==", "cheque"),
-              where("amount", "==", chequeAmount)
+              where("amount", "==", reversalAmount)
             );
             const altPaymentSnapshot = await getDocs(altPaymentQuery);
             paymentsToDelete = altPaymentSnapshot.docs.map(d => ({ id: d.id }));
           } else {
             paymentsToDelete = paymentSnapshot.docs.map(d => ({ id: d.id }));
+          }
+
+          // Bug #2: Query journal entries linked to payments BEFORE batch
+          const journalEntriesRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
+          const journalsToDelete: { id: string }[] = [];
+          for (const payment of paymentsToDelete) {
+            const journalQuery = query(
+              journalEntriesRef,
+              where("linkedPaymentId", "==", payment.id)
+            );
+            const journalSnapshot = await getDocs(journalQuery);
+            journalSnapshot.docs.forEach(journalDoc => {
+              journalsToDelete.push({ id: journalDoc.id });
+            });
           }
 
           // إزالة تاريخ الصرف ومرجع الدفع من الشيك
@@ -396,6 +438,11 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           // Delete payments in batch
           paymentsToDelete.forEach(payment => {
             batch.delete(doc(firestore, `users/${user.dataOwnerId}/payments`, payment.id));
+          });
+
+          // Bug #2: Delete journal entries in batch
+          journalsToDelete.forEach(journal => {
+            batch.delete(doc(firestore, `users/${user.dataOwnerId}/journal_entries`, journal.id));
           });
 
           // Update cheque in batch
@@ -419,7 +466,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
                 const transactionAmount = ledgerData.amount || 0;
 
                 // Fail fast on negative totalPaid - this indicates data corruption
-                const newTotalPaid = assertNonNegative(safeSubtract(currentTotalPaid, chequeAmount), {
+                const newTotalPaid = assertNonNegative(safeSubtract(currentTotalPaid, reversalAmount), {
                   operation: 'reverseChequePayment',
                   entityId: ledgerDoc.id,
                   entityType: 'ledger'
@@ -437,7 +484,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             }
           }
 
-          // Commit atomically
+          // Commit atomically - payment, journal entry, and ARAP all reverted together
           await batch.commit();
 
           let toastDescription: string;
@@ -601,6 +648,17 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
     if (!user) return false;
 
     try {
+      // Bug #6: Prevent linking changes on cashed cheques
+      const clearedStatuses = [CHEQUE_STATUS_AR.CASHED, "cleared", CHEQUE_STATUS_AR.COLLECTED, "cashed"];
+      if (clearedStatuses.includes(cheque.status)) {
+        toast({
+          title: "غير مسموح",
+          description: "لا يمكن تغيير المعاملة المرتبطة بشيك تم صرفه. قم بإلغاء الصرف أولاً",
+          variant: "destructive",
+        });
+        return false;
+      }
+
       const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, cheque.id);
       await updateDoc(chequeRef, {
         linkedTransactionId: transactionId.trim(),
