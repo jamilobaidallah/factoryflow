@@ -915,18 +915,78 @@ export class LedgerService {
           }
         }
 
-        // Also sync to linked cheques
+        // Also sync to linked cheques and handle cashed cheque payments
         const chequesQuery = query(
           this.chequesRef,
           where("linkedTransactionId", "==", existingTransactionId)
         );
         const chequesSnapshot = await getDocs(chequesQuery);
 
+        // Track cashed cheque IDs for payment lookup
+        const cashedChequeIds: string[] = [];
+        const clearedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+
         chequesSnapshot.forEach((chequeDoc) => {
+          const chequeData = chequeDoc.data();
           batch.update(chequeDoc.ref, {
             clientName: newClientName,
           });
+
+          // Track cashed cheques for payment journal recreation
+          if (clearedStatuses.includes(chequeData.status)) {
+            cashedChequeIds.push(chequeDoc.id);
+          }
         });
+
+        // Find payments for cashed cheques (linked by linkedChequeId)
+        // These payments may not have been found by the linkedTransactionId query above
+        // if they were created when the cheque was cashed without a linked transaction
+        for (const chequeId of cashedChequeIds) {
+          const chequePaymentQuery = query(
+            this.paymentsRef,
+            where("linkedChequeId", "==", chequeId)
+          );
+          const chequePaymentSnapshot = await getDocs(chequePaymentQuery);
+
+          for (const paymentDoc of chequePaymentSnapshot.docs) {
+            const paymentData = paymentDoc.data();
+            const paymentId = paymentDoc.id;
+
+            // Skip if already processed in the main payments query
+            if (paymentsSnapshot.docs.some(p => p.id === paymentId)) {
+              continue;
+            }
+
+            // Delete existing journal entry for this payment
+            const paymentJournalQuery = query(
+              this.journalEntriesRef,
+              where("linkedPaymentId", "==", paymentId)
+            );
+            const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+            paymentJournalSnapshot.forEach((journalDoc) => {
+              batch.delete(journalDoc.ref);
+            });
+
+            // Update payment clientName to match transaction
+            batch.update(paymentDoc.ref, {
+              clientName: newClientName,
+            });
+
+            // Recreate journal entry for the cashed cheque payment
+            const paymentCashAmount = paymentData.amount || 0;
+            if (paymentCashAmount > 0 && currentData?.isARAPEntry && !currentData?.immediateSettlement) {
+              const paymentType = paymentData.type as 'قبض' | 'صرف';
+              addPaymentJournalEntryToBatch(batch, this.userId, {
+                paymentId: paymentId,
+                description: paymentData.notes || `صرف شيك - ${formData.description}`,
+                amount: paymentCashAmount,
+                paymentType: paymentType,
+                date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
+                linkedTransactionId: existingTransactionId,
+              });
+            }
+          }
+        }
 
         // Handle COGS entries for inventory sales
         // COGS entries are auto-generated during sale and need to be deleted + recreated on edit
