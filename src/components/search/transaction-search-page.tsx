@@ -76,14 +76,18 @@ export default function TransactionSearchPage() {
         });
       });
 
-      // Search in Payments
+      // Search in Payments (both single-transaction and multi-allocation payments)
       const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-      const paymentsQuery = query(
+      const foundPaymentIds = new Set<string>();
+
+      // Query 1: Single-transaction payments (linkedTransactionId)
+      const singlePaymentsQuery = query(
         paymentsRef,
         where("linkedTransactionId", "==", trimmedQuery)
       );
-      const paymentsSnapshot = await getDocs(paymentsQuery);
-      paymentsSnapshot.forEach((doc) => {
+      const singlePaymentsSnapshot = await getDocs(singlePaymentsQuery);
+      singlePaymentsSnapshot.forEach((doc) => {
+        foundPaymentIds.add(doc.id);
         searchResults.push({
           type: "payment",
           id: doc.id,
@@ -92,6 +96,26 @@ export default function TransactionSearchPage() {
             date: toDate(doc.data().date),
           },
         });
+      });
+
+      // Query 2: Multi-allocation payments (allocationTransactionIds array)
+      const multiPaymentsQuery = query(
+        paymentsRef,
+        where("allocationTransactionIds", "array-contains", trimmedQuery)
+      );
+      const multiPaymentsSnapshot = await getDocs(multiPaymentsQuery);
+      multiPaymentsSnapshot.forEach((doc) => {
+        // Avoid duplicates if somehow a payment has both fields set
+        if (!foundPaymentIds.has(doc.id)) {
+          searchResults.push({
+            type: "payment",
+            id: doc.id,
+            data: {
+              ...doc.data(),
+              date: toDate(doc.data().date),
+            },
+          });
+        }
       });
 
       // Search in Cheques
