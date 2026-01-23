@@ -510,6 +510,65 @@ Owner capital movements affect Balance Sheet, NOT Income Statement.
 
 ---
 
+## 🔄 JOURNAL ENTRY CODE PATHS (CRITICAL)
+
+**When fixing bugs related to journal entries, you MUST check ALL code paths.**
+
+The same data (journal entries) can be created, updated, or deleted from multiple places in the codebase. Missing one path causes data inconsistency.
+
+### All Journal Entry Operations
+
+| Operation | File | Function | Journal Impact |
+|-----------|------|----------|----------------|
+| Create transaction | `LedgerService.ts` | `createLedgerEntry` | Creates journal |
+| **Update transaction** | `LedgerService.ts` | `updateLedgerEntry` | **Recreates ALL journals** |
+| Delete transaction | `LedgerService.ts` | `deleteLedgerEntry` | Deletes journals |
+| Cash outgoing cheque | `useOutgoingChequesOperations.ts` | `submitCheque` | Creates journal |
+| Cash incoming cheque | `useIncomingChequesOperations.ts` | `submitCheque` | Creates journal |
+| Bounce/revert cheque | both hooks | `submitCheque` | Deletes journal |
+| Endorse cheque | `useIncomingChequesOperations.ts` | `endorseCheque` | Creates journal |
+| Cancel endorsement | `useIncomingChequesOperations.ts` | `cancelEndorsement` | Deletes journal |
+| Add payment | `LedgerService.ts` | `addPaymentToEntry` | Creates journal |
+
+### Key Document Linking Fields
+
+| Field | Used For | Created By |
+|-------|----------|------------|
+| `linkedTransactionId` | Links journal to ledger entry | Transaction creation |
+| `linkedPaymentId` | Links journal to payment record | Payment/cheque cashing |
+| `linkedChequeId` | Links payment to cheque | Cheque cashing |
+| `linkedDocumentType` | Distinguishes journal types | Various (endorsement, inventory, etc.) |
+
+### Before Claiming a Journal Fix is Complete
+
+```bash
+# 1. Search for ALL places that touch journal_entries collection
+grep -r "journal_entries" --include="*.ts" src/
+
+# 2. Search for all uses of the linking fields
+grep -r "linkedPaymentId\|linkedChequeId\|linkedTransactionId" --include="*.ts" src/services/
+```
+
+### Common Mistakes to Avoid
+
+| Mistake | Why It Happens | How to Avoid |
+|---------|----------------|--------------|
+| Fix create but not update | Different code paths | Always check `updateLedgerEntry` |
+| Fix hook but not service | User can edit from ledger page | Check both entry points |
+| Query by wrong field | `linkedTransactionId` vs `linkedPaymentId` | Trace data flow |
+| Missing cheque payments | Payments linked by `linkedChequeId` | Query cheques then their payments |
+
+### Test Scenario Checklist
+
+When fixing journal issues, test ALL these scenarios:
+- [ ] Create new transaction → journal created
+- [ ] Cash cheque directly → journal created
+- [ ] Edit transaction from ledger → journals recreated (including cheque payments)
+- [ ] Delete transaction → all journals deleted (including cheque payment journals)
+- [ ] Bounce cashed cheque → journal deleted
+
+---
+
 ## 🎨 UI PATTERNS
 
 ### Colors
