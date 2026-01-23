@@ -1126,6 +1126,126 @@ export async function getTrialBalance(
 }
 
 /**
+ * Reclassify contra-balances for balance sheet presentation
+ *
+ * Per GAAP/IFRS, accounts with contra-balances should be reclassified:
+ * - Negative AR (credit balance from customer overpayment) → Customer Advances (liability)
+ * - Negative AP (debit balance from supplier prepayment) → Supplier Advances (asset)
+ *
+ * This is a presentational reclassification only - Trial Balance remains unchanged.
+ */
+interface ReclassificationResult {
+  assets: AccountBalance[];
+  liabilities: AccountBalance[];
+  reclassifications: Array<{
+    fromAccount: string;
+    toAccount: string;
+    amount: number;
+  }>;
+}
+
+function reclassifyContraBalances(
+  assets: AccountBalance[],
+  liabilities: AccountBalance[]
+): ReclassificationResult {
+  const reclassifiedAssets: AccountBalance[] = [];
+  const reclassifiedLiabilities: AccountBalance[] = [];
+  const reclassifications: ReclassificationResult['reclassifications'] = [];
+
+  // Process assets - find negative AR (credit balance = customer overpaid)
+  for (const account of assets) {
+    if (
+      account.accountCode === ACCOUNT_CODES.ACCOUNTS_RECEIVABLE &&
+      account.balance < 0
+    ) {
+      const reclassAmount = Math.abs(account.balance);
+
+      // Find existing Customer Advances or create new entry
+      const existingIdx = reclassifiedLiabilities.findIndex(
+        (l) => l.accountCode === ACCOUNT_CODES.CUSTOMER_ADVANCES
+      );
+
+      if (existingIdx >= 0) {
+        // Add to existing Customer Advances balance
+        reclassifiedLiabilities[existingIdx] = {
+          ...reclassifiedLiabilities[existingIdx],
+          balance: safeAdd(reclassifiedLiabilities[existingIdx].balance, reclassAmount),
+        };
+      } else {
+        // Create new Customer Advances entry
+        reclassifiedLiabilities.push({
+          accountCode: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+          accountName: 'Customer Advances (Reclassified AR)',
+          accountNameAr: 'سلفات عملاء (ذمم مدينة دائنة)',
+          accountType: 'liability',
+          totalDebits: 0,
+          totalCredits: reclassAmount,
+          balance: reclassAmount,
+        });
+      }
+
+      reclassifications.push({
+        fromAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+        toAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+        amount: reclassAmount,
+      });
+      // Don't add negative AR to assets - it's been reclassified
+    } else if (account.balance !== 0) {
+      reclassifiedAssets.push(account);
+    }
+  }
+
+  // Process liabilities - find negative AP (debit balance = we prepaid supplier)
+  for (const account of liabilities) {
+    if (
+      account.accountCode === ACCOUNT_CODES.ACCOUNTS_PAYABLE &&
+      account.balance < 0
+    ) {
+      const reclassAmount = Math.abs(account.balance);
+
+      // Find existing Supplier Advances or create new entry
+      const existingIdx = reclassifiedAssets.findIndex(
+        (a) => a.accountCode === ACCOUNT_CODES.SUPPLIER_ADVANCES
+      );
+
+      if (existingIdx >= 0) {
+        // Add to existing Supplier Advances balance
+        reclassifiedAssets[existingIdx] = {
+          ...reclassifiedAssets[existingIdx],
+          balance: safeAdd(reclassifiedAssets[existingIdx].balance, reclassAmount),
+        };
+      } else {
+        // Create new Supplier Advances entry
+        reclassifiedAssets.push({
+          accountCode: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+          accountName: 'Supplier Advances (Reclassified AP)',
+          accountNameAr: 'سلفات موردين (ذمم دائنة مدينة)',
+          accountType: 'asset',
+          totalDebits: reclassAmount,
+          totalCredits: 0,
+          balance: reclassAmount,
+        });
+      }
+
+      reclassifications.push({
+        fromAccount: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+        toAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+        amount: reclassAmount,
+      });
+      // Don't add negative AP to liabilities - it's been reclassified
+    } else if (account.balance !== 0) {
+      reclassifiedLiabilities.push(account);
+    }
+  }
+
+  return {
+    assets: reclassifiedAssets,
+    liabilities: reclassifiedLiabilities,
+    reclassifications,
+  };
+}
+
+/**
  * Calculate balance sheet
  */
 export async function getBalanceSheet(
@@ -1140,12 +1260,17 @@ export async function getBalanceSheet(
 
     const accounts = trialResult.data.accounts;
 
-    // Group by type
-    const assets = accounts.filter((a) => a.accountType === 'asset');
-    const liabilities = accounts.filter((a) => a.accountType === 'liability');
+    // Group by type (raw grouping before reclassification)
+    const rawAssets = accounts.filter((a) => a.accountType === 'asset');
+    const rawLiabilities = accounts.filter((a) => a.accountType === 'liability');
     const equity = accounts.filter((a) => a.accountType === 'equity');
 
-    // Calculate totals
+    // Apply contra-balance reclassification for proper balance sheet presentation
+    // Negative AR → Customer Advances (liability)
+    // Negative AP → Supplier Advances (asset)
+    const { assets, liabilities } = reclassifyContraBalances(rawAssets, rawLiabilities);
+
+    // Calculate totals using reclassified accounts
     const totalAssets = assets.reduce((sum, a) => safeAdd(sum, a.balance), 0);
     const totalLiabilities = liabilities.reduce((sum, a) => safeAdd(sum, a.balance), 0);
     const totalEquity = equity.reduce((sum, a) => safeAdd(sum, a.balance), 0);
