@@ -320,19 +320,20 @@ export default function PaymentsPage() {
         });
 
         // Create journal entry for the payment (double-entry accounting)
-        try {
-          await createJournalEntryForPayment(
-            user.dataOwnerId,
-            docRef.id,
-            `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
-            paymentAmount,
-            formData.type as 'قبض' | 'صرف',
-            new Date(formData.date),
-            formData.linkedTransactionId || undefined
-          );
-        } catch (journalError) {
-          console.error("Failed to create journal entry for payment:", journalError);
-          // Continue - payment is created, journal entry failure is logged but not blocking
+        const journalResult = await createJournalEntryForPayment(
+          user.dataOwnerId,
+          docRef.id,
+          `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+          paymentAmount,
+          formData.type as 'قبض' | 'صرف',
+          new Date(formData.date),
+          formData.linkedTransactionId || undefined
+        );
+
+        if (!journalResult.success) {
+          // Rollback: delete the payment we just created
+          await deleteDoc(docRef);
+          throw new Error(`فشل إنشاء القيد المحاسبي: ${journalResult.error || 'خطأ غير معروف'}`);
         }
 
         logActivity(user.dataOwnerId, {

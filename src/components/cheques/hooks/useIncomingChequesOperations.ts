@@ -301,12 +301,14 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
           // Add payment to batch with journalEntryCreated: true (journal is in same batch)
           // Bug #4: Add linkedChequeId to payment record
+          // Bug fix: Propagate linkedTransactionId from cheque if not in form data
+          const effectiveLinkedTransactionId = formData.linkedTransactionId || editingCheque.linkedTransactionId || "";
           batch.set(paymentDocRef, {
             clientName: formData.clientName,
             amount: chequeAmount,
             type: PAYMENT_TYPES.RECEIPT,
             method: "cheque",
-            linkedTransactionId: formData.linkedTransactionId || "",
+            linkedTransactionId: effectiveLinkedTransactionId,
             linkedChequeId: editingCheque.id, // Bug #4: Add linkedChequeId
             date: effectivePaymentDate,
             notes: `تحصيل شيك رقم ${formData.chequeNumber}`,
@@ -355,7 +357,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             amount: chequeAmount,
             paymentType: PAYMENT_TYPES.RECEIPT as 'قبض' | 'صرف',
             date: effectivePaymentDate,
-            linkedTransactionId: formData.linkedTransactionId || undefined,
+            linkedTransactionId: effectiveLinkedTransactionId || undefined,
           });
 
           // Commit atomically - either ALL succeed or ALL fail
