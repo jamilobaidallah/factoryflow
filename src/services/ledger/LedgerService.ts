@@ -827,15 +827,39 @@ export class LedgerService {
         // Get current entry data once for use throughout this block
         const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
 
-        const paymentsQuery = query(
+        // Query 1: Single-transaction payments (linkedTransactionId)
+        const singlePaymentsQuery = query(
           this.paymentsRef,
           where("linkedTransactionId", "==", existingTransactionId)
         );
-        const paymentsSnapshot = await getDocs(paymentsQuery);
+        const singlePaymentsSnapshot = await getDocs(singlePaymentsQuery);
+
+        // Query 2: Multi-allocation payments (allocationTransactionIds array)
+        const multiAllocPaymentsQuery = query(
+          this.paymentsRef,
+          where("allocationTransactionIds", "array-contains", existingTransactionId)
+        );
+        const multiAllocPaymentsSnapshot = await getDocs(multiAllocPaymentsQuery);
+
+        // Combine both results, avoiding duplicates
+        const processedPaymentIds = new Set<string>();
+        const allPaymentDocs: typeof singlePaymentsSnapshot.docs = [];
+
+        singlePaymentsSnapshot.docs.forEach((doc) => {
+          processedPaymentIds.add(doc.id);
+          allPaymentDocs.push(doc);
+        });
+
+        multiAllocPaymentsSnapshot.docs.forEach((doc) => {
+          if (!processedPaymentIds.has(doc.id)) {
+            processedPaymentIds.add(doc.id);
+            allPaymentDocs.push(doc);
+          }
+        });
 
         // First, delete journal entries for each payment being updated
         // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
-        const paymentJournalPromises = paymentsSnapshot.docs.map((paymentDoc) => {
+        const paymentJournalPromises = allPaymentDocs.map((paymentDoc) => {
           const paymentJournalQuery = query(
             this.journalEntriesRef,
             where("linkedPaymentId", "==", paymentDoc.id)
@@ -852,7 +876,7 @@ export class LedgerService {
         }
 
         // Then update payment records and recreate their journal entries
-        for (const paymentDoc of paymentsSnapshot.docs) {
+        for (const paymentDoc of allPaymentDocs) {
           const paymentData = paymentDoc.data();
 
           // Update the payment record
@@ -953,7 +977,7 @@ export class LedgerService {
             const paymentId = paymentDoc.id;
 
             // Skip if already processed in the main payments query
-            if (paymentsSnapshot.docs.some(p => p.id === paymentId)) {
+            if (processedPaymentIds.has(paymentId)) {
               continue;
             }
 
