@@ -285,6 +285,24 @@ export default function PaymentsPage() {
           }
         }
 
+        // Recreate journal entry for the updated payment
+        // Delete old journal entries and create new one with updated data
+        try {
+          await deleteJournalEntriesByPayment(user.dataOwnerId, editingPayment.id);
+          await createJournalEntryForPayment(
+            user.dataOwnerId,
+            editingPayment.id,
+            `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+            newAmount,
+            formData.type as 'قبض' | 'صرف',
+            new Date(formData.date),
+            formData.linkedTransactionId || undefined
+          );
+        } catch (journalError) {
+          console.error("Failed to recreate journal entry for payment:", journalError);
+          // Continue - payment is updated, journal entry failure is logged but not blocking
+        }
+
         logActivity(user.dataOwnerId, {
           action: 'update',
           module: 'payments',
