@@ -1164,14 +1164,15 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // are pre-calculated above to ensure paidTransactionIds includes advance IDs
       if (clientUnallocated > 0 && clientAdvanceLedgerRef && clientAdvanceTransactionId && clientAdvanceDocId) {
         // Create the advance entry in ledger
-        // Type "مصروف" = shows in payables (we owe them)
+        // Type "دخل" = we received cash from customer (per CATEGORIES constant)
         // paymentStatus "unpaid" = visible in ARAP aging
         batch.set(clientAdvanceLedgerRef, {
           transactionId: clientAdvanceTransactionId,
-          type: "مصروف",  // Liability - we owe the client
+          type: "دخل",  // Customer advance - we RECEIVED cash from them
           date: effectiveDate,
           description: `سلفة عميل - شيك مظهر رقم ${cheque.chequeNumber}`,
           category: "سلفة عميل",
+          subCategory: "دفعة مقدمة من عميل",
           amount: clientUnallocated,
           totalPaid: 0,  // Not yet consumed against future sales
           remainingBalance: clientUnallocated,  // Full amount still available as credit
@@ -1203,14 +1204,15 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // are pre-calculated above to ensure paidTransactionIds includes advance IDs
       if (supplierUnallocated > 0 && supplierAdvanceLedgerRef && supplierAdvanceTransactionId && supplierAdvanceDocId) {
         // Create the advance entry in ledger
-        // Type "دخل" = shows in receivables (they owe us)
+        // Type "مصروف" = we paid cash to supplier (per CATEGORIES constant)
         // paymentStatus "unpaid" = visible in ARAP aging (supplier hasn't "paid" with goods yet)
         batch.set(supplierAdvanceLedgerRef, {
           transactionId: supplierAdvanceTransactionId,
-          type: "دخل",  // Asset - supplier owes us goods/services
+          type: "مصروف",  // Supplier advance - we PAID cash to them
           date: effectiveDate,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
           category: "سلفة مورد",
+          subCategory: "دفعة مقدمة لمورد",
           amount: supplierUnallocated,
           totalPaid: 0,  // Supplier hasn't delivered goods yet
           remainingBalance: supplierUnallocated,  // Full amount still owed
