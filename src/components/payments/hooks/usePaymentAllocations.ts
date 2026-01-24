@@ -14,6 +14,7 @@ import {
   doc,
   runTransaction,
   getDoc,
+  arrayRemove,
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
@@ -352,6 +353,10 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
   /**
    * Reverse all allocations for a payment (used when deleting)
    * Uses Firestore transaction for atomicity - all operations succeed or all fail
+   *
+   * Also cleans up orphaned array references:
+   * - For advance allocations: removes entry from advanceAllocations array on the advance
+   * - For regular allocations: removes entry from paidFromAdvances array if paid by advance
    */
   const reversePaymentAllocations = async (paymentId: string): Promise<boolean> => {
     if (!user) {
@@ -374,7 +379,16 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       // Use transaction for atomic reversal
       await runTransaction(firestore, async (transaction) => {
         // 1. Read all ledger entries that need updating
-        const ledgerUpdates: { ref: ReturnType<typeof doc>; data: Record<string, unknown>; allocatedAmount: number; discountAmount: number }[] = [];
+        // Extended to track allocation metadata for array cleanup
+        const ledgerUpdates: {
+          ref: ReturnType<typeof doc>;
+          data: Record<string, unknown>;
+          allocatedAmount: number;
+          discountAmount: number;
+          isAdvance: boolean;
+          transactionId: string;
+          ledgerDocId: string;
+        }[] = [];
 
         for (const allocationDoc of allocationsSnapshot.docs) {
           const allocation = allocationDoc.data();
@@ -387,6 +401,9 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
               data: ledgerDoc.data() as Record<string, unknown>,
               allocatedAmount: allocation.allocatedAmount || 0,
               discountAmount: allocation.discountAmount || 0,
+              isAdvance: allocation.isAdvance === true,
+              transactionId: allocation.transactionId || '',
+              ledgerDocId: allocation.ledgerDocId || '',
             });
           }
         }
@@ -400,7 +417,8 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         transaction.delete(paymentRef);
 
         // 4. Update ledger entries (reverse the payments and discounts)
-        for (const { ref: ledgerRef, data: ledgerData, allocatedAmount, discountAmount } of ledgerUpdates) {
+        // Also clean up orphaned array references
+        for (const { ref: ledgerRef, data: ledgerData, allocatedAmount, discountAmount, isAdvance, transactionId, ledgerDocId } of ledgerUpdates) {
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
           const currentTotalDiscount = (ledgerData.totalDiscount as number) || 0;
@@ -434,7 +452,72 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
             updateData.totalDiscount = newTotalDiscount;
           }
 
+          // Clean up paidFromAdvances array if this invoice was paid by advances
+          // We need to remove entries related to this payment
+          const paidFromAdvances = ledgerData.paidFromAdvances as Array<{
+            advanceId: string;
+            advanceTransactionId: string;
+            amount: number;
+            date: Date;
+          }> | undefined;
+
+          if (paidFromAdvances && paidFromAdvances.length > 0 && !isAdvance) {
+            // For each advance that paid this invoice, we need to also clean up
+            // the advanceAllocations array on that advance entry
+            // This is handled in a separate loop below
+
+            // Clear the entire paidFromAdvances array and totalPaidFromAdvances
+            // since we're reversing the full payment
+            updateData.paidFromAdvances = [];
+            updateData.totalPaidFromAdvances = 0;
+          }
+
           transaction.update(ledgerRef, updateData);
+
+          // If this invoice was paid by advances, clean up advanceAllocations on each advance
+          if (paidFromAdvances && paidFromAdvances.length > 0 && !isAdvance) {
+            for (const advancePayment of paidFromAdvances) {
+              try {
+                const advanceRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, advancePayment.advanceId);
+                const advanceDoc = await transaction.get(advanceRef);
+
+                if (advanceDoc.exists()) {
+                  const advanceData = advanceDoc.data();
+                  const advanceAllocations = advanceData.advanceAllocations as Array<{
+                    invoiceId: string;
+                    invoiceTransactionId: string;
+                    amount: number;
+                    date: Date;
+                    description: string;
+                  }> | undefined;
+
+                  if (advanceAllocations && advanceAllocations.length > 0) {
+                    // Find and remove the allocation entry for this invoice
+                    const filteredAllocations = advanceAllocations.filter(
+                      (alloc) => alloc.invoiceId !== ledgerDocId && alloc.invoiceTransactionId !== transactionId
+                    );
+
+                    // Recalculate totalPaid based on remaining allocations
+                    const newAdvanceTotalPaid = filteredAllocations.reduce((sum, alloc) => sum + (alloc.amount || 0), 0);
+                    const advanceAmount = (advanceData.amount as number) || 0;
+                    const newAdvanceRemainingBalance = zeroFloor(safeSubtract(advanceAmount, newAdvanceTotalPaid));
+                    const newAdvanceStatus = newAdvanceTotalPaid <= 0 ? 'unpaid' :
+                      newAdvanceRemainingBalance <= 0 ? 'paid' : 'partial';
+
+                    transaction.update(advanceRef, {
+                      advanceAllocations: filteredAllocations,
+                      totalPaid: newAdvanceTotalPaid,
+                      remainingBalance: newAdvanceRemainingBalance,
+                      paymentStatus: newAdvanceStatus,
+                    });
+                  }
+                }
+              } catch (advanceError) {
+                // Log but don't fail - advance may have been deleted
+                console.error(`Failed to clean advanceAllocations for advance ${advancePayment.advanceId}:`, advanceError);
+              }
+            }
+          }
         }
       });
 

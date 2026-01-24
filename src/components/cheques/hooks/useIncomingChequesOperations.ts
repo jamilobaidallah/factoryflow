@@ -997,6 +997,38 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       const clientTransactionIds = clientAllocations.map(a => a.transactionId);
       const supplierTransactionIds = supplierAllocations.map(a => a.transactionId);
 
+      // ============================================================
+      // PRE-CALCULATE ADVANCES BEFORE CREATING PAYMENTS
+      // This ensures advance transaction IDs are included in paidTransactionIds
+      // ============================================================
+      const clientUnallocated = safeSubtract(cheque.amount, clientTotalAllocated);
+      const supplierUnallocated = safeSubtract(cheque.amount, supplierTotalAllocated);
+
+      // Generate advance transaction IDs and doc refs BEFORE creating payments
+      let clientAdvanceTransactionId: string | null = null;
+      let clientAdvanceDocId: string | null = null;
+      let clientAdvanceLedgerRef: ReturnType<typeof doc> | null = null;
+
+      if (clientUnallocated > 0) {
+        clientAdvanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-C`;
+        clientAdvanceLedgerRef = doc(ledgerRef);
+        clientAdvanceDocId = clientAdvanceLedgerRef.id;
+        // Add advance to transaction IDs array BEFORE creating payment
+        clientTransactionIds.push(clientAdvanceTransactionId);
+      }
+
+      let supplierAdvanceTransactionId: string | null = null;
+      let supplierAdvanceDocId: string | null = null;
+      let supplierAdvanceLedgerRef: ReturnType<typeof doc> | null = null;
+
+      if (supplierUnallocated > 0) {
+        supplierAdvanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-S`;
+        supplierAdvanceLedgerRef = doc(ledgerRef);
+        supplierAdvanceDocId = supplierAdvanceLedgerRef.id;
+        // Add advance to transaction IDs array BEFORE creating payment
+        supplierTransactionIds.push(supplierAdvanceTransactionId);
+      }
+
       // 1. Update incoming cheque status
       batch.update(incomingChequeRef, {
         chequeType: "مجير",
@@ -1128,14 +1160,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // 9. Create client advance entry if there's unallocated amount on client side
       // This happens when cheque value > client's total debt (client has credit with us)
       // ACCOUNTING: Client advance = We owe the client (liability) → Shows in PAYABLES
-      const clientUnallocated = safeSubtract(cheque.amount, clientTotalAllocated);
-      let clientAdvanceDocId: string | null = null;
-
-      if (clientUnallocated > 0) {
-        const clientAdvanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-C`;
-        const clientAdvanceLedgerRef = doc(ledgerRef);
-        clientAdvanceDocId = clientAdvanceLedgerRef.id;
-
+      // NOTE: clientUnallocated, clientAdvanceTransactionId, clientAdvanceDocId, clientAdvanceLedgerRef
+      // are pre-calculated above to ensure paidTransactionIds includes advance IDs
+      if (clientUnallocated > 0 && clientAdvanceLedgerRef && clientAdvanceTransactionId && clientAdvanceDocId) {
         // Create the advance entry in ledger
         // Type "مصروف" = shows in payables (we owe them)
         // paymentStatus "unpaid" = visible in ARAP aging
@@ -1168,26 +1195,18 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           isAdvance: true,
           createdAt: new Date(),
         });
-
-        clientTransactionIds.push(clientAdvanceTransactionId);
       }
 
       // 10. Create supplier advance entry if there's unallocated amount
       // ACCOUNTING: Supplier advance = Supplier owes us goods/services (asset) → Shows in RECEIVABLES
-      const supplierUnallocated = safeSubtract(cheque.amount, supplierTotalAllocated);
-      let supplierAdvanceDocId: string | null = null;
-
-      if (supplierUnallocated > 0) {
-        // Generate a transaction ID for the advance
-        const advanceTransactionId = `ADV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-S`;
-        const advanceLedgerRef = doc(ledgerRef);
-        supplierAdvanceDocId = advanceLedgerRef.id;
-
+      // NOTE: supplierUnallocated, supplierAdvanceTransactionId, supplierAdvanceDocId, supplierAdvanceLedgerRef
+      // are pre-calculated above to ensure paidTransactionIds includes advance IDs
+      if (supplierUnallocated > 0 && supplierAdvanceLedgerRef && supplierAdvanceTransactionId && supplierAdvanceDocId) {
         // Create the advance entry in ledger
         // Type "دخل" = shows in receivables (they owe us)
         // paymentStatus "unpaid" = visible in ARAP aging (supplier hasn't "paid" with goods yet)
-        batch.set(advanceLedgerRef, {
-          transactionId: advanceTransactionId,
+        batch.set(supplierAdvanceLedgerRef, {
+          transactionId: supplierAdvanceTransactionId,
           type: "دخل",  // Asset - supplier owes us goods/services
           date: effectiveDate,
           description: `سلفة مورد - شيك مظهر رقم ${cheque.chequeNumber}`,
@@ -1207,7 +1226,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         // Add allocation entry for the advance to the supplier payment
         const advanceAllocationRef = doc(collection(firestore, `users/${user.dataOwnerId}/payments/${disbursementDocRef.id}/allocations`));
         batch.set(advanceAllocationRef, {
-          transactionId: advanceTransactionId,
+          transactionId: supplierAdvanceTransactionId,
           ledgerDocId: supplierAdvanceDocId,
           allocatedAmount: supplierUnallocated,
           transactionDate: effectiveDate,
@@ -1215,9 +1234,6 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           isAdvance: true,
           createdAt: new Date(),
         });
-
-        // Update the paidTransactionIds array to include the advance
-        supplierTransactionIds.push(advanceTransactionId);
       }
 
       // Update cheque with advance doc IDs if created
@@ -1257,26 +1273,26 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
         // Client advance journal - if client paid more than they owed
         // DR AR (we reduce AR less), CR Customer Advances (liability)
-        if (clientUnallocated > 0) {
+        if (clientUnallocated > 0 && clientAdvanceTransactionId) {
           await createJournalEntryForClientAdvance(
             user.dataOwnerId,
             `سلفة عميل - تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName}`,
             clientUnallocated,
             effectiveDate,
-            undefined,
+            clientAdvanceTransactionId,  // Link journal to advance ledger entry
             cheque.id
           );
         }
 
         // Supplier advance journal - if we prepaid supplier
         // DR Supplier Advances (asset), CR AP (we reduce AP less)
-        if (supplierUnallocated > 0) {
+        if (supplierUnallocated > 0 && supplierAdvanceTransactionId) {
           await createJournalEntryForSupplierAdvance(
             user.dataOwnerId,
             `سلفة مورد - تظهير شيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
             supplierUnallocated,
             effectiveDate,
-            undefined,
+            supplierAdvanceTransactionId,  // Link journal to advance ledger entry
             cheque.id
           );
         }
@@ -1441,6 +1457,15 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                   const isSupplierAdvance = advanceData.isSupplierAdvance === true;
                   const isClientAdvance = advanceData.isClientAdvance === true;
                   const advanceTotalPaid = advanceData.totalPaid || 0;
+                  const linkedEndorsementChequeId = advanceData.linkedEndorsementChequeId;
+
+                  // Validate this advance belongs to this endorsement (safety check)
+                  if (linkedEndorsementChequeId && linkedEndorsementChequeId !== cheque.id) {
+                    console.error(`Advance entry ${ledgerDocId} is linked to different cheque: ${linkedEndorsementChequeId}`);
+                    throw new Error(
+                      `خطأ في البيانات: السلفة مرتبطة بشيك آخر`
+                    );
+                  }
 
                   // Both advance types start with totalPaid=0; if > 0, they've been consumed
                   if (isSupplierAdvance && advanceTotalPaid > 0) {
