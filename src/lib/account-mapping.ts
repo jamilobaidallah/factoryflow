@@ -174,13 +174,16 @@ export function isEquityCategory(category: string, subCategory?: string): boolea
  * - Expense: DR Expense, CR Accounts Payable (or Cash)
  * - Owner Capital: DR Cash, CR Owner's Capital
  * - Owner Drawings: DR Owner's Drawings, CR Cash
+ *
+ * @param isEndorsementAdvance - True if advance was created via cheque endorsement (uses AR instead of Cash)
  */
 export function getAccountMappingForLedgerEntry(
   type: string,
   category: string,
   subCategory?: string,
   isARAPEntry?: boolean,
-  immediateSettlement?: boolean
+  immediateSettlement?: boolean,
+  isEndorsementAdvance?: boolean
 ): AccountMapping {
   // Determine the specific account from category/subcategory
   const specificCategory = subCategory || category;
@@ -211,7 +214,7 @@ export function getAccountMappingForLedgerEntry(
   // Check for advance transactions (Balance Sheet items, NOT P&L)
   // Advances must be handled BEFORE income/expense routing
   if (isAdvanceCategory(category)) {
-    return getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد');
+    return getAccountMappingForAdvance(category as 'سلفة عميل' | 'سلفة مورد', isEndorsementAdvance);
   }
 
   // Check for loan transactions (Balance Sheet items, NOT P&L)
@@ -427,16 +430,39 @@ export function getAccountMappingForSettlementDiscount(
  * Get account mapping for advance transactions
  *
  * Advances are Balance Sheet items, NOT P&L:
+ *
+ * For CASH advances (direct payment):
  * - Customer Advance (سلفة عميل): DR Cash, CR Customer Advances (Liability)
- *   Customer pays us upfront → we owe them goods/services
+ *   Customer pays us cash upfront → we owe them goods/services
  * - Supplier Advance (سلفة مورد): DR Supplier Advances (Asset), CR Cash
- *   We pay supplier upfront → they owe us goods/services
+ *   We pay supplier cash upfront → they owe us goods/services
+ *
+ * For ENDORSEMENT advances (cheque endorsement, no cash movement):
+ * Per Bill of Exchange accounting standards, the cheque comes from the client (AR source):
+ * - Customer Advance: DR AR, CR Customer Advances (Liability)
+ *   Client's cheque had excess → we reduced AR less, created liability
+ * - Supplier Advance: DR Supplier Advances (Asset), CR AR
+ *   Cheque from client used for supplier advance → AR to Asset conversion
+ *
+ * @param advanceType - Type of advance: customer or supplier
+ * @param isEndorsementAdvance - True if advance created via cheque endorsement (no cash movement)
  */
 export function getAccountMappingForAdvance(
-  advanceType: 'سلفة عميل' | 'سلفة مورد'
+  advanceType: 'سلفة عميل' | 'سلفة مورد',
+  isEndorsementAdvance: boolean = false
 ): AccountMapping {
   if (advanceType === 'سلفة عميل') {
-    // Customer advance: We receive cash, create liability (we owe them goods/services)
+    if (isEndorsementAdvance) {
+      // Endorsement customer advance: Client's cheque had excess
+      // DR AR (we reduced AR less than cheque value), CR Customer Advances
+      return {
+        debitAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+        creditAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+      };
+    }
+    // Cash customer advance: We receive cash, create liability (we owe them goods/services)
     return {
       debitAccount: ACCOUNT_CODES.CASH,
       creditAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
@@ -444,7 +470,17 @@ export function getAccountMappingForAdvance(
       creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
     };
   } else {
-    // Supplier advance: We pay cash, create asset (they owe us goods/services)
+    if (isEndorsementAdvance) {
+      // Endorsement supplier advance: Cheque from client used to prepay supplier
+      // DR Supplier Advances (asset created), CR AR (cheque came from client)
+      return {
+        debitAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+        creditAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+      };
+    }
+    // Cash supplier advance: We pay cash, create asset (they owe us goods/services)
     return {
       debitAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
       creditAccount: ACCOUNT_CODES.CASH,

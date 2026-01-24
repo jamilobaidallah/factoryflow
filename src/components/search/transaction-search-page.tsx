@@ -98,15 +98,35 @@ export default function TransactionSearchPage() {
         });
       });
 
-      // Query 2: Multi-allocation payments (allocationTransactionIds array)
+      // Query 2: Multi-allocation payments from payments page (allocationTransactionIds array)
       const multiPaymentsQuery = query(
         paymentsRef,
         where("allocationTransactionIds", "array-contains", trimmedQuery)
       );
       const multiPaymentsSnapshot = await getDocs(multiPaymentsQuery);
       multiPaymentsSnapshot.forEach((doc) => {
-        // Avoid duplicates if somehow a payment has both fields set
         if (!foundPaymentIds.has(doc.id)) {
+          foundPaymentIds.add(doc.id);
+          searchResults.push({
+            type: "payment",
+            id: doc.id,
+            data: {
+              ...doc.data(),
+              date: toDate(doc.data().date),
+            },
+          });
+        }
+      });
+
+      // Query 3: Endorsement payments (paidTransactionIds array)
+      const endorsementPaymentsQuery = query(
+        paymentsRef,
+        where("paidTransactionIds", "array-contains", trimmedQuery)
+      );
+      const endorsementPaymentsSnapshot = await getDocs(endorsementPaymentsQuery);
+      endorsementPaymentsSnapshot.forEach((doc) => {
+        if (!foundPaymentIds.has(doc.id)) {
+          foundPaymentIds.add(doc.id);
           searchResults.push({
             type: "payment",
             id: doc.id,
