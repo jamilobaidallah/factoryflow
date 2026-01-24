@@ -834,14 +834,21 @@ export class LedgerService {
         );
         const singlePaymentsSnapshot = await getDocs(singlePaymentsQuery);
 
-        // Query 2: Multi-allocation payments (allocationTransactionIds array)
+        // Query 2: Multi-allocation payments from payments page (allocationTransactionIds array)
         const multiAllocPaymentsQuery = query(
           this.paymentsRef,
           where("allocationTransactionIds", "array-contains", existingTransactionId)
         );
         const multiAllocPaymentsSnapshot = await getDocs(multiAllocPaymentsQuery);
 
-        // Combine both results, avoiding duplicates
+        // Query 3: Endorsement payments (paidTransactionIds array)
+        const endorsementPaymentsQuery = query(
+          this.paymentsRef,
+          where("paidTransactionIds", "array-contains", existingTransactionId)
+        );
+        const endorsementPaymentsSnapshot = await getDocs(endorsementPaymentsQuery);
+
+        // Combine all results, avoiding duplicates
         const processedPaymentIds = new Set<string>();
         const allPaymentDocs: typeof singlePaymentsSnapshot.docs = [];
 
@@ -851,6 +858,13 @@ export class LedgerService {
         });
 
         multiAllocPaymentsSnapshot.docs.forEach((doc) => {
+          if (!processedPaymentIds.has(doc.id)) {
+            processedPaymentIds.add(doc.id);
+            allPaymentDocs.push(doc);
+          }
+        });
+
+        endorsementPaymentsSnapshot.docs.forEach((doc) => {
           if (!processedPaymentIds.has(doc.id)) {
             processedPaymentIds.add(doc.id);
             allPaymentDocs.push(doc);
