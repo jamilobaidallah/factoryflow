@@ -1116,6 +1116,9 @@ export class LedgerService {
             // If isARAPEntry is false/missing, default to true (cash sale)
             // This ensures legacy entries without immediateSettlement field work correctly
             immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
+            // Preserve endorsement advance flag - if linkedEndorsementChequeId exists,
+            // this advance was created via cheque endorsement and should use AR instead of Cash
+            isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
           });
         }
 

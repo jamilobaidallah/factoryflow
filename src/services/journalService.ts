@@ -612,8 +612,15 @@ export async function createJournalEntryForClientAdvance(
 /**
  * Create journal entry for supplier advance (from endorsement)
  * We prepaid supplier via endorsed cheque, they owe us goods/services
- * DR Supplier Advances (asset - prepayment created)
- * CR Accounts Payable (AP reduced less)
+ *
+ * ACCOUNTING (per Bill of Exchange standards):
+ * The cheque comes from the CLIENT (AR source), not from Cash or AP.
+ * When we endorse a cheque for more than we owe the supplier:
+ * - The excess amount (supplier advance) is sourced from the client's cheque
+ * - This means we're converting part of AR into a supplier prepayment asset
+ *
+ * DR Supplier Advances (1350) - asset created (supplier owes us goods)
+ * CR Accounts Receivable (1200) - cheque came from client (AR source)
  *
  * @throws {ValidationError} if amount is invalid
  */
@@ -638,9 +645,9 @@ export async function createJournalEntryForSupplierAdvance(
       description,
     },
     {
-      accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,  // 2000
-      accountName: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200 - cheque came from client
+      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
       debit: 0,
       credit: roundedAmount,
       description,
@@ -675,6 +682,8 @@ export interface JournalEntryBatchData {
   date: Date;
   isARAPEntry?: boolean;
   immediateSettlement?: boolean;
+  /** True if this is an advance created via cheque endorsement (no cash movement) */
+  isEndorsementAdvance?: boolean;
 }
 
 /**
@@ -741,7 +750,8 @@ export function addJournalEntryToBatch(
     data.category,
     data.subCategory,
     data.isARAPEntry,
-    data.immediateSettlement
+    data.immediateSettlement,
+    data.isEndorsementAdvance
   );
   const lines = createJournalLines(mapping, data.amount, data.description);
 
