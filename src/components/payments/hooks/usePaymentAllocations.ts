@@ -26,7 +26,8 @@ import {
 } from '../types';
 import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
-import { createJournalEntryForPayment, deleteJournalEntriesByPayment } from '@/services/journalService';
+import { createJournalEntryForPayment, createJournalEntryForAdvancePayment, deleteJournalEntriesByPayment } from '@/services/journalService';
+import { isAdvanceCategory } from '@/lib/account-mapping';
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from '@/lib/constants';
 
 /** Result from savePaymentWithAllocations */
@@ -178,6 +179,10 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         chequeDocRef = doc(chequesRef);
       }
 
+      // Track the first allocation's target category for journal entry creation
+      // If it's an advance, we need to use different accounts
+      let firstTargetCategory: string | undefined;
+
       // Use a transaction for atomic read-modify-write
       await runTransaction(firestore, async (transaction) => {
         // 1. Read all ledger entries first (required before writes in transaction)
@@ -196,6 +201,12 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
             data: ledgerDoc.data() as Record<string, unknown>,
             allocation,
           });
+        }
+
+        // Capture first target's category for journal entry creation
+        // If it's an advance, we need to use advance accounts (1350/2150) instead of AR/AP (1200/2000)
+        if (ledgerReads.length > 0) {
+          firstTargetCategory = ledgerReads[0].data.category as string | undefined;
         }
 
         // 2. Create the payment document
@@ -308,19 +319,40 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       });
 
       // Create journal entry for the payment
+      // Check if target is an advance entry - if so, use advance accounts (1350/2150)
+      // instead of AR/AP (1200/2000)
+      const isAdvanceTarget = firstTargetCategory && isAdvanceCategory(firstTargetCategory);
       const paymentDescription = `دفعة ${paymentData.type === 'قبض' ? 'واردة من' : 'صادرة إلى'} ${paymentData.clientName}`;
       let journalCreated = true;
 
       try {
-        const journalResult = await createJournalEntryForPayment(
-          user.dataOwnerId,
-          paymentDocRef.id,
-          paymentDescription,
-          totalAllocated,
-          paymentData.type as 'قبض' | 'صرف',
-          paymentData.date,
-          allocationTransactionIds[0] // Link to first transaction
-        );
+        let journalResult;
+
+        if (isAdvanceTarget && firstTargetCategory) {
+          // Payment is against an advance entry - use advance accounts
+          // This handles supplier refunds (DR Cash, CR Supplier Advances)
+          // and customer advance payments (DR Customer Advances, CR Cash)
+          journalResult = await createJournalEntryForAdvancePayment(
+            user.dataOwnerId,
+            paymentDocRef.id,
+            paymentDescription,
+            totalAllocated,
+            firstTargetCategory as 'سلفة عميل' | 'سلفة مورد',
+            paymentData.date,
+            allocationTransactionIds[0]
+          );
+        } else {
+          // Regular AR/AP payment - use standard accounts
+          journalResult = await createJournalEntryForPayment(
+            user.dataOwnerId,
+            paymentDocRef.id,
+            paymentDescription,
+            totalAllocated,
+            paymentData.type as 'قبض' | 'صرف',
+            paymentData.date,
+            allocationTransactionIds[0]
+          );
+        }
 
         if (!journalResult.success) {
           journalCreated = false;

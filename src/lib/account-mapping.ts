@@ -304,6 +304,44 @@ export function getAccountMappingForPayment(
 }
 
 /**
+ * Get account mapping for payment against an advance (closing the advance)
+ *
+ * When a payment is made against an advance entry (not AR/AP), we need to
+ * use advance accounts instead of AR/AP accounts:
+ *
+ * - Supplier advance payment received (refund): DR Cash, CR Supplier Advances
+ *   We receive cash/cheque from supplier, reducing our prepayment asset
+ *
+ * - Customer advance payment made (refund): DR Customer Advances, CR Cash
+ *   We pay cash to customer, reducing our advance liability
+ *
+ * This is different from getAccountMappingForPayment which always uses AR/AP.
+ */
+export function getAccountMappingForAdvancePayment(
+  advanceType: 'سلفة عميل' | 'سلفة مورد'
+): AccountMapping {
+  if (advanceType === 'سلفة مورد') {
+    // Receiving refund from supplier - closes our prepayment asset
+    // DR Cash (we receive money), CR Supplier Advances (asset decreases)
+    return {
+      debitAccount: ACCOUNT_CODES.CASH,
+      creditAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+    };
+  } else {
+    // Paying back customer advance - closes our liability
+    // DR Customer Advances (liability decreases), CR Cash (we pay out)
+    return {
+      debitAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+      creditAccount: ACCOUNT_CODES.CASH,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+    };
+  }
+}
+
+/**
  * Get account mapping for inventory COGS
  *
  * When inventory is sold (exits):

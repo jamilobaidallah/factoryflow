@@ -38,6 +38,7 @@ import { getDefaultAccountsForSeeding } from '@/lib/chart-of-accounts';
 import {
   getAccountMappingForLedgerEntry,
   getAccountMappingForPayment,
+  getAccountMappingForAdvancePayment,
   getAccountMappingForCOGS,
   getAccountMappingForDepreciation,
   getAccountMappingForBadDebt,
@@ -431,6 +432,35 @@ export async function createJournalEntryForPayment(
 ): Promise<ServiceResult<JournalEntry>> {
   validateAmount(amount);
   const mapping = getAccountMappingForPayment(paymentType);
+  const lines = createJournalLines(mapping, amount, description);
+  return createJournalEntry(userId, description, date, lines, linkedTransactionId, paymentId, 'payment');
+}
+
+/**
+ * Create journal entry for a payment against an advance
+ *
+ * When a payment is allocated to an advance entry (supplier or customer advance),
+ * we need to use advance accounts instead of AR/AP:
+ *
+ * - Supplier advance (refund received): DR Cash, CR Supplier Advances (1350)
+ *   We receive cash/cheque from supplier, closing our prepayment asset
+ *
+ * - Customer advance (refund paid): DR Customer Advances (2150), CR Cash
+ *   We pay cash to customer, closing our advance liability
+ *
+ * @throws {ValidationError} if amount is invalid
+ */
+export async function createJournalEntryForAdvancePayment(
+  userId: string,
+  paymentId: string,
+  description: string,
+  amount: number,
+  advanceType: 'سلفة عميل' | 'سلفة مورد',
+  date: Date,
+  linkedTransactionId?: string
+): Promise<ServiceResult<JournalEntry>> {
+  validateAmount(amount);
+  const mapping = getAccountMappingForAdvancePayment(advanceType);
   const lines = createJournalLines(mapping, amount, description);
   return createJournalEntry(userId, description, date, lines, linkedTransactionId, paymentId, 'payment');
 }
