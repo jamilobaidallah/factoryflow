@@ -60,6 +60,7 @@ import {
   createJournalEntryForSettlementDiscount,
   createJournalEntryForEndorsement,
   addPaymentJournalEntryToBatch,
+  addAdvancePaymentJournalEntryToBatch,
 } from "@/services/journalService";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
@@ -827,6 +828,9 @@ export class LedgerService {
         // Get current entry data once for use throughout this block
         const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
 
+        // Check if this is an advance entry - used for journal entry creation
+        const isAdvanceEntry = isAdvanceTransaction(currentData?.category);
+
         // Query 1: Single-transaction payments (linkedTransactionId)
         const singlePaymentsQuery = query(
           this.paymentsRef,
@@ -907,17 +911,29 @@ export class LedgerService {
           // Only for standard AR/AP entries (income/expense with partial payments)
           // Skip for:
           // - Immediate settlements (no separate payment journal)
-          // - Advances (use Cash vs Advance accounts, not AR/AP)
           // - Loans (use Cash vs Loans accounts, not AR/AP)
           // - Zero-amount payments (discount-only settlements have no cash movement)
           // - Endorsement payments (no cash movement, use DR AP, CR AR instead)
-          const isAdvance = isAdvanceTransaction(currentData?.category);
           const isLoan = currentData?.type === 'قرض';
           const isEndorsementPayment = paymentData.isEndorsement === true || paymentData.noCashMovement === true;
           const paymentCashAmount = paymentData.amount || 0;
           const paymentDiscountAmount = paymentData.discountAmount || 0;
 
-          if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvance && !isLoan) {
+          // Handle advance entries separately - use advance accounts (1350/2150)
+          if (isAdvanceEntry && currentData?.isARAPEntry && !currentData?.immediateSettlement && paymentCashAmount > 0 && !isEndorsementPayment) {
+            // Advance payment - use advance accounts instead of AR/AP
+            // Supplier advance (سلفة مورد) refund: DR Cash, CR Supplier Advances (1350)
+            // Customer advance (سلفة عميل) refund: DR Customer Advances (2150), CR Cash
+            const advanceType = currentData.category as 'سلفة عميل' | 'سلفة مورد';
+            addAdvancePaymentJournalEntryToBatch(batch, this.userId, {
+              paymentId: paymentDoc.id,
+              description: paymentData.notes || `دفعة سلفة - ${formData.description}`,
+              amount: paymentCashAmount,
+              advanceType: advanceType,
+              date: new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+            });
+          } else if (currentData?.isARAPEntry && !currentData?.immediateSettlement && !isAdvanceEntry && !isLoan) {
             if (isEndorsementPayment) {
               // Endorsement payment - track for journal recreation after batch commit
               // These need DR AP, CR AR (not DR Cash) and require cheque lookup
@@ -1013,15 +1029,28 @@ export class LedgerService {
             // Recreate journal entry for the cashed cheque payment
             const paymentCashAmount = paymentData.amount || 0;
             if (paymentCashAmount > 0 && currentData?.isARAPEntry && !currentData?.immediateSettlement) {
-              const paymentType = paymentData.type as 'قبض' | 'صرف';
-              addPaymentJournalEntryToBatch(batch, this.userId, {
-                paymentId: paymentId,
-                description: paymentData.notes || `صرف شيك - ${formData.description}`,
-                amount: paymentCashAmount,
-                paymentType: paymentType,
-                date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
-                linkedTransactionId: existingTransactionId,
-              });
+              // Check if target is an advance entry - use advance accounts
+              if (isAdvanceEntry) {
+                const advanceType = currentData.category as 'سلفة عميل' | 'سلفة مورد';
+                addAdvancePaymentJournalEntryToBatch(batch, this.userId, {
+                  paymentId: paymentId,
+                  description: paymentData.notes || `صرف شيك سلفة - ${formData.description}`,
+                  amount: paymentCashAmount,
+                  advanceType: advanceType,
+                  date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
+                  linkedTransactionId: existingTransactionId,
+                });
+              } else {
+                const paymentType = paymentData.type as 'قبض' | 'صرف';
+                addPaymentJournalEntryToBatch(batch, this.userId, {
+                  paymentId: paymentId,
+                  description: paymentData.notes || `صرف شيك - ${formData.description}`,
+                  amount: paymentCashAmount,
+                  paymentType: paymentType,
+                  date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
+                  linkedTransactionId: existingTransactionId,
+                });
+              }
             }
           }
         }

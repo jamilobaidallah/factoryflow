@@ -53,6 +53,7 @@ import {
 import { logActivity } from "@/services/activityLogService";
 import {
   addPaymentJournalEntryToBatch,
+  addAdvancePaymentJournalEntryToBatch,
   createJournalEntryForEndorsement,
   createJournalEntryForClientAdvance,
   createJournalEntryForSupplierAdvance,
@@ -317,6 +318,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           // Update cheque in batch
           batch.update(chequeRef, updateData);
 
+          // Track target ledger category for journal entry creation
+          let targetLedgerCategory: string | null = null;
+
           // Inline ARAP update in batch (if linked)
           if (formData.linkedTransactionId) {
             const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
@@ -329,6 +333,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             if (!ledgerSnapshot.empty) {
               const ledgerDoc = ledgerSnapshot.docs[0];
               const ledgerData = ledgerDoc.data();
+
+              // Capture the category to determine journal entry type
+              targetLedgerCategory = ledgerData.category as string | null;
 
               if (ledgerData.isARAPEntry) {
                 const currentTotalPaid = ledgerData.totalPaid || 0;
@@ -348,15 +355,31 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           }
 
           // Add journal entry to SAME batch for atomic all-or-nothing behavior
-          // Receipt: DR Cash (1000), CR AR (1200)
-          addPaymentJournalEntryToBatch(batch, user.dataOwnerId, {
-            paymentId: paymentDocRef.id,
-            description: `تحصيل شيك وارد رقم ${formData.chequeNumber}`,
-            amount: chequeAmount,
-            paymentType: PAYMENT_TYPES.RECEIPT as 'قبض' | 'صرف',
-            date: effectivePaymentDate,
-            linkedTransactionId: formData.linkedTransactionId || undefined,
-          });
+          // Check if target is an advance entry - use advance accounts instead of AR/AP
+          const isAdvanceTarget = targetLedgerCategory === 'سلفة مورد' || targetLedgerCategory === 'سلفة عميل';
+
+          if (isAdvanceTarget && targetLedgerCategory) {
+            // Advance payment: DR Cash, CR Supplier Advances (1350) for supplier advance refund
+            // Or: DR Customer Advances (2150), CR Cash for customer advance refund
+            addAdvancePaymentJournalEntryToBatch(batch, user.dataOwnerId, {
+              paymentId: paymentDocRef.id,
+              description: `تحصيل شيك وارد رقم ${formData.chequeNumber}`,
+              amount: chequeAmount,
+              advanceType: targetLedgerCategory as 'سلفة عميل' | 'سلفة مورد',
+              date: effectivePaymentDate,
+              linkedTransactionId: formData.linkedTransactionId || undefined,
+            });
+          } else {
+            // Standard payment: DR Cash (1100), CR AR (1200)
+            addPaymentJournalEntryToBatch(batch, user.dataOwnerId, {
+              paymentId: paymentDocRef.id,
+              description: `تحصيل شيك وارد رقم ${formData.chequeNumber}`,
+              amount: chequeAmount,
+              paymentType: PAYMENT_TYPES.RECEIPT as 'قبض' | 'صرف',
+              date: effectivePaymentDate,
+              linkedTransactionId: formData.linkedTransactionId || undefined,
+            });
+          }
 
           // Commit atomically - either ALL succeed or ALL fail
           await batch.commit();

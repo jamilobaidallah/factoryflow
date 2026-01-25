@@ -892,6 +892,59 @@ export function addPaymentJournalEntryToBatch(
 }
 
 /**
+ * Data required for adding an advance payment journal entry to a batch
+ */
+export interface AdvancePaymentJournalEntryBatchData {
+  paymentId: string;
+  description: string;
+  amount: number;
+  advanceType: 'سلفة عميل' | 'سلفة مورد';
+  date: Date;
+  linkedTransactionId?: string;
+}
+
+/**
+ * Add an advance payment journal entry to an existing WriteBatch.
+ *
+ * Use this when a payment is made against an advance entry:
+ * - Supplier advance (refund received): DR Cash, CR Supplier Advances (1350)
+ * - Customer advance (refund paid): DR Customer Advances (2150), CR Cash
+ *
+ * @throws {ValidationError} if inputs are invalid or entry is unbalanced
+ */
+export function addAdvancePaymentJournalEntryToBatch(
+  batch: WriteBatch,
+  userId: string,
+  data: AdvancePaymentJournalEntryBatchData
+): void {
+  validateUserId(userId);
+  validateAmount(data.amount);
+  validateDescription(data.description);
+  validateDate(data.date);
+
+  const mapping = getAccountMappingForAdvancePayment(data.advanceType);
+  const lines = createJournalLines(mapping, data.amount, data.description);
+
+  const validation = validateJournalEntry(lines);
+  if (!validation.isValid) {
+    throw new ValidationError(
+      `Advance payment journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
+    );
+  }
+
+  addValidatedJournalEntryToBatch(
+    batch,
+    userId,
+    lines,
+    data.description,
+    data.date,
+    data.linkedTransactionId ?? null,
+    'payment',
+    data.paymentId
+  );
+}
+
+/**
  * Create a reversing journal entry
  *
  * Creates a new entry that reverses the debits/credits of the original.
