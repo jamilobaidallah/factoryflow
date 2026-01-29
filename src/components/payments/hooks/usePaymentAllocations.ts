@@ -26,8 +26,12 @@ import {
 } from '../types';
 import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
-import { createJournalEntryForPayment, deleteJournalEntriesByPayment } from '@/services/journalService';
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from '@/lib/constants';
+import {
+  createJournalPostingEngine,
+  getTemplateForDiscount,
+  getEntriesByLinkedPaymentId,
+} from '@/services/journal';
 
 /** Result from savePaymentWithAllocations */
 export interface SavePaymentResult {
@@ -312,15 +316,19 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       let journalCreated = true;
 
       try {
-        const journalResult = await createJournalEntryForPayment(
-          user.dataOwnerId,
-          paymentDocRef.id,
-          paymentDescription,
-          totalAllocated,
-          paymentData.type as 'قبض' | 'صرف',
-          paymentData.date,
-          allocationTransactionIds[0] // Link to first transaction
-        );
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const templateId = paymentData.type === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
+        const journalResult = await engine.post({
+          templateId,
+          amount: totalAllocated,
+          date: paymentData.date,
+          description: paymentDescription,
+          source: {
+            type: "payment",
+            documentId: paymentDocRef.id,
+            transactionId: allocationTransactionIds[0], // Link to first transaction
+          },
+        });
 
         if (!journalResult.success) {
           journalCreated = false;
@@ -333,6 +341,55 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       } catch (err) {
         journalCreated = false;
         console.error("Failed to create journal entry for payment:", paymentDocRef.id, err);
+      }
+
+      // BUG FIX: Create discount journal entries for each allocation with discount
+      // Without these journals, Trial Balance would show incorrect AR/AP balances
+      // because discounts reduce the outstanding amount without a journal entry.
+      //
+      // For income (قبض): DR Sales Discount (4300), CR AR (1200)
+      // For expense (صرف): DR AP (2000), CR Purchase Discount (5050)
+      const discountAllocations = activeAllocations.filter(
+        (a) => a.discountAmount && a.discountAmount > 0
+      );
+
+      if (discountAllocations.length > 0) {
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const entryType = paymentData.type === 'قبض' ? 'دخل' : 'مصروف';
+
+        for (const allocation of discountAllocations) {
+          if (!allocation.discountAmount) continue;
+
+          try {
+            const templateId = getTemplateForDiscount(entryType as 'دخل' | 'مصروف');
+            const discountResult = await engine.post({
+              templateId,
+              amount: allocation.discountAmount,
+              date: paymentData.date,
+              description: `خصم تسوية - ${allocation.description}`,
+              source: {
+                type: 'discount',
+                documentId: paymentDocRef.id,
+                transactionId: allocation.transactionId,
+              },
+            });
+
+            if (!discountResult.success) {
+              console.error(
+                "Discount journal failed for allocation:",
+                allocation.transactionId,
+                discountResult.error
+              );
+            }
+          } catch (discountErr) {
+            // Log but don't fail - payment is already saved
+            console.error(
+              "Failed to create discount journal for allocation:",
+              allocation.transactionId,
+              discountErr
+            );
+          }
+        }
       }
 
       setLoading(false);
@@ -521,11 +578,17 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         }
       });
 
-      // Delete linked journal entries (prevents orphaned accounting records)
+      // Reverse linked journal entries (immutable ledger pattern)
       try {
-        await deleteJournalEntriesByPayment(user.dataOwnerId, paymentId);
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
+        for (const journal of linkedJournals) {
+          if (journal.status !== "reversed") {
+            await engine.reverse(journal.id, "حذف مدفوعة");
+          }
+        }
       } catch (journalError) {
-        console.error("Failed to delete journal entries for payment:", journalError);
+        console.error("Failed to reverse journal entries for payment:", journalError);
         // Continue - payment is already deleted, journal cleanup failure is logged
       }
 

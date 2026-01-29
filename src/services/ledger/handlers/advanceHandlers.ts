@@ -5,6 +5,9 @@
  * BUG 1 FIX: Uses FieldValue.arrayUnion and FieldValue.increment for atomic updates
  * to prevent race conditions when multiple invoices allocate from the same advance
  *
+ * JOURNAL FIX: Now creates journal entries when advances are applied to invoices.
+ * Without these journals, Trial Balance would show incorrect AR/AP and Advance balances.
+ *
  * SEMANTIC CHANGE: Advances now use standard AR/AP tracking (totalPaid, remainingBalance, paymentStatus)
  * instead of the separate totalUsedFromAdvance field. This aligns with how loans track obligations.
  *
@@ -16,17 +19,26 @@
  * - totalPaid increases (obligation fulfilled)
  * - remainingBalance decreases (remaining obligation)
  * - paymentStatus transitions: unpaid → partial → paid
+ *
+ * Journal entries when applying advances:
+ * - Customer advance application: DR Customer Advances, CR AR
+ * - Supplier advance application: DR AP, CR Supplier Advances
  */
 
 import { doc, arrayUnion, increment } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { safeAdd } from "@/lib/currency";
+import { TRANSACTION_TYPES } from "@/lib/constants";
 import type { HandlerContext } from "../types";
 import type { AdvanceAllocationResult } from "@/components/ledger/components/AdvanceAllocationDialog";
 import type {
   AdvanceAllocation,
   AdvancePaymentRecord,
 } from "@/components/ledger/utils/ledger-constants";
+import {
+  createJournalPostingEngine,
+  getTemplateForAdvanceApplication,
+} from "@/services/journal";
 
 /**
  * Handle advance allocation batch operation
@@ -36,6 +48,10 @@ import type {
  * - arrayUnion() for advanceAllocations - atomically appends to array
  * - increment() for totalPaid - atomically adds to the value (standard AR/AP field)
  *
+ * JOURNAL FIX: Creates journal entries for each advance application:
+ * - Customer advance: DR Customer Advances, CR AR
+ * - Supplier advance: DR AP, CR Supplier Advances
+ *
  * Note: remainingBalance is updated as a convenience field but can always be
  * recalculated from (amount - totalPaid) if needed. The authoritative
  * source is totalPaid which is now atomic.
@@ -43,7 +59,7 @@ import type {
  * @param ctx - Handler context with batch, refs, and form data
  * @param allocations - Array of advance allocations from the dialog
  * @param invoiceDocId - The ID of the newly created invoice document
- * @returns Total amount paid from advances
+ * @returns Total amount paid from advances and journal creation promises
  */
 export async function handleAdvanceAllocationBatch(
   ctx: HandlerContext,
@@ -52,12 +68,20 @@ export async function handleAdvanceAllocationBatch(
 ): Promise<{
   totalPaidFromAdvances: number;
   paidFromAdvances: AdvancePaymentRecord[];
+  journalPromises: Promise<void>[];
 }> {
   const { batch, transactionId, formData, userId } = ctx;
   const now = new Date();
 
   let totalPaidFromAdvances = 0;
   const paidFromAdvances: AdvancePaymentRecord[] = [];
+  const journalPromises: Promise<void>[] = [];
+
+  // Determine advance type based on transaction type (entryType is in ctx, not formData)
+  // Income (دخل) entries use customer advances (سلفة عميل)
+  // Expense (مصروف) entries use supplier advances (سلفة مورد)
+  const isCustomerAdvance = ctx.entryType === TRANSACTION_TYPES.INCOME;
+  const advanceType = isCustomerAdvance ? "سلفة عميل" : "سلفة مورد";
 
   for (const allocation of allocations) {
     if (allocation.amount <= 0) continue;
@@ -110,7 +134,69 @@ export async function handleAdvanceAllocationBatch(
       remainingBalance: increment(-allocation.amount),
       paymentStatus: newPaymentStatus,
     });
+
+    // JOURNAL FIX: Create journal entry for advance application
+    // This fixes the Trial Balance bug where AR/AP and Advance balances were incorrect
+    // because no journal was created when advances were consumed.
+    //
+    // Customer advance application: DR Customer Advances (2150), CR AR (1200)
+    // Supplier advance application: DR AP (2000), CR Supplier Advances (1350)
+    const journalPromise = createAdvanceApplicationJournal(
+      userId,
+      allocation,
+      invoiceDocId,
+      transactionId,
+      advanceType,
+      formData.description,
+      now
+    );
+    journalPromises.push(journalPromise);
   }
 
-  return { totalPaidFromAdvances, paidFromAdvances };
+  return { totalPaidFromAdvances, paidFromAdvances, journalPromises };
+}
+
+/**
+ * Create journal entry for advance application
+ *
+ * This is called after the batch commit to avoid conflicts.
+ * Journal entries are created outside the main batch because:
+ * 1. They need sequence numbers (requires separate transaction)
+ * 2. Graceful failure - if journal fails, the advance allocation still works
+ */
+async function createAdvanceApplicationJournal(
+  userId: string,
+  allocation: AdvanceAllocationResult,
+  invoiceDocId: string,
+  transactionId: string,
+  advanceType: "سلفة عميل" | "سلفة مورد",
+  description: string,
+  date: Date
+): Promise<void> {
+  try {
+    const engine = createJournalPostingEngine(userId);
+    const templateId = getTemplateForAdvanceApplication(advanceType);
+
+    const result = await engine.post({
+      templateId,
+      amount: allocation.amount,
+      date,
+      description: `تطبيق ${advanceType} على فاتورة: ${description}`,
+      source: {
+        type: "advance_application",
+        documentId: invoiceDocId,
+        transactionId: transactionId,
+      },
+    });
+
+    if (!result.success) {
+      console.error(
+        `Failed to create advance application journal: ${result.error}`
+      );
+    }
+  } catch (error) {
+    // Graceful failure - log but don't throw
+    // The advance allocation itself succeeded
+    console.error("Error creating advance application journal:", error);
+  }
 }

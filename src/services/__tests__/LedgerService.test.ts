@@ -179,7 +179,7 @@ jest.mock('../ledger/handlers/fixedAssetHandlers', () => ({
 
 jest.mock('../ledger/handlers/advanceHandlers', () => ({
   handleAdvanceAllocationBatch: jest.fn(() =>
-    Promise.resolve({ totalPaidFromAdvances: 0, paidFromAdvances: [] })
+    Promise.resolve({ totalPaidFromAdvances: 0, paidFromAdvances: [], journalPromises: [] })
   ),
 }));
 
@@ -481,6 +481,7 @@ describe('LedgerService', () => {
       handleAdvanceAllocationBatch.mockResolvedValue({
         totalPaidFromAdvances: 500,
         paidFromAdvances: [{ advanceId: 'adv-1', amount: 500, date: new Date() }],
+        journalPromises: [],
       });
 
       const mockBatch = createMockBatch();

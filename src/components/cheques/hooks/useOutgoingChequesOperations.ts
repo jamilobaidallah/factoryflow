@@ -51,6 +51,10 @@ import {
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
 import { addPaymentJournalEntryToBatch } from "@/services/journalService";
+import {
+  createJournalPostingEngine,
+  getEntriesByLinkedPaymentId,
+} from "@/services/journal";
 
 interface UseOutgoingChequesOperationsReturn {
   submitCheque: (
@@ -414,19 +418,8 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             paymentsToDelete = paymentSnapshot.docs.map(d => ({ id: d.id }));
           }
 
-          // Bug #2: Query journal entries linked to payments BEFORE batch
-          const journalEntriesRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
-          const journalsToDelete: { id: string }[] = [];
-          for (const payment of paymentsToDelete) {
-            const journalQuery = query(
-              journalEntriesRef,
-              where("linkedPaymentId", "==", payment.id)
-            );
-            const journalSnapshot = await getDocs(journalQuery);
-            journalSnapshot.docs.forEach(journalDoc => {
-              journalsToDelete.push({ id: journalDoc.id });
-            });
-          }
+          // Collect payment IDs for journal reversal (done after batch commit)
+          const paymentIdsForJournalReversal = paymentsToDelete.map(p => p.id);
 
           // إزالة تاريخ الصرف ومرجع الدفع من الشيك
           updateData.clearedDate = null;
@@ -438,11 +431,6 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           // Delete payments in batch
           paymentsToDelete.forEach(payment => {
             batch.delete(doc(firestore, `users/${user.dataOwnerId}/payments`, payment.id));
-          });
-
-          // Bug #2: Delete journal entries in batch
-          journalsToDelete.forEach(journal => {
-            batch.delete(doc(firestore, `users/${user.dataOwnerId}/journal_entries`, journal.id));
           });
 
           // Update cheque in batch
@@ -484,8 +472,28 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             }
           }
 
-          // Commit atomically - payment, journal entry, and ARAP all reverted together
+          // Commit atomically - payment and ARAP all reverted together
           await batch.commit();
+
+          // Reverse journal entries AFTER batch commit (immutable ledger pattern)
+          // This creates reversal entries instead of deleting the originals
+          const reasonAr = newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced"
+            ? "شيك مرتجع"
+            : "إلغاء صرف شيك";
+
+          try {
+            const engine = createJournalPostingEngine(user.dataOwnerId);
+            for (const paymentId of paymentIdsForJournalReversal) {
+              // Find journals linked to this payment and reverse them
+              const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
+              for (const journal of linkedJournals) {
+                await engine.reverse(journal.id, reasonAr);
+              }
+            }
+          } catch (journalError) {
+            // Graceful failure - the main operation succeeded
+            console.error("Failed to reverse journal entries:", journalError);
+          }
 
           let toastDescription: string;
           if (newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced") {

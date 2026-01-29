@@ -10,7 +10,10 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
-import { createJournalEntryForPayment, deleteJournalEntriesByPayment } from "@/services/journalService";
+import {
+  createJournalPostingEngine,
+  getEntriesByLinkedPaymentId,
+} from "@/services/journal";
 import { exportPaymentsToExcelProfessional } from "@/lib/export-payments-excel";
 import { MultiAllocationDialog } from "./MultiAllocationDialog";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
@@ -286,18 +289,31 @@ export default function PaymentsPage() {
         }
 
         // Recreate journal entry for the updated payment
-        // Delete old journal entries and create new one with updated data
+        // Reverse old journals and create new one with updated data
         try {
-          await deleteJournalEntriesByPayment(user.dataOwnerId, editingPayment.id);
-          await createJournalEntryForPayment(
-            user.dataOwnerId,
-            editingPayment.id,
-            `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
-            newAmount,
-            formData.type as 'قبض' | 'صرف',
-            new Date(formData.date),
-            formData.linkedTransactionId || undefined
-          );
+          const engine = createJournalPostingEngine(user.dataOwnerId);
+
+          // Reverse old journal entries
+          const oldJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, editingPayment.id);
+          for (const journal of oldJournals) {
+            if (journal.status !== "reversed") {
+              await engine.reverse(journal.id, "تعديل مدفوعة");
+            }
+          }
+
+          // Create new journal entry
+          const templateId = formData.type === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
+          await engine.post({
+            templateId,
+            amount: newAmount,
+            date: new Date(formData.date),
+            description: `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+            source: {
+              type: "payment",
+              documentId: editingPayment.id,
+              transactionId: formData.linkedTransactionId || undefined,
+            },
+          });
         } catch (journalError) {
           console.error("Failed to recreate journal entry for payment:", journalError);
           // Continue - payment is updated, journal entry failure is logged but not blocking
@@ -339,15 +355,19 @@ export default function PaymentsPage() {
 
         // Create journal entry for the payment (double-entry accounting)
         try {
-          await createJournalEntryForPayment(
-            user.dataOwnerId,
-            docRef.id,
-            `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
-            paymentAmount,
-            formData.type as 'قبض' | 'صرف',
-            new Date(formData.date),
-            formData.linkedTransactionId || undefined
-          );
+          const engine = createJournalPostingEngine(user.dataOwnerId);
+          const templateId = formData.type === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
+          await engine.post({
+            templateId,
+            amount: paymentAmount,
+            date: new Date(formData.date),
+            description: `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+            source: {
+              type: "payment",
+              documentId: docRef.id,
+              transactionId: formData.linkedTransactionId || undefined,
+            },
+          });
         } catch (journalError) {
           console.error("Failed to create journal entry for payment:", journalError);
           // Continue - payment is created, journal entry failure is logged but not blocking
@@ -578,11 +598,17 @@ export default function PaymentsPage() {
             }
           }
 
-          // Delete linked journal entries (prevents orphaned accounting records)
+          // Reverse linked journal entries (immutable ledger pattern)
           try {
-            await deleteJournalEntriesByPayment(user.dataOwnerId, paymentId);
+            const engine = createJournalPostingEngine(user.dataOwnerId);
+            const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
+            for (const journal of linkedJournals) {
+              if (journal.status !== "reversed") {
+                await engine.reverse(journal.id, "حذف مدفوعة");
+              }
+            }
           } catch (journalError) {
-            console.error("Failed to delete journal entries for payment:", journalError);
+            console.error("Failed to reverse journal entries for payment:", journalError);
             // Continue - we still want to delete the payment
           }
 

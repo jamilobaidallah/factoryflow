@@ -52,15 +52,11 @@ import {
   assertNonNegative,
   isDataIntegrityError,
 } from "@/lib/errors";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import {
-  addJournalEntryToBatch,
-  addCOGSJournalEntryToBatch,
-  createJournalEntryForBadDebt,
-  createJournalEntryForPayment,
-  createJournalEntryForSettlementDiscount,
-  createJournalEntryForEndorsement,
-  addPaymentJournalEntryToBatch,
-} from "@/services/journalService";
+  createJournalPostingEngine,
+  getEntriesByTransactionId,
+} from "@/services/journal";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
 import {
@@ -381,30 +377,44 @@ export class LedgerService {
         isARAPEntry: false,
       });
 
-      // Add journal entry to batch (atomic with ledger entry)
-      addJournalEntryToBatch(batch, this.userId, {
-        transactionId,
-        description: formData.description,
-        amount,
-        type: entryType,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        date: entryDate,
-        isARAPEntry: false,
-        immediateSettlement: false,
-      });
-
-      // Commit batch - both ledger and journal succeed or fail together
+      // Commit batch
       try {
         await batch.commit();
       } catch (batchError) {
         const { message, type } = handleError(batchError);
-        console.error("Failed to commit ledger entry with journal:", batchError);
+        console.error("Failed to commit ledger entry:", batchError);
         return {
           success: false,
           error: message,
           errorType: type,
         };
+      }
+
+      // Create journal entry after batch commit (uses separate sequence transaction)
+      // Graceful failure - if journal fails, the ledger entry still works
+      try {
+        const engine = createJournalPostingEngine(this.userId);
+        const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+        await engine.post({
+          templateId,
+          amount,
+          date: entryDate,
+          description: formData.description,
+          source: {
+            type: "ledger",
+            documentId: ledgerDocRef.id,
+            transactionId,
+          },
+          context: {
+            category: formData.category,
+            subCategory: formData.subCategory,
+            isARAPEntry: false,
+            immediateSettlement: formData.immediateSettlement ?? true,
+          },
+        });
+      } catch (journalError) {
+        // Log but don't fail - ledger entry was already committed
+        console.error("Failed to create journal entry:", journalError);
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -580,7 +590,11 @@ export class LedgerService {
       }
 
       // Handle advance allocation (applying existing advances to this invoice)
-      let advanceAllocationResult = { totalPaidFromAdvances: 0, paidFromAdvances: [] as { advanceId: string; advanceTransactionId: string; amount: number; date: Date }[] };
+      let advanceAllocationResult = {
+        totalPaidFromAdvances: 0,
+        paidFromAdvances: [] as { advanceId: string; advanceTransactionId: string; amount: number; date: Date }[],
+        journalPromises: [] as Promise<void>[]
+      };
       if (options.advanceAllocations && options.advanceAllocations.length > 0) {
         advanceAllocationResult = await handleAdvanceAllocationBatch(
           ctx,
@@ -607,29 +621,6 @@ export class LedgerService {
         }
       }
 
-      // Add journal entry to batch (atomic with ledger entry)
-      addJournalEntryToBatch(batch, this.userId, {
-        transactionId,
-        description: formData.description,
-        amount: totalAmount,
-        type: entryType,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        date: new Date(formData.date),
-        isARAPEntry: formData.trackARAP,
-        immediateSettlement: formData.immediateSettlement,
-      });
-
-      // Add COGS journal entry to batch if applicable
-      if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
-        addCOGSJournalEntryToBatch(batch, this.userId, {
-          description: inventoryResult.cogsDescription,
-          amount: inventoryResult.cogsAmount,
-          date: new Date(formData.date),
-          linkedTransactionId: transactionId,
-        });
-      }
-
       // Commit batch - rollback inventory on failure
       try {
         await batch.commit();
@@ -639,12 +630,69 @@ export class LedgerService {
           await rollbackInventoryChanges(this.userId, [inventoryResult.inventoryChange]);
         }
         const { message, type } = handleError(batchError);
-        console.error("Failed to commit ledger entry with journal:", batchError);
+        console.error("Failed to commit ledger entry:", batchError);
         return {
           success: false,
           error: message,
           errorType: type,
         };
+      }
+
+      // Create journal entries after batch commit (uses separate sequence transaction)
+      // Graceful failure - if journals fail, the ledger entry still works
+      try {
+        const engine = createJournalPostingEngine(this.userId);
+        const entryDate = new Date(formData.date);
+
+        // Main ledger journal entry
+        const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+        await engine.post({
+          templateId,
+          amount: totalAmount,
+          date: entryDate,
+          description: formData.description,
+          source: {
+            type: "ledger",
+            documentId: ledgerDocRef.id,
+            transactionId,
+          },
+          context: {
+            category: formData.category,
+            subCategory: formData.subCategory,
+            isARAPEntry: formData.trackARAP ?? false,
+            immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
+          },
+        });
+
+        // COGS journal entry if applicable
+        if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
+          await engine.post({
+            templateId: "COGS",
+            amount: inventoryResult.cogsAmount,
+            date: entryDate,
+            description: inventoryResult.cogsDescription,
+            source: {
+              type: "inventory",
+              documentId: ledgerDocRef.id,
+              transactionId,
+            },
+          });
+        }
+      } catch (journalError) {
+        // Log but don't fail - ledger entry was already committed
+        console.error("Failed to create journal entries:", journalError);
+      }
+
+      // Create advance application journals (after batch commit)
+      // These are created outside the batch because they need sequence numbers
+      // Graceful failure - if journals fail, the advance allocation still works
+      if (advanceAllocationResult.journalPromises.length > 0) {
+        try {
+          await Promise.all(advanceAllocationResult.journalPromises);
+        } catch (journalError) {
+          // Log but don't fail the operation - advance allocation succeeded
+          console.error("Error creating advance application journals:", journalError);
+        }
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -722,10 +770,13 @@ export class LedgerService {
         date: new Date(formData.date),
       };
 
+      // Track COGS recreation data for journal creation after batch commit
+      let cogsRecreationResult: { description: string; amount: number } | null = null;
+
       // Fetch current entry to check if AR/AP recalculation is needed
       const currentEntrySnap = await getDoc(entryRef);
-      if (currentEntrySnap.exists()) {
-        const currentData = currentEntrySnap.data();
+      const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+      if (currentData) {
         const oldAmount = currentData.amount || 0;
 
         // BUG 4 FIX: Reverse advance allocations when editing an invoice
@@ -1060,16 +1111,7 @@ export class LedgerService {
             batch.delete(cogsDoc.ref);
           });
 
-          // Delete old COGS journal entries (linkedDocumentType='inventory')
-          const cogsJournalQuery = query(
-            this.journalEntriesRef,
-            where("linkedTransactionId", "==", existingTransactionId),
-            where("linkedDocumentType", "==", "inventory")
-          );
-          const cogsJournalSnapshot = await getDocs(cogsJournalQuery);
-          cogsJournalSnapshot.forEach((journalDoc) => {
-            batch.delete(journalDoc.ref);
-          });
+          // Note: COGS journal reversals will be handled after batch commit
 
           // Store movement data for COGS recreation
           if (!movementSnapshot.empty) {
@@ -1083,46 +1125,8 @@ export class LedgerService {
           }
         }
 
-        // Delete old journal entries and recreate with new values
-        const journalQuery = query(
-          this.journalEntriesRef,
-          where("linkedTransactionId", "==", existingTransactionId)
-        );
-        const journalSnapshot = await getDocs(journalQuery);
-
-        // Delete existing journal entries (excluding COGS which were already deleted above)
-        journalSnapshot.forEach((journalDoc) => {
-          const data = journalDoc.data();
-          // Skip COGS journals as they were already deleted
-          if (data?.linkedDocumentType !== 'inventory') {
-            batch.delete(journalDoc.ref);
-          }
-        });
-
-        // Recreate journal entry with new values (only if entry exists)
-        // Use currentData flags to preserve original settlement type
-        // For legacy entries without these fields, default to immediate settlement (cash)
-        if (currentData) {
-          addJournalEntryToBatch(batch, this.userId, {
-            transactionId: existingTransactionId,
-            description: formData.description,
-            amount: newAmount,
-            type: entryType,
-            category: formData.category,
-            subCategory: formData.subCategory,
-            date: new Date(formData.date),
-            isARAPEntry: currentData.isARAPEntry ?? false,
-            // If isARAPEntry is true, default immediateSettlement to false (credit sale)
-            // If isARAPEntry is false/missing, default to true (cash sale)
-            // This ensures legacy entries without immediateSettlement field work correctly
-            immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
-            // Preserve endorsement advance flag - if linkedEndorsementChequeId exists,
-            // this advance was created via cheque endorsement and should use AR instead of Cash
-            isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
-          });
-        }
-
-        // Recreate COGS entries if we had them
+        // Note: Journal reversals and recreations will happen after batch commit
+        // Store COGS recreation data if we have it
         if (cogsRecreationData) {
           // Get current inventory cost
           const inventoryRef = doc(
@@ -1159,7 +1163,7 @@ export class LedgerService {
           if (newCogsAmount > 0) {
             const cogsDescription = `تكلفة البضاعة المباعة - ${cogsRecreationData.itemName}`;
 
-            // Create new COGS ledger entry
+            // Create new COGS ledger entry in batch
             const cogsDocRef = doc(this.ledgerRef);
             batch.set(cogsDocRef, {
               transactionId: `COGS-${existingTransactionId}`,
@@ -1175,60 +1179,107 @@ export class LedgerService {
               createdAt: new Date(),
             });
 
-            // Create new COGS journal entry
-            addCOGSJournalEntryToBatch(batch, this.userId, {
-              description: cogsDescription,
-              amount: newCogsAmount,
-              date: new Date(formData.date),
-              linkedTransactionId: existingTransactionId,
-            });
+            // Store for journal creation after batch commit
+            cogsRecreationResult = { description: cogsDescription, amount: newCogsAmount };
           }
         }
       }
 
       await batch.commit();
 
-      // Create discount journal entries after batch commit (async, not in batch)
-      // This matches the pattern in addQuickPayment where journal creation is separate
-      // Each discount reduces AR (for income) or AP (for expense) and records the discount
-      if (paymentsWithDiscounts.length > 0 && existingTransactionId) {
-        const discountEntryType = entryType === "دخل" ? "دخل" : "مصروف";
-        for (const discountPayment of paymentsWithDiscounts) {
-          try {
-            await createJournalEntryForSettlementDiscount(
-              this.userId,
-              discountPayment.description,
-              discountPayment.discountAmount,
-              discountEntryType as 'دخل' | 'مصروف',
-              new Date(formData.date),
-              existingTransactionId
-            );
-          } catch (discountJournalError) {
-            // Log but don't fail - the main update was already committed
-            // This matches the pattern in addQuickPayment
-            console.error("Failed to create discount journal entry:", discountJournalError);
-          }
-        }
-      }
+      // After batch commit: Reverse old journals and create new ones
+      // Uses immutable ledger pattern - never delete, only reverse
+      try {
+        const engine = createJournalPostingEngine(this.userId);
+        const entryDate = new Date(formData.date);
 
-      // Create endorsement journal entries after batch commit
-      // Endorsement journals use DR AP, CR AR (not DR Cash) for AR→AP transfer
-      if (endorsementPaymentsToRecreate.length > 0 && existingTransactionId) {
-        for (const endorsement of endorsementPaymentsToRecreate) {
-          try {
-            await createJournalEntryForEndorsement(
-              this.userId,
-              endorsement.description,
-              endorsement.amount,
-              new Date(formData.date),
-              endorsement.chequeId,
-              existingTransactionId
-            );
-          } catch (endorsementJournalError) {
-            // Log but don't fail - the main update was already committed
-            console.error("Failed to create endorsement journal entry:", endorsementJournalError);
+        // 1. Reverse all existing journals for this transaction
+        if (existingTransactionId) {
+          const existingJournals = await getEntriesByTransactionId(
+            this.userId,
+            existingTransactionId,
+            true  // Include reversed to skip them
+          );
+          for (const journal of existingJournals) {
+            if (journal.status !== "reversed") {
+              await engine.reverse(journal.id, "تعديل معاملة");
+            }
           }
         }
+
+        // 2. Create new main ledger journal entry
+        if (currentData) {
+          const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+          await engine.post({
+            templateId,
+            amount: newAmount,
+            date: entryDate,
+            description: formData.description,
+            source: {
+              type: "ledger",
+              documentId: entryId,
+              transactionId: existingTransactionId,
+            },
+            context: {
+              category: formData.category,
+              subCategory: formData.subCategory,
+              isARAPEntry: currentData.isARAPEntry ?? false,
+              immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
+              isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
+            },
+          });
+        }
+
+        // 3. Create COGS journal if needed
+        if (cogsRecreationResult) {
+          await engine.post({
+            templateId: "COGS",
+            amount: cogsRecreationResult.amount,
+            date: entryDate,
+            description: cogsRecreationResult.description,
+            source: {
+              type: "inventory",
+              documentId: entryId,
+              transactionId: existingTransactionId,
+            },
+          });
+        }
+
+        // 4. Create discount journals
+        if (paymentsWithDiscounts.length > 0) {
+          const discountTemplateId = entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
+          for (const discountPayment of paymentsWithDiscounts) {
+            await engine.post({
+              templateId: discountTemplateId,
+              amount: discountPayment.discountAmount,
+              date: entryDate,
+              description: discountPayment.description,
+              source: {
+                type: "discount",
+                documentId: entryId,
+                transactionId: existingTransactionId,
+              },
+            });
+          }
+        }
+
+        // 5. Create endorsement journals
+        for (const endorsement of endorsementPaymentsToRecreate) {
+          await engine.post({
+            templateId: "ENDORSEMENT",
+            amount: endorsement.amount,
+            date: entryDate,
+            description: endorsement.description,
+            source: {
+              type: "endorsement",
+              documentId: endorsement.chequeId,
+              transactionId: existingTransactionId,
+            },
+          });
+        }
+      } catch (journalError) {
+        // Log but don't fail - the main update was already committed
+        console.error("Failed to reverse/recreate journal entries:", journalError);
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -1730,31 +1781,44 @@ export class LedgerService {
       const isLoan = data.entryType === "قرض";
 
       if (data.isARAPEntry && !isAdvance && !isLoan) {
-        // Create journal entry for cash payment portion
-        if (data.amount > 0) {
-          await createJournalEntryForPayment(
-            this.userId,
-            paymentDocRef.id,
-            `دفعة تسوية - ${data.entryDescription}`,
-            data.amount,
-            paymentType as 'قبض' | 'صرف',
-            data.date || new Date(),
-            data.entryTransactionId
-          );
-        }
+        try {
+          const engine = createJournalPostingEngine(this.userId);
+          const paymentDate = data.date || new Date();
 
-        // Create journal entry for discount portion
-        if (discountAmount > 0) {
-          // Map entry type to settlement discount type
-          const discountEntryType = data.entryType === "دخل" ? "دخل" : "مصروف";
-          await createJournalEntryForSettlementDiscount(
-            this.userId,
-            `خصم تسوية - ${data.entryDescription}`,
-            discountAmount,
-            discountEntryType as 'دخل' | 'مصروف',
-            data.date || new Date(),
-            data.entryTransactionId
-          );
+          // Create journal entry for cash payment portion
+          if (data.amount > 0) {
+            const templateId = paymentType === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
+            await engine.post({
+              templateId,
+              amount: data.amount,
+              date: paymentDate,
+              description: `دفعة تسوية - ${data.entryDescription}`,
+              source: {
+                type: "payment",
+                documentId: paymentDocRef.id,
+                transactionId: data.entryTransactionId,
+              },
+            });
+          }
+
+          // Create journal entry for discount portion
+          if (discountAmount > 0) {
+            const discountTemplateId = data.entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
+            await engine.post({
+              templateId: discountTemplateId,
+              amount: discountAmount,
+              date: paymentDate,
+              description: `خصم تسوية - ${data.entryDescription}`,
+              source: {
+                type: "discount",
+                documentId: paymentDocRef.id,
+                transactionId: data.entryTransactionId,
+              },
+            });
+          }
+        } catch (journalError) {
+          // Log but don't fail - payment was already committed
+          console.error("Failed to create payment journal entries:", journalError);
         }
       }
 
@@ -1864,14 +1928,19 @@ export class LedgerService {
       // DR: Bad Debt Expense (5600)
       // CR: Accounts Receivable (1200)
       try {
+        const engine = createJournalPostingEngine(this.userId);
         const journalDescription = `شطب دين معدوم: ${data.associatedParty} - ${data.writeoffReason}`;
-        await createJournalEntryForBadDebt(
-          this.userId,
-          journalDescription,
-          data.writeoffAmount,
-          new Date(),
-          data.entryTransactionId
-        );
+        await engine.post({
+          templateId: "BAD_DEBT",
+          amount: data.writeoffAmount,
+          date: new Date(),
+          description: journalDescription,
+          source: {
+            type: "bad_debt",
+            documentId: data.entryId,
+            transactionId: data.entryTransactionId,
+          },
+        });
       } catch (journalError) {
         // Log but don't fail - the writeoff was already committed
         console.error("Failed to create journal entry for bad debt:", journalError);

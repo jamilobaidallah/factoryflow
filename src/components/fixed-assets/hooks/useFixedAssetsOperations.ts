@@ -17,7 +17,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
 import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
-import { createJournalEntryForDepreciation } from "@/services/journalService";
+import { createJournalPostingEngine } from "@/services/journal";
 import { logActivity } from "@/services/activityLogService";
 
 // Helper function to generate unique asset number
@@ -351,13 +351,18 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
 
       if (totalDepreciation > 0) {
         try {
-          const journalResult = await createJournalEntryForDepreciation(
-            user.uid,
-            `استهلاك أصول ثابتة - ${periodLabel}`,
-            totalDepreciation,
-            new Date(),
-            transactionId
-          );
+          const engine = createJournalPostingEngine(user.uid);
+          const journalResult = await engine.post({
+            templateId: "DEPRECIATION",
+            amount: totalDepreciation,
+            date: new Date(),
+            description: `استهلاك أصول ثابتة - ${periodLabel}`,
+            source: {
+              type: "depreciation",
+              documentId: transactionId,
+              transactionId,
+            },
+          });
 
           if (!journalResult.success) {
             journalCreated = false;

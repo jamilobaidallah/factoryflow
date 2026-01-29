@@ -223,6 +223,12 @@ export function getAccountMappingForLedgerEntry(
     return getAccountMappingForLoan(category, subCategory);
   }
 
+  // Check for fixed asset purchases (Balance Sheet items, NOT P&L)
+  // Fixed assets are capitalized, not expensed
+  if (isFixedAssetCategory(category, subCategory)) {
+    return getAccountMappingForFixedAssetPurchase(immediateSettlement ?? true);
+  }
+
   // Income transaction
   if (type === TRANSACTION_TYPES.INCOME) {
     const revenueAccount =
@@ -601,4 +607,61 @@ export function isFixedAssetCategory(category: string, subCategory?: string): bo
     return true;
   }
   return false;
+}
+
+/**
+ * Get account mapping for applying an advance to an invoice
+ *
+ * When an advance is used to pay an invoice:
+ * - Customer Advance Application: DR Customer Advances (reduce liability), CR AR (reduce receivable)
+ *   The customer's prepayment is consumed to settle what they owe us
+ * - Supplier Advance Application: DR AP (reduce payable), CR Supplier Advances (reduce asset)
+ *   Our prepayment to supplier is consumed to settle what we owe them
+ *
+ * This creates the missing journal entry for advance consumption.
+ * Without this, Trial Balance would show incorrect AR/AP and Advance balances.
+ *
+ * @param advanceType - Type of advance being applied: customer or supplier
+ */
+export function getAccountMappingForAdvanceApplication(
+  advanceType: 'سلفة عميل' | 'سلفة مورد'
+): AccountMapping {
+  if (advanceType === 'سلفة عميل') {
+    // Customer advance application: Reduce Customer Advances liability, reduce AR
+    // DR Customer Advances (2150), CR AR (1200)
+    return {
+      debitAccount: ACCOUNT_CODES.CUSTOMER_ADVANCES,
+      creditAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+    };
+  } else {
+    // Supplier advance application: Reduce AP, reduce Supplier Advances asset
+    // DR AP (2000), CR Supplier Advances (1350)
+    return {
+      debitAccount: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+      creditAccount: ACCOUNT_CODES.SUPPLIER_ADVANCES,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
+    };
+  }
+}
+
+/**
+ * Get account mapping for cheque endorsement
+ *
+ * Endorsement transfers a received cheque to pay a supplier:
+ * - DR Accounts Payable (reduce what we owe supplier)
+ * - CR Accounts Receivable (reduce what customer owes us, via cheque transfer)
+ *
+ * This is bill of exchange accounting - the cheque is a negotiable instrument
+ * that can be transferred to settle obligations.
+ */
+export function getAccountMappingForEndorsement(): AccountMapping {
+  return {
+    debitAccount: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
+    creditAccount: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+    debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
+    creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+  };
 }

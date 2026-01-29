@@ -229,7 +229,7 @@ export async function ensureMissingAccounts(
     }
 
     await batch.commit();
-    console.log(`Added ${missingAccounts.length} missing accounts:`, missingAccounts.map(a => `${a.code} ${a.nameAr}`));
+    // Removed console.log - use activity log or return value for tracking
     return { success: true, data: missingAccounts.length };
   } catch (error) {
     console.error('Error ensuring missing accounts:', error);
@@ -390,311 +390,16 @@ export async function createJournalEntry(
   }
 }
 
-/**
- * Create journal entry for a ledger entry (income/expense)
- * Auto-determines debit/credit accounts based on category and type.
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForLedger(
-  userId: string,
-  transactionId: string,
-  description: string,
-  amount: number,
-  type: string,
-  category: string,
-  subCategory: string,
-  date: Date,
-  isARAPEntry?: boolean,
-  immediateSettlement?: boolean
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForLedgerEntry(
-    type, category, subCategory, isARAPEntry, immediateSettlement
-  );
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, transactionId, undefined, 'ledger');
-}
-
-/**
- * Create journal entry for a payment
- * Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForPayment(
-  userId: string,
-  paymentId: string,
-  description: string,
-  amount: number,
-  paymentType: 'قبض' | 'صرف',
-  date: Date,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForPayment(paymentType);
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, linkedTransactionId, paymentId, 'payment');
-}
-
-/**
- * Create journal entry for COGS (inventory exit)
- * DR COGS, CR Inventory
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForCOGS(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForCOGS();
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'inventory');
-}
-
-/**
- * Create journal entry for depreciation
- * DR Depreciation Expense, CR Accumulated Depreciation
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForDepreciation(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForDepreciation();
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'depreciation');
-}
-
-/**
- * Create journal entry for bad debt writeoff
- * DR Bad Debt Expense, CR Accounts Receivable
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForBadDebt(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForBadDebt();
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'ledger');
-}
-
-/**
- * Create journal entry for settlement discount
- * For income (AR): DR Sales Discount, CR Accounts Receivable
- * For expense (AP): DR Accounts Payable, CR Purchase Discount
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForSettlementDiscount(
-  userId: string,
-  description: string,
-  amount: number,
-  entryType: 'دخل' | 'مصروف',
-  date: Date,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-  const mapping = getAccountMappingForSettlementDiscount(entryType);
-  const lines = createJournalLines(mapping, amount, description);
-  return createJournalEntry(userId, description, date, lines, linkedTransactionId, undefined, 'payment');
-}
-
-/**
- * Create journal entry for cheque endorsement
- * Endorsement transfers AR to AP without cash movement:
- * DR Accounts Payable (supplier debt reduced)
- * CR Accounts Receivable (customer debt settled)
- *
- * @param chequeId - For linking to source document (stored in linkedPaymentId field)
- * @param linkedTransactionId - Primary client transaction (for querying)
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForEndorsement(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  chequeId: string,
-  linkedTransactionId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-
-  const roundedAmount = roundCurrency(amount);
-  const lines: JournalLine[] = [
-    {
-      accountCode: ACCOUNT_CODES.ACCOUNTS_PAYABLE,  // 2000
-      accountName: ACCOUNT_CODES.ACCOUNTS_PAYABLE,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_PAYABLE),
-      debit: roundedAmount,
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200
-      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-      debit: 0,
-      credit: roundedAmount,
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,  // Primary link for querying
-    chequeId,             // Use linkedPaymentId field for cheque ID
-    'endorsement'
-  );
-}
-
-/**
- * Create journal entry for client advance (from endorsement)
- * Client overpaid via endorsed cheque, we owe them future credit
- * DR Accounts Receivable (AR reduced less)
- * CR Customer Advances (liability to client created)
- *
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForClientAdvance(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  linkedTransactionId?: string,
-  chequeId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-
-  const roundedAmount = roundCurrency(amount);
-  const lines: JournalLine[] = [
-    {
-      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200
-      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-      debit: roundedAmount,
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: ACCOUNT_CODES.CUSTOMER_ADVANCES,  // 2150
-      accountName: ACCOUNT_CODES.CUSTOMER_ADVANCES,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.CUSTOMER_ADVANCES),
-      debit: 0,
-      credit: roundedAmount,
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,
-    chequeId,
-    'endorsement'
-  );
-}
-
-/**
- * Create journal entry for supplier advance (from endorsement)
- * We prepaid supplier via endorsed cheque, they owe us goods/services
- *
- * ACCOUNTING (per Bill of Exchange standards):
- * The cheque comes from the CLIENT (AR source), not from Cash or AP.
- * When we endorse a cheque for more than we owe the supplier:
- * - The excess amount (supplier advance) is sourced from the client's cheque
- * - This means we're converting part of AR into a supplier prepayment asset
- *
- * DR Supplier Advances (1350) - asset created (supplier owes us goods)
- * CR Accounts Receivable (1200) - cheque came from client (AR source)
- *
- * @throws {ValidationError} if amount is invalid
- */
-export async function createJournalEntryForSupplierAdvance(
-  userId: string,
-  description: string,
-  amount: number,
-  date: Date,
-  linkedTransactionId?: string,
-  chequeId?: string
-): Promise<ServiceResult<JournalEntry>> {
-  validateAmount(amount);
-
-  const roundedAmount = roundCurrency(amount);
-  const lines: JournalLine[] = [
-    {
-      accountCode: ACCOUNT_CODES.SUPPLIER_ADVANCES,  // 1350
-      accountName: ACCOUNT_CODES.SUPPLIER_ADVANCES,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.SUPPLIER_ADVANCES),
-      debit: roundedAmount,
-      credit: 0,
-      description,
-    },
-    {
-      accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,  // 1200 - cheque came from client
-      accountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-      accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-      debit: 0,
-      credit: roundedAmount,
-      description,
-    },
-  ];
-
-  return createJournalEntry(
-    userId,
-    description,
-    date,
-    lines,
-    linkedTransactionId,
-    chequeId,
-    'endorsement'
-  );
-}
+// ============================================================================
+// DEPRECATED: Old Journal Creation Functions
+// These have been replaced by the JournalPostingEngine in src/services/journal/
+// The functions below are kept for reference during transition period.
+// Use createJournalPostingEngine().post() instead.
+// ============================================================================
 
 // ============================================================================
 // Batch Operations (for atomic transactions with ledger)
 // ============================================================================
-
-/**
- * Data required for adding a journal entry to a batch
- */
-export interface JournalEntryBatchData {
-  transactionId: string;
-  description: string;
-  amount: number;
-  type: string;
-  category: string;
-  subCategory: string;
-  date: Date;
-  isARAPEntry?: boolean;
-  immediateSettlement?: boolean;
-  /** True if this is an advance created via cheque endorsement (no cash movement) */
-  isEndorsementAdvance?: boolean;
-}
-
-/**
- * Data required for adding a COGS journal entry to a batch
- */
-export interface COGSJournalEntryBatchData {
-  description: string;
-  amount: number;
-  date: Date;
-  linkedTransactionId?: string;
-}
 
 /**
  * Internal helper to add a validated journal entry to a batch.
@@ -727,87 +432,6 @@ function addValidatedJournalEntryToBatch(
     createdAt: Timestamp.fromDate(now),
     postedAt: Timestamp.fromDate(now),
   });
-}
-
-/**
- * Add a journal entry for a ledger entry to an existing WriteBatch.
- * Use this for atomic operations where ledger and journal must succeed together.
- *
- * @throws {ValidationError} if inputs are invalid or entry is unbalanced
- */
-export function addJournalEntryToBatch(
-  batch: WriteBatch,
-  userId: string,
-  data: JournalEntryBatchData
-): void {
-  validateUserId(userId);
-  validateAmount(data.amount);
-  validateDescription(data.description);
-  validateDate(data.date);
-
-  const mapping = getAccountMappingForLedgerEntry(
-    data.type,
-    data.category,
-    data.subCategory,
-    data.isARAPEntry,
-    data.immediateSettlement,
-    data.isEndorsementAdvance
-  );
-  const lines = createJournalLines(mapping, data.amount, data.description);
-
-  const validation = validateJournalEntry(lines);
-  if (!validation.isValid) {
-    throw new ValidationError(
-      `Journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
-    );
-  }
-
-  addValidatedJournalEntryToBatch(
-    batch,
-    userId,
-    lines,
-    data.description,
-    data.date,
-    data.transactionId,
-    'ledger'
-  );
-}
-
-/**
- * Add a COGS journal entry to an existing WriteBatch.
- * Use this for atomic operations where inventory COGS and journal must succeed together.
- *
- * @throws {ValidationError} if inputs are invalid or entry is unbalanced
- */
-export function addCOGSJournalEntryToBatch(
-  batch: WriteBatch,
-  userId: string,
-  data: COGSJournalEntryBatchData
-): void {
-  validateUserId(userId);
-  validateAmount(data.amount);
-  validateDescription(data.description);
-  validateDate(data.date);
-
-  const mapping = getAccountMappingForCOGS();
-  const lines = createJournalLines(mapping, data.amount, data.description);
-
-  const validation = validateJournalEntry(lines);
-  if (!validation.isValid) {
-    throw new ValidationError(
-      `COGS journal entry is unbalanced. Debits: ${validation.totalDebits}, Credits: ${validation.totalCredits}`
-    );
-  }
-
-  addValidatedJournalEntryToBatch(
-    batch,
-    userId,
-    lines,
-    data.description,
-    data.date,
-    data.linkedTransactionId ?? null,
-    'inventory'
-  );
 }
 
 /**
@@ -861,85 +485,37 @@ export function addPaymentJournalEntryToBatch(
   );
 }
 
+// DEPRECATED: reverseJournalEntry has been replaced by JournalPostingEngine.reverse()
+// Use: const engine = createJournalPostingEngine(userId); await engine.reverse(entryId, reason);
+
 /**
- * Create a reversing journal entry
+ * Get all journal entries (optionally filtered by date range and status)
  *
- * Creates a new entry that reverses the debits/credits of the original.
- */
-export async function reverseJournalEntry(
-  userId: string,
-  originalEntryId: string,
-  reason: string
-): Promise<ServiceResult<JournalEntry>> {
-  try {
-    const entryRef = doc(firestore, getJournalEntriesPath(userId), originalEntryId);
-    const entryDoc = await getDoc(entryRef);
-
-    if (!entryDoc.exists()) {
-      return { success: false, error: 'Original entry not found' };
-    }
-
-    const original = convertFirestoreDates(entryDoc.data()) as JournalEntryDocument;
-
-    if (original.status === 'reversed') {
-      return { success: false, error: 'Entry has already been reversed' };
-    }
-
-    // Create reversing lines (swap debits and credits)
-    const reversingLines: JournalLine[] = original.lines.map((line) => ({
-      ...line,
-      debit: line.credit,
-      credit: line.debit,
-    }));
-
-    const description = `عكس قيد: ${original.description} - ${reason}`;
-    const result = await createJournalEntry(
-      userId,
-      description,
-      new Date(),
-      reversingLines,
-      original.linkedTransactionId,
-      original.linkedPaymentId,
-      original.linkedDocumentType
-    );
-
-    if (result.success && result.data) {
-      // Mark original as reversed
-      await updateDoc(entryRef, {
-        status: 'reversed',
-        reversedById: result.data.id,
-        updatedAt: Timestamp.fromDate(new Date()),
-      });
-
-      // Mark reversing entry with reference
-      const reversingRef = doc(firestore, getJournalEntriesPath(userId), result.data.id);
-      await updateDoc(reversingRef, {
-        reversesEntryId: originalEntryId,
-      });
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Error reversing journal entry:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to reverse entry',
-    };
-  }
-}
-
-/**
- * Get all journal entries (optionally filtered by date range)
+ * By default, only returns 'posted' entries (excludes reversed entries).
+ * This is the correct behavior for the immutable ledger design where
+ * reversed entries remain in the database but should not affect reports.
+ *
+ * @param userId - User/owner ID
+ * @param startDate - Optional start date filter
+ * @param endDate - Optional end date filter
+ * @param includeReversed - If true, also returns reversed entries (default: false)
  */
 export async function getJournalEntries(
   userId: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  includeReversed: boolean = false
 ): Promise<ServiceResult<JournalEntry[]>> {
   try {
     const journalRef = collection(firestore, getJournalEntriesPath(userId));
-    // Safety limit to prevent fetching unbounded data
-    const q = query(journalRef, orderBy('date', 'desc'), limit(5000));
+
+    // Build query with status filter for immutable ledger support
+    // This filters at Firestore level for better performance
+    const constraints = includeReversed
+      ? [orderBy('date', 'desc'), limit(5000)]
+      : [where('status', '==', 'posted'), orderBy('date', 'desc'), limit(5000)];
+
+    const q = query(journalRef, ...constraints);
 
     const snapshot = await getDocs(q);
     let entries: JournalEntry[] = snapshot.docs.map((doc) => ({
@@ -947,7 +523,7 @@ export async function getJournalEntries(
       ...convertFirestoreDates(doc.data()),
     })) as JournalEntry[];
 
-    // Filter by date range if provided
+    // Filter by date range if provided (client-side for flexibility)
     if (startDate || endDate) {
       entries = entries.filter((entry) => {
         const entryDate = entry.date;
@@ -977,6 +553,8 @@ export async function getJournalEntries(
 
 /**
  * Calculate balance for a single account from journal entries
+ *
+ * Only considers 'posted' entries (reversed entries are excluded by getJournalEntries).
  */
 export async function getAccountBalance(
   userId: string,
@@ -984,6 +562,7 @@ export async function getAccountBalance(
   asOfDate?: Date
 ): Promise<ServiceResult<AccountBalance>> {
   try {
+    // getJournalEntries now filters by status='posted' at Firestore level by default
     const entriesResult = await getJournalEntries(userId, undefined, asOfDate);
     if (!entriesResult.success || !entriesResult.data) {
       return { success: false, error: entriesResult.error };
@@ -992,10 +571,8 @@ export async function getAccountBalance(
     let totalDebits = 0;
     let totalCredits = 0;
 
-    // Only count posted entries
-    const postedEntries = entriesResult.data.filter((e) => e.status === 'posted');
-
-    for (const entry of postedEntries) {
+    // All entries are already 'posted' (reversed excluded at query level)
+    for (const entry of entriesResult.data) {
       for (const line of entry.lines) {
         if (line.accountCode === accountCode) {
           totalDebits = safeAdd(totalDebits, line.debit);
@@ -1035,6 +612,9 @@ export async function getAccountBalance(
 
 /**
  * Calculate trial balance (all accounts with balances)
+ *
+ * Only considers 'posted' entries (reversed entries are excluded by getJournalEntries).
+ * This ensures the trial balance reflects the true financial state after reversals.
  */
 export async function getTrialBalance(
   userId: string,
@@ -1049,6 +629,7 @@ export async function getTrialBalance(
       return { success: false, error: accountsResult.error };
     }
 
+    // getJournalEntries now filters by status='posted' at Firestore level by default
     const entriesResult = await getJournalEntries(userId, undefined, asOfDate);
     if (!entriesResult.success || !entriesResult.data) {
       return { success: false, error: entriesResult.error };
@@ -1062,9 +643,8 @@ export async function getTrialBalance(
       balanceMap.set(account.code, { debits: 0, credits: 0 });
     }
 
-    // Sum up journal entry lines
-    const postedEntries = entriesResult.data.filter((e) => e.status === 'posted');
-    for (const entry of postedEntries) {
+    // Sum up journal entry lines (all entries are 'posted' - reversed excluded at query level)
+    for (const entry of entriesResult.data) {
       for (const line of entry.lines) {
         const current = balanceMap.get(line.accountCode) || { debits: 0, credits: 0 };
         balanceMap.set(line.accountCode, {
@@ -1348,24 +928,7 @@ export async function getBalanceSheet(
   }
 }
 
-/**
- * Delete journal entries linked to a transaction
- * Used when deleting a ledger entry
- */
-export async function deleteJournalEntriesByTransaction(
-  userId: string,
-  transactionId: string
-): Promise<ServiceResult<number>> {
-  return deleteJournalEntriesByField(userId, 'linkedTransactionId', transactionId);
-}
-
-/**
- * Delete journal entries linked to a payment
- */
-export async function deleteJournalEntriesByPayment(
-  userId: string,
-  paymentId: string
-): Promise<ServiceResult<number>> {
-  return deleteJournalEntriesByField(userId, 'linkedPaymentId', paymentId);
-}
+// DEPRECATED: deleteJournalEntriesByTransaction and deleteJournalEntriesByPayment
+// have been replaced by JournalPostingEngine.reverse() for the immutable ledger pattern.
+// Use: const engine = createJournalPostingEngine(userId); await engine.reverse(entryId, reason);
 

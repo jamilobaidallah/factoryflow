@@ -51,12 +51,11 @@ import {
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
 import { logActivity } from "@/services/activityLogService";
+import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import {
-  addPaymentJournalEntryToBatch,
-  createJournalEntryForEndorsement,
-  createJournalEntryForClientAdvance,
-  createJournalEntryForSupplierAdvance,
-} from "@/services/journalService";
+  createJournalPostingEngine,
+  getEntriesByLinkedPaymentId,
+} from "@/services/journal";
 
 /** Allocation entry for multi-allocation endorsement */
 interface EndorsementAllocation {
@@ -426,19 +425,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             paymentsToDelete = paymentSnapshot.docs.map(d => ({ id: d.id }));
           }
 
-          // Query journal entries linked to payments BEFORE batch
-          const journalEntriesRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
-          const journalsToDelete: { id: string }[] = [];
-          for (const payment of paymentsToDelete) {
-            const journalQuery = query(
-              journalEntriesRef,
-              where("linkedPaymentId", "==", payment.id)
-            );
-            const journalSnapshot = await getDocs(journalQuery);
-            journalSnapshot.docs.forEach(journalDoc => {
-              journalsToDelete.push({ id: journalDoc.id });
-            });
-          }
+          // Collect payment IDs for journal reversal (done after batch commit)
+          const paymentIdsForJournalReversal = paymentsToDelete.map(p => p.id);
 
           // Clear cheque payment references
           updateData.clearedDate = null;
@@ -450,11 +438,6 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           // Delete payments in batch
           paymentsToDelete.forEach(payment => {
             batch.delete(doc(firestore, `users/${user.dataOwnerId}/payments`, payment.id));
-          });
-
-          // Delete journal entries in batch
-          journalsToDelete.forEach(journal => {
-            batch.delete(doc(firestore, `users/${user.dataOwnerId}/journal_entries`, journal.id));
           });
 
           // Update cheque in batch
@@ -496,8 +479,28 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             }
           }
 
-          // Commit atomically - payment, journal entry, and ARAP all reverted together
+          // Commit atomically - payment and ARAP all reverted together
           await batch.commit();
+
+          // Reverse journal entries AFTER batch commit (immutable ledger pattern)
+          // This creates reversal entries instead of deleting the originals
+          const reasonAr = newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced" || newStatus === CHEQUE_STATUS_AR.BOUNCED
+            ? "شيك مرتجع"
+            : "إلغاء تحصيل شيك";
+
+          try {
+            const engine = createJournalPostingEngine(user.dataOwnerId);
+            for (const paymentId of paymentIdsForJournalReversal) {
+              // Find journals linked to this payment and reverse them
+              const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
+              for (const journal of linkedJournals) {
+                await engine.reverse(journal.id, reasonAr);
+              }
+            }
+          } catch (journalError) {
+            // Graceful failure - the main operation succeeded
+            console.error("Failed to reverse journal entries:", journalError);
+          }
 
           let toastDescription: string;
           if (newStatus === CHEQUE_STATUS_AR.RETURNED || newStatus === "bounced" || newStatus === CHEQUE_STATUS_AR.BOUNCED) {
@@ -847,18 +850,26 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // Create journal entry for endorsement (AR → AP transfer)
       // ONE entry for the full cheque amount - allocations just track affected transactions
       try {
-        await createJournalEntryForEndorsement(
-          user.dataOwnerId,
-          `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
-          cheque.amount,
-          effectiveDate,
-          cheque.id,
-          cheque.linkedTransactionId || ""
-        );
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const result = await engine.post({
+          templateId: "ENDORSEMENT",
+          amount: cheque.amount,
+          date: effectiveDate,
+          description: `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
+          source: {
+            type: "endorsement",
+            documentId: cheque.id,
+            transactionId: cheque.linkedTransactionId || "",
+          },
+        });
 
-        // Mark BOTH payments as having journal entry
-        await updateDoc(receiptDocRef, { journalEntryCreated: true });
-        await updateDoc(disbursementDocRef, { journalEntryCreated: true });
+        if (result.success) {
+          // Mark BOTH payments as having journal entry
+          await updateDoc(receiptDocRef, { journalEntryCreated: true });
+          await updateDoc(disbursementDocRef, { journalEntryCreated: true });
+        } else {
+          console.error("Failed to create endorsement journal entry:", result.error);
+        }
       } catch (journalError) {
         console.error("Failed to create endorsement journal entry:", journalError);
         // Don't fail - endorsement succeeded, journal can be reconciled later
@@ -1257,46 +1268,61 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // ONE journal entry for the main endorsement (allocated amount)
       // Plus separate journal entries for advances if any
       try {
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+
         // Main endorsement journal - for the amount that settles AR/AP
         // Use the smaller of clientTotalAllocated and supplierTotalAllocated
         // This is the actual AR→AP transfer amount
         const endorsementAmount = Math.min(clientTotalAllocated, supplierTotalAllocated);
 
         if (endorsementAmount > 0) {
-          await createJournalEntryForEndorsement(
-            user.dataOwnerId,
-            `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
-            endorsementAmount,
-            effectiveDate,
-            cheque.id,
-            primaryClientTransactionId
-          );
+          await engine.post({
+            templateId: "ENDORSEMENT",
+            amount: endorsementAmount,
+            date: effectiveDate,
+            description: `تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName} إلى ${supplierName}`,
+            source: {
+              type: "endorsement",
+              documentId: cheque.id,
+              transactionId: primaryClientTransactionId,
+            },
+          });
         }
 
         // Client advance journal - if client paid more than they owed
         // DR AR (we reduce AR less), CR Customer Advances (liability)
         if (clientUnallocated > 0 && clientAdvanceTransactionId) {
-          await createJournalEntryForClientAdvance(
-            user.dataOwnerId,
-            `سلفة عميل - تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName}`,
-            clientUnallocated,
-            effectiveDate,
-            clientAdvanceTransactionId,  // Link journal to advance ledger entry
-            cheque.id
-          );
+          await engine.post({
+            templateId: "CLIENT_ADVANCE",
+            amount: clientUnallocated,
+            date: effectiveDate,
+            description: `سلفة عميل - تظهير شيك رقم ${cheque.chequeNumber} من ${cheque.clientName}`,
+            source: {
+              type: "advance_client",
+              documentId: clientAdvanceDocId || cheque.id,
+              transactionId: clientAdvanceTransactionId,
+              chequeId: cheque.id,
+            },
+            context: { isEndorsementAdvance: true },
+          });
         }
 
         // Supplier advance journal - if we prepaid supplier
-        // DR Supplier Advances (asset), CR AP (we reduce AP less)
+        // DR Supplier Advances (asset), CR AR (cheque source)
         if (supplierUnallocated > 0 && supplierAdvanceTransactionId) {
-          await createJournalEntryForSupplierAdvance(
-            user.dataOwnerId,
-            `سلفة مورد - تظهير شيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
-            supplierUnallocated,
-            effectiveDate,
-            supplierAdvanceTransactionId,  // Link journal to advance ledger entry
-            cheque.id
-          );
+          await engine.post({
+            templateId: "SUPPLIER_ADVANCE",
+            amount: supplierUnallocated,
+            date: effectiveDate,
+            description: `سلفة مورد - تظهير شيك رقم ${cheque.chequeNumber} إلى ${supplierName}`,
+            source: {
+              type: "advance_supplier",
+              documentId: supplierAdvanceDocId || cheque.id,
+              transactionId: supplierAdvanceTransactionId,
+              chequeId: cheque.id,
+            },
+            context: { isEndorsementAdvance: true },
+          });
         }
 
         // Mark BOTH payments as having journal entry
@@ -1563,22 +1589,17 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // Commit atomically - all operations succeed or all fail
       await batch.commit();
 
-      // Delete endorsement journal entries after batch commit
+      // Reverse endorsement journal entries after batch commit (immutable ledger pattern)
       // Query by linkedPaymentId (which stores chequeId) and linkedDocumentType='endorsement'
       try {
-        const journalRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
-        const journalQuery = query(
-          journalRef,
-          where("linkedPaymentId", "==", cheque.id),
-          where("linkedDocumentType", "==", "endorsement")
-        );
-        const journalSnapshot = await getDocs(journalQuery);
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, cheque.id);
 
-        for (const journalDoc of journalSnapshot.docs) {
-          await deleteDoc(journalDoc.ref);
+        for (const journal of linkedJournals) {
+          await engine.reverse(journal.id, "إلغاء تظهير");
         }
       } catch (journalError) {
-        console.error("Failed to delete endorsement journal entries:", journalError);
+        console.error("Failed to reverse endorsement journal entries:", journalError);
         // Don't fail - the main cancellation succeeded
       }
 
