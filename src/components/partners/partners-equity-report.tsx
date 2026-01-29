@@ -22,6 +22,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
+import { isExcludedFromPL } from "@/components/ledger/utils/ledger-helpers";
 
 interface Partner {
   id: string;
@@ -103,16 +104,20 @@ export default function PartnersEquityReport() {
           return;
         }
 
-        // Check if this is an equity transaction (by type or category)
-        const isEquity = data.type === "حركة رأس مال" || data.category === "رأس المال";
+        // Skip transactions that don't affect P&L:
+        // - Equity transactions (رأس المال)
+        // - Fixed assets (أصول ثابتة) - CapEx, not OpEx
+        // - Advances (سلفة عميل / سلفة مورد)
+        // - Loans (قروض مستلمة / قروض ممنوحة)
+        if (isExcludedFromPL(data.type, data.category)) {
+          return;
+        }
 
-        // Calculate total profit (excluding all equity/capital transactions)
-        if (!isEquity) {
-          if (data.type === "دخل" || data.type === "إيراد") {
-            totalRevenue += data.amount || 0;
-          } else if (data.type === "مصروف") {
-            totalExpenses += data.amount || 0;
-          }
+        // Calculate total profit from P&L transactions only
+        if (data.type === "دخل" || data.type === "إيراد") {
+          totalRevenue += data.amount || 0;
+        } else if (data.type === "مصروف") {
+          totalExpenses += data.amount || 0;
         }
       });
 
