@@ -71,6 +71,7 @@ export interface Cheque {
 
 export interface LedgerEntry {
   id: string;
+  transactionId?: string; // Unique transaction identifier
   type: string;
   amount: number;
   category: string;
@@ -120,6 +121,7 @@ function transformCheques(docs: DocumentData[]): Cheque[] {
 function transformLedgerEntries(docs: DocumentData[]): LedgerEntry[] {
   return docs.map((data) => ({
     id: data.id,
+    transactionId: data.transactionId,
     type: data.type,
     amount: data.amount || 0,
     category: data.category,
@@ -230,6 +232,7 @@ function calculateClientBalances(
     // Convert to balance utility types
     const balanceLedgerEntries: BalanceLedgerEntry[] = clientLedger.map(e => ({
       id: e.id,
+      transactionId: e.transactionId,
       type: e.type,
       amount: e.amount,
       category: e.category,

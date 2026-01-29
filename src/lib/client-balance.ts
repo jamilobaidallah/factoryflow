@@ -32,6 +32,7 @@ import {
 // Types for balance calculation
 export interface BalanceLedgerEntry {
   id: string;
+  transactionId?: string; // Unique transaction identifier (used by payments to link to entries)
   type: string;
   amount: number;
   category: string;
@@ -161,8 +162,9 @@ export function calculatePaymentDebitCredit(
   }
 
   // Skip payments linked to advance entries (already counted in ledger)
+  // Note: linkedTransactionId refers to the transactionId field, NOT the document id
   if (payment.linkedTransactionId && ledgerEntries) {
-    const linkedEntry = ledgerEntries.find(e => e.id === payment.linkedTransactionId);
+    const linkedEntry = ledgerEntries.find(e => e.transactionId === payment.linkedTransactionId);
     if (linkedEntry && isAdvanceEntry(linkedEntry)) {
       return { debit: 0, credit: 0 };
     }
