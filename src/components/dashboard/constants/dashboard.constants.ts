@@ -141,8 +141,16 @@ export const DASHBOARD_LABELS = {
   dueInvoices: "فاتورة مستحقة",
 } as const;
 
-/** Categories to exclude from P&L calculations (for backward compatibility with old data) */
-export const EXCLUDED_CATEGORIES = ["رأس المال", "Owner Equity", "سلفة مورد", "سلفة عميل", "قروض مستلمة", "قروض ممنوحة"] as const;
+/** Categories to exclude from P&L calculations (Balance Sheet items, not Income Statement) */
+export const EXCLUDED_CATEGORIES = [
+  "رأس المال",      // Owner equity
+  "Owner Equity",   // Owner equity (English)
+  "سلفة مورد",      // Supplier advances
+  "سلفة عميل",      // Customer advances
+  "قروض مستلمة",    // Loans received
+  "قروض ممنوحة",    // Loans given
+  "أصول ثابتة",     // Fixed assets (CapEx) - capitalized to Balance Sheet, not expensed
+] as const;
 
 /** Income type identifiers in Arabic */
 export const INCOME_TYPES = ["دخل", "إيراد"] as const;

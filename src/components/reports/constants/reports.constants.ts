@@ -168,11 +168,15 @@ export const ADVANCE_CATEGORIES = ['سلفة مورد', 'سلفة عميل'] as 
 // Loan categories to exclude from P&L (derived from shared constants)
 export const LOAN_CATEGORIES = [LOAN_CATEGORIES_OBJ.RECEIVED, LOAN_CATEGORIES_OBJ.GIVEN] as const;
 
+// Fixed asset category - CapEx capitalized to Balance Sheet, not expensed on P&L
+export const FIXED_ASSET_CATEGORY = "أصول ثابتة" as const;
+
 // All categories excluded from P&L calculations
 export const EXCLUDED_FROM_PL_CATEGORIES = [
   ...OWNER_EQUITY_CATEGORIES,
   ...ADVANCE_CATEGORIES,
   ...LOAN_CATEGORIES,
+  FIXED_ASSET_CATEGORY,
 ] as const;
 
 // Arabic month names for charts
