@@ -22,7 +22,6 @@ import {
 import {
   ArrowLeft,
   Copy,
-  DollarSign,
   TrendingUp,
   TrendingDown,
   Calendar as CalendarIcon,
@@ -42,11 +41,9 @@ import {
   onSnapshot,
   query,
   where,
-  orderBy,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
-import { safeAdd, safeSubtract } from "@/lib/currency";
 import { exportStatementToPDF } from "@/lib/export-statement-pdf";
 import { exportStatementToExcel } from "@/lib/export-statement-excel";
 import {
@@ -369,20 +366,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   // Financial metrics
   const [totalSales, setTotalSales] = useState(0);
   const [totalPurchases, setTotalPurchases] = useState(0);
-  const [totalPaymentsReceived, setTotalPaymentsReceived] = useState(0);
-  const [totalPaymentsMade, setTotalPaymentsMade] = useState(0);
-  const [currentBalance, setCurrentBalance] = useState(0);
-  // Discounts and writeoffs from ledger entries - split by entry type
-  const [totalIncomeDiscounts, setTotalIncomeDiscounts] = useState(0);
-  const [totalIncomeWriteoffs, setTotalIncomeWriteoffs] = useState(0);
-  const [totalExpenseDiscounts, setTotalExpenseDiscounts] = useState(0);
-  const [totalExpenseWriteoffs, setTotalExpenseWriteoffs] = useState(0);
-  // Advance payments - amounts paid from customer/supplier advances
-  const [totalIncomeAdvancePayments, setTotalIncomeAdvancePayments] = useState(0);
-  const [totalExpenseAdvancePayments, setTotalExpenseAdvancePayments] = useState(0);
-  // Advance balances - outstanding advances (not yet consumed by invoices)
-  const [customerAdvances, setCustomerAdvances] = useState(0);  // سلفة عميل - we owe them (liability)
-  const [supplierAdvances, setSupplierAdvances] = useState(0);  // سلفة مورد - they owe us (asset)
 
   // Loan balances
   const [loansReceivable, setLoansReceivable] = useState(0);  // Loans we gave to this party (they owe us)
@@ -709,19 +692,8 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         const entries: LedgerEntry[] = [];
         let sales = 0;
         let purchases = 0;
-        // Split discount tracking by entry type
-        let incomeDiscounts = 0;
-        let incomeWriteoffs = 0;
-        let expenseDiscounts = 0;
-        let expenseWriteoffs = 0;
-        // Advance payments tracking
-        let incomeAdvancePayments = 0;
-        let expenseAdvancePayments = 0;
-        // Advance balances (outstanding amount not yet consumed)
-        let custAdvances = 0;  // سلفة عميل - we owe them
-        let suppAdvances = 0;  // سلفة مورد - they owe us
-        let loanReceivable = 0;  // Loans we gave (قروض ممنوحة)
-        let loanPayable = 0;     // Loans we received (قروض مستلمة)
+        let loanReceivable = 0;
+        let loanPayable = 0;
 
         snapshot.forEach((doc) => {
           const data = doc.data();
@@ -734,49 +706,20 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
           // Track loan balances (separate from regular income/expense)
           if (isLoanTransaction(entry.type, entry.category)) {
-            // Only count initial loans for outstanding balance
             if (isInitialLoan(entry.subCategory)) {
               const loanType = getLoanType(entry.category);
               if (loanType === "receivable") {
-                // Loans Given - we lent money, they owe us
                 loanReceivable += entry.remainingBalance ?? entry.amount ?? 0;
               } else if (loanType === "payable") {
-                // Loans Received - they lent to us, we owe them
                 loanPayable += entry.remainingBalance ?? entry.amount ?? 0;
               }
             }
-          } else if (isAdvanceEntry(entry)) {
-            // Track advance balances - use FULL amount (not remaining)
-            // The "مدفوع من سلفة" row on invoices is informational only
-            // Balance formula will NOT subtract totalIncomeAdvancePayments since we use full advance
-            //
-            // IMPORTANT: Skip advances created from multi-allocation payments (have linkedPaymentId)
-            // These advances are already captured in the parent payment amount, so counting them
-            // separately would double-count the money flow.
-            if (entry.linkedPaymentId) {
-              // Skip - this advance was created from a multi-allocation payment
-              // The payment document already records the full amount
-            } else if (entry.category === "سلفة عميل") {
-              custAdvances += entry.amount; // Customer advance - we owe them (full amount)
-            } else if (entry.category === "سلفة مورد") {
-              suppAdvances += entry.amount; // Supplier advance - they owe us (full amount)
-            }
-          } else {
-            // Calculate regular totals (exclude advances and loans - they are not income/expense)
-            if ((entry.type === "دخل" || entry.type === "إيراد") && !isAdvanceEntry(entry)) {
+          } else if (!isAdvanceEntry(entry)) {
+            // Calculate regular totals (exclude advances and loans)
+            if (entry.type === "دخل" || entry.type === "إيراد") {
               sales += entry.amount;
-              // Track discounts/writeoffs for income entries (customer discounts)
-              incomeDiscounts += data.totalDiscount || 0;
-              incomeWriteoffs += data.writeoffAmount || 0;
-              // Track advance payments for income entries (customer advance used)
-              incomeAdvancePayments += data.totalPaidFromAdvances || 0;
-            } else if (entry.type === "مصروف" && !isAdvanceEntry(entry)) {
+            } else if (entry.type === "مصروف") {
               purchases += entry.amount;
-              // Track discounts/writeoffs for expense entries (supplier discounts)
-              expenseDiscounts += data.totalDiscount || 0;
-              expenseWriteoffs += data.writeoffAmount || 0;
-              // Track advance payments for expense entries (supplier advance used)
-              expenseAdvancePayments += data.totalPaidFromAdvances || 0;
             }
           }
         });
@@ -787,14 +730,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         setLedgerEntries(entries);
         setTotalSales(sales);
         setTotalPurchases(purchases);
-        setTotalIncomeDiscounts(incomeDiscounts);
-        setTotalIncomeWriteoffs(incomeWriteoffs);
-        setTotalExpenseDiscounts(expenseDiscounts);
-        setTotalExpenseWriteoffs(expenseWriteoffs);
-        setTotalIncomeAdvancePayments(incomeAdvancePayments);
-        setTotalExpenseAdvancePayments(expenseAdvancePayments);
-        setCustomerAdvances(custAdvances);
-        setSupplierAdvances(suppAdvances);
         setLoansReceivable(loanReceivable);
         setLoansPayable(loanPayable);
       },
@@ -820,8 +755,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       q,
       (snapshot) => {
         const paymentsList: Payment[] = [];
-        let received = 0;
-        let made = 0;
 
         snapshot.forEach((doc) => {
           const data = doc.data();
@@ -831,25 +764,12 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             date: data.date?.toDate?.() || new Date(),
           } as Payment;
           paymentsList.push(payment);
-
-          // Calculate totals - EXCLUDE advance payments
-          // Advance payments are tracked separately via customerAdvances/supplierAdvances
-          const isAdvancePayment = payment.category === "سلفة عميل" || payment.category === "سلفة مورد";
-          if (!isAdvancePayment) {
-            if (payment.type === "قبض") {
-              received += payment.amount;
-            } else if (payment.type === "صرف") {
-              made += payment.amount;
-            }
-          }
         });
 
         // Sort by date in JavaScript
         paymentsList.sort((a, b) => b.date.getTime() - a.date.getTime());
 
         setPayments(paymentsList);
-        setTotalPaymentsReceived(received);
-        setTotalPaymentsMade(made);
       },
       (error) => {
         console.error("Error loading payments:", error);
@@ -893,31 +813,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
     return () => unsubscribe();
   }, [user, client]);
-
-  // Calculate current balance using Decimal.js for precision
-  // Formula: balance = (sales - purchases) - (payments received - payments made) - income discounts/writeoffs + expense discounts/writeoffs - customer advances + supplier advances
-  // Income discounts/writeoffs reduce what the customer owes us (subtract)
-  // Expense discounts/writeoffs reduce what we owe the supplier (add back to make balance less negative)
-  // Customer advances (سلفة عميل): We received cash, owe them goods → subtract (we owe them) - FULL amount
-  // Supplier advances (سلفة مورد): We paid cash, they owe us goods → add (they owe us) - FULL amount
-  // NOTE: Advance payments (amount used from advance) are NOT in this formula - they're informational only
-  useEffect(() => {
-    // Use Decimal.js via safeAdd/safeSubtract for money precision
-    // NOTE: Advance payments (totalIncomeAdvancePayments, totalExpenseAdvancePayments) are NOT in formula
-    // because advances are tracked at FULL amount via customerAdvances/supplierAdvances
-    // The "مدفوع من سلفة" row on invoices is informational only (debit=0, credit=0)
-    let balance = safeSubtract(totalSales, totalPurchases);
-    balance = safeSubtract(balance, totalPaymentsReceived);
-    balance = safeAdd(balance, totalPaymentsMade);
-    balance = safeSubtract(balance, totalIncomeDiscounts);
-    balance = safeSubtract(balance, totalIncomeWriteoffs);
-    balance = safeAdd(balance, totalExpenseDiscounts);
-    balance = safeAdd(balance, totalExpenseWriteoffs);
-    // Include advance balances at FULL amount
-    balance = safeSubtract(balance, customerAdvances);  // We owe customer (liability)
-    balance = safeAdd(balance, supplierAdvances);       // Supplier owes us (asset)
-    setCurrentBalance(balance);
-  }, [totalSales, totalPurchases, totalPaymentsReceived, totalPaymentsMade, totalIncomeDiscounts, totalIncomeWriteoffs, totalExpenseDiscounts, totalExpenseWriteoffs, customerAdvances, supplierAdvances]);
 
   // Export statement to Excel
   const exportStatement = async () => {
@@ -1029,7 +924,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       </div>
 
       {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
@@ -1064,49 +959,6 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              المدفوعات
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-semibold text-gray-700">
-              <span className="text-green-600">قبض: {totalPaymentsReceived.toFixed(2)}</span>
-              {customerAdvances > 0 && (
-                <span className="text-orange-500 text-sm mr-2">(+ سلفة: {customerAdvances.toFixed(2)})</span>
-              )}
-            </div>
-            <div className="text-lg font-semibold text-gray-700">
-              <span className="text-red-600">صرف: {totalPaymentsMade.toFixed(2)}</span>
-              {supplierAdvances > 0 && (
-                <span className="text-orange-500 text-sm mr-2">(+ سلفة: {supplierAdvances.toFixed(2)})</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              الرصيد الحالي
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                currentBalance >= 0 ? "text-red-600" : "text-green-600"
-              }`}
-            >
-              {formatNumber(Math.abs(currentBalance))} د.أ
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {currentBalance > 0 ? "عليه" : currentBalance < 0 ? "له" : "(مسدد)"}
-            </p>
-          </CardContent>
-        </Card>
 
         {/* Loan Balance Card - Only show if there are loans */}
         {(loansReceivable > 0 || loansPayable > 0) && (
