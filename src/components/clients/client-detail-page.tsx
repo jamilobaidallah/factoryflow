@@ -92,6 +92,7 @@ interface LedgerEntry {
   totalDiscount?: number;        // Settlement discounts (خصم تسوية)
   writeoffAmount?: number;       // Bad debt write-offs (ديون معدومة)
   totalPaidFromAdvances?: number; // Amount paid from customer/supplier advances
+  linkedPaymentId?: string;       // For advances created from multi-allocation payments
   // Advance allocation fields
   totalUsedFromAdvance?: number;  // Total amount consumed from this advance
   advanceAllocations?: Array<{    // Which invoices used this advance
@@ -403,6 +404,13 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         const rows: StatementItem[] = [];
         const isAdvance = isAdvanceEntry(e);
         const isLoan = isLoanTransaction(e.type, e.category);
+
+        // Skip advances that were created from multi-allocation payments
+        // These have linkedPaymentId and their cash movement is already captured
+        // in the payment record (avoids double-counting the advance amount)
+        if (isAdvance && e.linkedPaymentId) {
+          return [];
+        }
 
         // Determine debit/credit based on entry type
         let debit = 0;
