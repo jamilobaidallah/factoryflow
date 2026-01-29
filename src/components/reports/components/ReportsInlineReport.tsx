@@ -9,6 +9,7 @@ import {
   isEquityTransaction,
   isLoanTransaction,
   isAdvanceTransaction,
+  isFixedAssetTransaction,
   isCapitalContribution,
   isOwnerDrawing,
   getLoanCashDirection,
@@ -608,10 +609,12 @@ function ExpenseAnalysisReport({
       if (!isExpenseType(entry.type)) {
         return;
       }
-      // Exclude equity, advances, and loans from expense analysis
+      // Exclude equity, advances, loans, and fixed assets from expense analysis
+      // Fixed assets are CapEx (Balance Sheet), not OpEx (P&L)
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
-          isLoanTransaction(entry.type, entry.category)) {
+          isLoanTransaction(entry.type, entry.category) ||
+          isFixedAssetTransaction(entry.category)) {
         return;
       }
 
