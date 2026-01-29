@@ -10,6 +10,7 @@ import {
   isEquityTransaction,
   isAdvanceTransaction,
   isLoanTransaction,
+  isFixedAssetTransaction,
   isCapitalContribution,
   isOwnerDrawing,
   getLoanCashDirection,
@@ -199,10 +200,16 @@ export function useReportsCalculations({
 
     ledgerEntries.forEach((entry) => {
       // EXCLUDE non-P&L transactions using helper functions
+      // These are Balance Sheet items, not Income Statement items:
+      // - Equity: Capital contributions and owner drawings
+      // - Advances: Customer and supplier prepayments
+      // - Loans: Money borrowed or lent
+      // - Fixed Assets: Capital expenditures (CapEx) - depreciated over time instead
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
-          isLoanTransaction(entry.type, entry.category)) {
-        return; // Skip owner equity, advance, and loan transactions
+          isLoanTransaction(entry.type, entry.category) ||
+          isFixedAssetTransaction(entry.category)) {
+        return; // Skip non-P&L transactions
       }
 
       if (entry.type === "دخل") {

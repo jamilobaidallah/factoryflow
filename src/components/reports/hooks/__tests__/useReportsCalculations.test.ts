@@ -899,4 +899,187 @@ describe('useReportsCalculations', () => {
       expect(result.current.fixedAssetsSummary.activeAssets.length).toBe(0);
     });
   });
+
+  describe('Fixed Asset P&L Exclusion', () => {
+    it('should exclude fixed asset purchases from income statement expenses', () => {
+      const entries = [
+        {
+          id: '1',
+          transactionId: 'TX-001',
+          description: 'شراء ماكينة طباعة',
+          type: 'مصروف',
+          amount: 50000,
+          category: 'أصول ثابتة',
+          subCategory: 'معدات وآلات',
+          associatedParty: 'مورد المعدات',
+          date: new Date('2024-01-15'),
+        },
+      ];
+
+      const { result } = renderHook(() =>
+        useReportsCalculations({
+          ledgerEntries: entries,
+          payments: [],
+          inventory: [],
+          fixedAssets: [],
+        })
+      );
+
+      // Fixed asset purchase should NOT be counted as expense
+      expect(result.current.incomeStatement.totalExpenses).toBe(0);
+      expect(result.current.incomeStatement.netProfit).toBe(0);
+    });
+
+    it('should still include depreciation expense in P&L (category is مصاريف تشغيلية)', () => {
+      const entries = [
+        {
+          id: '1',
+          transactionId: 'TX-001',
+          description: 'استهلاك أصول ثابتة - 2024-01',
+          type: 'مصروف',
+          amount: 1500,
+          category: 'مصاريف تشغيلية',
+          subCategory: 'استهلاك أصول ثابتة',
+          associatedParty: '',
+          date: new Date('2024-01-31'),
+        },
+      ];
+
+      const { result } = renderHook(() =>
+        useReportsCalculations({
+          ledgerEntries: entries,
+          payments: [],
+          inventory: [],
+          fixedAssets: [],
+        })
+      );
+
+      // Depreciation expense SHOULD be counted (it has category مصاريف تشغيلية, not أصول ثابتة)
+      expect(result.current.incomeStatement.totalExpenses).toBe(1500);
+      expect(result.current.incomeStatement.netProfit).toBe(-1500);
+    });
+
+    it('should still include small equipment in expenses (not fixed assets)', () => {
+      const entries = [
+        {
+          id: '1',
+          transactionId: 'TX-001',
+          description: 'أدوات صغيرة للمصنع',
+          type: 'مصروف',
+          amount: 500,
+          category: 'مصاريف تشغيلية',
+          subCategory: 'أدوات ومعدات صغيرة',
+          associatedParty: '',
+          date: new Date('2024-01-10'),
+        },
+      ];
+
+      const { result } = renderHook(() =>
+        useReportsCalculations({
+          ledgerEntries: entries,
+          payments: [],
+          inventory: [],
+          fixedAssets: [],
+        })
+      );
+
+      // Small equipment SHOULD be counted as expense (below capitalization threshold)
+      expect(result.current.incomeStatement.totalExpenses).toBe(500);
+    });
+
+    it('should correctly calculate profit when mixing fixed assets with regular expenses', () => {
+      const entries = [
+        {
+          id: '1',
+          transactionId: 'TX-001',
+          description: 'مبيعات',
+          type: 'دخل',
+          amount: 100000,
+          category: 'إيرادات المبيعات',
+          subCategory: 'مبيعات منتجات',
+          associatedParty: 'عميل 1',
+          date: new Date('2024-01-15'),
+        },
+        {
+          id: '2',
+          transactionId: 'TX-002',
+          description: 'شراء سيارة نقل',
+          type: 'مصروف',
+          amount: 30000,
+          category: 'أصول ثابتة',
+          subCategory: 'سيارات ومركبات',
+          associatedParty: 'معرض السيارات',
+          date: new Date('2024-01-20'),
+        },
+        {
+          id: '3',
+          transactionId: 'TX-003',
+          description: 'رواتب الموظفين',
+          type: 'مصروف',
+          amount: 15000,
+          category: 'مصاريف تشغيلية',
+          subCategory: 'رواتب وأجور',
+          associatedParty: '',
+          date: new Date('2024-01-25'),
+        },
+      ];
+
+      const { result } = renderHook(() =>
+        useReportsCalculations({
+          ledgerEntries: entries,
+          payments: [],
+          inventory: [],
+          fixedAssets: [],
+        })
+      );
+
+      // Revenue: 100,000
+      // Expenses: only 15,000 (salaries) - fixed asset 30,000 is EXCLUDED
+      // Net Profit: 100,000 - 15,000 = 85,000
+      expect(result.current.incomeStatement.totalRevenue).toBe(100000);
+      expect(result.current.incomeStatement.totalExpenses).toBe(15000);
+      expect(result.current.incomeStatement.netProfit).toBe(85000);
+    });
+
+    it('should not include fixed assets in expenses by category breakdown', () => {
+      const entries = [
+        {
+          id: '1',
+          transactionId: 'TX-001',
+          description: 'شراء ماكينة',
+          type: 'مصروف',
+          amount: 50000,
+          category: 'أصول ثابتة',
+          subCategory: 'معدات وآلات',
+          associatedParty: '',
+          date: new Date('2024-01-15'),
+        },
+        {
+          id: '2',
+          transactionId: 'TX-002',
+          description: 'إيجار المصنع',
+          type: 'مصروف',
+          amount: 5000,
+          category: 'مصاريف تشغيلية',
+          subCategory: 'إيجارات',
+          associatedParty: '',
+          date: new Date('2024-01-20'),
+        },
+      ];
+
+      const { result } = renderHook(() =>
+        useReportsCalculations({
+          ledgerEntries: entries,
+          payments: [],
+          inventory: [],
+          fixedAssets: [],
+        })
+      );
+
+      // Fixed assets category should NOT appear in expenses breakdown
+      expect(result.current.incomeStatement.expensesByCategory['أصول ثابتة']).toBeUndefined();
+      // Operating expenses should be included
+      expect(result.current.incomeStatement.expensesByCategory['مصاريف تشغيلية']).toBe(5000);
+    });
+  });
 });

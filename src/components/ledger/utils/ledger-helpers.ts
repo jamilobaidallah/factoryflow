@@ -30,6 +30,12 @@ export const EQUITY_SUBCATEGORIES = {
 } as const;
 
 /**
+ * Fixed asset category constant
+ * Fixed assets are capitalized to Balance Sheet (CapEx), NOT expensed on P&L (OpEx)
+ */
+export const FIXED_ASSET_CATEGORY = "أصول ثابتة" as const;
+
+/**
  * Helper function to get category type
  * Uses CATEGORIES from ledger-constants.ts as single source of truth
  * Returns: "دخل" (income), "مصروف" (expense), "حركة رأس مال" (equity), or "قرض" (loan)
@@ -142,8 +148,28 @@ export function getLoanCashDirection(subCategory?: string): "in" | "out" | null 
 }
 
 /**
+ * Helper function to check if a transaction is a fixed asset purchase
+ * Fixed assets are Balance Sheet items (CapEx), NOT Income Statement expenses (OpEx)
+ *
+ * Note: This only checks the category. Depreciation expense uses category "مصاريف تشغيلية"
+ * with subCategory "استهلاك أصول ثابتة", so depreciation is correctly included in P&L.
+ *
+ * @param category - Transaction category name
+ * @returns true if this is a fixed asset purchase transaction
+ */
+export function isFixedAssetTransaction(category?: string): boolean {
+    return category === FIXED_ASSET_CATEGORY;
+}
+
+/**
  * Helper function to check if a transaction should be excluded from P&L
- * Combines equity, advance, and loan checks
+ * Combines equity, advance, loan, and fixed asset checks
+ *
+ * Excluded transactions are Balance Sheet items, not Income Statement items:
+ * - Equity: Capital contributions and owner drawings
+ * - Advances: Customer and supplier prepayments
+ * - Loans: Money borrowed or lent
+ * - Fixed Assets: Capital expenditures (CapEx) - depreciated over time instead
  *
  * @param type - Transaction type
  * @param category - Transaction category name
@@ -152,7 +178,8 @@ export function getLoanCashDirection(subCategory?: string): "in" | "out" | null 
 export function isExcludedFromPL(type?: string, category?: string): boolean {
     return isEquityTransaction(type, category) ||
            isAdvanceTransaction(category) ||
-           isLoanTransaction(type, category);
+           isLoanTransaction(type, category) ||
+           isFixedAssetTransaction(category);
 }
 
 /**
