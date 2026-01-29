@@ -378,16 +378,19 @@ service cloud.firestore {
 
     match /invitations/{invitationId} {
       // Owner can create invitations for their factory
-      // Only authenticated users who are creating an invitation for themselves (ownerId == auth.uid)
       allow create: if isAuthenticated()
         && request.resource.data.ownerId == request.auth.uid
+        && isRoleOwner(request.auth.uid)
         && request.resource.data.status == 'pending'
         && request.resource.data.role in ['accountant', 'viewer'];
 
-      // Read permissions - simplified for list queries to work
-      // Any authenticated user can read invitations - the app filters appropriately
-      // This is needed because Firestore list queries can't handle OR conditions in rules
-      allow read: if isAuthenticated();
+      // Read permissions:
+      // 1. Owner can read their own invitations
+      // 2. Invitee can read invitations addressed to their email
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.inviteeEmail == request.auth.token.email
+      );
 
       // Update permissions:
       // 1. Invitee can accept (update status to 'accepted')
