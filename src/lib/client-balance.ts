@@ -75,8 +75,7 @@ function isIncomeType(type: string): boolean {
  * This is the core transformation used by both balance sheet and clients list
  */
 export function calculateEntryDebitCredit(
-  entry: BalanceLedgerEntry,
-  allEntries?: BalanceLedgerEntry[]
+  entry: BalanceLedgerEntry
 ): { debit: number; credit: number; discountDebit: number; discountCredit: number; writeoffDebit: number; writeoffCredit: number } {
   const isAdvance = isAdvanceEntry(entry);
   const isLoan = isLoanTransaction(entry.type, entry.category);
@@ -199,7 +198,7 @@ export function calculateClientBalance(
   // Process ledger entries
   for (const entry of ledgerEntries) {
     const { debit, credit, discountDebit, discountCredit, writeoffDebit, writeoffCredit } =
-      calculateEntryDebitCredit(entry, ledgerEntries);
+      calculateEntryDebitCredit(entry);
     totalDebit += debit + discountDebit + writeoffDebit;
     totalCredit += credit + discountCredit + writeoffCredit;
   }
