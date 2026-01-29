@@ -509,13 +509,10 @@ export async function getJournalEntries(
   try {
     const journalRef = collection(firestore, getJournalEntriesPath(userId));
 
-    // Build query with status filter for immutable ledger support
-    // This filters at Firestore level for better performance
-    const constraints = includeReversed
-      ? [orderBy('date', 'desc'), limit(5000)]
-      : [where('status', '==', 'posted'), orderBy('date', 'desc'), limit(5000)];
-
-    const q = query(journalRef, ...constraints);
+    // Query all entries ordered by date, filter status client-side
+    // This avoids requiring a composite index (status + date) in Firestore
+    // and maintains backward compatibility with existing data without status field
+    const q = query(journalRef, orderBy('date', 'desc'), limit(5000));
 
     const snapshot = await getDocs(q);
     let entries: JournalEntry[] = snapshot.docs.map((doc) => ({
@@ -523,7 +520,16 @@ export async function getJournalEntries(
       ...convertFirestoreDates(doc.data()),
     })) as JournalEntry[];
 
-    // Filter by date range if provided (client-side for flexibility)
+    // Filter out reversed entries unless explicitly requested
+    // Entries without status field (legacy) are treated as 'posted'
+    if (!includeReversed) {
+      entries = entries.filter((entry) => {
+        const status = (entry as JournalEntry & { status?: string }).status;
+        return !status || status === 'posted';
+      });
+    }
+
+    // Filter by date range if provided
     if (startDate || endDate) {
       entries = entries.filter((entry) => {
         const entryDate = entry.date;
