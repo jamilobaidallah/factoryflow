@@ -749,7 +749,14 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             // Track advance balances - use FULL amount (not remaining)
             // The "مدفوع من سلفة" row on invoices is informational only
             // Balance formula will NOT subtract totalIncomeAdvancePayments since we use full advance
-            if (entry.category === "سلفة عميل") {
+            //
+            // IMPORTANT: Skip advances created from multi-allocation payments (have linkedPaymentId)
+            // These advances are already captured in the parent payment amount, so counting them
+            // separately would double-count the money flow.
+            if (entry.linkedPaymentId) {
+              // Skip - this advance was created from a multi-allocation payment
+              // The payment document already records the full amount
+            } else if (entry.category === "سلفة عميل") {
               custAdvances += entry.amount; // Customer advance - we owe them (full amount)
             } else if (entry.category === "سلفة مورد") {
               suppAdvances += entry.amount; // Supplier advance - they owe us (full amount)
