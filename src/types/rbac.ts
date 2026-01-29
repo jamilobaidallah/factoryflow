@@ -90,3 +90,33 @@ export interface AccessRequest {
  * مصفوفة الصلاحيات - تحدد الإجراءات المسموحة لكل دور في كل وحدة
  */
 export type RolePermissions = Record<UserRole, Record<PermissionModule, PermissionAction[]>>;
+
+/**
+ * دعوة لانضمام عضو جديد
+ */
+export interface Invitation {
+  /** معرف الدعوة */
+  id: string;
+  /** رمز الدعوة الفريد (للرابط) */
+  token: string;
+  /** معرف المالك الذي أرسل الدعوة */
+  ownerId: string;
+  /** البريد الإلكتروني للمالك */
+  ownerEmail: string;
+  /** اسم المالك/المصنع */
+  ownerDisplayName?: string;
+  /** البريد الإلكتروني للمدعو */
+  inviteeEmail: string;
+  /** الدور المخصص للمدعو */
+  role: 'accountant' | 'viewer';
+  /** تاريخ الإنشاء */
+  createdAt: Date;
+  /** تاريخ انتهاء الصلاحية */
+  expiresAt: Date;
+  /** حالة الدعوة */
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  /** تاريخ القبول (عند القبول) */
+  acceptedAt?: Date;
+  /** معرف المستخدم الذي قبل الدعوة */
+  acceptedBy?: string;
+}

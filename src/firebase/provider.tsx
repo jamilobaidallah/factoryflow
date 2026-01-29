@@ -113,14 +113,23 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
               userRole = 'owner';
             }
           } else {
-            // No user document - check if this is a legacy owner with existing data
-            // مستخدم بدون مستند - تحقق إذا كان مالك قديم لديه بيانات
+            // No user document exists - determine if new owner or employee
+            // مستخدم بدون مستند - تحديد إذا كان مالك جديد أو موظف
             const legacyStatus = await checkIfLegacyOwner(firebaseUser.uid);
 
-            if (legacyStatus === 'legacy' || legacyStatus === 'unknown') {
-              // Legacy owner OR unknown (be lenient for backwards compatibility)
-              // مالك قديم أو غير معروف - نتعامل معهم كمالك للتوافق
-              console.log(`User ${firebaseUser.email} treated as owner (status: ${legacyStatus})`);
+            // Check if user selected "owner" during signup (stored in localStorage)
+            // التحقق إذا اختار المستخدم "مالك" أثناء التسجيل
+            let pendingOwnerSetup = false;
+            try {
+              pendingOwnerSetup = localStorage.getItem('pendingOwnerSetup') === 'true';
+            } catch {
+              // localStorage not available (SSR)
+            }
+
+            if (legacyStatus === 'legacy' || legacyStatus === 'unknown' || pendingOwnerSetup) {
+              // Create as owner: legacy user with data OR user selected "owner" at signup
+              // إنشاء كمالك: مستخدم قديم لديه بيانات أو مستخدم اختار "مالك" عند التسجيل
+              console.log(`User ${firebaseUser.email} created as owner (legacy: ${legacyStatus}, pendingSetup: ${pendingOwnerSetup})`);
 
               // Create their user document with owner role
               // إنشاء مستند المستخدم بدور المالك
@@ -130,13 +139,21 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
                 displayName: firebaseUser.displayName,
                 role: 'owner',
                 createdAt: new Date(),
-                isLegacyMigrated: true,
+                isLegacyMigrated: legacyStatus !== 'new',
               });
               userRole = 'owner';
+
+              // Clear the pending owner setup flag
+              // مسح علامة إعداد المالك المعلق
+              try {
+                localStorage.removeItem('pendingOwnerSetup');
+              } catch {
+                // Ignore if localStorage not available
+              }
             } else {
-              // Definitely a NEW user → role = null (must request access)
-              // مستخدم جديد بالتأكيد = يجب طلب الوصول
-              console.log(`New user ${firebaseUser.email} - role set to null`);
+              // New user who selected "employee" - must request access
+              // مستخدم جديد اختار "موظف" - يجب طلب الوصول
+              console.log(`New user ${firebaseUser.email} - role set to null (employee flow)`);
               userRole = null;
             }
           }

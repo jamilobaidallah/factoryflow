@@ -3,23 +3,27 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Clock, Shield } from "lucide-react";
+import { Users, Clock, Shield, Mail } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { UserList } from "./UserList";
 import { PendingRequestsList } from "./PendingRequestsList";
+import { InviteMemberDialog } from "./InviteMemberDialog";
+import { InvitationsList } from "./InvitationsList";
 import {
   getOrganizationMembers,
   getPendingRequests,
 } from "@/services/userService";
-import type { OrganizationMember, AccessRequest } from "@/types/rbac";
+import { getOwnerInvitations } from "@/services/invitationService";
+import type { OrganizationMember, AccessRequest, Invitation } from "@/types/rbac";
 
 export default function UsersPage() {
   const { user, loading: authLoading } = useUser();
   const { role } = usePermissions();
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
 
@@ -28,9 +32,10 @@ export default function UsersPage() {
 
     setLoading(true);
     try {
-      const [membersData, requestsData] = await Promise.all([
+      const [membersData, requestsData, invitationsData] = await Promise.all([
         getOrganizationMembers(user.uid),
         getPendingRequests(user.uid),
+        getOwnerInvitations(user.uid),
       ]);
 
       // Add owner to members list if not already there
@@ -50,6 +55,7 @@ export default function UsersPage() {
 
       setMembers(membersData);
       setPendingRequests(requestsData);
+      setInvitations(invitationsData.filter(i => i.status === 'pending'));
     } catch (error) {
       console.error("Error fetching user data:", error);
     } finally {
@@ -97,6 +103,7 @@ export default function UsersPage() {
             إدارة صلاحيات المستخدمين وطلبات الوصول
           </p>
         </div>
+        <InviteMemberDialog onInvitationCreated={fetchData} />
       </div>
 
       {/* Summary Cards */}
@@ -150,6 +157,15 @@ export default function UsersPage() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="invitations" className="gap-2">
+            <Mail className="w-4 h-4" />
+            الدعوات المعلقة
+            {invitations.length > 0 && (
+              <span className="mr-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                {invitations.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -184,6 +200,25 @@ export default function UsersPage() {
                   requests={pendingRequests}
                   ownerId={user?.uid || ""}
                   onRequestProcessed={fetchData}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invitations">
+          <Card>
+            <CardHeader>
+              <CardTitle>الدعوات المعلقة</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <TableSkeleton rows={5} />
+              ) : (
+                <InvitationsList
+                  invitations={invitations}
+                  ownerId={user?.uid || ""}
+                  onInvitationUpdated={fetchData}
                 />
               )}
             </CardContent>

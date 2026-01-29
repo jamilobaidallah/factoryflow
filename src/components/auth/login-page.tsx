@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
   const [lockoutRemaining, setLockoutRemaining] = useState<string>("");
+  const [accountType, setAccountType] = useState<'owner' | 'employee'>('owner');
   const { toast } = useToast();
 
   const rateLimiter = getRateLimiter();
@@ -104,10 +105,25 @@ export default function LoginPage() {
           description: "مرحباً بك في نظام إدارة المصنع",
         });
       } else {
+        // SIGNUP FLOW
+        // Store account type choice BEFORE creating account
+        // This is read by provider.tsx after onAuthStateChanged fires
+        if (accountType === 'owner') {
+          try {
+            localStorage.setItem('pendingOwnerSetup', 'true');
+          } catch {
+            // localStorage not available
+          }
+        }
+
         await createUserWithEmailAndPassword(auth, email, password);
+
+        // Show appropriate success message based on account type
         toast({
           title: "تم إنشاء الحساب بنجاح",
-          description: "يمكنك الآن استخدام النظام",
+          description: accountType === 'owner'
+            ? "جاري إعداد حسابك..."
+            : "الآن قم بطلب الانضمام لمصنع صاحب العمل",
         });
       }
     } catch (error) {
@@ -226,6 +242,37 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
+            {/* Account Type Selection - Only shown during signup */}
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label>نوع الحساب</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={accountType === 'owner' ? 'default' : 'outline'}
+                    className="w-full"
+                    onClick={() => setAccountType('owner')}
+                    disabled={loading}
+                  >
+                    مالك مصنع
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={accountType === 'employee' ? 'default' : 'outline'}
+                    className="w-full"
+                    onClick={() => setAccountType('employee')}
+                    disabled={loading}
+                  >
+                    موظف
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500 text-center">
+                  {accountType === 'owner'
+                    ? 'سيتم إنشاء حساب جديد لإدارة مصنعك'
+                    : 'ستحتاج للانضمام لمصنع موجود بعد التسجيل'}
+                </p>
+              </div>
+            )}
             {isLogin && (
               <div className="text-left">
                 <Link
