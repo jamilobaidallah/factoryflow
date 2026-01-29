@@ -228,6 +228,12 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         // Determine the linked cheque ID (either from cashing an existing cheque or from creating a new cheque)
         const linkedChequeId = paymentData.linkedChequeId || (chequeDocRef ? chequeDocRef.id : undefined);
 
+        // Build allocationTransactionIds - include advance if created
+        // This ensures all linked transactions appear in the payments table
+        const finalAllocationTransactionIds = hasExcess && advanceTransactionId
+          ? [...allocationTransactionIds, advanceTransactionId]
+          : allocationTransactionIds;
+
         transaction.set(paymentDocRef, {
           clientName: paymentData.clientName,
           amount: paymentData.amount,
@@ -238,8 +244,9 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           isMultiAllocation: true,
           totalAllocated,
           allocationMethod,
-          allocationCount: activeAllocations.length,
-          allocationTransactionIds,
+          // Include advance in count if created
+          allocationCount: hasExcess ? activeAllocations.length + 1 : activeAllocations.length,
+          allocationTransactionIds: finalAllocationTransactionIds,
           linkedTransactionId: '',
           ...(linkedChequeId && { linkedChequeId }),
           // Mark as cheque payment if creating a new cheque
