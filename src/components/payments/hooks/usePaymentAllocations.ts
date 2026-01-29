@@ -26,12 +26,15 @@ import {
 } from '../types';
 import { calculatePaymentStatus, calculateRemainingBalance } from '@/lib/arap-utils';
 import { safeSubtract, safeAdd, sumAmounts, zeroFloor } from '@/lib/currency';
-import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from '@/lib/constants';
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, TRANSACTION_TYPES } from '@/lib/constants';
 import {
   createJournalPostingEngine,
   getTemplateForDiscount,
+  getTemplateForAdvance,
   getEntriesByLinkedPaymentId,
+  getEntriesByLinkedTransactionId,
 } from '@/services/journal';
+import { generateTransactionId } from '@/components/ledger/utils/ledger-helpers';
 
 /** Result from savePaymentWithAllocations */
 export interface SavePaymentResult {
@@ -40,6 +43,10 @@ export interface SavePaymentResult {
   journalFailed?: boolean;
   /** ID of the created cheque (if payment method was cheque) */
   chequeId?: string;
+  /** ID of the created advance ledger entry (if overpayment) */
+  advanceLedgerId?: string;
+  /** Amount of the advance created (if overpayment) */
+  advanceAmount?: number;
 }
 
 interface UsePaymentAllocationsResult {
@@ -166,6 +173,11 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     try {
       const totalAllocated = sumAmounts(activeAllocations.map(a => a.allocatedAmount));
 
+      // Calculate excess amount (overpayment that will become an advance)
+      // Use threshold to avoid floating point issues
+      const excessAmount = safeSubtract(paymentData.amount, totalAllocated);
+      const hasExcess = excessAmount > 0.01;
+
       // Extract transaction IDs for display in the payments table
       const allocationTransactionIds = activeAllocations.map(
         (a) => a.transactionId
@@ -180,6 +192,16 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       if (paymentData.chequePaymentData) {
         const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
         chequeDocRef = doc(chequesRef);
+      }
+
+      // Create advance ledger document reference if there's excess (overpayment)
+      // The excess will be recorded as an advance (سلفة عميل/سلفة مورد)
+      let advanceLedgerDocRef: ReturnType<typeof doc> | null = null;
+      let advanceTransactionId: string | null = null;
+      if (hasExcess) {
+        const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
+        advanceLedgerDocRef = doc(ledgerRef);
+        advanceTransactionId = generateTransactionId();
       }
 
       // Use a transaction for atomic read-modify-write
@@ -222,7 +244,45 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
           ...(linkedChequeId && { linkedChequeId }),
           // Mark as cheque payment if creating a new cheque
           ...(paymentData.chequePaymentData && { paymentMethod: 'cheque' }),
+          // Advance tracking fields (if overpayment created an advance)
+          ...(hasExcess && advanceLedgerDocRef && {
+            advanceLedgerId: advanceLedgerDocRef.id,
+            advanceTransactionId: advanceTransactionId,
+            advanceAmount: excessAmount,
+          }),
         });
+
+        // 2.3. Create advance ledger entry if there's excess (overpayment)
+        // This converts the overpayment into a trackable advance that can be used for future transactions
+        if (hasExcess && advanceLedgerDocRef && advanceTransactionId) {
+          // Determine advance category based on payment type:
+          // - قبض (receipt from customer) → سلفة عميل (we owe them goods/services)
+          // - صرف (payment to supplier) → سلفة مورد (they owe us goods/services)
+          const advanceCategory = paymentData.type === 'قبض' ? 'سلفة عميل' : 'سلفة مورد';
+          const advanceType = paymentData.type === 'قبض' ? TRANSACTION_TYPES.INCOME : TRANSACTION_TYPES.EXPENSE;
+          const advanceSubCategory = advanceCategory === 'سلفة عميل' ? 'دفعة مقدمة من عميل' : 'دفعة مقدمة لمورد';
+
+          transaction.set(advanceLedgerDocRef, {
+            transactionId: advanceTransactionId,
+            description: `سلفة من دفعة متعددة - ${paymentData.clientName}`,
+            type: advanceType,
+            category: advanceCategory,
+            subCategory: advanceSubCategory,
+            amount: excessAmount,
+            associatedParty: paymentData.clientName,
+            date: paymentData.date,
+            createdAt: new Date(),
+            // AR/AP tracking fields - advance is "unpaid" meaning not yet used
+            isARAPEntry: true,
+            totalPaid: 0,
+            remainingBalance: excessAmount,
+            paymentStatus: 'unpaid',
+            // Link back to payment for traceability and reversal
+            linkedPaymentId: paymentDocRef.id,
+            // Advance-specific fields
+            advanceAllocations: [], // Will be populated when advance is used
+          });
+        }
 
         // 2.5. Create the cheque document if cheque payment data is provided
         if (chequeDocRef && paymentData.chequePaymentData) {
@@ -392,11 +452,57 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         }
       }
 
+      // Create advance journal entry if overpayment created an advance
+      // This is critical for Trial Balance accuracy:
+      // - Customer advance (قبض): DR Cash, CR Customer Advances (liability - we owe goods/services)
+      // - Supplier advance (صرف): DR Supplier Advances (asset - they owe us goods/services), CR Cash
+      if (hasExcess && advanceLedgerDocRef && advanceTransactionId) {
+        try {
+          const engine = createJournalPostingEngine(user.dataOwnerId);
+          const advanceCategory = paymentData.type === 'قبض' ? 'سلفة عميل' : 'سلفة مورد';
+          const advanceTemplateId = getTemplateForAdvance(advanceCategory);
+          // Source type for journal - matches JournalSourceType enum
+          const advanceSourceType = paymentData.type === 'قبض' ? 'advance_client' : 'advance_supplier';
+
+          const advanceJournalResult = await engine.post({
+            templateId: advanceTemplateId,
+            amount: excessAmount,
+            date: paymentData.date,
+            description: `سلفة من دفعة متعددة - ${paymentData.clientName}`,
+            source: {
+              type: advanceSourceType,
+              documentId: advanceLedgerDocRef.id,
+              transactionId: advanceTransactionId,
+            },
+          });
+
+          if (!advanceJournalResult.success) {
+            console.error(
+              "Advance journal failed:",
+              advanceLedgerDocRef.id,
+              advanceJournalResult.error
+            );
+          }
+        } catch (advanceErr) {
+          // Log but don't fail - payment and advance ledger entry are already saved
+          console.error(
+            "Failed to create advance journal:",
+            advanceLedgerDocRef.id,
+            advanceErr
+          );
+        }
+      }
+
       setLoading(false);
 
       return {
         paymentId: paymentDocRef.id,
         journalFailed: !journalCreated,
+        // Include advance info in result so caller can show confirmation to user
+        ...(hasExcess && advanceLedgerDocRef && {
+          advanceLedgerId: advanceLedgerDocRef.id,
+          advanceAmount: excessAmount,
+        }),
         ...(chequeDocRef && { chequeId: chequeDocRef.id }),
       };
     } catch (err) {
@@ -433,12 +539,34 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       const allocationsSnapshot = await getDocs(allocationsRef);
       const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, paymentId);
 
+      // Read payment document outside transaction to get advanceTransactionId for journal reversal
+      // (We also read inside transaction for atomicity, but need this for post-transaction journal work)
+      const prePaymentDoc = await getDoc(paymentRef);
+      const advanceTransactionIdForJournals = prePaymentDoc.exists()
+        ? (prePaymentDoc.data()?.advanceTransactionId as string | undefined)
+        : undefined;
+
       // Use transaction for atomic reversal
       // IMPORTANT: Firestore transactions require ALL reads before ANY writes
       await runTransaction(firestore, async (transaction) => {
         // ============ PHASE 1: ALL READS ============
 
-        // 1a. Read all ledger entries that need updating
+        // 1a. Read the payment document to check for linked advance
+        const paymentDoc = await transaction.get(paymentRef);
+        const paymentData = paymentDoc.exists() ? paymentDoc.data() : null;
+
+        // Store advance info for deletion after reads
+        const advanceLedgerId = paymentData?.advanceLedgerId as string | undefined;
+        const advanceTransactionId = paymentData?.advanceTransactionId as string | undefined;
+
+        // Read advance ledger entry if it exists
+        let advanceLedgerRef: ReturnType<typeof doc> | null = null;
+        if (advanceLedgerId) {
+          advanceLedgerRef = doc(firestore, `users/${user.dataOwnerId}/ledger`, advanceLedgerId);
+          await transaction.get(advanceLedgerRef); // Read to satisfy Firestore requirements
+        }
+
+        // 1b. Read all ledger entries that need updating
         const ledgerUpdates: {
           ref: ReturnType<typeof doc>;
           data: Record<string, unknown>;
@@ -519,6 +647,11 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
         // 3. Delete payment document
         transaction.delete(paymentRef);
+
+        // 3b. Delete advance ledger entry if this payment created one
+        if (advanceLedgerRef) {
+          transaction.delete(advanceLedgerRef);
+        }
 
         // 4. Update ledger entries (reverse the payments and discounts)
         for (const { ref: ledgerRef, data: ledgerData, allocatedAmount, discountAmount, isAdvance } of ledgerUpdates) {
@@ -610,10 +743,25 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
       // Reverse linked journal entries (immutable ledger pattern)
       try {
         const engine = createJournalPostingEngine(user.dataOwnerId);
+
+        // Reverse payment journal entries
         const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
         for (const journal of linkedJournals) {
           if (journal.status !== "reversed") {
             await engine.reverse(journal.id, "حذف مدفوعة");
+          }
+        }
+
+        // Reverse advance journal entries if this payment created an advance
+        if (advanceTransactionIdForJournals) {
+          const advanceJournals = await getEntriesByLinkedTransactionId(
+            user.dataOwnerId,
+            advanceTransactionIdForJournals
+          );
+          for (const journal of advanceJournals) {
+            if (journal.status !== "reversed") {
+              await engine.reverse(journal.id, "حذف دفعة متعددة (إلغاء السلفة)");
+            }
           }
         }
       } catch (journalError) {

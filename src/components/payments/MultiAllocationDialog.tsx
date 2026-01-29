@@ -340,6 +340,14 @@ export function MultiAllocationDialog({
     const amount = parseFloat(value) || 0;
     const maxAmount = allocations[index].remainingBalance;
 
+    // Show toast if user entered more than remaining balance
+    if (amount > maxAmount) {
+      toast({
+        title: "تنبيه",
+        description: `تم تعديل المبلغ إلى الحد الأقصى المتاح (${maxAmount.toFixed(2)} دينار)`,
+      });
+    }
+
     setAllocations((prev) => {
       const updated = [...prev];
       updated[index] = {
@@ -784,8 +792,8 @@ export function MultiAllocationDialog({
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 {difference > 0
-                  ? `يوجد ${difference.toFixed(2)} دينار غير موزع من مبلغ الدفعة`
-                  : `التخصيص يتجاوز مبلغ الدفعة بـ ${Math.abs(difference).toFixed(2)} دينار`}
+                  ? `سيتم إنشاء سلفة بقيمة ${difference.toFixed(2)} دينار (المبلغ غير الموزع)`
+                  : `التخصيص يتجاوز مبلغ الدفعة بـ ${Math.abs(difference).toFixed(2)} دينار - يرجى تعديل المبالغ`}
               </AlertDescription>
             </Alert>
           )}
@@ -805,7 +813,7 @@ export function MultiAllocationDialog({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={saving || allocationLoading || totalAllocated === 0}
+            disabled={saving || allocationLoading || totalAllocated === 0 || difference < -0.01}
           >
             {saving ? (
               <>

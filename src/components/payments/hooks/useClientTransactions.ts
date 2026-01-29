@@ -3,6 +3,10 @@
  *
  * Fetches all unpaid or partially paid transactions for a specific client.
  * Used for multi-allocation payment dialog.
+ *
+ * NOTE: Excludes advance entries (سلفة عميل / سلفة مورد) which have their own
+ * allocation flow via AdvanceAllocationDialog. Advances should not appear
+ * in the multi-allocation payment list as they represent prepayments, not invoices.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,6 +20,10 @@ import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { UnpaidTransaction } from '../types';
 import { safeSubtract, sumAmounts } from '@/lib/currency';
+
+// Advance categories to exclude from multi-allocation payments
+// These have their own allocation flow and should not be mixed with regular invoices
+const ADVANCE_CATEGORIES = ['سلفة عميل', 'سلفة مورد'];
 
 interface UseClientTransactionsResult {
   transactions: UnpaidTransaction[];
@@ -64,6 +72,12 @@ export function useClientTransactions(clientName: string): UseClientTransactions
       snapshot.forEach((doc) => {
         const data = doc.data();
         const paymentStatus = data.paymentStatus || 'unpaid';
+
+        // Skip advance entries - they have their own allocation mechanism
+        // Advances represent prepayments and should not be in the invoice list
+        if (ADVANCE_CATEGORIES.includes(data.category)) {
+          return;
+        }
 
         // Only include unpaid or partial transactions
         if (paymentStatus === 'paid') {
