@@ -28,6 +28,7 @@ import {
   isInitialLoan,
   getLoanType,
 } from '@/components/ledger/utils/ledger-helpers';
+import { CHEQUE_STATUS_AR } from '@/lib/constants';
 
 // Types for balance calculation
 export interface BalanceLedgerEntry {
@@ -230,8 +231,9 @@ export function calculateBalanceAfterCheques(
   pendingCheques: BalanceCheque[]
 ): number {
   // Filter to only PENDING cheques (excluding endorsed)
+  // Use CHEQUE_STATUS_AR.PENDING ('قيد الانتظار') - this is the actual database value
   const pending = pendingCheques.filter(
-    c => c.status === 'معلق' && !c.isEndorsedCheque
+    c => c.status === CHEQUE_STATUS_AR.PENDING && !c.isEndorsedCheque
   );
 
   let incomingTotal = 0;
@@ -254,5 +256,6 @@ export function calculateBalanceAfterCheques(
  * Check if client has pending cheques
  */
 export function hasPendingCheques(pendingCheques: BalanceCheque[]): boolean {
-  return pendingCheques.some(c => c.status === 'معلق' && !c.isEndorsedCheque);
+  // Use CHEQUE_STATUS_AR.PENDING ('قيد الانتظار') - this is the actual database value
+  return pendingCheques.some(c => c.status === CHEQUE_STATUS_AR.PENDING && !c.isEndorsedCheque);
 }
