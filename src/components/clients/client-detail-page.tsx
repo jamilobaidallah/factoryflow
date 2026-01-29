@@ -1074,9 +1074,15 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           <CardContent>
             <div className="text-lg font-semibold text-gray-700">
               <span className="text-green-600">قبض: {totalPaymentsReceived.toFixed(2)}</span>
+              {customerAdvances > 0 && (
+                <span className="text-orange-500 text-sm mr-2">(+ سلفة: {customerAdvances.toFixed(2)})</span>
+              )}
             </div>
             <div className="text-lg font-semibold text-gray-700">
               <span className="text-red-600">صرف: {totalPaymentsMade.toFixed(2)}</span>
+              {supplierAdvances > 0 && (
+                <span className="text-orange-500 text-sm mr-2">(+ سلفة: {supplierAdvances.toFixed(2)})</span>
+              )}
             </div>
           </CardContent>
         </Card>
