@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, TrendingDown, History, AlertTriangle, XCircle } from "lucide-react";
+import { Plus, TrendingDown, History, AlertTriangle, XCircle, Play, Loader2 } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { StatCardSkeleton, TableSkeleton } from "@/components/ui/loading-skeleton";
@@ -21,6 +21,7 @@ import {
 import { useFixedAssetsData } from "./hooks/useFixedAssetsData";
 import { useFixedAssetsOperations } from "./hooks/useFixedAssetsOperations";
 import { useDepreciationHistory } from "./hooks/useDepreciationHistory";
+import { useAutoDepreciation } from "./hooks/useAutoDepreciation";
 
 // Components
 import { FixedAssetsStatsCards } from "./components/FixedAssetsStatsCards";
@@ -36,6 +37,16 @@ export default function FixedAssetsPage() {
   const { assets, loading: dataLoading } = useFixedAssetsData();
   const { submitAsset, deleteAsset, runDepreciation } = useFixedAssetsOperations();
   const { runs, loading: historyLoading, getProcessedPeriods } = useDepreciationHistory();
+
+  // Auto-depreciation detection - only activate when assets are loaded
+  const {
+    pendingPeriods,
+    pendingCount,
+    oldestPending,
+    checking: checkingPending,
+    running: runningAuto,
+    runAllPending,
+  } = useAutoDepreciation(assets);
 
   // UI state
   const [activeTab, setActiveTab] = useState("assets");
@@ -132,11 +143,18 @@ export default function FixedAssetsPage() {
     );
   };
 
-  // Calculate pending months (simple check - months without depreciation)
-  const activeAssetsWithoutDepreciation = assets.filter(
-    (a) => a.status === "active" && !a.lastDepreciationDate
-  );
-  const hasPendingDepreciation = activeAssetsWithoutDepreciation.length > 0 && assets.length > 0;
+  // Handle running all pending depreciation periods
+  const handleRunAllPending = () => {
+    const newestPending = pendingPeriods[pendingPeriods.length - 1];
+    confirm(
+      "تشغيل الاستهلاك التلقائي",
+      `سيتم معالجة ${pendingCount} فترة استهلاك من ${oldestPending} إلى ${newestPending?.periodLabel}. هل تريد المتابعة؟`,
+      async () => {
+        await runAllPending();
+      },
+      "warning"
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -187,26 +205,46 @@ export default function FixedAssetsPage() {
         </div>
       )}
 
-      {/* Pending depreciation warning banner */}
-      {hasPendingDepreciation && !dataLoading && (
+      {/* Pending depreciation periods banner */}
+      {pendingCount > 0 && !dataLoading && !checkingPending && (
         <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
           <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-amber-800">
-              يوجد {activeAssetsWithoutDepreciation.length} أصل لم يتم تسجيل استهلاك له بعد
+              يوجد {pendingCount} فترة استهلاك معلقة
             </p>
             <p className="text-xs text-amber-600 mt-1">
-              يُنصح بتسجيل الاستهلاك الشهري للحفاظ على دقة البيانات المحاسبية
+              من {oldestPending} إلى {pendingPeriods[pendingPeriods.length - 1]?.periodLabel} - يُنصح بتشغيل الاستهلاك التلقائي
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-amber-300 text-amber-700 hover:bg-amber-100"
-            onClick={() => setIsDepreciationDialogOpen(true)}
-          >
-            تسجيل الاستهلاك
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-300 text-amber-700 hover:bg-amber-100"
+              onClick={() => setIsDepreciationDialogOpen(true)}
+            >
+              يدوي
+            </Button>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white gap-1"
+              onClick={handleRunAllPending}
+              disabled={runningAuto}
+            >
+              {runningAuto ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري المعالجة...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  تشغيل الكل ({pendingCount})
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
