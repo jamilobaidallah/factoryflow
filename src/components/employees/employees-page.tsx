@@ -144,9 +144,11 @@ export default function EmployeesPage() {
   };
 
   const handleMarkAsPaid = (payrollEntry: typeof payrollEntries[0]) => {
+    // Use netSalary (after advance deduction) if available, otherwise fall back to totalSalary
+    const amountToPay = payrollEntry.netSalary ?? payrollEntry.totalSalary;
     confirm(
       "تأكيد دفع الراتب",
-      `هل تريد تسجيل دفع راتب ${payrollEntry.employeeName} بقيمة ${formatNumber(payrollEntry.totalSalary)} دينار؟`,
+      `هل تريد تسجيل دفع راتب ${payrollEntry.employeeName} بقيمة ${formatNumber(amountToPay)} دينار؟`,
       async () => {
         setLoading(true);
         await markAsPaid(payrollEntry);
