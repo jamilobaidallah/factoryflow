@@ -250,3 +250,93 @@ export function generateTransactionId(): string {
 
     return `TXN-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`;
 }
+
+/**
+ * Determine the correct journal template ID for a transaction
+ *
+ * This centralizes template selection logic to avoid duplication and ensure
+ * consistent handling of special transaction types (equity, loans, fixed assets).
+ *
+ * @param entryType - Transaction type from getCategoryType()
+ * @param category - Transaction category
+ * @param subCategory - Transaction subcategory
+ * @returns The appropriate JournalTemplateId
+ */
+export function getJournalTemplateForTransaction(
+    entryType: string,
+    category?: string,
+    subCategory?: string
+): string {
+    // 1. Check for equity/capital transactions
+    if (isEquityTransaction(entryType, category)) {
+        if (isOwnerDrawing(subCategory)) {
+            return "OWNER_DRAWINGS";
+        }
+        // Default to capital contribution for equity transactions
+        return "OWNER_CAPITAL";
+    }
+
+    // 2. Check for loan transactions
+    if (isLoanTransaction(entryType, category)) {
+        const isGivenLoan = category === LOAN_CATEGORIES.GIVEN;
+        const isInitial = isInitialLoan(subCategory);
+
+        if (isGivenLoan) {
+            return isInitial ? "LOAN_GIVEN" : "LOAN_COLLECTION";
+        } else {
+            return isInitial ? "LOAN_RECEIVED" : "LOAN_REPAYMENT";
+        }
+    }
+
+    // 3. Check for fixed asset purchases
+    if (isFixedAssetTransaction(category)) {
+        return "FIXED_ASSET_PURCHASE";
+    }
+
+    // 4. Default to income/expense templates
+    return entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+}
+
+/**
+ * Determine the correct payment type for a transaction
+ *
+ * This handles the cash flow direction for all transaction types:
+ * - Income: RECEIPT (cash IN)
+ * - Expense: DISBURSEMENT (cash OUT)
+ * - Capital IN: RECEIPT (cash IN from owner)
+ * - Drawings OUT: DISBURSEMENT (cash OUT to owner)
+ * - Loans: depends on subcategory (giving vs receiving)
+ *
+ * @param entryType - Transaction type
+ * @param category - Transaction category
+ * @param subCategory - Transaction subcategory
+ * @returns "قبض" (RECEIPT) or "صرف" (DISBURSEMENT)
+ */
+export function getPaymentTypeForTransaction(
+    entryType: string,
+    category?: string,
+    subCategory?: string
+): string {
+    const RECEIPT = "قبض";
+    const DISBURSEMENT = "صرف";
+
+    // 1. Income is always cash IN
+    if (entryType === "دخل") {
+        return RECEIPT;
+    }
+
+    // 2. Equity/Capital transactions
+    if (isEquityTransaction(entryType, category)) {
+        // Capital contribution = cash IN, Drawings = cash OUT
+        return isCapitalContribution(subCategory) ? RECEIPT : DISBURSEMENT;
+    }
+
+    // 3. Loan transactions - use existing helper for cash direction
+    if (isLoanTransaction(entryType, category)) {
+        const cashDirection = getLoanCashDirection(subCategory);
+        return cashDirection === "in" ? RECEIPT : DISBURSEMENT;
+    }
+
+    // 4. Default: expenses and fixed assets are cash OUT
+    return DISBURSEMENT;
+}

@@ -19,9 +19,11 @@ import {
   getAccountMappingForAdvanceApplication,
   getAccountMappingForEndorsement,
   getAccountMappingForFixedAssetPurchase,
+  getAccountMappingForLoan,
   getAccountNameAr,
   type AccountMapping,
 } from "@/lib/account-mapping";
+import { LOAN_CATEGORIES, LOAN_SUBCATEGORIES } from "@/components/ledger/utils/ledger-helpers";
 import { ACCOUNT_CODES } from "@/types/accounting";
 import type { JournalTemplateId, TemplateContext, AccountMapping as TemplateAccountMapping } from "./types";
 
@@ -305,6 +307,62 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
       creditAccountName: ACCOUNT_CODES.CASH,
       creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
     }),
+  },
+
+  /**
+   * Loan given (we lend money to someone)
+   * DR: Loans Receivable (asset) | CR: Cash
+   */
+  LOAN_GIVEN: {
+    id: "LOAN_GIVEN",
+    nameAr: "منح قرض",
+    nameEn: "Loan Given",
+    resolveAccounts: () =>
+      toTemplateMapping(
+        getAccountMappingForLoan(LOAN_CATEGORIES.GIVEN, LOAN_SUBCATEGORIES.LOAN_GIVEN)
+      ),
+  },
+
+  /**
+   * Loan collection (we collect repayment from someone we lent to)
+   * DR: Cash | CR: Loans Receivable (asset decreases)
+   */
+  LOAN_COLLECTION: {
+    id: "LOAN_COLLECTION",
+    nameAr: "تحصيل قرض",
+    nameEn: "Loan Collection",
+    resolveAccounts: () =>
+      toTemplateMapping(
+        getAccountMappingForLoan(LOAN_CATEGORIES.GIVEN, LOAN_SUBCATEGORIES.LOAN_COLLECTION)
+      ),
+  },
+
+  /**
+   * Loan received (we borrow money from someone)
+   * DR: Cash | CR: Loans Payable (liability)
+   */
+  LOAN_RECEIVED: {
+    id: "LOAN_RECEIVED",
+    nameAr: "استلام قرض",
+    nameEn: "Loan Received",
+    resolveAccounts: () =>
+      toTemplateMapping(
+        getAccountMappingForLoan(LOAN_CATEGORIES.RECEIVED, LOAN_SUBCATEGORIES.LOAN_RECEIPT)
+      ),
+  },
+
+  /**
+   * Loan repayment (we repay borrowed money)
+   * DR: Loans Payable (liability decreases) | CR: Cash
+   */
+  LOAN_REPAYMENT: {
+    id: "LOAN_REPAYMENT",
+    nameAr: "سداد قرض",
+    nameEn: "Loan Repayment",
+    resolveAccounts: () =>
+      toTemplateMapping(
+        getAccountMappingForLoan(LOAN_CATEGORIES.RECEIVED, LOAN_SUBCATEGORIES.LOAN_REPAYMENT)
+      ),
   },
 };
 
