@@ -15,7 +15,13 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
-import { FixedAsset, FixedAssetFormData, DepreciationPeriod } from "../types/fixed-assets";
+import {
+  FixedAsset,
+  FixedAssetFormData,
+  DepreciationPeriod,
+  DepreciationResult,
+  DEPRECIATION_RECOVERY_INSTRUCTIONS,
+} from "../types/fixed-assets";
 import { parseAmount, safeMultiply, safeSubtract, safeDivide, safeAdd, roundCurrency } from "@/lib/currency";
 import { createJournalPostingEngine } from "@/services/journal";
 import { logActivity } from "@/services/activityLogService";
@@ -50,7 +56,7 @@ interface UseFixedAssetsOperationsReturn {
   runDepreciation: (
     period: DepreciationPeriod,
     assets: FixedAsset[]
-  ) => Promise<boolean>;
+  ) => Promise<DepreciationResult>;
 }
 
 export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
@@ -217,12 +223,21 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
   const runDepreciation = async (
     period: DepreciationPeriod,
     assets: FixedAsset[]
-  ): Promise<boolean> => {
-    if (!user) return false;
+  ): Promise<DepreciationResult> => {
+    const periodLabel = `${period.year}-${String(period.month).padStart(2, "0")}`;
+
+    if (!user) {
+      return {
+        success: false,
+        totalDepreciation: 0,
+        partialFailure: false,
+        error: "المستخدم غير مسجل الدخول",
+        periodLabel,
+      };
+    }
 
     try {
       const batch = writeBatch(firestore);
-      const periodLabel = `${period.year}-${String(period.month).padStart(2, '0')}`;
 
       // Check if depreciation already run for this period
       const runsRef = collection(firestore, `users/${user.dataOwnerId}/depreciation_runs`);
@@ -235,7 +250,13 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           description: "تم تسجيل الاستهلاك لهذه الفترة مسبقاً",
           variant: "destructive",
         });
-        return false;
+        return {
+          success: false,
+          totalDepreciation: 0,
+          partialFailure: false,
+          error: "تم تسجيل الاستهلاك لهذه الفترة مسبقاً",
+          periodLabel,
+        };
       }
 
       // Get active assets
@@ -247,7 +268,13 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           description: "لا توجد أصول ثابتة نشطة لتسجيل الاستهلاك",
           variant: "destructive",
         });
-        return false;
+        return {
+          success: false,
+          totalDepreciation: 0,
+          partialFailure: false,
+          error: "لا توجد أصول ثابتة نشطة",
+          periodLabel,
+        };
       }
 
       let totalDepreciation = 0;
@@ -384,21 +411,35 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         }
       }
 
-      // Show appropriate toast based on journal entry result
+      // Return result based on journal entry outcome
       if (journalCreated) {
         toast({
           title: "تم تسجيل الاستهلاك بنجاح",
           description: `إجمالي الاستهلاك: ${roundCurrency(totalDepreciation).toFixed(2)} دينار`,
         });
+        return {
+          success: true,
+          totalDepreciation: roundCurrency(totalDepreciation),
+          partialFailure: false,
+          periodLabel,
+        };
       } else {
+        // PARTIAL FAILURE: Records saved but journal failed
+        // Return partialFailure=true so UI can show persistent recovery alert
         toast({
-          title: "تحذير",
-          description: "تم تسجيل الاستهلاك لكن فشل إنشاء القيد المحاسبي. يرجى مراجعة السجلات أو التواصل مع الدعم.",
+          title: "تحذير: فشل القيد المحاسبي",
+          description: "تم تسجيل الاستهلاك لكن فشل إنشاء القيد المحاسبي",
           variant: "destructive",
         });
+        return {
+          success: false,
+          totalDepreciation: roundCurrency(totalDepreciation),
+          partialFailure: true,
+          recoveryInstructions: DEPRECIATION_RECOVERY_INSTRUCTIONS,
+          error: "فشل في إنشاء القيد المحاسبي",
+          periodLabel,
+        };
       }
-
-      return true;
     } catch (error) {
       const appError = handleError(error);
       toast({
@@ -406,7 +447,13 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         description: appError.message,
         variant: "destructive",
       });
-      return false;
+      return {
+        success: false,
+        totalDepreciation: 0,
+        partialFailure: false,
+        error: appError.message,
+        periodLabel,
+      };
     }
   };
 
