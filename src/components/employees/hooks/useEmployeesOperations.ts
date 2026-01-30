@@ -825,15 +825,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     try {
       const batch = writeBatch(firestore);
 
-      // Generate reversal transaction ID
-      const now = new Date();
-      const reversalTransactionId = `REV-${now.getFullYear()}${String(
-        now.getMonth() + 1
-      ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(
-        Math.floor(Math.random() * 1000)
-      ).padStart(3, "0")}`;
-
-      // Calculate the amount that was paid (net salary)
+      // Calculate the amount that was paid (net salary) for logging
       const advanceDeduction = payrollEntry.advanceDeduction || 0;
       const paidAmount =
         payrollEntry.netSalary !== undefined
@@ -852,43 +844,37 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         linkedTransactionId: null,
       });
 
-      // Create reversing ledger entry (opposite of the original)
-      const ledgerRef = collection(
-        firestore,
-        `users/${user.dataOwnerId}/ledger`
-      );
-      const ledgerDocRef = doc(ledgerRef);
-      batch.set(ledgerDocRef, {
-        transactionId: reversalTransactionId,
-        description: `عكس راتب ${payrollEntry.employeeName} - ${payrollEntry.month}`,
-        type: "إيراد", // Opposite of مصروف
-        amount: paidAmount,
-        category: "تعديلات",
-        subCategory: "عكس رواتب",
-        associatedParty: payrollEntry.employeeName,
-        date: new Date(),
-        reference: `Reversal-${payrollEntry.linkedTransactionId || payrollEntry.id}`,
-        notes: `عكس دفع راتب شهر ${payrollEntry.month}`,
-        createdAt: new Date(),
-      });
+      // Delete original ledger entry by transactionId
+      if (payrollEntry.linkedTransactionId) {
+        const ledgerRef = collection(
+          firestore,
+          `users/${user.dataOwnerId}/ledger`
+        );
+        const ledgerQuery = query(
+          ledgerRef,
+          where("transactionId", "==", payrollEntry.linkedTransactionId),
+          limit(1)
+        );
+        const ledgerSnapshot = await getDocs(ledgerQuery);
+        ledgerSnapshot.docs.forEach((docSnap) => {
+          batch.delete(docSnap.ref);
+        });
 
-      // Create reversing payment entry
-      const paymentsRef = collection(
-        firestore,
-        `users/${user.dataOwnerId}/payments`
-      );
-      const paymentDocRef = doc(paymentsRef);
-      batch.set(paymentDocRef, {
-        clientName: payrollEntry.employeeName,
-        amount: paidAmount,
-        type: "قبض", // Opposite of صرف
-        linkedTransactionId: reversalTransactionId,
-        date: new Date(),
-        notes: `عكس دفع راتب ${payrollEntry.month}`,
-        category: "تعديلات",
-        subCategory: "عكس رواتب",
-        createdAt: new Date(),
-      });
+        // Delete original payment entry by linkedTransactionId
+        const paymentsRef = collection(
+          firestore,
+          `users/${user.dataOwnerId}/payments`
+        );
+        const paymentQuery = query(
+          paymentsRef,
+          where("linkedTransactionId", "==", payrollEntry.linkedTransactionId),
+          limit(1)
+        );
+        const paymentSnapshot = await getDocs(paymentQuery);
+        paymentSnapshot.docs.forEach((docSnap) => {
+          batch.delete(docSnap.ref);
+        });
+      }
 
       await batch.commit();
 
@@ -917,23 +903,22 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       }
 
       logActivity(user.dataOwnerId, {
-        action: "update",
+        action: "delete",
         module: "employees",
         targetId: payrollEntry.id,
         userId: user.uid,
         userEmail: user.email || "",
-        description: `عكس دفع راتب: ${payrollEntry.employeeName} - ${payrollEntry.month}`,
+        description: `إلغاء دفع راتب: ${payrollEntry.employeeName} - ${payrollEntry.month}`,
         metadata: {
-          reversedAmount: paidAmount,
-          originalTransactionId: payrollEntry.linkedTransactionId,
-          reversalTransactionId,
+          deletedAmount: paidAmount,
+          deletedTransactionId: payrollEntry.linkedTransactionId,
           advanceIds: payrollEntry.advanceIds,
         },
       });
 
       toast({
-        title: "تم عكس الدفع",
-        description: `تم عكس دفع راتب ${payrollEntry.employeeName} بقيمة ${paidAmount} دينار`,
+        title: "تم إلغاء الدفع",
+        description: `تم إلغاء دفع راتب ${payrollEntry.employeeName} وحذف القيود المرتبطة`,
       });
       return true;
     } catch (error) {
