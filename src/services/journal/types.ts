@@ -182,7 +182,11 @@ export type JournalTemplateId =
   | "APPLY_SUPPLIER_ADVANCE"
   | "FIXED_ASSET_PURCHASE"
   | "OWNER_CAPITAL"
-  | "OWNER_DRAWINGS";
+  | "OWNER_DRAWINGS"
+  | "LOAN_GIVEN"
+  | "LOAN_COLLECTION"
+  | "LOAN_RECEIVED"
+  | "LOAN_REPAYMENT";
 
 /**
  * Context for template account resolution

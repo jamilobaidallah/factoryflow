@@ -39,7 +39,14 @@ import type {
   InventoryItemData,
 } from "@/components/ledger/types/ledger";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-import { getCategoryType, generateTransactionId, LOAN_CATEGORIES, isAdvanceTransaction } from "@/components/ledger/utils/ledger-helpers";
+import {
+  getCategoryType,
+  generateTransactionId,
+  LOAN_CATEGORIES,
+  isAdvanceTransaction,
+  getJournalTemplateForTransaction,
+  getPaymentTypeForTransaction,
+} from "@/components/ledger/utils/ledger-helpers";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
 import {
   parseAmount,
@@ -394,7 +401,11 @@ export class LedgerService {
       // Graceful failure - if journal fails, the ledger entry still works
       try {
         const engine = createJournalPostingEngine(this.userId);
-        const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+        const templateId = getJournalTemplateForTransaction(
+          entryType,
+          formData.category,
+          formData.subCategory
+        );
         await engine.post({
           templateId,
           amount,
@@ -645,7 +656,11 @@ export class LedgerService {
         const entryDate = new Date(formData.date);
 
         // Main ledger journal entry
-        const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+        const templateId = getJournalTemplateForTransaction(
+          entryType,
+          formData.category,
+          formData.subCategory
+        );
         await engine.post({
           templateId,
           amount: totalAmount,
@@ -1209,7 +1224,11 @@ export class LedgerService {
 
         // 2. Create new main ledger journal entry
         if (currentData) {
-          const templateId = entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
+          const templateId = getJournalTemplateForTransaction(
+            entryType,
+            formData.category,
+            formData.subCategory
+          );
           await engine.post({
             templateId,
             amount: newAmount,
@@ -1601,7 +1620,11 @@ export class LedgerService {
   ): Promise<ServiceResult> {
     try {
       const paymentAmount = parseAmount(formData.amount);
-      const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+      const paymentType = getPaymentTypeForTransaction(
+        entry.type,
+        entry.category,
+        entry.subCategory
+      );
 
       const entryRef = this.getLedgerDocRef(entry.id);
       const paymentDocRef = doc(this.paymentsRef);
@@ -1670,20 +1693,13 @@ export class LedgerService {
     try {
       const discountAmount = data.discountAmount || 0;
 
-      // Determine payment type based on entry type and category
-      let paymentType: string;
-      if (data.entryType === "دخل") {
-        paymentType = PAYMENT_TYPES.RECEIPT;
-      } else if (data.entryType === "قرض") {
-        // For loan entries, use CATEGORY to determine payment direction:
-        // - قروض ممنوحة (Loans Given): payments = collecting = cash IN (قبض)
-        // - قروض مستلمة (Loans Received): payments = repaying = cash OUT (صرف)
-        paymentType = data.entryCategory === LOAN_CATEGORIES.GIVEN
-          ? PAYMENT_TYPES.RECEIPT
-          : PAYMENT_TYPES.DISBURSEMENT;
-      } else {
-        paymentType = PAYMENT_TYPES.DISBURSEMENT;
-      }
+      // Determine payment type based on entry type, category, and subcategory
+      // This handles income, expense, capital, loans, and fixed assets correctly
+      const paymentType = getPaymentTypeForTransaction(
+        data.entryType,
+        data.entryCategory,
+        data.entrySubCategory
+      );
 
       // Use transaction to prevent race conditions when multiple payments
       // happen simultaneously on the same ledger entry
@@ -1894,20 +1910,12 @@ export class LedgerService {
 
       // Create payment record for the writeoff (so it appears in payments page)
       const paymentDocRef = doc(this.paymentsRef);
-      // Determine payment type based on entry type and category
-      let paymentType: string;
-      if (data.entryType === "دخل") {
-        paymentType = PAYMENT_TYPES.RECEIPT;
-      } else if (data.entryType === "قرض") {
-        // For loan entries, use CATEGORY to determine payment direction:
-        // - قروض ممنوحة (Loans Given): payments = collecting = cash IN (قبض)
-        // - قروض مستلمة (Loans Received): payments = repaying = cash OUT (صرف)
-        paymentType = data.entryCategory === LOAN_CATEGORIES.GIVEN
-          ? PAYMENT_TYPES.RECEIPT
-          : PAYMENT_TYPES.DISBURSEMENT;
-      } else {
-        paymentType = PAYMENT_TYPES.DISBURSEMENT;
-      }
+      // Determine payment type based on entry type, category, and subcategory
+      const paymentType = getPaymentTypeForTransaction(
+        data.entryType,
+        data.entryCategory,
+        data.entrySubCategory
+      );
       batch.set(paymentDocRef, {
         clientName: data.associatedParty || "غير محدد",
         amount: 0,  // No actual cash payment
@@ -2068,7 +2076,11 @@ export class LedgerService {
       batch.set(chequeDocRef, chequeData);
 
       if (accountingType === "cashed") {
-        const paymentType = entry.type === "دخل" ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+        const paymentType = getPaymentTypeForTransaction(
+          entry.type,
+          entry.category,
+          entry.subCategory
+        );
         const paymentDocRef = doc(this.paymentsRef);
         batch.set(paymentDocRef, {
           clientName: entry.associatedParty || "غير محدد",
