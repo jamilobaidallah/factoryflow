@@ -1,5 +1,6 @@
 import { CATEGORIES } from "./ledger-constants";
 import { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR } from "@/lib/constants";
+import type { JournalTemplateId } from "@/services/journal/types";
 
 // Re-export for convenience
 export { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR };
@@ -266,7 +267,7 @@ export function getJournalTemplateForTransaction(
     entryType: string,
     category?: string,
     subCategory?: string
-): string {
+): JournalTemplateId {
     // 1. Check for equity/capital transactions
     if (isEquityTransaction(entryType, category)) {
         if (isOwnerDrawing(subCategory)) {
