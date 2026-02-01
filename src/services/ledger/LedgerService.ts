@@ -63,6 +63,7 @@ import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import {
   createJournalPostingEngine,
   getEntriesByTransactionId,
+  type JournalPostingEngine,
 } from "@/services/journal";
 import { handleError, ErrorType } from "@/lib/error-handling";
 import { logActivity } from "@/services/activityLogService";
