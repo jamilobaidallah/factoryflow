@@ -340,6 +340,8 @@ export class JournalPostingEngine {
         date: new Date(), // Reversal uses current date
         description: `عكس: ${originalData.description} - ${reason}`,
         lines: reversedLines,
+        totalDebits: originalData.totalCredits,  // Swapped
+        totalCredits: originalData.totalDebits,  // Swapped
         status: "posted",
         source: {
           ...originalData.source,
@@ -528,6 +530,8 @@ export class JournalPostingEngine {
         date: new Date(),
         description: `عكس: ${originalData.description} - ${reason}`,
         lines: reversedLines,
+        totalDebits: originalData.totalCredits,  // Swapped
+        totalCredits: originalData.totalDebits,  // Swapped
         status: "posted",
         source: originalData.source,
         reversal: {
