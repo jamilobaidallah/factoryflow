@@ -218,6 +218,26 @@ export class LedgerService {
     };
   }
 
+  /**
+   * Helper to post journal entry and handle errors
+   * Throws if posting fails to prevent silent accounting errors
+   */
+  private async postJournalEntry(
+    engine: JournalPostingEngine,
+    request: Parameters<JournalPostingEngine['post']>[0],
+    context: string = "journal entry"
+  ): Promise<void> {
+    const result = await engine.post(request);
+
+    if (!result.success) {
+      const error = result.error || "Unknown error creating journal entry";
+      console.error(`❌ Failed to create ${context}:`, error);
+      throw new Error(`Failed to create ${context}: ${error}`);
+    }
+
+    console.log(`✅ ${context} created successfully:`, result.entryNumber);
+  }
+
   // ============================================
   // Read Operations
   // ============================================
@@ -398,7 +418,6 @@ export class LedgerService {
       }
 
       // Create journal entry after batch commit (uses separate sequence transaction)
-      // Graceful failure - if journal fails, the ledger entry still works
       try {
         const engine = createJournalPostingEngine(this.userId);
         const templateId = getJournalTemplateForTransaction(
@@ -406,7 +425,7 @@ export class LedgerService {
           formData.category,
           formData.subCategory
         );
-        await engine.post({
+        await this.postJournalEntry(engine, {
           templateId,
           amount,
           date: entryDate,
@@ -422,7 +441,7 @@ export class LedgerService {
             isARAPEntry: false,
             immediateSettlement: formData.immediateSettlement ?? true,
           },
-        });
+        }, "main ledger journal");
       } catch (journalError) {
         // Log but don't fail - ledger entry was already committed
         console.error("Failed to create journal entry:", journalError);
@@ -650,7 +669,6 @@ export class LedgerService {
       }
 
       // Create journal entries after batch commit (uses separate sequence transaction)
-      // Graceful failure - if journals fail, the ledger entry still works
       try {
         const engine = createJournalPostingEngine(this.userId);
         const entryDate = new Date(formData.date);
@@ -661,7 +679,7 @@ export class LedgerService {
           formData.category,
           formData.subCategory
         );
-        await engine.post({
+        await this.postJournalEntry(engine, {
           templateId,
           amount: totalAmount,
           date: entryDate,
@@ -677,11 +695,11 @@ export class LedgerService {
             isARAPEntry: formData.trackARAP ?? false,
             immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
           },
-        });
+        }, "main ledger journal");
 
         // COGS journal entry if applicable
         if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
-          await engine.post({
+          await this.postJournalEntry(engine, {
             templateId: "COGS",
             amount: inventoryResult.cogsAmount,
             date: entryDate,
@@ -691,7 +709,7 @@ export class LedgerService {
               documentId: ledgerDocRef.id,
               transactionId,
             },
-          });
+          }, "COGS journal");
         }
       } catch (journalError) {
         // Log but don't fail - ledger entry was already committed
@@ -1229,7 +1247,7 @@ export class LedgerService {
             formData.category,
             formData.subCategory
           );
-          await engine.post({
+          await this.postJournalEntry(engine, {
             templateId,
             amount: newAmount,
             date: entryDate,
@@ -1246,12 +1264,12 @@ export class LedgerService {
               immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
               isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
             },
-          });
+          }, "main ledger journal (update)");
         }
 
         // 3. Create COGS journal if needed
         if (cogsRecreationResult) {
-          await engine.post({
+          await this.postJournalEntry(engine, {
             templateId: "COGS",
             amount: cogsRecreationResult.amount,
             date: entryDate,
@@ -1261,14 +1279,14 @@ export class LedgerService {
               documentId: entryId,
               transactionId: existingTransactionId,
             },
-          });
+          }, "COGS journal (update)");
         }
 
         // 4. Create discount journals
         if (paymentsWithDiscounts.length > 0) {
           const discountTemplateId = entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
           for (const discountPayment of paymentsWithDiscounts) {
-            await engine.post({
+            await this.postJournalEntry(engine, {
               templateId: discountTemplateId,
               amount: discountPayment.discountAmount,
               date: entryDate,
@@ -1278,13 +1296,13 @@ export class LedgerService {
                 documentId: entryId,
                 transactionId: existingTransactionId,
               },
-            });
+            }, "discount journal (update)");
           }
         }
 
         // 5. Create endorsement journals
         for (const endorsement of endorsementPaymentsToRecreate) {
-          await engine.post({
+          await this.postJournalEntry(engine, {
             templateId: "ENDORSEMENT",
             amount: endorsement.amount,
             date: entryDate,
@@ -1294,7 +1312,7 @@ export class LedgerService {
               documentId: endorsement.chequeId,
               transactionId: existingTransactionId,
             },
-          });
+          }, "endorsement journal (update)");
         }
       } catch (journalError) {
         // Log but don't fail - the main update was already committed
@@ -1804,7 +1822,7 @@ export class LedgerService {
           // Create journal entry for cash payment portion
           if (data.amount > 0) {
             const templateId = paymentType === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
-            await engine.post({
+            await this.postJournalEntry(engine, {
               templateId,
               amount: data.amount,
               date: paymentDate,
@@ -1814,13 +1832,13 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            });
+            }, "payment journal (quick payment)");
           }
 
           // Create journal entry for discount portion
           if (discountAmount > 0) {
             const discountTemplateId = data.entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
-            await engine.post({
+            await this.postJournalEntry(engine, {
               templateId: discountTemplateId,
               amount: discountAmount,
               date: paymentDate,
@@ -1830,7 +1848,7 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            });
+            }, "discount journal (quick payment)");
           }
         } catch (journalError) {
           // Log but don't fail - payment was already committed
@@ -1938,7 +1956,7 @@ export class LedgerService {
       try {
         const engine = createJournalPostingEngine(this.userId);
         const journalDescription = `شطب دين معدوم: ${data.associatedParty} - ${data.writeoffReason}`;
-        await engine.post({
+        await this.postJournalEntry(engine, {
           templateId: "BAD_DEBT",
           amount: data.writeoffAmount,
           date: new Date(),
@@ -1948,7 +1966,7 @@ export class LedgerService {
             documentId: data.entryId,
             transactionId: data.entryTransactionId,
           },
-        });
+        }, "bad debt writeoff journal");
       } catch (journalError) {
         // Log but don't fail - the writeoff was already committed
         console.error("Failed to create journal entry for bad debt:", journalError);
