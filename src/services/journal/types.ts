@@ -149,6 +149,8 @@ export interface JournalEntryV2Document {
   date: Date;
   description: string;
   lines: JournalLine[];
+  totalDebits: number;
+  totalCredits: number;
   status: "posted" | "reversed";
   source: JournalSource;
   reversal?: JournalReversal;
