@@ -127,23 +127,29 @@ export class JournalPostingEngine {
 
       // 6. Build entry document
       const template = getTemplate(request.templateId);
+
+      // Determine linkedPaymentId value (only for payment/endorsement types)
+      const linkedPaymentId =
+        request.source.type === "payment" ||
+        request.source.type === "endorsement"
+          ? request.source.documentId
+          : undefined;
+
       const entryDoc: JournalEntryV2Document = {
         sequenceNumber,
         entryNumber,
         date: request.date,
         description: request.description || template.nameAr,
         lines,
+        totalDebits: validation.totalDebits,
+        totalCredits: validation.totalCredits,
         status: "posted",
         source: request.source,
         createdAt: new Date(),
 
         // Legacy fields for backward compatibility
         linkedTransactionId: request.source.transactionId,
-        linkedPaymentId:
-          request.source.type === "payment" ||
-          request.source.type === "endorsement"
-            ? request.source.documentId
-            : undefined,
+        ...(linkedPaymentId && { linkedPaymentId }), // Only include if defined
         linkedDocumentType: this.mapSourceTypeToLegacy(request.source.type),
       };
 
@@ -226,6 +232,13 @@ export class JournalPostingEngine {
     const entryNumber = formatEntryNumber(sequenceNumber);
     const template = getTemplate(request.templateId);
 
+    // Determine linkedPaymentId value (only for payment/endorsement types)
+    const linkedPaymentId =
+      request.source.type === "payment" ||
+      request.source.type === "endorsement"
+        ? request.source.documentId
+        : undefined;
+
     // Build entry document
     const entryDoc: JournalEntryV2Document = {
       sequenceNumber,
@@ -233,17 +246,15 @@ export class JournalPostingEngine {
       date: request.date,
       description: request.description || template.nameAr,
       lines,
+      totalDebits: validation.totalDebits,
+      totalCredits: validation.totalCredits,
       status: "posted",
       source: request.source,
       createdAt: new Date(),
 
       // Legacy fields
       linkedTransactionId: request.source.transactionId,
-      linkedPaymentId:
-        request.source.type === "payment" ||
-        request.source.type === "endorsement"
-          ? request.source.documentId
-          : undefined,
+      ...(linkedPaymentId && { linkedPaymentId }), // Only include if defined
       linkedDocumentType: this.mapSourceTypeToLegacy(request.source.type),
     };
 
