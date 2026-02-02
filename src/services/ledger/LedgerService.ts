@@ -238,6 +238,7 @@ export class LedgerService {
       throw new Error(`Failed to create ${context}: ${error}`);
     }
 
+    // eslint-disable-next-line no-console
     console.log(`✅ ${context} created successfully:`, result.entryNumber);
   }
 
@@ -272,6 +273,7 @@ export class LedgerService {
     try {
       // Attempt to delete the orphaned ledger entry
       await deleteDoc(ledgerRef);
+      // eslint-disable-next-line no-console
       console.log("✅ Rollback successful: Orphaned ledger entry deleted", {
         ledgerId: ledgerRef.id,
         transactionId,
@@ -315,6 +317,7 @@ export class LedgerService {
           createdBy: this.userEmail,
         });
 
+        // eslint-disable-next-line no-console
         console.log("📝 Logged to failed_rollbacks collection for manual cleanup");
       } catch (logError) {
         console.error("🚨 CRITICAL: Failed to log to failed_rollbacks", logError);
