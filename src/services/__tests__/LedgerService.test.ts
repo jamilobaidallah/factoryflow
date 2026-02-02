@@ -80,7 +80,17 @@ jest.mock('firebase/storage', () => ({
 jest.mock('@/services/journalService', () => ({
   addJournalEntryToBatch: jest.fn(),
   addCOGSJournalEntryToBatch: jest.fn(),
+  addPaymentJournalEntryToBatch: jest.fn(),
   createJournalEntryForBadDebt: jest.fn(() => Promise.resolve()),
+}));
+
+// Mock journal posting engine
+const mockPost = jest.fn().mockResolvedValue({ success: true, entryNumber: 'JE-001' });
+jest.mock('@/services/journal', () => ({
+  createJournalPostingEngine: jest.fn(() => ({
+    post: mockPost,
+  })),
+  getEntriesByTransactionId: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock activityLogService
@@ -249,6 +259,9 @@ describe('LedgerService', () => {
     // Default mock implementations
     mockCollection.mockReturnValue({ id: 'mock-collection' });
     mockDoc.mockReturnValue({ id: 'mock-doc-id' });
+
+    // Reset journal posting mock
+    mockPost.mockResolvedValue({ success: true, entryNumber: 'JE-001' });
   });
 
   // ============================================

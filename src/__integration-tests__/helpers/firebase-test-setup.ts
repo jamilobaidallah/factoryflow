@@ -1,84 +1,83 @@
 /**
  * Firebase Emulator Test Setup
  *
- * Provides utilities for integration testing with Firebase Emulator.
- * Used to test real Firestore operations without mocking.
+ * Configures the Firebase SDK to use the local emulator for testing.
+ * This allows testing real service code (like LedgerService) against the emulator.
  */
 
-import {
-  initializeTestEnvironment,
-  RulesTestEnvironment,
-} from '@firebase/rules-unit-testing';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import type { Firestore } from 'firebase/firestore';
+// IMPORTANT: Set environment variable BEFORE importing Firebase
+process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 
-let testEnv: RulesTestEnvironment | null = null;
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
+import { getFirestore, connectFirestoreEmulator, terminate } from 'firebase/firestore';
+
+const TEST_PROJECT_ID = 'test-project';
+
+let isInitialized = false;
 
 /**
- * Initialize Firebase Emulator for testing
+ * Initialize Firebase for testing with emulator
  */
-export async function setupFirebaseTest(projectId: string = 'test-project') {
-  // Read Firestore rules
-  const rulesPath = resolve(__dirname, '../../../firestore.rules');
-  const rules = readFileSync(rulesPath, 'utf8');
+export async function setupFirebaseTest() {
+  if (isInitialized) return;
 
-  testEnv = await initializeTestEnvironment({
-    projectId,
-    firestore: {
-      host: 'localhost',
-      port: 8080,
-      rules,
-    },
+  // Clear any existing apps
+  const apps = getApps();
+  for (const app of apps) {
+    await deleteApp(app);
+  }
+
+  // Initialize with test project
+  const app = initializeApp({
+    projectId: TEST_PROJECT_ID,
+    apiKey: 'fake-api-key-for-testing',
+    authDomain: `${TEST_PROJECT_ID}.firebaseapp.com`,
   });
 
-  return testEnv;
+  // Connect to emulator
+  const db = getFirestore(app);
+
+  // Note: connectFirestoreEmulator should only be called once
+  // The FIRESTORE_EMULATOR_HOST env var handles this automatically
+
+  isInitialized = true;
+
+  return { app, db };
 }
 
 /**
- * Get authenticated Firestore instance for testing
- */
-export function getAuthenticatedFirestore(userId: string, dataOwnerId?: string): Firestore {
-  if (!testEnv) {
-    throw new Error('Test environment not initialized. Call setupFirebaseTest() first.');
-  }
-
-  return testEnv.authenticatedContext(userId, {
-    dataOwnerId: dataOwnerId || userId,
-    email: `${userId}@test.com`,
-  }).firestore() as unknown as Firestore;
-}
-
-/**
- * Get unauthenticated Firestore instance for testing
- */
-export function getUnauthenticatedFirestore(): Firestore {
-  if (!testEnv) {
-    throw new Error('Test environment not initialized. Call setupFirebaseTest() first.');
-  }
-
-  return testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
-}
-
-/**
- * Clear all Firestore data (run between tests)
+ * Clear all Firestore data using emulator REST API
  */
 export async function clearFirestoreData() {
-  if (!testEnv) {
-    throw new Error('Test environment not initialized.');
-  }
+  try {
+    const response = await fetch(
+      `http://localhost:8080/emulator/v1/projects/${TEST_PROJECT_ID}/databases/(default)/documents`,
+      { method: 'DELETE' }
+    );
 
-  await testEnv.clearFirestore();
+    if (!response.ok) {
+      console.warn('Failed to clear Firestore data:', response.statusText);
+    }
+  } catch (error) {
+    console.warn('Could not clear Firestore data:', error);
+  }
 }
 
 /**
- * Cleanup and destroy test environment
+ * Cleanup Firebase test environment
  */
 export async function cleanupFirebaseTest() {
-  if (testEnv) {
-    await testEnv.cleanup();
-    testEnv = null;
+  const apps = getApps();
+  for (const app of apps) {
+    try {
+      const db = getFirestore(app);
+      await terminate(db);
+      await deleteApp(app);
+    } catch (error) {
+      // Ignore cleanup errors
+    }
   }
+  isInitialized = false;
 }
 
 /**
@@ -94,49 +93,63 @@ export function createTestUser(userId: string = 'test-user-123') {
 }
 
 /**
- * Helper to seed test data into Firestore
+ * Helper to seed test data into Firestore via emulator REST API
+ * This bypasses security rules for test setup
  */
 export async function seedFirestoreData(
-  db: Firestore,
   dataOwnerId: string,
   collections: {
-    ledger?: any[];
-    payments?: any[];
-    journal_entries?: any[];
-    clients?: any[];
+    ledger?: Array<{ id: string; [key: string]: unknown }>;
+    payments?: Array<{ id: string; [key: string]: unknown }>;
+    journal_entries?: Array<{ id: string; [key: string]: unknown }>;
+    clients?: Array<{ id: string; [key: string]: unknown }>;
   }
 ) {
-  const { collection, doc, setDoc } = await import('firebase/firestore');
+  const baseUrl = `http://localhost:8080/v1/projects/${TEST_PROJECT_ID}/databases/(default)/documents`;
 
-  // Seed ledger entries
+  const seedCollection = async (collectionName: string, documents: Array<{ id: string; [key: string]: unknown }>) => {
+    for (const doc of documents) {
+      const { id, ...data } = doc;
+      const docPath = `users/${dataOwnerId}/${collectionName}/${id}`;
+
+      // Convert to Firestore REST format
+      const fields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'string') {
+          fields[key] = { stringValue: value };
+        } else if (typeof value === 'number') {
+          fields[key] = { doubleValue: value };
+        } else if (typeof value === 'boolean') {
+          fields[key] = { booleanValue: value };
+        } else if (value instanceof Date) {
+          fields[key] = { timestampValue: value.toISOString() };
+        } else if (value === null) {
+          fields[key] = { nullValue: null };
+        }
+      }
+
+      try {
+        await fetch(`${baseUrl}/${docPath}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields }),
+        });
+      } catch (error) {
+        console.warn(`Failed to seed ${collectionName}/${id}:`, error);
+      }
+    }
+  };
+
   if (collections.ledger) {
-    for (const entry of collections.ledger) {
-      const ref = doc(collection(db, `users/${dataOwnerId}/ledger`));
-      await setDoc(ref, { ...entry, id: ref.id });
-    }
+    await seedCollection('ledger', collections.ledger);
   }
-
-  // Seed payments
   if (collections.payments) {
-    for (const payment of collections.payments) {
-      const ref = doc(collection(db, `users/${dataOwnerId}/payments`));
-      await setDoc(ref, { ...payment, id: ref.id });
-    }
+    await seedCollection('payments', collections.payments);
   }
-
-  // Seed journal entries
   if (collections.journal_entries) {
-    for (const entry of collections.journal_entries) {
-      const ref = doc(collection(db, `users/${dataOwnerId}/journal_entries`));
-      await setDoc(ref, { ...entry, id: ref.id });
-    }
+    await seedCollection('journal_entries', collections.journal_entries);
   }
-
-  // Seed clients
   if (collections.clients) {
-    for (const client of collections.clients) {
-      const ref = doc(collection(db, `users/${dataOwnerId}/clients`));
-      await setDoc(ref, { ...client, id: ref.id });
-    }
+    await seedCollection('clients', collections.clients);
   }
 }

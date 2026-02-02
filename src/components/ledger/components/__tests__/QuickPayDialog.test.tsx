@@ -64,9 +64,21 @@ jest.mock('firebase/firestore', () => ({
   }),
 }));
 
+// Mock LedgerService
+const mockAddQuickPayment = jest.fn().mockResolvedValue({ success: true });
+jest.mock('@/services/ledgerService', () => ({
+  createLedgerService: jest.fn(() => ({
+    addQuickPayment: mockAddQuickPayment,
+  })),
+}));
+
 // Mock hooks
 const mockToast = jest.fn();
-const mockUser = { uid: 'test-user-123' };
+const mockUser = {
+  uid: 'test-user-123',
+  dataOwnerId: 'test-user-123',
+  email: 'test@example.com',
+};
 
 jest.mock('@/firebase/provider', () => ({
   useUser: jest.fn(() => ({ user: mockUser })),
@@ -118,6 +130,8 @@ describe('QuickPayDialog', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset LedgerService mock
+    mockAddQuickPayment.mockClear().mockResolvedValue({ success: true });
     // Reset batch mocks
     mockBatchSet.mockClear();
     mockBatchUpdate.mockClear();
@@ -436,16 +450,15 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        // Now uses runTransaction with transaction.set instead of batch.set
-        expect(mockTransactionSet).toHaveBeenCalledWith(
-          expect.anything(),
+        // LedgerService.addQuickPayment is called with correct data
+        expect(mockAddQuickPayment).toHaveBeenCalledWith(
           expect.objectContaining({
-            clientName: 'عميل أ',
             amount: 300,
-            type: 'قبض',
-            linkedTransactionId: 'TXN-001',
-            category: 'مبيعات',
-            subCategory: 'منتجات',
+            entryId: 'entry-1',
+            entryTransactionId: 'TXN-001',
+            associatedParty: 'عميل أ',
+            entryCategory: 'مبيعات',
+            entrySubCategory: 'منتجات',
           })
         );
       }, { timeout: 3000 });
@@ -473,11 +486,11 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        // Now uses runTransaction with transaction.set instead of batch.set
-        expect(mockTransactionSet).toHaveBeenCalledWith(
-          expect.anything(),
+        // LedgerService.addQuickPayment is called for expense entry
+        expect(mockAddQuickPayment).toHaveBeenCalledWith(
           expect.objectContaining({
-            type: 'صرف',
+            amount: 200,
+            entryType: 'مصروف',
           })
         );
       }, { timeout: 3000 });
@@ -500,13 +513,12 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        // Now uses runTransaction with transaction.update instead of batch.update
-        expect(mockTransactionUpdate).toHaveBeenCalledWith(
-          expect.anything(),
+        // LedgerService.addQuickPayment handles the status update internally
+        expect(mockAddQuickPayment).toHaveBeenCalledWith(
           expect.objectContaining({
-            totalPaid: 500,
-            remainingBalance: 500,
-            paymentStatus: 'partial',
+            amount: 500,
+            totalPaid: 0,
+            remainingBalance: 1000,
           })
         );
       }, { timeout: 3000 });
@@ -529,22 +541,23 @@ describe('QuickPayDialog', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        // Now uses runTransaction with transaction.update instead of batch.update
-        expect(mockTransactionUpdate).toHaveBeenCalledWith(
-          expect.anything(),
+        // LedgerService.addQuickPayment handles the full payment
+        expect(mockAddQuickPayment).toHaveBeenCalledWith(
           expect.objectContaining({
-            totalPaid: 1000,
-            remainingBalance: 0,
-            paymentStatus: 'paid',
+            amount: 1000,
+            totalPaid: 0,
+            remainingBalance: 1000,
           })
         );
       }, { timeout: 3000 });
     });
 
     it('should handle Firebase errors gracefully', async () => {
-      // Make runTransaction fail
-      const { runTransaction } = require('firebase/firestore');
-      runTransaction.mockRejectedValueOnce(new Error('Firebase error'));
+      // Make addQuickPayment return failure
+      mockAddQuickPayment.mockResolvedValueOnce({
+        success: false,
+        error: 'حدث خطأ في قاعدة البيانات',
+      });
 
       render(
         <QuickPayDialog
@@ -564,7 +577,7 @@ describe('QuickPayDialog', () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'خطأ',
-          description: 'حدث خطأ غير متوقع', // Classified error message from handleError()
+          description: 'حدث خطأ في قاعدة البيانات',
           variant: 'destructive',
         });
       });
