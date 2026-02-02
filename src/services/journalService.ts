@@ -591,9 +591,9 @@ export async function getAccountBalance(
     const normalBalance = getNormalBalance(accountType);
     const balance = calculateAccountBalance(totalDebits, totalCredits, normalBalance);
 
-    // Handle contra-asset (accumulated depreciation)
-    const isContraAsset = accountCode === ACCOUNT_CODES.ACCUMULATED_DEPRECIATION;
-    const adjustedBalance = isContraAsset ? -balance : balance;
+    // Note: Contra-assets (like Accumulated Depreciation) are handled correctly by
+    // calculateAccountBalance - it returns negative when credits > debits for a
+    // debit-normal account. No additional adjustment needed.
 
     return {
       success: true,
@@ -604,7 +604,7 @@ export async function getAccountBalance(
         accountType,
         totalDebits: roundCurrency(totalDebits),
         totalCredits: roundCurrency(totalCredits),
-        balance: roundCurrency(adjustedBalance),
+        balance: roundCurrency(balance),
       },
     };
   } catch (error) {
@@ -677,9 +677,9 @@ export async function getTrialBalance(
         account.normalBalance
       );
 
-      // Handle contra-asset
-      const isContraAsset = account.code === ACCOUNT_CODES.ACCUMULATED_DEPRECIATION;
-      const adjustedBalance = isContraAsset ? -balance : balance;
+      // Note: Contra-assets (like Accumulated Depreciation) are handled correctly by
+      // calculateAccountBalance - it returns negative when credits > debits for a
+      // debit-normal account. No additional adjustment needed.
 
       accountBalances.push({
         accountCode: account.code,
@@ -688,7 +688,7 @@ export async function getTrialBalance(
         accountType: account.type,
         totalDebits: roundCurrency(totals.debits),
         totalCredits: roundCurrency(totals.credits),
-        balance: roundCurrency(adjustedBalance),
+        balance: roundCurrency(balance),
       });
 
       totalDebits = safeAdd(totalDebits, totals.debits);

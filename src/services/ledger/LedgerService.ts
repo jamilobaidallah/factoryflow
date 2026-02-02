@@ -46,6 +46,7 @@ import {
   generateTransactionId,
   LOAN_CATEGORIES,
   isAdvanceTransaction,
+  isFixedAssetTransaction,
   getJournalTemplateForTransaction,
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
@@ -655,7 +656,10 @@ export class LedgerService {
       // Note: When immediateSettlement is true, cheque handlers skip creating their
       // own payments (for cashed cheques) to avoid double payment. This logic handles
       // all payment creation for immediate settlements.
-      if (formData.immediateSettlement) {
+      // EXCEPTION: Fixed asset purchases with immediate settlement skip payment creation
+      // because the FIXED_ASSET_PURCHASE journal template already handles the cash movement
+      // (DR Fixed Assets, CR Cash). Creating a payment journal would double-count the cash.
+      if (formData.immediateSettlement && !isFixedAssetTransaction(formData.category)) {
         // Check if there are cashed cheques that need payment records
         let hasCashedIncoming = false;
         let hasCashedOutgoing = false;

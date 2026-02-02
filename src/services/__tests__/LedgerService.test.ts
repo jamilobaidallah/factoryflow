@@ -165,6 +165,7 @@ jest.mock('@/components/ledger/utils/ledger-helpers', () => ({
   generateTransactionId: jest.fn(() => 'TXN-' + Math.random().toString(36).substr(2, 9)),
   LOAN_CATEGORIES: { GIVEN: 'قروض ممنوحة', RECEIVED: 'قروض مستلمة' },
   isAdvanceTransaction: jest.fn((category) => category === 'سلفة عميل' || category === 'سلفة مورد'),
+  isFixedAssetTransaction: jest.fn((category) => category === 'أصول ثابتة'),
   getJournalTemplateForTransaction: jest.fn((entryType) => {
     return entryType === 'دخل' ? 'LEDGER_INCOME' : 'LEDGER_EXPENSE';
   }),
