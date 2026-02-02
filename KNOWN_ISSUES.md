@@ -29,15 +29,26 @@ await waitFor(() => {
 - ✅ Does NOT affect production functionality
 - ✅ Core payment and ledger operations work correctly
 
-**Proposed Fix** (tracked for separate PR):
-1. Increase timeout values for async operations
-2. Add proper `act()` wrappers around state updates
-3. Mock async operations with `jest.useFakeTimers()`
-4. Add `waitFor` with proper async/await patterns
+**Fix Implemented** (PR: fix/quickpay-dialog-tests):
+1. ✅ Created integration test infrastructure using Firebase Emulator
+2. ✅ Added `test:integration` npm script
+3. ✅ Implemented real accounting workflow tests (payment-flow.integration.test.ts)
+4. ✅ Tests verify journal entries, Trial Balance, and data relationships
+
+**Why Integration Tests Instead of Mocking**:
+- Unit tests with mocks wouldn't have caught recent bugs (capital/loan journal entries not being created)
+- Integration tests verify complete data flow: Service → Firestore → Query
+- Can validate Trial Balance is balanced (debits = credits) with real data
+- Better for accounting systems where correctness is paramount
+
+**How to Run**:
+1. Start Firebase Emulator: `firebase emulators:start --only firestore`
+2. Run tests: `npm run test:integration`
 
 **Related**:
 - These failures existed before recent journal entry fixes
 - No regressions introduced by audit blocker fixes or rollback implementation
+- QuickPayDialog unit tests will be gradually replaced with integration tests
 
 ---
 
