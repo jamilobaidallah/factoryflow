@@ -656,10 +656,7 @@ export class LedgerService {
       // Note: When immediateSettlement is true, cheque handlers skip creating their
       // own payments (for cashed cheques) to avoid double payment. This logic handles
       // all payment creation for immediate settlements.
-      // EXCEPTION: Fixed asset purchases with immediate settlement skip payment creation
-      // because the FIXED_ASSET_PURCHASE journal template already handles the cash movement
-      // (DR Fixed Assets, CR Cash). Creating a payment journal would double-count the cash.
-      if (formData.immediateSettlement && !isFixedAssetTransaction(formData.category)) {
+      if (formData.immediateSettlement) {
         // Check if there are cashed cheques that need payment records
         let hasCashedIncoming = false;
         let hasCashedOutgoing = false;
@@ -687,7 +684,11 @@ export class LedgerService {
         // Create the settlement payment
         // Use "cheque" method if payment involves cashed cheques
         const paymentMethod = (hasCashedIncoming || hasCashedOutgoing) ? "cheque" : "cash";
-        handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod);
+
+        // For fixed assets: create payment record for tracking, but skip payment journal
+        // because FIXED_ASSET_PURCHASE template already handles cash movement (DR Assets, CR Cash)
+        const skipPaymentJournal = isFixedAssetTransaction(formData.category);
+        handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod, skipPaymentJournal);
       }
 
       // Handle advance payment (SPECIAL CASE)
