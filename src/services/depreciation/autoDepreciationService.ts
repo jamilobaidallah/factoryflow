@@ -32,6 +32,28 @@ import {
 import { createJournalPostingEngine } from "@/services/journal";
 import { logActivity } from "@/services/activityLogService";
 
+/**
+ * Represents an in-memory asset update after depreciation is processed.
+ * Used to sync local state between sequential period processing.
+ */
+interface AssetUpdate {
+  assetId: string;
+  newAccumulatedDepreciation: number;
+  newBookValue: number;
+}
+
+/**
+ * Result of a single period depreciation run.
+ * Includes assetUpdates for in-memory state synchronization.
+ */
+interface DepreciationPeriodResult {
+  success: boolean;
+  totalDepreciation: number;
+  error?: string;
+  /** Asset updates to apply to in-memory state for next period's calculation */
+  assetUpdates: AssetUpdate[];
+}
+
 // Helper function to generate transaction ID
 function generateTransactionId(): string {
   const now = new Date();
@@ -151,10 +173,13 @@ export async function runDepreciationForPeriod(
   assets: FixedAsset[],
   userId: string,
   userEmail: string
-): Promise<{ success: boolean; totalDepreciation: number; error?: string }> {
+): Promise<DepreciationPeriodResult> {
   try {
     const batch = writeBatch(firestore);
     const periodLabel = `${period.year}-${String(period.month).padStart(2, "0")}`;
+
+    // Track asset updates for in-memory state synchronization
+    const assetUpdates: AssetUpdate[] = [];
 
     // Check if depreciation already run for this period
     const runsRef = collection(firestore, `users/${dataOwnerId}/depreciation_runs`);
@@ -166,6 +191,7 @@ export async function runDepreciationForPeriod(
         success: false,
         totalDepreciation: 0,
         error: `الفترة ${periodLabel} تم معالجتها مسبقاً`,
+        assetUpdates: [],
       };
     }
 
@@ -177,6 +203,7 @@ export async function runDepreciationForPeriod(
         success: false,
         totalDepreciation: 0,
         error: "لا توجد أصول ثابتة نشطة",
+        assetUpdates: [],
       };
     }
 
@@ -239,6 +266,13 @@ export async function runDepreciationForPeriod(
         lastDepreciationDate: new Date(),
       });
 
+      // Track update for in-memory state synchronization
+      assetUpdates.push({
+        assetId: asset.id,
+        newAccumulatedDepreciation,
+        newBookValue,
+      });
+
       totalDepreciation = safeAdd(totalDepreciation, depreciationAmount);
     }
 
@@ -247,6 +281,7 @@ export async function runDepreciationForPeriod(
         success: true,
         totalDepreciation: 0,
         error: undefined,
+        assetUpdates,
       };
     }
 
@@ -333,6 +368,7 @@ export async function runDepreciationForPeriod(
             success: false,
             totalDepreciation,
             error: `تم تسجيل الاستهلاك لكن فشل إنشاء القيد المحاسبي للفترة ${periodLabel}`,
+            assetUpdates, // Still return updates since batch committed
           };
         }
       } catch (err) {
@@ -353,6 +389,7 @@ export async function runDepreciationForPeriod(
           success: false,
           totalDepreciation,
           error: `فشل إنشاء القيد المحاسبي للفترة ${periodLabel}`,
+          assetUpdates, // Still return updates since batch committed
         };
       }
     }
@@ -361,6 +398,7 @@ export async function runDepreciationForPeriod(
       success: true,
       totalDepreciation: roundCurrency(totalDepreciation),
       error: undefined,
+      assetUpdates,
     };
   } catch (error) {
     console.error("runDepreciationForPeriod error:", error);
@@ -368,6 +406,7 @@ export async function runDepreciationForPeriod(
       success: false,
       totalDepreciation: 0,
       error: error instanceof Error ? error.message : "خطأ غير متوقع",
+      assetUpdates: [],
     };
   }
 }
@@ -414,8 +453,24 @@ export async function runAllPendingDepreciation(
       userEmail
     );
 
+    // === CRITICAL: IN-MEMORY STATE UPDATE ===
+    // After each period's batch commits, update local asset objects
+    // so the NEXT period sees correct starting values (accumulated depreciation).
+    // Without this, every period would calculate from the original stale values.
+    if (result.assetUpdates.length > 0) {
+      for (const update of result.assetUpdates) {
+        const asset = assets.find((a) => a.id === update.assetId);
+        if (asset) {
+          asset.accumulatedDepreciation = update.newAccumulatedDepreciation;
+          asset.bookValue = update.newBookValue;
+        }
+      }
+    }
+    // === END IN-MEMORY STATE UPDATE ===
+
     if (!result.success) {
       // FAIL-FAST: Stop immediately on any failure
+      // Note: In-memory updates were already applied above for consistency
       return {
         success: false,
         processedPeriods,
