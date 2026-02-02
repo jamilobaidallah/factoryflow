@@ -4,51 +4,44 @@ This document tracks known issues, technical debt, and planned improvements for 
 
 ---
 
-## 🧪 Test Failures
+## 🧪 Test Status
 
-### QuickPayDialog Test Flakiness
-**Status**: Known issue, not blocking
-**Priority**: Low (technical debt)
-**Affected Files**: `src/components/ledger/components/__tests__/QuickPayDialog.test.tsx`
+### All Tests Passing ✅
+**Status**: Resolved
+**Date Fixed**: 2026-02-02
+**Branch**: fix/quickpay-dialog-tests
 
-**Details**:
-- 18 tests in QuickPayDialog.test.tsx fail intermittently
-- Root cause: Async timing issues with mock callbacks
-- Tests expect `mockOnSuccess` to be called within 3000ms timeout
-- Callbacks not firing within the timeout window
+**Current State**:
+- ✅ 1335 tests passing (50 test suites)
+- ✅ 100% pass rate
+- ✅ All unit tests and integration tests working
 
-**Error Pattern**:
-```typescript
-await waitFor(() => {
-  expect(mockOnSuccess).toHaveBeenCalled(); // ❌ Timeout after 3000ms
-}, { timeout: 3000 });
-```
+**What Was Fixed**:
+The 18 failing tests were caused by missing service mocks. Fixed by adding:
 
-**Impact**:
-- ❌ 18/1338 tests failing (98.7% pass rate)
-- ✅ Does NOT affect production functionality
-- ✅ Core payment and ledger operations work correctly
+1. **LedgerService.test.ts** - Added mock for `@/services/journal`:
+   ```typescript
+   jest.mock('@/services/journal', () => ({
+     createJournalPostingEngine: jest.fn(() => ({
+       post: mockPost,
+     })),
+     getEntriesByTransactionId: jest.fn().mockResolvedValue([]),
+   }));
+   ```
 
-**Fix Implemented** (PR: fix/quickpay-dialog-tests):
-1. ✅ Created integration test infrastructure using Firebase Emulator
-2. ✅ Added `test:integration` npm script
-3. ✅ Implemented real accounting workflow tests (payment-flow.integration.test.ts)
-4. ✅ Tests verify journal entries, Trial Balance, and data relationships
+2. **QuickPayDialog.test.tsx** - Added mock for `@/services/ledgerService`:
+   ```typescript
+   jest.mock('@/services/ledgerService', () => ({
+     createLedgerService: jest.fn(() => ({
+       addQuickPayment: mockAddQuickPayment,
+     })),
+   }));
+   ```
 
-**Why Integration Tests Instead of Mocking**:
-- Unit tests with mocks wouldn't have caught recent bugs (capital/loan journal entries not being created)
-- Integration tests verify complete data flow: Service → Firestore → Query
-- Can validate Trial Balance is balanced (debits = credits) with real data
-- Better for accounting systems where correctness is paramount
-
-**How to Run**:
-1. Start Firebase Emulator: `firebase emulators:start --only firestore`
-2. Run tests: `npm run test:integration`
-
-**Related**:
-- These failures existed before recent journal entry fixes
-- No regressions introduced by audit blocker fixes or rollback implementation
-- QuickPayDialog unit tests will be gradually replaced with integration tests
+**Integration Test Infrastructure** (also added):
+- Firebase Emulator integration tests for accounting workflows
+- Tests verify Trial Balance, Decimal.js calculations, account code mapping
+- Run with: `firebase emulators:start --only firestore` then `npm run test:integration`
 
 ---
 
@@ -101,8 +94,10 @@ await waitFor(() => {
 ## 📝 Notes
 
 **Last Updated**: 2026-02-02
-**Last Reviewed**: After audit blocker fixes + Phase 1 rollback implementation
+**Last Reviewed**: After test fixes - all tests now passing
 
 **Change Log**:
+- 2026-02-02: Fixed all 18 failing tests by adding proper service mocks
+- 2026-02-02: Added Firebase Emulator integration test infrastructure
 - 2026-02-02: Initial documentation of QuickPayDialog test failures
 - 2026-02-02: Added Phase 2 atomicity improvement plan
