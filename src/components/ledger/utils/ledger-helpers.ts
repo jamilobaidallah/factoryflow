@@ -279,6 +279,11 @@ export function getJournalTemplateForTransaction(
 
     // 2. Check for loan transactions
     if (isLoanTransaction(entryType, category)) {
+        // Explicit validation - prevent unknown categories from being silently misclassified
+        if (category !== LOAN_CATEGORIES.GIVEN && category !== LOAN_CATEGORIES.RECEIVED) {
+            throw new Error(`Unknown loan category: ${category}`);
+        }
+
         const isGivenLoan = category === LOAN_CATEGORIES.GIVEN;
         const isInitial = isInitialLoan(subCategory);
 

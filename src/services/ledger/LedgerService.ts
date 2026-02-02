@@ -444,8 +444,13 @@ export class LedgerService {
           },
         }, "main ledger journal");
       } catch (journalError) {
-        // Log but don't fail - ledger entry was already committed
+        // Re-throw to fail-fast - accounting errors must not be silent
         console.error("Failed to create journal entry:", journalError);
+        throw new Error(
+          `Ledger entry created but journal entry failed: ${
+            journalError instanceof Error ? journalError.message : String(journalError)
+          }`
+        );
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -713,8 +718,13 @@ export class LedgerService {
           }, "COGS journal");
         }
       } catch (journalError) {
-        // Log but don't fail - ledger entry was already committed
+        // Re-throw to fail-fast - accounting errors must not be silent
         console.error("Failed to create journal entries:", journalError);
+        throw new Error(
+          `Ledger entry created but journal entries failed: ${
+            journalError instanceof Error ? journalError.message : String(journalError)
+          }`
+        );
       }
 
       // Create advance application journals (after batch commit)
@@ -724,8 +734,13 @@ export class LedgerService {
         try {
           await Promise.all(advanceAllocationResult.journalPromises);
         } catch (journalError) {
-          // Log but don't fail the operation - advance allocation succeeded
+          // Re-throw to fail-fast - accounting errors must not be silent
           console.error("Error creating advance application journals:", journalError);
+          throw new Error(
+            `Advance allocation succeeded but journal entries failed: ${
+              journalError instanceof Error ? journalError.message : String(journalError)
+            }`
+          );
         }
       }
 
@@ -1316,8 +1331,13 @@ export class LedgerService {
           }, "endorsement journal (update)");
         }
       } catch (journalError) {
-        // Log but don't fail - the main update was already committed
+        // Re-throw to fail-fast - accounting errors must not be silent
         console.error("Failed to reverse/recreate journal entries:", journalError);
+        throw new Error(
+          `Ledger entry updated but journal entries failed: ${
+            journalError instanceof Error ? journalError.message : String(journalError)
+          }`
+        );
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -1852,8 +1872,13 @@ export class LedgerService {
             }, "discount journal (quick payment)");
           }
         } catch (journalError) {
-          // Log but don't fail - payment was already committed
+          // Re-throw to fail-fast - accounting errors must not be silent
           console.error("Failed to create payment journal entries:", journalError);
+          throw new Error(
+            `Payment created but journal entries failed: ${
+              journalError instanceof Error ? journalError.message : String(journalError)
+            }`
+          );
         }
       }
 
@@ -1969,8 +1994,13 @@ export class LedgerService {
           },
         }, "bad debt writeoff journal");
       } catch (journalError) {
-        // Log but don't fail - the writeoff was already committed
+        // Re-throw to fail-fast - accounting errors must not be silent
         console.error("Failed to create journal entry for bad debt:", journalError);
+        throw new Error(
+          `Bad debt writeoff created but journal entry failed: ${
+            journalError instanceof Error ? journalError.message : String(journalError)
+          }`
+        );
       }
 
       // Log the writeoff activity

@@ -135,6 +135,9 @@ export class JournalPostingEngine {
           ? request.source.documentId
           : undefined;
 
+      // Determine linkedDocumentType value (can be undefined for manual entries)
+      const linkedDocumentType = this.mapSourceTypeToLegacy(request.source.type);
+
       const entryDoc: JournalEntryV2Document = {
         sequenceNumber,
         entryNumber,
@@ -147,10 +150,10 @@ export class JournalPostingEngine {
         source: request.source,
         createdAt: new Date(),
 
-        // Legacy fields for backward compatibility
+        // Legacy fields for backward compatibility (use conditional spread to avoid undefined)
         linkedTransactionId: request.source.transactionId,
-        ...(linkedPaymentId && { linkedPaymentId }), // Only include if defined
-        linkedDocumentType: this.mapSourceTypeToLegacy(request.source.type),
+        ...(linkedPaymentId && { linkedPaymentId }),
+        ...(linkedDocumentType && { linkedDocumentType }),
       };
 
       // 7. Write to Firestore
@@ -239,6 +242,9 @@ export class JournalPostingEngine {
         ? request.source.documentId
         : undefined;
 
+    // Determine linkedDocumentType value (can be undefined for manual entries)
+    const linkedDocumentType = this.mapSourceTypeToLegacy(request.source.type);
+
     // Build entry document
     const entryDoc: JournalEntryV2Document = {
       sequenceNumber,
@@ -252,10 +258,10 @@ export class JournalPostingEngine {
       source: request.source,
       createdAt: new Date(),
 
-      // Legacy fields
+      // Legacy fields (use conditional spread to avoid undefined)
       linkedTransactionId: request.source.transactionId,
-      ...(linkedPaymentId && { linkedPaymentId }), // Only include if defined
-      linkedDocumentType: this.mapSourceTypeToLegacy(request.source.type),
+      ...(linkedPaymentId && { linkedPaymentId }),
+      ...(linkedDocumentType && { linkedDocumentType }),
     };
 
     // Add to batch
@@ -355,10 +361,10 @@ export class JournalPostingEngine {
         },
         createdAt: new Date(),
 
-        // Legacy fields
+        // Legacy fields (use conditional spread to avoid undefined)
         linkedTransactionId: originalData.linkedTransactionId,
-        linkedPaymentId: originalData.linkedPaymentId,
-        linkedDocumentType: originalData.linkedDocumentType,
+        ...(originalData.linkedPaymentId && { linkedPaymentId: originalData.linkedPaymentId }),
+        ...(originalData.linkedDocumentType && { linkedDocumentType: originalData.linkedDocumentType }),
       };
 
       // 8. Write both updates atomically
@@ -542,8 +548,8 @@ export class JournalPostingEngine {
         },
         createdAt: new Date(),
         linkedTransactionId: originalData.linkedTransactionId,
-        linkedPaymentId: originalData.linkedPaymentId,
-        linkedDocumentType: originalData.linkedDocumentType,
+        ...(originalData.linkedPaymentId && { linkedPaymentId: originalData.linkedPaymentId }),
+        ...(originalData.linkedDocumentType && { linkedDocumentType: originalData.linkedDocumentType }),
       };
 
       // Add reversal to batch
