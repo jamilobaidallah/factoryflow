@@ -46,6 +46,7 @@ import {
   generateTransactionId,
   LOAN_CATEGORIES,
   isAdvanceTransaction,
+  isFixedAssetTransaction,
   getJournalTemplateForTransaction,
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
@@ -683,7 +684,11 @@ export class LedgerService {
         // Create the settlement payment
         // Use "cheque" method if payment involves cashed cheques
         const paymentMethod = (hasCashedIncoming || hasCashedOutgoing) ? "cheque" : "cash";
-        handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod);
+
+        // For fixed assets: create payment record for tracking, but skip payment journal
+        // because FIXED_ASSET_PURCHASE template already handles cash movement (DR Assets, CR Cash)
+        const skipPaymentJournal = isFixedAssetTransaction(formData.category);
+        handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod, skipPaymentJournal);
       }
 
       // Handle advance payment (SPECIAL CASE)

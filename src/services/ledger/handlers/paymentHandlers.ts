@@ -46,11 +46,16 @@ function getPaymentType(entryType: string, category: string): string {
  * @param ctx - Handler context with batch, refs, and form data
  * @param amount - The payment amount
  * @param method - Payment method: "cash" or "cheque" (default: "cash")
+ * @param skipPaymentJournal - If true, creates payment record but skips journal entry.
+ *   Used for fixed assets where the main FIXED_ASSET_PURCHASE template already handles
+ *   the cash movement (DR Fixed Assets, CR Cash). We still need the payment record for
+ *   tracking/history, but not the payment journal which would double-count cash.
  */
 export function handleImmediateSettlementBatch(
   ctx: HandlerContext,
   amount: number,
-  method: "cash" | "cheque" = "cash"
+  method: "cash" | "cheque" = "cash",
+  skipPaymentJournal: boolean = false
 ): void {
   const { batch, transactionId, formData, entryType, refs, userId } = ctx;
 
@@ -73,8 +78,13 @@ export function handleImmediateSettlementBatch(
       category: formData.category,
       subCategory: formData.subCategory,
       createdAt: new Date(),
-      journalEntryCreated: true, // Flag for reconciliation - journal entry in same batch
+      journalEntryCreated: !skipPaymentJournal, // Flag for reconciliation - true only if journal created
     });
+
+    // Skip journal entry for fixed assets - main template already handles cash movement
+    if (skipPaymentJournal) {
+      return;
+    }
 
     // Create journal entry for the payment (double-entry accounting)
     // Receipt: DR Cash, CR AR | Disbursement: DR AP, CR Cash
