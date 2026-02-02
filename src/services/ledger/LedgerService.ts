@@ -23,10 +23,12 @@ import {
   onSnapshot,
   getCountFromServer,
   DocumentSnapshot,
+  DocumentReference,
   Unsubscribe,
   QueryConstraint,
   increment,
   arrayRemove,
+  serverTimestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage";
 import type {
@@ -239,6 +241,95 @@ export class LedgerService {
     console.log(`✅ ${context} created successfully:`, result.entryNumber);
   }
 
+  /**
+   * Handle journal entry creation failure with automatic rollback
+   *
+   * Implements "compensation logic" to maintain data integrity:
+   * 1. Attempts to delete the orphaned ledger entry
+   * 2. If rollback succeeds: logs success and re-throws original error
+   * 3. If rollback fails: logs to failed_rollbacks collection for manual cleanup
+   *
+   * @param ledgerRef - Reference to the ledger document to delete
+   * @param transactionId - Transaction ID for tracking
+   * @param originalError - The error that caused journal creation to fail
+   * @throws Always re-throws the original error (or enhanced error if rollback fails)
+   */
+  private async handleJournalFailure(
+    ledgerRef: DocumentReference,
+    transactionId: string,
+    originalError: any
+  ): Promise<void> {
+    const errorMessage = originalError instanceof Error
+      ? originalError.message
+      : String(originalError);
+
+    console.error("⚠️ Journal creation failed, attempting rollback...", {
+      ledgerId: ledgerRef.id,
+      transactionId,
+      error: errorMessage,
+    });
+
+    try {
+      // Attempt to delete the orphaned ledger entry
+      await deleteDoc(ledgerRef);
+      console.log("✅ Rollback successful: Orphaned ledger entry deleted", {
+        ledgerId: ledgerRef.id,
+        transactionId,
+      });
+
+      // Re-throw the original error so the UI sees it
+      throw new Error(
+        `Transaction failed: ${errorMessage}. Ledger entry was rolled back.`
+      );
+    } catch (rollbackError) {
+      // Check if this is the re-thrown error from above (not a delete failure)
+      if (rollbackError instanceof Error && rollbackError.message.includes("rolled back")) {
+        throw rollbackError;
+      }
+
+      // Rollback failed - this is the worst-case scenario
+      const rollbackErrorMessage = rollbackError instanceof Error
+        ? rollbackError.message
+        : String(rollbackError);
+
+      console.error("🚨 CRITICAL: Rollback failed - orphaned ledger entry exists", {
+        ledgerId: ledgerRef.id,
+        transactionId,
+        originalError: errorMessage,
+        rollbackError: rollbackErrorMessage,
+      });
+
+      // Write to failed_rollbacks collection for manual cleanup
+      try {
+        const failedRollbacksRef = collection(
+          firestore,
+          `users/${this.userId}/failed_rollbacks`
+        );
+        await addDoc(failedRollbacksRef, {
+          ledgerId: ledgerRef.id,
+          transactionId,
+          context: "Orphaned Ledger Entry - Journal Creation Failed",
+          originalError: errorMessage,
+          rollbackError: rollbackErrorMessage,
+          timestamp: serverTimestamp(),
+          createdBy: this.userEmail,
+        });
+
+        console.log("📝 Logged to failed_rollbacks collection for manual cleanup");
+      } catch (logError) {
+        console.error("🚨 CRITICAL: Failed to log to failed_rollbacks", logError);
+      }
+
+      // Re-throw with enhanced error message
+      throw new Error(
+        `CRITICAL: Transaction failed AND rollback failed. ` +
+        `Orphaned ledger entry ${ledgerRef.id}. ` +
+        `Original error: ${errorMessage}. ` +
+        `Rollback error: ${rollbackErrorMessage}`
+      );
+    }
+  }
+
   // ============================================
   // Read Operations
   // ============================================
@@ -444,13 +535,8 @@ export class LedgerService {
           },
         }, "main ledger journal");
       } catch (journalError) {
-        // Re-throw to fail-fast - accounting errors must not be silent
-        console.error("Failed to create journal entry:", journalError);
-        throw new Error(
-          `Ledger entry created but journal entry failed: ${
-            journalError instanceof Error ? journalError.message : String(journalError)
-          }`
-        );
+        // Rollback ledger entry and handle failure
+        await this.handleJournalFailure(ledgerDocRef, transactionId, journalError);
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -718,13 +804,8 @@ export class LedgerService {
           }, "COGS journal");
         }
       } catch (journalError) {
-        // Re-throw to fail-fast - accounting errors must not be silent
-        console.error("Failed to create journal entries:", journalError);
-        throw new Error(
-          `Ledger entry created but journal entries failed: ${
-            journalError instanceof Error ? journalError.message : String(journalError)
-          }`
-        );
+        // Rollback ledger entry and handle failure
+        await this.handleJournalFailure(ledgerDocRef, transactionId, journalError);
       }
 
       // Create advance application journals (after batch commit)
@@ -734,13 +815,8 @@ export class LedgerService {
         try {
           await Promise.all(advanceAllocationResult.journalPromises);
         } catch (journalError) {
-          // Re-throw to fail-fast - accounting errors must not be silent
-          console.error("Error creating advance application journals:", journalError);
-          throw new Error(
-            `Advance allocation succeeded but journal entries failed: ${
-              journalError instanceof Error ? journalError.message : String(journalError)
-            }`
-          );
+          // Rollback ledger entry and handle failure
+          await this.handleJournalFailure(ledgerDocRef, transactionId, journalError);
         }
       }
 
@@ -1331,12 +1407,12 @@ export class LedgerService {
           }, "endorsement journal (update)");
         }
       } catch (journalError) {
-        // Re-throw to fail-fast - accounting errors must not be silent
-        console.error("Failed to reverse/recreate journal entries:", journalError);
-        throw new Error(
-          `Ledger entry updated but journal entries failed: ${
-            journalError instanceof Error ? journalError.message : String(journalError)
-          }`
+        // Note: For UPDATE operations, rollback deletes the entry
+        // This may cause data loss but prevents inconsistent books
+        await this.handleJournalFailure(
+          entryRef,
+          existingTransactionId || entryId,
+          journalError
         );
       }
 
@@ -1872,12 +1948,11 @@ export class LedgerService {
             }, "discount journal (quick payment)");
           }
         } catch (journalError) {
-          // Re-throw to fail-fast - accounting errors must not be silent
-          console.error("Failed to create payment journal entries:", journalError);
-          throw new Error(
-            `Payment created but journal entries failed: ${
-              journalError instanceof Error ? journalError.message : String(journalError)
-            }`
+          // Rollback payment and handle failure
+          await this.handleJournalFailure(
+            paymentDocRef,
+            data.entryTransactionId,
+            journalError
           );
         }
       }
@@ -1994,12 +2069,12 @@ export class LedgerService {
           },
         }, "bad debt writeoff journal");
       } catch (journalError) {
-        // Re-throw to fail-fast - accounting errors must not be silent
-        console.error("Failed to create journal entry for bad debt:", journalError);
-        throw new Error(
-          `Bad debt writeoff created but journal entry failed: ${
-            journalError instanceof Error ? journalError.message : String(journalError)
-          }`
+        // Note: For writeoff operations, rollback deletes the entry
+        // This may cause data loss but prevents inconsistent books
+        await this.handleJournalFailure(
+          entryRef,
+          data.entryTransactionId,
+          journalError
         );
       }
 
