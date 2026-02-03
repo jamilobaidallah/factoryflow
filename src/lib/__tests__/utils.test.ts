@@ -2,7 +2,6 @@ import {
     cn,
     formatCurrency,
     formatDate,
-    formatDateForInput,
     parseDateFromInput,
     getTimestamp,
     calculatePercentage,
@@ -13,13 +12,9 @@ import {
     sum,
     getArabicMonthName,
     getStatusColor,
-    translateStatus,
-    formatFileSize,
-    isImageFile,
     sortByDate,
     daysDifference,
-    isOverdue,
-    generateExcelFileName
+    isOverdue
 } from '../utils';
 
 describe('Utils', () => {
@@ -78,25 +73,6 @@ describe('Utils', () => {
             const result = formatDate('2024-01-15');
             expect(result).toBeTruthy();
             expect(typeof result).toBe('string');
-        });
-    });
-
-    describe('formatDateForInput', () => {
-        it('should format date for input field', () => {
-            const date = new Date('2024-01-15');
-            const result = formatDateForInput(date);
-            expect(result).toBe('2024-01-15');
-        });
-
-        it('should handle single-digit months and days', () => {
-            const date = new Date('2024-03-05');
-            const result = formatDateForInput(date);
-            expect(result).toBe('2024-03-05');
-        });
-
-        it('should format string dates', () => {
-            const result = formatDateForInput('2024-12-25');
-            expect(result).toBe('2024-12-25');
         });
     });
 
@@ -249,44 +225,6 @@ describe('Utils', () => {
         });
     });
 
-    describe('translateStatus', () => {
-        it('should translate known statuses to Arabic', () => {
-            expect(translateStatus('pending')).toBe('معلق');
-            expect(translateStatus('cleared')).toBe('محصل');
-            expect(translateStatus('income')).toBe('دخل');
-            expect(translateStatus('expense')).toBe('مصروف');
-        });
-
-        it('should return original status if not found', () => {
-            expect(translateStatus('unknown')).toBe('unknown');
-        });
-    });
-
-    describe('formatFileSize', () => {
-        it('should format bytes correctly', () => {
-            expect(formatFileSize(0)).toBe('0 بايت');
-            expect(formatFileSize(1024)).toContain('كيلوبايت');
-            expect(formatFileSize(1024 * 1024)).toContain('ميجابايت');
-        });
-    });
-
-    describe('isImageFile', () => {
-        it('should identify image files', () => {
-            expect(isImageFile('photo.jpg')).toBe(true);
-            expect(isImageFile('image.png')).toBe(true);
-            expect(isImageFile('pic.gif')).toBe(true);
-        });
-
-        it('should reject non-image files', () => {
-            expect(isImageFile('document.pdf')).toBe(false);
-            expect(isImageFile('file.txt')).toBe(false);
-        });
-
-        it('should be case-insensitive', () => {
-            expect(isImageFile('PHOTO.JPG')).toBe(true);
-        });
-    });
-
     describe('sortByDate', () => {
         it('should sort by date descending (newest first)', () => {
             const items = [
@@ -342,16 +280,4 @@ describe('Utils', () => {
         });
     });
 
-    describe('generateExcelFileName', () => {
-        it('should generate filename with prefix', () => {
-            const filename = generateExcelFileName('report');
-            expect(filename).toContain('report_');
-            expect(filename).toContain('.xlsx');
-        });
-
-        it('should include date and time', () => {
-            const filename = generateExcelFileName('export');
-            expect(filename).toMatch(/export_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.xlsx/);
-        });
-    });
 });

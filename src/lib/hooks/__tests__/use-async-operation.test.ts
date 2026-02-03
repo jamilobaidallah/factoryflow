@@ -1,14 +1,14 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAsyncOperation } from '../use-async-operation';
 
-// Mock error-handler
-jest.mock('../../error-handler', () => ({
-  handleFirebaseError: jest.fn((error) => ({
+// Mock error-handling (consolidated from error-handler)
+jest.mock('../../error-handling', () => ({
+  handleFirebaseErrorSimple: jest.fn((error) => ({
     title: 'Error',
     description: error.message || 'An error occurred',
     variant: 'destructive',
   })),
-  logError: jest.fn(),
+  logErrorSimple: jest.fn(),
 }));
 
 describe('useAsyncOperation', () => {
@@ -277,7 +277,7 @@ describe('useAsyncOperation', () => {
 
   describe('Options', () => {
     it('uses default context when not provided', async () => {
-      const { logError } = require('../../error-handler');
+      const { logErrorSimple: logError } = require('../../error-handling');
       const asyncFn = jest.fn().mockRejectedValue(new Error('error'));
       const { result } = renderHook(() => useAsyncOperation(asyncFn));
 
@@ -289,7 +289,7 @@ describe('useAsyncOperation', () => {
     });
 
     it('uses custom context when provided', async () => {
-      const { logError } = require('../../error-handler');
+      const { logErrorSimple: logError } = require('../../error-handling');
       const asyncFn = jest.fn().mockRejectedValue(new Error('error'));
       const { result } = renderHook(() =>
         useAsyncOperation(asyncFn, { context: 'CustomContext' })

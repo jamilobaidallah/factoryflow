@@ -436,3 +436,51 @@ export function getSuccessMessage(operation: 'create' | 'update' | 'delete', ent
       };
   }
 }
+
+// ======================
+// Legacy-Compatible Functions
+// (Consolidated from error-handler.ts)
+// ======================
+
+/**
+ * Simple error result for toast notifications
+ * Legacy interface maintained for backward compatibility with use-async-operation.ts
+ */
+export interface ErrorResult {
+  title: string;
+  description: string;
+  variant?: 'default' | 'destructive';
+}
+
+/**
+ * Legacy-compatible error handler that accepts any error type
+ * Returns simple ErrorResult for toast notifications
+ *
+ * @param error - Any error type (Firebase, standard Error, or unknown)
+ * @returns ErrorResult with title, description, and variant
+ */
+export function handleFirebaseErrorSimple(error: unknown): ErrorResult {
+  const appError = handleError(error);
+  return {
+    title: getErrorTitle(appError),
+    description: appError.message,
+    variant: getErrorVariant(appError),
+  };
+}
+
+/**
+ * Legacy-compatible error logger with context-first signature
+ * Wraps the main logError function for backward compatibility
+ *
+ * @param context - Context string (e.g., 'PaymentsPage.handleSubmit')
+ * @param error - Error object
+ * @param additionalData - Any additional data to log
+ */
+export function logErrorSimple(
+  context: string,
+  error: unknown,
+  additionalData?: Record<string, any>
+): void {
+  const appError = handleError(error);
+  logError(appError, { ...additionalData, context });
+}

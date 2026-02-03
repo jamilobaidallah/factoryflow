@@ -25,15 +25,6 @@ export function formatDate(date: Date | string): string {
   }).format(d);
 }
 
-// Format date for input fields
-export function formatDateForInput(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 // Parse date from input field
 export function parseDateFromInput(dateString: string): Date {
   return new Date(dateString + 'T00:00:00');
@@ -114,47 +105,6 @@ export function getStatusColor(status: string): string {
   return statusColors[status] || 'bg-gray-100 text-gray-800';
 }
 
-// Translate status to Arabic
-export function translateStatus(status: string): string {
-  const translations: Record<string, string> = {
-    pending: 'معلق',
-    cleared: 'محصل',
-    bounced: 'مرتجع',
-    endorsed: 'مظهر',
-    cashed: 'مصروف',
-    cancelled: 'ملغي',
-    income: 'دخل',
-    expense: 'مصروف',
-    receipt: 'قبض',
-    disbursement: 'صرف',
-    entry: 'دخول',
-    exit: 'خروج',
-    cash: 'نقدي',
-    bank_transfer: 'تحويل بنكي',
-    cheque: 'شيك',
-    other: 'أخرى',
-  };
-  return translations[status] || status;
-}
-
-// File size formatter
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) {
-    return '0 بايت';
-  }
-  const k = 1024;
-  const sizes = ['بايت', 'كيلوبايت', 'ميجابايت', 'جيجابايت'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-
-// Check if file is image
-export function isImageFile(fileName: string): boolean {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  return extension ? imageExtensions.includes(extension) : false;
-}
-
 // Sort by date (newest first)
 export function sortByDate<T extends { date: Date | string }>(items: T[]): T[] {
   return [...items].sort((a, b) => {
@@ -176,10 +126,3 @@ export function isOverdue(date: Date | string): boolean {
   return d < new Date();
 }
 
-// Generate Excel filename
-export function generateExcelFileName(prefix: string): string {
-  const date = new Date();
-  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  const timeStr = `${String(date.getHours()).padStart(2, '0')}-${String(date.getMinutes()).padStart(2, '0')}`;
-  return `${prefix}_${dateStr}_${timeStr}.xlsx`;
-}

@@ -154,7 +154,7 @@ export function WriteOffDialog({ isOpen, onClose, entry, onSuccess }: WriteOffDi
         remainingBalance: entry.remainingBalance || entry.amount,
         writeoffAmount: writeoffValue,
         writeoffReason: fullReason,
-        writeoffBy: user.email || user.uid,
+        writeoffBy: user.email || 'system',
       });
 
       if (result.success) {

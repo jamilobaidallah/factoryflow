@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { handleFirebaseError, logError, ErrorResult } from '../error-handler';
+import { handleFirebaseErrorSimple as handleFirebaseError, logErrorSimple as logError, ErrorResult } from '../error-handling';
 
 interface UseAsyncOperationOptions {
   onSuccess?: (data?: any) => void;
