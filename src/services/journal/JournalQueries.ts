@@ -60,8 +60,8 @@ function docToJournalEntry(
 ): JournalEntryV2 {
   // Convert Firestore timestamps to Dates
   const toDate = (value: Date | { toDate: () => Date } | undefined): Date => {
-    if (!value) return new Date();
-    if (value instanceof Date) return value;
+    if (!value) {return new Date();}
+    if (value instanceof Date) {return value;}
     if (typeof (value as { toDate?: () => Date }).toDate === "function") {
       return (value as { toDate: () => Date }).toDate();
     }

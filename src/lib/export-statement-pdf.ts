@@ -46,7 +46,7 @@ function containsArabic(text: string): boolean {
 
 // Reverse Arabic text for proper RTL display in jsPDF
 function processArabicText(text: string): string {
-  if (!containsArabic(text)) return text;
+  if (!containsArabic(text)) {return text;}
   // Reverse the text for RTL display since jsPDF doesn't handle RTL natively
   return text.split('').reverse().join('');
 }

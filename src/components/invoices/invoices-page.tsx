@@ -130,7 +130,7 @@ export default function InvoicesPage() {
 
   // Sorted invoices with memoization
   const sortedInvoices = useMemo(() => {
-    if (!sortField) return invoices;
+    if (!sortField) {return invoices;}
 
     return [...invoices].sort((a, b) => {
       let comparison = 0;

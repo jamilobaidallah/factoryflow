@@ -43,7 +43,7 @@ export function usePermissions(): UsePermissionsReturn {
   const { role } = useUser();
 
   const can = (action: PermissionAction, module: PermissionModule): boolean => {
-    if (!role) return false;
+    if (!role) {return false;}
     return hasPermission(role, module, action);
   };
 

@@ -38,7 +38,7 @@ export function useOvertimeData(): UseOvertimeDataReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const overtimeRef = collection(
       firestore,

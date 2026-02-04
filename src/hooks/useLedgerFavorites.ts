@@ -44,7 +44,7 @@ export function useLedgerFavorites(): UseLedgerFavoritesReturn {
   } = useQuery({
     queryKey: queryKeys.favorites.all(ownerId || ""),
     queryFn: async () => {
-      if (!ownerId) return { success: false, data: [] };
+      if (!ownerId) {return { success: false, data: [] };}
       return getFavorites(ownerId);
     },
     enabled: !!ownerId,

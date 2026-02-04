@@ -229,20 +229,20 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         // Date filter
         if (filters.dateRange.from || filters.dateRange.to) {
           const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
-          if (filters.dateRange.from && entryDate < filters.dateRange.from) return false;
-          if (filters.dateRange.to && entryDate > filters.dateRange.to) return false;
+          if (filters.dateRange.from && entryDate < filters.dateRange.from) {return false;}
+          if (filters.dateRange.to && entryDate > filters.dateRange.to) {return false;}
         }
 
         // View mode filter (main tabs)
         if (filters.viewMode !== "all") {
-          if (filters.viewMode === "income" && entry.type !== "دخل") return false;
-          if (filters.viewMode === "expense" && entry.type !== "مصروف") return false;
-          if (filters.viewMode === "loans" && !isLoanTransaction(entry.type, entry.category)) return false;
+          if (filters.viewMode === "income" && entry.type !== "دخل") {return false;}
+          if (filters.viewMode === "expense" && entry.type !== "مصروف") {return false;}
+          if (filters.viewMode === "loans" && !isLoanTransaction(entry.type, entry.category)) {return false;}
           if (filters.viewMode === "unpaid") {
             // Exclude equity/capital transactions - they don't have AR/AP
-            if (isEquityTransaction(entry.type, entry.category)) return false;
-            if (!entry.paymentStatus) return false;
-            if (entry.paymentStatus !== "unpaid" && entry.paymentStatus !== "partial") return false;
+            if (isEquityTransaction(entry.type, entry.category)) {return false;}
+            if (!entry.paymentStatus) {return false;}
+            if (entry.paymentStatus !== "unpaid" && entry.paymentStatus !== "partial") {return false;}
           }
         }
 

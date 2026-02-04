@@ -79,7 +79,7 @@ export function safeMultiply(a: number, b: number): number {
  * safeDivide(1000, 0) // Returns 0 (safe division by zero)
  */
 export function safeDivide(a: number, b: number): number {
-  if (b === 0) return 0;
+  if (b === 0) {return 0;}
   return new Decimal(a).dividedBy(b).toDecimalPlaces(2).toNumber();
 }
 
@@ -131,7 +131,7 @@ export function sumAmounts(values: number[]): number {
  */
 export function parseAmount(value: string | number): number {
   const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num) || !isFinite(num)) return 0;
+  if (isNaN(num) || !isFinite(num)) {return 0;}
   return roundCurrency(num);
 }
 

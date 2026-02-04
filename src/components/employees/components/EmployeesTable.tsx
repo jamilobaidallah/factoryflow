@@ -61,7 +61,7 @@ export function EmployeesTable({
 
   // Filter employees by search term
   const filteredEmployees = useMemo(() => {
-    if (!searchTerm.trim()) return employees;
+    if (!searchTerm.trim()) {return employees;}
     const term = searchTerm.toLowerCase();
     return employees.filter(
       (emp) =>
@@ -72,7 +72,7 @@ export function EmployeesTable({
 
   // Sort employees
   const sortedEmployees = useMemo(() => {
-    if (!sortField) return filteredEmployees;
+    if (!sortField) {return filteredEmployees;}
 
     return [...filteredEmployees].sort((a, b) => {
       let comparison = 0;

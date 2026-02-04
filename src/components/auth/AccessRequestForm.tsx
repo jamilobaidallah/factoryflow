@@ -48,7 +48,7 @@ export function AccessRequestForm({ onSuccess }: AccessRequestFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) {return;}
 
     setLoading(true);
     setError(null);

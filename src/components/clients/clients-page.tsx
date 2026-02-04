@@ -213,7 +213,7 @@ export default function ClientsPage() {
 
   // Sorted clients with memoization
   const sortedClients = useMemo(() => {
-    if (!sortField) return clients;
+    if (!sortField) {return clients;}
 
     return [...clients].sort((a, b) => {
       let comparison = 0;

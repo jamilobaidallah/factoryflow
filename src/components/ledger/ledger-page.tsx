@@ -184,7 +184,7 @@ export default function LedgerPage() {
   // Export handlers - fetch ALL entries, not just current page
   // Uses lazy-loaded modules to reduce initial bundle size
   const handleExportExcel = useCallback(async () => {
-    if (!user) return;
+    if (!user) {return;}
     try {
       const [{ createLedgerService }, { exportLedgerToExcelProfessional }] = await Promise.all([
         loadLedgerService(),
@@ -206,7 +206,7 @@ export default function LedgerPage() {
   }, [user, filterEntries, toast]);
 
   const handleExportPDF = useCallback(async () => {
-    if (!user) return;
+    if (!user) {return;}
     try {
       const [{ createLedgerService }, { exportLedgerToHTML }] = await Promise.all([
         loadLedgerService(),
@@ -338,7 +338,7 @@ export default function LedgerPage() {
 
   const handleAddPayment = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!state.data.selectedEntry) return;
+    if (!state.data.selectedEntry) {return;}
     dispatch({ type: "SET_LOADING", payload: true });
     const success = await addPaymentToEntry(state.data.selectedEntry, paymentFormData);
     if (success) {
@@ -350,7 +350,7 @@ export default function LedgerPage() {
 
   const handleAddCheque = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!state.data.selectedEntry) return;
+    if (!state.data.selectedEntry) {return;}
     dispatch({ type: "SET_LOADING", payload: true });
     const success = await addChequeToEntry(state.data.selectedEntry, chequeFormData);
     if (success) {
@@ -362,7 +362,7 @@ export default function LedgerPage() {
 
   const handleAddInventory = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!state.data.selectedEntry) return;
+    if (!state.data.selectedEntry) {return;}
     dispatch({ type: "SET_LOADING", payload: true });
     const success = await addInventoryToEntry(state.data.selectedEntry, inventoryFormData);
     if (success) {

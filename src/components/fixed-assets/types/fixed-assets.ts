@@ -167,7 +167,7 @@ export function isFullyDepreciated(asset: FixedAsset): boolean {
  */
 export function getRemainingLifeMonths(asset: FixedAsset): number {
   const depreciableAmount = safeSubtract(asset.purchaseCost, asset.salvageValue);
-  if (depreciableAmount <= 0 || asset.monthlyDepreciation <= 0) return 0;
+  if (depreciableAmount <= 0 || asset.monthlyDepreciation <= 0) {return 0;}
 
   const monthsDepreciated = Math.floor(
     safeDivide(asset.accumulatedDepreciation, asset.monthlyDepreciation)
@@ -202,7 +202,7 @@ export function categorizeAssetsForDepreciation(assets: FixedAsset[]): {
   let expectedDepreciation = 0;
 
   for (const asset of assets) {
-    if (asset.status !== "active") continue;
+    if (asset.status !== "active") {continue;}
 
     activeAssets.push(asset);
 

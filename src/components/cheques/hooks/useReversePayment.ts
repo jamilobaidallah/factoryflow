@@ -37,7 +37,7 @@ export function useReversePayment() {
    * @returns true if reversal succeeded, false otherwise
    */
   const reversePayment = async (cheque: Cheque): Promise<boolean> => {
-    if (!user || !cheque.linkedPaymentId) return false;
+    if (!user || !cheque.linkedPaymentId) {return false;}
 
     try {
       const batch = writeBatch(firestore);

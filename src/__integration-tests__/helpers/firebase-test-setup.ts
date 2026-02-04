@@ -19,7 +19,7 @@ let isInitialized = false;
  * Initialize Firebase for testing with emulator
  */
 export async function setupFirebaseTest() {
-  if (isInitialized) return;
+  if (isInitialized) {return;}
 
   // Clear any existing apps
   const apps = getApps();

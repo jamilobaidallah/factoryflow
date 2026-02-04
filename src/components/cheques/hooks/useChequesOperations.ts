@@ -54,7 +54,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     amount: number,
     isAddition: boolean
   ) => {
-    if (!user || !linkedTransactionId) return;
+    if (!user || !linkedTransactionId) {return;}
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const ledgerQuery = query(
@@ -101,7 +101,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
     chequeImage: File | null,
     paymentDate?: Date
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       // Upload image first (external storage - before batch)
@@ -352,7 +352,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
    *    - Reverse the AR/AP balance in the ledger
    */
   const deleteCheque = async (chequeId: string, cheques: Cheque[]): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const cheque = cheques.find((c) => c.id === chequeId);
@@ -602,7 +602,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
    * Ensures cheque update + payment + ARAP update succeed or fail together
    */
   const clearCheque = async (cheque: Cheque, paymentDate?: Date): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Validate state transition: only PENDING cheques can be cashed
     try {
@@ -714,7 +714,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
   };
 
   const bounceCheque = async (cheque: Cheque): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Validate state transition: only PENDING or CASHED cheques can be bounced
     try {
@@ -849,7 +849,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
    * This is called when a cheque's status changes from "cashed" back to another status
    */
   const reverseChequeCashing = async (cheque: Cheque): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Check if cheque has a linked payment from multi-allocation
     if (!cheque.linkedPaymentId) {

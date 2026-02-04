@@ -59,7 +59,7 @@ export function OvertimeTable({
   // Get hourly rate for an employee
   const getHourlyRate = (employeeId: string): number => {
     const employee = employees.find((e) => e.id === employeeId);
-    if (!employee) return 0;
+    if (!employee) {return 0;}
     return safeDivide(employee.currentSalary, 208);
   };
 

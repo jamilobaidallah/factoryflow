@@ -30,7 +30,7 @@ export function useAdvancesData(): UseAdvancesDataReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const advancesRef = collection(
       firestore,

@@ -22,27 +22,27 @@ interface FixedAssetsTableProps {
 
 // Format remaining life for display
 function formatRemainingLife(months: number): string {
-  if (months === 0) return "مكتمل";
-  if (months < 12) return `${months} شهر`;
+  if (months === 0) {return "مكتمل";}
+  if (months < 12) {return `${months} شهر`;}
   const years = Math.floor(months / 12);
   const remainingMonths = months % 12;
-  if (remainingMonths === 0) return `${years} سنة`;
+  if (remainingMonths === 0) {return `${years} سنة`;}
   return `${years} سنة و ${remainingMonths} شهر`;
 }
 
 // Format relative date (how long ago)
 function formatRelativeDate(date: Date | undefined): string {
-  if (!date) return "لم يُسجَّل";
+  if (!date) {return "لم يُسجَّل";}
 
   const now = new Date();
   const diffMs = now.getTime() - new Date(date).getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return "اليوم";
-  if (diffDays === 1) return "أمس";
-  if (diffDays < 7) return `منذ ${diffDays} أيام`;
-  if (diffDays < 30) return `منذ ${Math.floor(diffDays / 7)} أسابيع`;
-  if (diffDays < 365) return `منذ ${Math.floor(diffDays / 30)} شهر`;
+  if (diffDays === 0) {return "اليوم";}
+  if (diffDays === 1) {return "أمس";}
+  if (diffDays < 7) {return `منذ ${diffDays} أيام`;}
+  if (diffDays < 30) {return `منذ ${Math.floor(diffDays / 7)} أسابيع`;}
+  if (diffDays < 365) {return `منذ ${Math.floor(diffDays / 30)} شهر`;}
   return `منذ ${Math.floor(diffDays / 365)} سنة`;
 }
 

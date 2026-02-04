@@ -255,7 +255,7 @@ export default function ChequesPage() {
 
   const submitChequeWithDate = async (paymentDate?: Date) => {
     setLoading(true);
-    if (chequeImage) setUploadingImage(true);
+    if (chequeImage) {setUploadingImage(true);}
 
     const dataToSubmit = pendingFormData || formData;
     const success = await submitCheque(dataToSubmit, editingCheque, chequeImage, paymentDate);
@@ -281,7 +281,7 @@ export default function ChequesPage() {
   };
 
   const handleEndorse = async () => {
-    if (!dialogState.chequeToEndorse) return;
+    if (!dialogState.chequeToEndorse) {return;}
     setLoading(true);
     const success = await endorseCheque(dialogState.chequeToEndorse, dialogState.endorseToSupplier);
     if (success) {
@@ -291,7 +291,7 @@ export default function ChequesPage() {
   };
 
   const handleClear = async () => {
-    if (!dialogState.chequeToClear) return;
+    if (!dialogState.chequeToClear) {return;}
 
     // Go directly to MultiAllocationDialog (date picker is inside)
     const cheque = dialogState.chequeToClear;
@@ -311,7 +311,7 @@ export default function ChequesPage() {
 
   // Handler for successful cheque cashing via MultiAllocationDialog
   const handleChequeCashingSuccess = async (paymentId: string) => {
-    if (!user || !dialogState.chequeToCash) return;
+    if (!user || !dialogState.chequeToCash) {return;}
 
     try {
       // Update the cheque status to 'Cashed' and link the payment
@@ -343,7 +343,7 @@ export default function ChequesPage() {
   };
 
   const handleBounce = async () => {
-    if (!dialogState.chequeToBounce) return;
+    if (!dialogState.chequeToBounce) {return;}
     setLoading(true);
     const success = await bounceCheque(dialogState.chequeToBounce);
     if (success) {
@@ -433,7 +433,7 @@ export default function ChequesPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                        if (currentPage < totalPages) {setCurrentPage(currentPage + 1);}
                       }}
                       className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
                     />
@@ -460,7 +460,7 @@ export default function ChequesPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                        if (currentPage > 1) {setCurrentPage(currentPage - 1);}
                       }}
                       className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
                     />

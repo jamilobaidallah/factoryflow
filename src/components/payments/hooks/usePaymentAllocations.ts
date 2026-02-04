@@ -425,7 +425,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
         const entryType = paymentData.type === 'قبض' ? 'دخل' : 'مصروف';
 
         for (const allocation of discountAllocations) {
-          if (!allocation.discountAmount) continue;
+          if (!allocation.discountAmount) {continue;}
 
           try {
             const templateId = getTemplateForDiscount(entryType as 'دخل' | 'مصروف');

@@ -154,7 +154,7 @@ export async function getPendingDepreciationPeriods(
 
   // CRITICAL: Sort chronologically (oldest first) for sequential processing
   pendingPeriods.sort((a, b) => {
-    if (a.year !== b.year) return a.year - b.year;
+    if (a.year !== b.year) {return a.year - b.year;}
     return a.month - b.month;
   });
 

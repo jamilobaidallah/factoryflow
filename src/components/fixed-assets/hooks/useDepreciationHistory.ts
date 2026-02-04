@@ -102,7 +102,7 @@ export function useDepreciationHistory(): UseDepreciationHistoryReturn {
     // Sort each asset's records by date (oldest first)
     Array.from(map.entries()).forEach(([assetId, assetRecords]) => {
       assetRecords.sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
+        if (a.year !== b.year) {return a.year - b.year;}
         return a.month - b.month;
       });
       map.set(assetId, assetRecords);

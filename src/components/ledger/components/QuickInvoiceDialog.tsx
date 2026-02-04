@@ -159,7 +159,7 @@ export function QuickInvoiceDialog({
   // Handle invoice image upload (converts to base64)
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {return;}
 
     const reader = new FileReader();
     reader.onloadend = () => {

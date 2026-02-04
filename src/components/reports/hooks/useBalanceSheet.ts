@@ -104,7 +104,7 @@ export function formatBalanceSheetAmount(amount: number): string {
  * Get account balance display class based on value
  */
 export function getBalanceClass(balance: number): string {
-  if (balance > 0) return 'text-green-600';
-  if (balance < 0) return 'text-red-600';
+  if (balance > 0) {return 'text-green-600';}
+  if (balance < 0) {return 'text-red-600';}
   return 'text-gray-500';
 }

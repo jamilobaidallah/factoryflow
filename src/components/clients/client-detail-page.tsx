@@ -816,7 +816,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
   // Export statement to Excel
   const exportStatement = async () => {
-    if (!client) return;
+    if (!client) {return;}
 
     const clientInitialBalance = client.balance || 0;
     const exportData = buildExportData(ledgerEntries, payments, cheques, clientInitialBalance);
@@ -883,7 +883,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </Button>
           <Button
             onClick={async () => {
-              if (!client) return;
+              if (!client) {return;}
 
               const clientInitialBalance = client.balance || 0;
               const exportData = buildExportData(ledgerEntries, payments, cheques, clientInitialBalance);
@@ -1416,7 +1416,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 {/* Pending Cheques Section */}
                 {(() => {
                   const pendingCheques = filterPendingCheques(cheques);
-                  if (pendingCheques.length === 0) return null;
+                  if (pendingCheques.length === 0) {return null;}
 
                   const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
                   const { balanceAfterCheques } = calculateBalanceAfterCheques(statementData.finalBalance, pendingCheques);

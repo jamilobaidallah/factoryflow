@@ -18,7 +18,7 @@ export const formatDimensions = (
   width?: number,
   length?: number
 ): string | null => {
-  if (!thickness) return null;
+  if (!thickness) {return null;}
   return `${thickness}سم × ${width || "-"}سم × ${length || "-"}سم`;
 };
 

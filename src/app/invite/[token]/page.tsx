@@ -108,7 +108,7 @@ export default function InvitationPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!invitation) return;
+    if (!invitation) {return;}
 
     // Validate email matches invitation
     const normalizedEmail = email.toLowerCase().trim();

@@ -73,7 +73,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
 
   // Load employee data
   useEffect(() => {
-    if (!user || !employeeId) return;
+    if (!user || !employeeId) {return;}
 
     const employeeRef = doc(firestore, `users/${user.dataOwnerId}/employees`, employeeId);
     const unsubscribe = onSnapshot(employeeRef, (snapshot) => {
@@ -103,7 +103,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
 
   // Handlers
   const handleEditEmployee = () => {
-    if (!employee) return;
+    if (!employee) {return;}
     setEmployeeFormData({
       name: employee.name,
       currentSalary: employee.currentSalary.toString(),
@@ -116,7 +116,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
 
   const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!employee) return;
+    if (!employee) {return;}
     setLoading(true);
     const success = await submitEmployee(employeeFormData, employee);
     if (success) {
@@ -134,7 +134,7 @@ export default function EmployeeDetailPage({ employeeId }: EmployeeDetailPagePro
   };
 
   const handleAdvanceSubmit = async () => {
-    if (!employee) return;
+    if (!employee) {return;}
     setLoading(true);
     const success = await createAdvance(advanceFormData, employee);
     if (success) {

@@ -61,8 +61,8 @@ function isEmployeeEligibleForMonth(employee: Employee, selectedMonth: string): 
   const hireMonth = hireDate.getMonth() + 1; // getMonth() is 0-indexed
 
   // Employee is eligible if hired in the selected month or any previous month
-  if (hireYear < year) return true;
-  if (hireYear === year && hireMonth <= month) return true;
+  if (hireYear < year) {return true;}
+  if (hireYear === year && hireMonth <= month) {return true;}
   return false;
 }
 
@@ -172,13 +172,13 @@ export function PayrollTable({
   }, [employees, selectedMonth]);
 
   const handleExportToExcel = async () => {
-    if (monthPayroll.length === 0) return;
+    if (monthPayroll.length === 0) {return;}
     await exportPayrollToExcel(monthPayroll, selectedMonth);
   };
 
   // Calculate summary statistics for processed payroll
   const payrollSummary = useMemo(() => {
-    if (monthPayroll.length === 0) return null;
+    if (monthPayroll.length === 0) {return null;}
 
     const totalBase = sumAmounts(monthPayroll.map(e => e.baseSalary));
     const totalOvertime = sumAmounts(monthPayroll.map(e => e.overtimePay));
@@ -211,7 +211,7 @@ export function PayrollTable({
 
   // Calculate preview totals for unprocessed payroll (only eligible employees, with proration)
   const previewSummary = useMemo(() => {
-    if (monthPayroll.length > 0 || eligibleEmployees.length === 0) return null;
+    if (monthPayroll.length > 0 || eligibleEmployees.length === 0) {return null;}
 
     let totalBase = 0;
     let totalOvertime = 0;
@@ -233,7 +233,7 @@ export function PayrollTable({
 
       // Get prorated salary info
       const { baseSalary, isProrated } = getProratedSalaryInfo(employee, selectedMonth);
-      if (isProrated) proratedCount++;
+      if (isProrated) {proratedCount++;}
 
       const overtimePay = employee.overtimeEligible
         ? calculateOvertimePay(employee.currentSalary, overtimeHours)
@@ -245,7 +245,7 @@ export function PayrollTable({
 
       // Get advance deduction for this employee
       const advanceDeduction = getEmployeeAdvanceDeduction(employee.id);
-      if (advanceDeduction > 0) advanceCount++;
+      if (advanceDeduction > 0) {advanceCount++;}
       const netTotal = safeSubtract(total, advanceDeduction);
 
       totalBase = safeAdd(totalBase, baseSalary);

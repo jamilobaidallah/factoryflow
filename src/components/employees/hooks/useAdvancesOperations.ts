@@ -42,7 +42,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
     formData: AdvanceFormData,
     employee: Employee
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const amount = parseAmount(formData.amount);
@@ -163,7 +163,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
   };
 
   const deleteAdvance = async (advance: Advance): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     if (advance.status !== ADVANCE_STATUS.ACTIVE) {
       toast({
@@ -255,7 +255,7 @@ export function useAdvancesOperations(): UseAdvancesOperationsReturn {
     payrollId: string,
     month: string
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const advanceRef = doc(

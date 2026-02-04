@@ -38,7 +38,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
     formData: OvertimeFormData,
     employee: Employee
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const hours = parseAmount(formData.hours);
@@ -135,7 +135,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
     formData: OvertimeFormData,
     employee: Employee
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const hours = parseAmount(formData.hours);
@@ -215,7 +215,7 @@ export function useOvertimeOperations(): UseOvertimeOperationsReturn {
   };
 
   const deleteOvertimeEntry = async (entry: OvertimeEntry): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Check if entry is linked to processed payroll
     if (entry.linkedPayrollId) {

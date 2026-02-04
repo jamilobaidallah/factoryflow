@@ -18,7 +18,7 @@ export function useChequesAlerts(): UseChequesAlertsReturn {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const unsubscribe = onSnapshot(chequesRef, (snapshot) => {

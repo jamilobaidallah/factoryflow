@@ -226,7 +226,7 @@ export function MultiAllocationDialog({
 
   // Fetch parties that have outstanding AR/AP debt from ledger
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     setPartiesLoading(true);
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
@@ -246,7 +246,7 @@ export function MultiAllocationDialog({
         const paymentStatus = data.paymentStatus || "unpaid";
 
         // Skip if no party name or fully paid
-        if (!partyName || paymentStatus === "paid") return;
+        if (!partyName || paymentStatus === "paid") {return;}
 
         const amount = data.amount || 0;
         const totalPaid = data.totalPaid || 0;
@@ -291,7 +291,7 @@ export function MultiAllocationDialog({
 
   // Filter parties for dropdown
   const filteredParties = useMemo(() => {
-    if (!formData.clientName) return partiesWithDebt;
+    if (!formData.clientName) {return partiesWithDebt;}
     return partiesWithDebt.filter((p) =>
       p.name.toLowerCase().includes(formData.clientName.toLowerCase())
     );

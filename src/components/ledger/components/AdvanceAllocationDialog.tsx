@@ -76,7 +76,7 @@ export function AdvanceAllocationDialog({
     let remaining = invoiceAmount;
 
     for (const advance of advances) {
-      if (remaining <= 0) break;
+      if (remaining <= 0) {break;}
 
       const allocateAmount = Math.min(advance.remainingBalance, remaining);
       newSelected.set(advance.id, allocateAmount);

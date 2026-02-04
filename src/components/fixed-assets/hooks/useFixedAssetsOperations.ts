@@ -67,7 +67,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
     formData: FixedAssetFormData,
     editingAsset: FixedAsset | null
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const purchaseCost = parseAmount(formData.purchaseCost);
@@ -183,7 +183,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
   };
 
   const deleteAsset = async (assetId: string, asset?: FixedAsset): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const assetRef = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, assetId);

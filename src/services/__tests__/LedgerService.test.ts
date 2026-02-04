@@ -115,7 +115,7 @@ jest.mock('@/lib/error-handling', () => ({
 // Mock errors
 jest.mock('@/lib/errors', () => ({
   assertNonNegative: jest.fn((value) => {
-    if (value < 0) throw new Error('DATA_INTEGRITY_ERROR');
+    if (value < 0) {throw new Error('DATA_INTEGRITY_ERROR');}
     return value;
   }),
   isDataIntegrityError: jest.fn((error) => error?.message?.includes('DATA_INTEGRITY_ERROR')),
@@ -133,8 +133,8 @@ jest.mock('@/lib/currency', () => ({
 jest.mock('@/lib/arap-utils', () => ({
   calculatePaymentStatus: jest.fn((totalPaid, amount, discount, writeoff) => {
     const remaining = amount - totalPaid - (discount || 0) - (writeoff || 0);
-    if (remaining <= 0) return 'paid';
-    if (totalPaid > 0) return 'partial';
+    if (remaining <= 0) {return 'paid';}
+    if (totalPaid > 0) {return 'partial';}
     return 'unpaid';
   }),
   calculateRemainingBalance: jest.fn((amount, totalPaid, discount, writeoff) =>
@@ -158,8 +158,8 @@ jest.mock('@/lib/constants', () => ({
 // Mock ledger helpers
 jest.mock('@/components/ledger/utils/ledger-helpers', () => ({
   getCategoryType: jest.fn((category) => {
-    if (category === 'مبيعات' || category === 'إيرادات') return 'دخل';
-    if (category === 'مصروف' || category === 'رواتب') return 'مصروف';
+    if (category === 'مبيعات' || category === 'إيرادات') {return 'دخل';}
+    if (category === 'مصروف' || category === 'رواتب') {return 'مصروف';}
     return 'دخل';
   }),
   generateTransactionId: jest.fn(() => 'TXN-' + Math.random().toString(36).substr(2, 9)),

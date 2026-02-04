@@ -41,20 +41,20 @@ export function EmployeeBalanceDisplay({
   };
 
   const getColorClasses = () => {
-    if (isPositive) return "text-success-600";
-    if (isNegative) return "text-danger-600";
+    if (isPositive) {return "text-success-600";}
+    if (isNegative) {return "text-danger-600";}
     return "text-slate-400";
   };
 
   const getBgClasses = () => {
-    if (isPositive) return "bg-success-50";
-    if (isNegative) return "bg-danger-50";
+    if (isPositive) {return "bg-success-50";}
+    if (isNegative) {return "bg-danger-50";}
     return "bg-slate-50";
   };
 
   const getIcon = () => {
-    if (isPositive) return <ArrowUp className={`${iconSizes[size]} text-success-500`} />;
-    if (isNegative) return <ArrowDown className={`${iconSizes[size]} text-danger-500`} />;
+    if (isPositive) {return <ArrowUp className={`${iconSizes[size]} text-success-500`} />;}
+    if (isNegative) {return <ArrowDown className={`${iconSizes[size]} text-danger-500`} />;}
     return <Minus className={`${iconSizes[size]} text-slate-400`} />;
   };
 

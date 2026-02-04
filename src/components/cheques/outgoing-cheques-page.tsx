@@ -163,7 +163,7 @@ export default function OutgoingChequesPage() {
 
   const submitChequeWithDate = async (paymentDate?: Date) => {
     setLoading(true);
-    if (chequeImage) setUploadingImage(true);
+    if (chequeImage) {setUploadingImage(true);}
 
     const dataToSubmit = pendingFormData || formData;
     const success = await submitCheque(dataToSubmit, editingCheque, chequeImage, paymentDate);
@@ -189,7 +189,7 @@ export default function OutgoingChequesPage() {
 
   // Handler for successful cheque cashing via MultiAllocationDialog
   const handleChequeCashingSuccess = async (paymentId: string, paidTransactionIds: string[]) => {
-    if (!user || !chequeToCash) return;
+    if (!user || !chequeToCash) {return;}
 
     try {
       // Update the cheque status to 'Cashed' and link the payment + transaction IDs
@@ -243,7 +243,7 @@ export default function OutgoingChequesPage() {
   };
 
   const handleLinkTransaction = async () => {
-    if (!chequeToLink) return;
+    if (!chequeToLink) {return;}
 
     setLoading(true);
     const success = await linkTransaction(chequeToLink, linkTransactionId);

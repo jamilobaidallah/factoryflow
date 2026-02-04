@@ -42,7 +42,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
     isEditMode: boolean,
     editingOrderId: string | null
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const selectedItem = inventoryItems.find(item => item.id === formData.inputItemId);
@@ -304,7 +304,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
   };
 
   const completeOrder = async (order: ProductionOrder): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const batch = writeBatch(firestore);
@@ -416,7 +416,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
   };
 
   const cancelOrder = async (orderId: string): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const orderRef = doc(firestore, `users/${user.dataOwnerId}/production_orders`, orderId);
@@ -441,7 +441,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
   };
 
   const deleteOrder = async (order: ProductionOrder): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const batch = writeBatch(firestore);

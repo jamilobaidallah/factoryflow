@@ -36,7 +36,14 @@
       "Bash(gh auth:*)",
       "Bash(transactions require all reads to be executed before all writes\" because\nadvance entries were being read AFTER ledger updates had started.\n\nFixed by:\n- Phase 1: Read all ledger entries, then read all related advance entries\n- Phase 2: Delete allocations, delete payment, update ledgers, update advances\n\nThis allows multi-allocation payments to be deleted properly.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "WebFetch(domain:firebase.google.com)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(Service \")",
+      "Bash(for dir in services components hooks lib types)",
+      "Bash(while:*)",
+      "Bash(do wc -l \"$file\")",
+      "Bash(for func in \"groupBy\" \"getStatusColor\" \"isImageFile\" \"formatFileSize\" \"formatDateForInput\")",
+      "Bash(for func in \"calculatePaymentStatus\" \"calculateRemainingBalance\" \"isValidTransactionId\" \"validatePaymentAmount\" \"isMultiAllocationPayment\" \"updateARAPOnPaymentAdd\" \"reverseARAPOnPaymentDelete\" \"updateLedgerEntryById\")",
+      "Bash(for func in \"createBackup\" \"downloadBackup\" \"validateBackup\" \"restoreBackup\" \"createAutoBackupBeforeRestore\" \"parseBackupFile\")"
     ],
     "deny": [],
     "ask": []

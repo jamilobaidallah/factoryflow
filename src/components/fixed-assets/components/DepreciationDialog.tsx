@@ -62,7 +62,7 @@ export function DepreciationDialog({
 
   // Handle run with double-click prevention
   const handleRunClick = () => {
-    if (isSubmitting || loading) return;
+    if (isSubmitting || loading) {return;}
     setIsSubmitting(true);
     onRunDepreciation();
     // Reset after a delay to allow for dialog close or error recovery

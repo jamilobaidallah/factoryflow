@@ -41,8 +41,8 @@ export function calculatePaymentStatus(
   const effectiveSettled = safeAdd(safeAdd(totalPaid, totalDiscount), writeoffAmount);
   const remaining = safeSubtract(transactionAmount, effectiveSettled);
 
-  if (remaining <= 0) return PAYMENT_STATUSES.PAID;
-  if (effectiveSettled > 0) return PAYMENT_STATUSES.PARTIAL;
+  if (remaining <= 0) {return PAYMENT_STATUSES.PAID;}
+  if (effectiveSettled > 0) {return PAYMENT_STATUSES.PARTIAL;}
   return PAYMENT_STATUSES.UNPAID;
 }
 

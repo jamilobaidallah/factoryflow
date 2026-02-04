@@ -96,7 +96,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
     amount: number,
     isAddition: boolean
   ) => {
-    if (!user || !linkedTransactionId) return;
+    if (!user || !linkedTransactionId) {return;}
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const ledgerQuery = query(
@@ -150,7 +150,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
     chequeImage: File | null,
     paymentDate?: Date
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       // Upload image first (external storage - before batch)
@@ -618,7 +618,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
   };
 
   const deleteCheque = async (chequeId: string): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const chequeRef = doc(firestore, `users/${user.dataOwnerId}/cheques`, chequeId);
@@ -653,7 +653,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
   };
 
   const linkTransaction = async (cheque: Cheque, transactionId: string): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       // Bug #6: Prevent linking changes on cashed cheques

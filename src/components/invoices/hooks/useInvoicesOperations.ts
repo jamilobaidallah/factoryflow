@@ -49,7 +49,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     items: InvoiceItem[],
     editingInvoice: Invoice | null
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const { subtotal, taxAmount, total } = calculateTotals(items, parseAmount(formData.taxRate));
@@ -195,7 +195,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
   };
 
   const deleteInvoice = async (invoiceId: string, invoice?: Invoice): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       await deleteDoc(doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId));
@@ -246,7 +246,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     newStatus: Invoice["status"],
     invoices: Invoice[]
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const invoiceRef = doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId);
@@ -312,7 +312,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
   const exportPDF = (invoice: Invoice) => {
     // Create a simple HTML invoice for print
     const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    if (!printWindow) {return;}
 
     // تنسيق الأبعاد بشكل موضعي ثابت - Strict positional dimension formatting
     // Format: Length × Width × Thickness (use dash for missing values)

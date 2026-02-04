@@ -107,7 +107,7 @@ export default function PaymentsPage() {
 
   // Fetch total count
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     getCountFromServer(query(paymentsRef)).then((snapshot) => {
@@ -118,7 +118,7 @@ export default function PaymentsPage() {
   // Subscribe to ALL payments for stats calculation (not paginated)
   // This ensures PaymentsSummaryCards shows accurate totals across all payments
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     const q = query(paymentsRef, orderBy("date", "desc"), limit(10000));
@@ -140,7 +140,7 @@ export default function PaymentsPage() {
 
   // Fetch payments with cursor-based pagination
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
 
@@ -187,7 +187,7 @@ export default function PaymentsPage() {
 
   // Filtered payments based on search term
   const filteredPayments = useMemo(() => {
-    if (!searchTerm.trim()) return payments;
+    if (!searchTerm.trim()) {return payments;}
     const term = searchTerm.toLowerCase().trim();
     return payments.filter((p) =>
       p.id.toLowerCase().includes(term) ||
@@ -212,7 +212,7 @@ export default function PaymentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) {return;}
 
     setLoading(true);
     try {
@@ -465,7 +465,7 @@ export default function PaymentsPage() {
   };
 
   const handleDelete = (paymentId: string) => {
-    if (!user) return;
+    if (!user) {return;}
 
     const payment = payments.find((p) => p.id === paymentId);
 
@@ -724,7 +724,7 @@ export default function PaymentsPage() {
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                      if (currentPage < totalPages) {setCurrentPage(currentPage + 1);}
                     }}
                     className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
                   />
@@ -753,7 +753,7 @@ export default function PaymentsPage() {
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      if (currentPage > 1) setCurrentPage(currentPage - 1);
+                      if (currentPage > 1) {setCurrentPage(currentPage - 1);}
                     }}
                     className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
                   />

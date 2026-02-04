@@ -103,8 +103,8 @@ export function isLoanTransaction(type?: string, category?: string): boolean {
  * @returns "receivable" for loans given, "payable" for loans received, null if not a loan
  */
 export function getLoanType(category?: string): "receivable" | "payable" | null {
-    if (category === LOAN_CATEGORIES.GIVEN) return "receivable";
-    if (category === LOAN_CATEGORIES.RECEIVED) return "payable";
+    if (category === LOAN_CATEGORIES.GIVEN) {return "receivable";}
+    if (category === LOAN_CATEGORIES.RECEIVED) {return "payable";}
     return null;
 }
 

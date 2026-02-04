@@ -38,7 +38,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
 
   // Fetch total count
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     getCountFromServer(query(chequesRef)).then((snapshot) => {
@@ -48,7 +48,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
 
   // Fetch client phone numbers
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const clientsRef = collection(firestore, `users/${user.dataOwnerId}/clients`);
     const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
@@ -67,7 +67,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
 
   // Fetch cheques with pagination
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
@@ -89,7 +89,7 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
   }, [user, pageSize, currentPage]);
 
   const refresh = async () => {
-    if (!user) return;
+    if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));

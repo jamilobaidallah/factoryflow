@@ -57,7 +57,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     formData: EmployeeFormData,
     editingEmployee: Employee | null
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Validate salary is positive
     const salary = parseAmount(formData.currentSalary);
@@ -185,7 +185,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   };
 
   const deleteEmployee = async (employeeId: string, employee?: Employee): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const batch = writeBatch(firestore);
@@ -268,7 +268,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     advances?: Advance[],
     allPayrollEntries?: PayrollEntry[]
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       // Validate that selected month is not in the future
@@ -314,8 +314,8 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
         const hireMonth = hireDate.getMonth() + 1; // getMonth() is 0-indexed
 
         // Employee is eligible if hired in the selected month or any previous month
-        if (hireYear < year) return true;
-        if (hireYear === year && hireMonth <= month) return true;
+        if (hireYear < year) {return true;}
+        if (hireYear === year && hireMonth <= month) {return true;}
         return false;
       });
 
@@ -509,7 +509,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   };
 
   const markAsPaid = async (payrollEntry: PayrollEntry): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     try {
       const batch = writeBatch(firestore);
@@ -632,7 +632,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   };
 
   const deletePayrollEntry = async (payrollEntry: PayrollEntry): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Only allow deleting unpaid entries
     if (payrollEntry.isPaid) {
@@ -711,7 +711,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
     selectedMonth: string,
     monthPayroll: PayrollEntry[]
   ): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     // Check if any entries are paid
     const paidEntries = monthPayroll.filter((e) => e.isPaid);
@@ -811,7 +811,7 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
   };
 
   const reversePayment = async (payrollEntry: PayrollEntry): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {return false;}
 
     if (!payrollEntry.isPaid) {
       toast({

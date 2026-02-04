@@ -84,8 +84,8 @@ export function useAllClients(options: UseAllClientsOptions = {}): UseAllClients
 
       // Helper to merge sources
       const mergeSource = (existing: ClientSource, newSource: ClientSource): ClientSource => {
-        if (existing === newSource) return existing;
-        if (existing === 'multiple' || newSource === 'multiple') return 'multiple';
+        if (existing === newSource) {return existing;}
+        if (existing === 'multiple' || newSource === 'multiple') {return 'multiple';}
         if ((existing === 'client' || newSource === 'client') && existing !== newSource) {
           return 'multiple';
         }

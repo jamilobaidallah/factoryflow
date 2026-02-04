@@ -34,7 +34,7 @@ export function InvoicePreviewDialog({
   invoice,
   onExportPDF,
 }: InvoicePreviewDialogProps) {
-  if (!invoice) return null;
+  if (!invoice) {return null;}
 
   const getStatusLabel = (status: Invoice["status"]) => {
     const labels = {

@@ -42,7 +42,7 @@ function StatusBadge({
   totalDiscount?: number;
   writeoffAmount?: number;
 }) {
-  if (!status) return <span className="text-xs text-slate-400">-</span>;
+  if (!status) {return <span className="text-xs text-slate-400">-</span>;}
 
   // Show discount/writeoff indicators
   const hasDiscount = (totalDiscount || 0) > 0;
@@ -130,7 +130,7 @@ function TypeBadge({ type }: { type: string }) {
 
 /** Determine if amount should be shown as positive (cash in) */
 function isPositiveAmount(type: string, subCategory: string): boolean {
-  if (type === "دخل") return true;
+  if (type === "دخل") {return true;}
   if (type === "حركة رأس مال") {
     return isCapitalContribution(subCategory); // Capital contribution = cash IN
   }

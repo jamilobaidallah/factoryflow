@@ -84,7 +84,7 @@ export async function handleAdvanceAllocationBatch(
   const advanceType = isCustomerAdvance ? "سلفة عميل" : "سلفة مورد";
 
   for (const allocation of allocations) {
-    if (allocation.amount <= 0) continue;
+    if (allocation.amount <= 0) {continue;}
 
     totalPaidFromAdvances = safeAdd(totalPaidFromAdvances, allocation.amount);
 

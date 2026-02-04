@@ -42,7 +42,7 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
   const [unpaidPayables, setUnpaidPayables] = useState<AlertData>({ count: 0, total: 0 });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     // Add limit to prevent loading unbounded data

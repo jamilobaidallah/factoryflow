@@ -45,7 +45,7 @@ export function InviteMemberDialog({ onInvitationCreated }: InviteMemberDialogPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!user) return;
+    if (!user) {return;}
 
     setLoading(true);
 
@@ -84,7 +84,7 @@ export function InviteMemberDialog({ onInvitationCreated }: InviteMemberDialogPr
   };
 
   const handleCopyLink = async () => {
-    if (!invitationLink) return;
+    if (!invitationLink) {return;}
 
     try {
       await navigator.clipboard.writeText(invitationLink);

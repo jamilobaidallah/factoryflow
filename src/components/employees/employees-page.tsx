@@ -220,7 +220,7 @@ export default function EmployeesPage() {
 
   const handleAdvanceSubmit = async () => {
     const employee = employees.find((e) => e.id === advanceFormData.employeeId);
-    if (!employee) return;
+    if (!employee) {return;}
 
     setLoading(true);
     const success = await createAdvance(advanceFormData, employee);
@@ -264,7 +264,7 @@ export default function EmployeesPage() {
 
   const handleOvertimeSubmit = async () => {
     const employee = employees.find((e) => e.id === overtimeFormData.employeeId);
-    if (!employee) return;
+    if (!employee) {return;}
 
     setLoading(true);
     let success: boolean;

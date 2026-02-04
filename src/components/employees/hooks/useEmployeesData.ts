@@ -43,7 +43,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
 
   // Load employees
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const employeesRef = collection(firestore, `users/${user.dataOwnerId}/employees`);
     const q = query(employeesRef, orderBy("name", "asc"), limit(500));
@@ -78,7 +78,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
 
   // Load salary history
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const historyRef = collection(firestore, `users/${user.dataOwnerId}/salary_history`);
     const q = query(historyRef, orderBy("effectiveDate", "desc"), limit(1000));
@@ -106,7 +106,7 @@ export function useEmployeesData(): UseEmployeesDataReturn {
 
   // Load payroll entries
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const payrollRef = collection(firestore, `users/${user.dataOwnerId}/payroll`);
     // Increased limit to support ~50 employees × 12 months of history

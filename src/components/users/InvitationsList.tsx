@@ -56,7 +56,7 @@ export function InvitationsList({
   };
 
   const handleRevoke = async (invitation: Invitation) => {
-    if (!user) return;
+    if (!user) {return;}
 
     setRevoking(invitation.id);
 

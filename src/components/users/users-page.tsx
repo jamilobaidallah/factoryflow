@@ -28,7 +28,7 @@ export default function UsersPage() {
   const [activeTab, setActiveTab] = useState("users");
 
   const fetchData = useCallback(async () => {
-    if (!user?.uid) return;
+    if (!user?.uid) {return;}
 
     setLoading(true);
     try {

@@ -29,7 +29,7 @@ export function useOutgoingChequesData(): UseOutgoingChequesDataReturn {
 
   // Fetch outgoing cheques with real-time updates
   useEffect(() => {
-    if (!user) return;
+    if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     // Filter for outgoing cheques only

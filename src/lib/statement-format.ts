@@ -29,8 +29,8 @@ export function formatStatementDate(date: Date | string): string {
  */
 export function formatBalanceWithSuffix(balance: number): string {
   const formatted = formatCurrency(balance);
-  if (balance > 0.01) return `${formatted} JOD (Debit)`;
-  if (balance < -0.01) return `${formatted} JOD (Credit)`;
+  if (balance > 0.01) {return `${formatted} JOD (Debit)`;}
+  if (balance < -0.01) {return `${formatted} JOD (Credit)`;}
   return `${formatted} JOD (Settled)`;
 }
 
@@ -41,8 +41,8 @@ export function formatBalanceWithSuffix(balance: number): string {
  */
 export function formatBalanceAr(balance: number): string {
   const formatted = formatCurrency(balance);
-  if (balance > 0.01) return `${formatted} د.أ عليه`;
-  if (balance < -0.01) return `${formatted} د.أ له`;
+  if (balance > 0.01) {return `${formatted} د.أ عليه`;}
+  if (balance < -0.01) {return `${formatted} د.أ له`;}
   return `${formatted} د.أ مسدد`;
 }
 
@@ -50,7 +50,7 @@ export function formatBalanceAr(balance: number): string {
  * Calculate date range from array of items with date property
  */
 export function getDateRange(items: Array<{ date: Date }>): { oldest: Date; newest: Date } {
-  if (items.length === 0) return { oldest: new Date(), newest: new Date() };
+  if (items.length === 0) {return { oldest: new Date(), newest: new Date() };}
   const dates = items.map(item => new Date(item.date)).sort((a, b) => a.getTime() - b.getTime());
   return { oldest: dates[0], newest: dates[dates.length - 1] };
 }
@@ -61,7 +61,7 @@ export function getDateRange(items: Array<{ date: Date }>): { oldest: Date; newe
  * @example extractPaymentMethod("تحويل كليك - ملاحظة") → "تحويل كليك"
  */
 export function extractPaymentMethod(description: string): string {
-  if (!description) return '';
+  if (!description) {return '';}
   const dashIndex = description.indexOf(' - ');
   return dashIndex > 0 ? description.substring(0, dashIndex) : description;
 }

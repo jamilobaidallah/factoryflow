@@ -32,7 +32,7 @@ function TrialBalanceTabComponent({
 
   // Memoize grouped accounts to prevent recalculation on every render
   const groupedAccounts = useMemo(() => {
-    if (!trialBalance?.accounts) return null;
+    if (!trialBalance?.accounts) {return null;}
 
     const groups: Record<string, AccountBalance[]> = {
       asset: [],
@@ -52,7 +52,7 @@ function TrialBalanceTabComponent({
   }, [trialBalance?.accounts]);
 
   const formatAmount = (amount: number): string => {
-    if (amount === 0) return "-";
+    if (amount === 0) {return "-";}
     return `${formatNumber(amount, 2)} د.أ`;
   };
 
@@ -156,12 +156,12 @@ function TrialBalanceTabComponent({
                 </TableHeader>
                 <TableBody>
                   {(() => {
-                    if (!groupedAccounts) return null;
+                    if (!groupedAccounts) {return null;}
                     const typeOrder = ['asset', 'liability', 'equity', 'revenue', 'expense'];
 
                     return typeOrder.map((type) => {
                       const accounts = groupedAccounts[type];
-                      if (accounts.length === 0) return null;
+                      if (accounts.length === 0) {return null;}
 
                       return (
                         <React.Fragment key={type}>

@@ -62,8 +62,8 @@ export async function saveFavorite(
     };
 
     // Only add optional fields if they have values
-    if (formData.ownerName) favoriteData.ownerName = formData.ownerName;
-    if (formData.description) favoriteData.description = formData.description;
+    if (formData.ownerName) {favoriteData.ownerName = formData.ownerName;}
+    if (formData.description) {favoriteData.description = formData.description;}
 
     const docRef = await addDoc(favoritesRef, favoriteData);
 

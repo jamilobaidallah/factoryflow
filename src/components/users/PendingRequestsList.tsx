@@ -63,7 +63,7 @@ export function PendingRequestsList({
   };
 
   const handleApprove = async () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest) {return;}
 
     setProcessingRequestId(selectedRequest.id);
     setApprovalDialogOpen(false);
