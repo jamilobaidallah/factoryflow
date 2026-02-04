@@ -29,6 +29,7 @@ import {
   getLoanType,
 } from '@/components/ledger/utils/ledger-helpers';
 import { CHEQUE_STATUS_AR } from '@/lib/constants';
+import { safeAdd, safeSubtract } from '@/lib/currency';
 
 // Types for balance calculation
 export interface BalanceLedgerEntry {
@@ -198,25 +199,25 @@ export function calculateClientBalance(
   let totalDebit = 0;
   let totalCredit = 0;
 
-  // Process ledger entries
+  // Process ledger entries (using safe math to avoid floating-point errors)
   for (const entry of ledgerEntries) {
     const { debit, credit, discountDebit, discountCredit, writeoffDebit, writeoffCredit } =
       calculateEntryDebitCredit(entry);
-    totalDebit += debit + discountDebit + writeoffDebit;
-    totalCredit += credit + discountCredit + writeoffCredit;
+    totalDebit = safeAdd(totalDebit, safeAdd(debit, safeAdd(discountDebit, writeoffDebit)));
+    totalCredit = safeAdd(totalCredit, safeAdd(credit, safeAdd(discountCredit, writeoffCredit)));
   }
 
-  // Process payments
+  // Process payments (using safe math)
   for (const payment of payments) {
     const { debit, credit } = calculatePaymentDebitCredit(payment, ledgerEntries);
-    totalDebit += debit;
-    totalCredit += credit;
+    totalDebit = safeAdd(totalDebit, debit);
+    totalCredit = safeAdd(totalCredit, credit);
   }
 
   // Balance = opening + (debit - credit)
   // Positive = they owe us (عليه)
   // Negative = we owe them (له)
-  return openingBalance + totalDebit - totalCredit;
+  return safeAdd(openingBalance, safeSubtract(totalDebit, totalCredit));
 }
 
 /**
@@ -239,17 +240,18 @@ export function calculateBalanceAfterCheques(
   let incomingTotal = 0;
   let outgoingTotal = 0;
 
+  // Use safe math to avoid floating-point errors
   for (const cheque of pending) {
     if (cheque.type === 'وارد') {
-      incomingTotal += cheque.amount || 0;
+      incomingTotal = safeAdd(incomingTotal, cheque.amount || 0);
     } else if (cheque.type === 'صادر') {
-      outgoingTotal += cheque.amount || 0;
+      outgoingTotal = safeAdd(outgoingTotal, cheque.amount || 0);
     }
   }
 
   // Incoming cheques reduce what they owe (subtract)
   // Outgoing cheques reduce what we owe (add)
-  return currentBalance - incomingTotal + outgoingTotal;
+  return safeAdd(safeSubtract(currentBalance, incomingTotal), outgoingTotal);
 }
 
 /**

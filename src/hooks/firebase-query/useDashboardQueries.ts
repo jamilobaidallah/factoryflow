@@ -13,6 +13,7 @@ import {
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { toDate } from '@/lib/firestore-utils';
+import { safeAdd } from '@/lib/currency';
 import { queryKeys } from './keys';
 import { useReactiveQueryData } from './useReactiveQueryData';
 import { QUERY_LIMITS } from '@/lib/constants';
@@ -73,10 +74,10 @@ function updateMonthlyData(
   badDebt: number
 ): void {
   const existing = map.get(monthKey) || { revenue: 0, expenses: 0, discounts: 0, badDebt: 0 };
-  existing.revenue += revenue;
-  existing.expenses += expenses;
-  existing.discounts = (existing.discounts || 0) + discounts;
-  existing.badDebt = (existing.badDebt || 0) + badDebt;
+  existing.revenue = safeAdd(existing.revenue, revenue);
+  existing.expenses = safeAdd(existing.expenses, expenses);
+  existing.discounts = safeAdd(existing.discounts || 0, discounts);
+  existing.badDebt = safeAdd(existing.badDebt || 0, badDebt);
   map.set(monthKey, existing);
 }
 
@@ -92,9 +93,9 @@ function updateCategoryData(
   }
 
   const catData = map.get(category) || { total: 0, monthly: new Map() };
-  catData.total += amount;
+  catData.total = safeAdd(catData.total, amount);
   const monthlyAmount = catData.monthly.get(monthKey) || 0;
-  catData.monthly.set(monthKey, monthlyAmount + amount);
+  catData.monthly.set(monthKey, safeAdd(monthlyAmount, amount));
   map.set(category, catData);
 }
 
@@ -140,24 +141,24 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
 
     if (isExcluded) {
       if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
-        finCashIn += entry.amount;
+        finCashIn = safeAdd(finCashIn, entry.amount);
       } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
-        finCashOut += entry.amount;
+        finCashOut = safeAdd(finCashOut, entry.amount);
       }
 
       if (entry.category === LOAN_CATEGORIES.RECEIVED) {
         if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT) {
-          loanIn += entry.amount;
-          loanPayableTotal += entry.remainingBalance ?? entry.amount ?? 0;
+          loanIn = safeAdd(loanIn, entry.amount);
+          loanPayableTotal = safeAdd(loanPayableTotal, entry.remainingBalance ?? entry.amount ?? 0);
         } else if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_REPAYMENT) {
-          loanOut += entry.amount;
+          loanOut = safeAdd(loanOut, entry.amount);
         }
       } else if (entry.category === LOAN_CATEGORIES.GIVEN) {
         if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN) {
-          loanOut += entry.amount;
-          loanReceivableTotal += entry.remainingBalance ?? entry.amount ?? 0;
+          loanOut = safeAdd(loanOut, entry.amount);
+          loanReceivableTotal = safeAdd(loanReceivableTotal, entry.remainingBalance ?? entry.amount ?? 0);
         } else if (entry.subCategory === LOAN_SUBCATEGORIES.LOAN_COLLECTION) {
-          loanIn += entry.amount;
+          loanIn = safeAdd(loanIn, entry.amount);
         }
       }
     } else {
@@ -165,22 +166,22 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
       const isIncome = INCOME_TYPES.some((type) => entry.type === type);
 
       if (isIncome) {
-        revenue += entry.amount;
+        revenue = safeAdd(revenue, entry.amount);
         if (entry.totalDiscount) {
-          discounts += entry.totalDiscount;
+          discounts = safeAdd(discounts, entry.totalDiscount);
         }
         if (data.writeoffAmount) {
-          badDebt += data.writeoffAmount;
+          badDebt = safeAdd(badDebt, data.writeoffAmount);
         }
         updateMonthlyData(monthlyMap, monthKey, entry.amount, 0, entry.totalDiscount || 0, data.writeoffAmount || 0);
       } else if (entry.type === EXPENSE_TYPE) {
-        expenses += entry.amount;
+        expenses = safeAdd(expenses, entry.amount);
         // Track discounts/writeoffs on expense entries (contra-expense)
         if (entry.totalDiscount) {
-          expenseDiscounts += entry.totalDiscount;
+          expenseDiscounts = safeAdd(expenseDiscounts, entry.totalDiscount);
         }
         if (data.writeoffAmount) {
-          expenseWriteoffs += data.writeoffAmount;
+          expenseWriteoffs = safeAdd(expenseWriteoffs, data.writeoffAmount);
         }
         updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
         updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
@@ -226,9 +227,9 @@ function transformPaymentsData(docs: DocumentData[]): PaymentsDashboardData {
     const paymentType = data.type || "";
 
     if (paymentType === PAYMENT_TYPES.INCOMING) {
-      opCashIn += amount;
+      opCashIn = safeAdd(opCashIn, amount);
     } else if (paymentType === PAYMENT_TYPES.OUTGOING) {
-      opCashOut += amount;
+      opCashOut = safeAdd(opCashOut, amount);
     }
   });
 

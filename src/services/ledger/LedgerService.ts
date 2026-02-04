@@ -1163,50 +1163,69 @@ export class LedgerService {
         // Find payments for cashed cheques (linked by linkedChequeId)
         // These payments may not have been found by the linkedTransactionId query above
         // if they were created when the cheque was cashed without a linked transaction
-        for (const chequeId of cashedChequeIds) {
+        // Use Promise.all to fetch all cheque payments in parallel (avoid N+1 query pattern)
+        const cashedChequePaymentPromises = cashedChequeIds.map((chequeId) => {
           const chequePaymentQuery = query(
             this.paymentsRef,
             where("linkedChequeId", "==", chequeId)
           );
-          const chequePaymentSnapshot = await getDocs(chequePaymentQuery);
+          return getDocs(chequePaymentQuery);
+        });
+        const cashedChequePaymentSnapshots = await Promise.all(cashedChequePaymentPromises);
 
+        // Collect unprocessed payment docs and their data
+        const unprocessedChequePayments: { doc: any; data: any; id: string }[] = [];
+        for (const chequePaymentSnapshot of cashedChequePaymentSnapshots) {
           for (const paymentDoc of chequePaymentSnapshot.docs) {
-            const paymentData = paymentDoc.data();
             const paymentId = paymentDoc.id;
-
             // Skip if already processed in the main payments query
-            if (processedPaymentIds.has(paymentId)) {
-              continue;
-            }
-
-            // Delete existing journal entry for this payment
-            const paymentJournalQuery = query(
-              this.journalEntriesRef,
-              where("linkedPaymentId", "==", paymentId)
-            );
-            const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
-            paymentJournalSnapshot.forEach((journalDoc) => {
-              batch.delete(journalDoc.ref);
-            });
-
-            // Update payment clientName to match transaction
-            batch.update(paymentDoc.ref, {
-              clientName: newClientName,
-            });
-
-            // Recreate journal entry for the cashed cheque payment
-            const paymentCashAmount = paymentData.amount || 0;
-            if (paymentCashAmount > 0 && currentData?.isARAPEntry && !currentData?.immediateSettlement) {
-              const paymentType = paymentData.type as 'قبض' | 'صرف';
-              addPaymentJournalEntryToBatch(batch, this.userId, {
-                paymentId: paymentId,
-                description: paymentData.notes || `صرف شيك - ${formData.description}`,
-                amount: paymentCashAmount,
-                paymentType: paymentType,
-                date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
-                linkedTransactionId: existingTransactionId,
+            if (!processedPaymentIds.has(paymentId)) {
+              unprocessedChequePayments.push({
+                doc: paymentDoc,
+                data: paymentDoc.data(),
+                id: paymentId,
               });
             }
+          }
+        }
+
+        // Fetch all journal entries for unprocessed cheque payments in parallel (avoid nested N+1 pattern)
+        const unprocessedJournalPromises = unprocessedChequePayments.map(({ id: paymentId }) => {
+          const paymentJournalQuery = query(
+            this.journalEntriesRef,
+            where("linkedPaymentId", "==", paymentId)
+          );
+          return getDocs(paymentJournalQuery);
+        });
+        const unprocessedJournalSnapshots = await Promise.all(unprocessedJournalPromises);
+
+        // Delete journals and update payments
+        for (let i = 0; i < unprocessedChequePayments.length; i++) {
+          const { doc: paymentDoc, data: paymentData, id: paymentId } = unprocessedChequePayments[i];
+          const paymentJournalSnapshot = unprocessedJournalSnapshots[i];
+
+          // Delete existing journal entries for this payment
+          paymentJournalSnapshot.forEach((journalDoc) => {
+            batch.delete(journalDoc.ref);
+          });
+
+          // Update payment clientName to match transaction
+          batch.update(paymentDoc.ref, {
+            clientName: newClientName,
+          });
+
+          // Recreate journal entry for the cashed cheque payment
+          const paymentCashAmount = paymentData.amount || 0;
+          if (paymentCashAmount > 0 && currentData?.isARAPEntry && !currentData?.immediateSettlement) {
+            const paymentType = paymentData.type as 'قبض' | 'صرف';
+            addPaymentJournalEntryToBatch(batch, this.userId, {
+              paymentId: paymentId,
+              description: paymentData.notes || `صرف شيك - ${formData.description}`,
+              amount: paymentCashAmount,
+              paymentType: paymentType,
+              date: paymentData.date?.toDate ? paymentData.date.toDate() : new Date(formData.date),
+              linkedTransactionId: existingTransactionId,
+            });
           }
         }
 
@@ -1527,12 +1546,16 @@ export class LedgerService {
       });
 
       // Delete journal entries linked to payments (cheque cashing creates journal entries with linkedPaymentId)
-      for (const paymentId of paymentIds) {
+      // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
+      const paymentJournalPromises = paymentIds.map((paymentId) => {
         const paymentJournalQuery = query(
           this.journalEntriesRef,
           where("linkedPaymentId", "==", paymentId)
         );
-        const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
+        return getDocs(paymentJournalQuery);
+      });
+      const paymentJournalSnapshots = await Promise.all(paymentJournalPromises);
+      for (const paymentJournalSnapshot of paymentJournalSnapshots) {
         paymentJournalSnapshot.forEach((journalDoc) => {
           batch.delete(journalDoc.ref);
           deletedRelatedCount++;
@@ -1555,29 +1578,40 @@ export class LedgerService {
 
       // For each cheque, find and delete any payments created when cheque was cashed
       // These payments are linked by linkedChequeId (not linkedTransactionId)
-      for (const chequeId of chequeIds) {
+      // Use Promise.all to fetch all cheque payments in parallel (avoid N+1 query pattern)
+      const chequePaymentPromises = chequeIds.map((chequeId) => {
         const chequePaymentQuery = query(
           this.paymentsRef,
           where("linkedChequeId", "==", chequeId)
         );
-        const chequePaymentSnapshot = await getDocs(chequePaymentQuery);
+        return getDocs(chequePaymentQuery);
+      });
+      const chequePaymentSnapshots = await Promise.all(chequePaymentPromises);
 
+      // Collect all payment docs and their IDs
+      const chequePaymentDocs: { ref: any; id: string }[] = [];
+      for (const chequePaymentSnapshot of chequePaymentSnapshots) {
         for (const paymentDoc of chequePaymentSnapshot.docs) {
-          const paymentId = paymentDoc.id;
+          chequePaymentDocs.push({ ref: paymentDoc.ref, id: paymentDoc.id });
           batch.delete(paymentDoc.ref);
           deletedRelatedCount++;
-
-          // Delete journal entries linked to this payment
-          const paymentJournalQuery = query(
-            this.journalEntriesRef,
-            where("linkedPaymentId", "==", paymentId)
-          );
-          const paymentJournalSnapshot = await getDocs(paymentJournalQuery);
-          paymentJournalSnapshot.forEach((journalDoc) => {
-            batch.delete(journalDoc.ref);
-            deletedRelatedCount++;
-          });
         }
+      }
+
+      // Fetch all journal entries for cheque payments in parallel (avoid nested N+1 pattern)
+      const chequePaymentJournalPromises = chequePaymentDocs.map(({ id: paymentId }) => {
+        const paymentJournalQuery = query(
+          this.journalEntriesRef,
+          where("linkedPaymentId", "==", paymentId)
+        );
+        return getDocs(paymentJournalQuery);
+      });
+      const chequePaymentJournalSnapshots = await Promise.all(chequePaymentJournalPromises);
+      for (const paymentJournalSnapshot of chequePaymentJournalSnapshots) {
+        paymentJournalSnapshot.forEach((journalDoc) => {
+          batch.delete(journalDoc.ref);
+          deletedRelatedCount++;
+        });
       }
 
       // Delete related fixed assets
