@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,24 +32,13 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
-import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
 import { exportStatementToPDF } from "@/lib/export-statement-pdf";
 import { exportStatementToExcel } from "@/lib/export-statement-excel";
 import {
   formatCurrency,
   formatStatementDate,
-  getDateRange,
   extractPaymentMethod
 } from "@/lib/statement-format";
 import { CHEQUE_STATUS_AR } from "@/lib/constants";
@@ -57,119 +46,28 @@ import {
   isLoanTransaction,
   isInitialLoan,
   getLoanType,
-  LOAN_CATEGORIES,
-  LOAN_SUBCATEGORIES,
 } from "@/components/ledger/utils/ledger-helpers";
+
+// Import extracted hooks and types
+import {
+  useClientData,
+  useLedgerForClient,
+  usePaymentsForClient,
+  useChequesForClient,
+  useStatementData,
+  isAdvanceEntry,
+  type LedgerEntry,
+  type Payment,
+  type Cheque,
+  type StatementItem,
+} from './hooks';
 
 // Aliases for backward compatibility with existing code
 const formatNumber = formatCurrency;
 const formatDateAr = formatStatementDate;
 
-interface Client {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  address: string;
-  balance: number;
-  createdAt: Date;
-}
-
-interface LedgerEntry {
-  id: string;
-  transactionId?: string;
-  type: string;
-  amount: number;
-  date: Date;
-  category: string;
-  subCategory?: string;
-  description: string;
-  associatedParty?: string;
-  remainingBalance?: number;
-  totalDiscount?: number;        // Settlement discounts (خصم تسوية)
-  writeoffAmount?: number;       // Bad debt write-offs (ديون معدومة)
-  totalPaidFromAdvances?: number; // Amount paid from customer/supplier advances
-  linkedPaymentId?: string;       // For advances created from multi-allocation payments
-  // Advance allocation fields
-  totalUsedFromAdvance?: number;  // Total amount consumed from this advance
-  advanceAllocations?: Array<{    // Which invoices used this advance
-    invoiceId: string;
-    invoiceTransactionId: string;
-    amount: number;
-    date: Date | string;
-    description?: string;
-  }>;
-}
-
-interface Payment {
-  id: string;
-  type: string;
-  amount: number;
-  date: Date;
-  description: string;
-  paymentMethod: string;
-  notes: string;  // Payment method info is stored in notes field
-  associatedParty?: string;
-  discountAmount?: number;  // Settlement discount applied with this payment
-  isEndorsement?: boolean;  // True if payment is from cheque endorsement
-  noCashMovement?: boolean; // True if no actual cash moved (endorsements)
-  endorsementChequeId?: string; // Links payment to the endorsed cheque
-  linkedTransactionId?: string; // Links payment to its ledger entry
-  category?: string;  // Category for filtering (e.g., سلفة عميل, سلفة مورد)
-}
-
-interface Cheque {
-  id: string;
-  chequeNumber: string;
-  amount: number;
-  issueDate: Date;
-  dueDate?: Date;
-  bankName: string;
-  status: string;
-  type: string;
-  associatedParty?: string;
-  // Endorsement fields
-  endorsedTo?: string;        // Name of party cheque was endorsed to
-  endorsedDate?: Date;        // When the cheque was endorsed
-  chequeType?: string;        // "عادي" (normal) or "مجير" (endorsed)
-  isEndorsedCheque?: boolean; // Flag for endorsed cheques
-  endorsedFromId?: string;    // Reference to original incoming cheque
-}
-
-interface StatementItem {
-  id: string;
-  transactionId?: string;
-  source: 'ledger' | 'payment';
-  date: Date;
-  isPayment: boolean;
-  entryType: string;
-  description: string;
-  debit: number;
-  credit: number;
-  balance?: number;
-  // Ledger-specific
-  category?: string;
-  subCategory?: string;
-  // Payment-specific
-  notes?: string;
-  isEndorsement?: boolean; // True if this is an endorsement-based payment
-}
-
 interface ClientDetailPageProps {
   clientId: string;
-}
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Check if a ledger entry is an advance (سلفة)
- * Advances are informational only - they explain where overpayment sits
- * but should NOT affect running balance (the payment already captured the money flow)
- */
-function isAdvanceEntry(entry: LedgerEntry): boolean {
-  return entry.category === "سلفة عميل" || entry.category === "سلفة مورد";
 }
 
 /**
@@ -354,22 +252,33 @@ function buildExportData(
 
 export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const router = useRouter();
-  const { user } = useUser();
   const { toast } = useToast();
 
-  const [client, setClient] = useState<Client | null>(null);
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [cheques, setCheques] = useState<Cheque[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ============================================================================
+  // DATA HOOKS
+  // ============================================================================
 
-  // Financial metrics
-  const [totalSales, setTotalSales] = useState(0);
-  const [totalPurchases, setTotalPurchases] = useState(0);
+  // Load client data
+  const { client, loading } = useClientData(clientId);
 
-  // Loan balances
-  const [loansReceivable, setLoansReceivable] = useState(0);  // Loans we gave to this party (they owe us)
-  const [loansPayable, setLoansPayable] = useState(0);        // Loans this party gave us (we owe them)
+  // Load ledger entries and financial metrics
+  const {
+    ledgerEntries,
+    totalSales,
+    totalPurchases,
+    loansReceivable,
+    loansPayable,
+  } = useLedgerForClient(client);
+
+  // Load payments
+  const { payments } = usePaymentsForClient(client);
+
+  // Load cheques
+  const { cheques } = useChequesForClient(client);
+
+  // ============================================================================
+  // LOCAL STATE
+  // ============================================================================
 
   // Modal state for transaction details
   const [selectedTransaction, setSelectedTransaction] = useState<StatementItem | null>(null);
@@ -379,440 +288,23 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
-  // Memoize allTransactions - expensive computation that combines ledger entries and payments
-  const allTransactions = useMemo((): StatementItem[] => {
-    return [
-      // Ledger entries (invoices) plus their discounts and writeoffs
-      ...ledgerEntries.flatMap((e) => {
-        const rows: StatementItem[] = [];
-        const isAdvance = isAdvanceEntry(e);
-        const isLoan = isLoanTransaction(e.type, e.category);
+  // ============================================================================
+  // DERIVED DATA (from useStatementData hook)
+  // ============================================================================
 
-        // Skip advances that were created from multi-allocation payments
-        // These have linkedPaymentId and their cash movement is already captured
-        // in the payment record (avoids double-counting the advance amount)
-        if (isAdvance && e.linkedPaymentId) {
-          return [];
-        }
+  const {
+    allTransactions,
+    dateRange,
+    openingBalance,
+    rowsWithBalance,
+    totalDebit,
+    totalCredit,
+    finalBalance,
+  } = useStatementData(ledgerEntries, payments, client, dateFrom, dateTo);
 
-        // Determine debit/credit based on entry type
-        let debit = 0;
-        let credit = 0;
-        if (isLoan) {
-          // Loans: direction based on subcategory
-          const loanType = getLoanType(e.category);
-          if (isInitialLoan(e.subCategory)) {
-            // Initial loans:
-            // - Loan Given (قروض ممنوحة / منح قرض): We lent money → debit (they owe us)
-            // - Loan Received (قروض مستلمة / استلام قرض): We borrowed → credit (we owe them)
-            if (loanType === "receivable") {
-              debit = e.amount; // We lent money, they owe us
-            } else if (loanType === "payable") {
-              credit = e.amount; // We borrowed, we owe them
-            }
-          } else {
-            // Loan repayments/collections:
-            // - Loan Collection (تحصيل قرض): They paid us back → credit (reduces what they owe)
-            // - Loan Repayment (سداد قرض): We paid back → debit (reduces what we owe)
-            if (loanType === "receivable") {
-              credit = e.amount; // They paid back
-            } else if (loanType === "payable") {
-              debit = e.amount; // We paid back
-            }
-          }
-        } else if (isAdvance) {
-          // Advances have INVERTED debit/credit vs their entry type
-          // Customer advance (سلفة عميل): We received cash, but we OWE them goods → credit (لنا)
-          // Supplier advance (سلفة مورد): We paid cash, they OWE us goods → debit (عليه)
-          // Show FULL amount - the "مدفوع من سلفة" row on invoices is informational only
-          if (e.category === "سلفة عميل") {
-            credit = e.amount; // We owe them (liability) - full amount received
-          } else if (e.category === "سلفة مورد") {
-            debit = e.amount; // They owe us (asset) - full amount paid
-          }
-        } else if (e.type === "دخل" || e.type === "إيراد") {
-          debit = e.amount;
-        } else if (e.type === "مصروف") {
-          credit = e.amount;
-        }
-
-        rows.push({
-          id: e.id,
-          transactionId: e.transactionId,
-          source: 'ledger' as const,
-          date: e.date,
-          isPayment: false,
-          entryType: isAdvance ? 'سلفة' : (isLoan ? 'قرض' : e.type),
-          description: e.description,
-          category: e.category,
-          subCategory: e.subCategory,
-          debit,
-          credit,
-        });
-
-        // Row 2: Discount from ledger entry (if any) - reduces what client owes
-        if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-          rows.push({
-            id: `${e.id}-discount`,
-            transactionId: e.transactionId,
-            source: 'ledger' as const,
-            date: e.date,
-            isPayment: true,  // Display as payment-like row
-            entryType: 'خصم',
-            description: 'خصم تسوية',
-            category: e.category,
-            debit: 0,
-            credit: e.totalDiscount,  // Credit reduces debt
-          });
-        }
-
-        // Row 3: Writeoff from ledger entry (if any) - reduces what client owes
-        if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
-          rows.push({
-            id: `${e.id}-writeoff`,
-            transactionId: e.transactionId,
-            source: 'ledger' as const,
-            date: e.date,
-            isPayment: true,  // Display as payment-like row
-            entryType: 'شطب',
-            description: 'شطب دين معدوم',
-            category: e.category,
-            debit: 0,
-            credit: e.writeoffAmount,  // Credit reduces debt
-          });
-        }
-
-        // Row 4: Expense discount (if any) - reduces what we owe supplier (DEBIT)
-        if (e.totalDiscount && e.totalDiscount > 0 && e.type === "مصروف") {
-          rows.push({
-            id: `${e.id}-discount`,
-            transactionId: e.transactionId,
-            source: 'ledger' as const,
-            date: e.date,
-            isPayment: true,
-            entryType: 'خصم مورد',
-            description: 'خصم من المورد',
-            category: e.category,
-            debit: e.totalDiscount,  // DEBIT reduces liability (opposite of income)
-            credit: 0,
-          });
-        }
-
-        // Row 5: Expense writeoff (if any) - reduces what we owe supplier (DEBIT)
-        if (e.writeoffAmount && e.writeoffAmount > 0 && e.type === "مصروف") {
-          rows.push({
-            id: `${e.id}-writeoff`,
-            transactionId: e.transactionId,
-            source: 'ledger' as const,
-            date: e.date,
-            isPayment: true,
-            entryType: 'إعفاء مورد',
-            description: 'إعفاء من المورد',
-            category: e.category,
-            debit: e.writeoffAmount,  // DEBIT reduces liability
-            credit: 0,
-          });
-        }
-
-        // Row 6: Paid from advance (if any) - INFORMATIONAL ONLY
-        // Shows that invoice was paid using customer/supplier advance, but doesn't affect balance
-        // The advance entry shows FULL amount, so this row is just for clarity
-        if (e.totalPaidFromAdvances && e.totalPaidFromAdvances > 0) {
-          const isIncome = e.type === "دخل" || e.type === "إيراد";
-          rows.push({
-            id: `${e.id}-advance-payment`,
-            transactionId: e.transactionId,
-            source: 'ledger' as const,
-            date: e.date,
-            isPayment: true,
-            entryType: 'معلومات',
-            description: isIncome
-              ? `مدفوع من سلفة عميل (${e.totalPaidFromAdvances})`
-              : `مخصوم من سلفة مورد (${e.totalPaidFromAdvances})`,
-            category: e.category,
-            debit: 0,   // Informational only - no balance impact
-            credit: 0,  // The advance entry already shows full amount
-          });
-        }
-
-        return rows;
-      }),
-      // Payments (cash/cheque payments only - discounts/writeoffs come from ledger)
-      // Note: Don't include payment.discountAmount here as it's already in ledger.totalDiscount
-      ...payments.flatMap((p) => {
-        // Only show payments with actual amount (skip discount-only records)
-        if (p.amount <= 0) {
-          return [];
-        }
-
-        // Skip payments linked to advance entries (already shown as سلفة)
-        if (p.linkedTransactionId) {
-          // linkedTransactionId stores the transactionId, not the document id
-          const linkedEntry = ledgerEntries.find(e => e.transactionId === p.linkedTransactionId);
-          if (linkedEntry && isAdvanceEntry(linkedEntry)) {
-            return []; // Skip advance-related payments
-          }
-        }
-
-        return [{
-          id: p.id,
-          source: 'payment' as const,
-          date: p.date,
-          isPayment: true,
-          entryType: p.type,
-          description: p.notes || p.description || '',
-          notes: p.notes,
-          isEndorsement: p.isEndorsement || false, // Track endorsement payments
-          // Payment received (قبض): goes in دائن (reduces what they owe us)
-          // Payment made (صرف): goes in مدين (reduces what we owe them)
-          debit: p.type === "صرف" ? p.amount : 0,
-          credit: p.type === "قبض" ? p.amount : 0,
-        }];
-      }),
-    ].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [ledgerEntries, payments]);
-
-  // Memoize date range calculation
-  const dateRange = useMemo(() => getDateRange(allTransactions), [allTransactions]);
-
-  // Memoize filtered transactions and balance calculations
-  const statementData = useMemo(() => {
-    // Calculate opening balance
-    // Start with client's initial balance (الرصيد الافتتاحي) from their record
-    const clientInitialBalance = client?.balance || 0;
-    let openingBalance = clientInitialBalance;
-
-    // If date filter is applied, add all transactions BEFORE the "from" date
-    if (dateFrom) {
-      const fromDate = new Date(dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      allTransactions.forEach((item) => {
-        const itemDate = new Date(item.date);
-        itemDate.setHours(0, 0, 0, 0);
-        if (itemDate < fromDate) {
-          openingBalance += item.debit - item.credit;
-        }
-      });
-    }
-
-    // Filter transactions by date range
-    const filteredTransactions = allTransactions.filter((item) => {
-      const itemDate = new Date(item.date);
-      itemDate.setHours(0, 0, 0, 0);
-
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom);
-        fromDate.setHours(0, 0, 0, 0);
-        if (itemDate < fromDate) {
-          return false;
-        }
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        if (itemDate > toDate) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    // Calculate totals from filtered transactions
-    // Running balance starts from opening balance
-    let totalDebit = 0;
-    let totalCredit = 0;
-    let runningBalance = openingBalance;
-    const rowsWithBalance = filteredTransactions.map((t) => {
-      totalDebit += t.debit;
-      totalCredit += t.credit;
-      runningBalance += t.debit - t.credit;
-      return { ...t, balance: runningBalance };
-    });
-
-    const finalBalance = runningBalance;
-
-    return {
-      openingBalance,
-      filteredTransactions,
-      rowsWithBalance,
-      totalDebit,
-      totalCredit,
-      finalBalance,
-    };
-  }, [allTransactions, dateFrom, dateTo, client?.balance]);
-
-  // Load client data
-  useEffect(() => {
-    if (!user || !clientId) {return;}
-
-    const clientRef = doc(firestore, `users/${user.dataOwnerId}/clients`, clientId);
-    getDoc(clientRef)
-      .then((docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setClient({
-            id: docSnap.id,
-            ...data,
-            createdAt: data.createdAt?.toDate?.() || new Date(),
-          } as Client);
-        } else {
-          toast({
-            title: "خطأ",
-            description: "العميل غير موجود",
-            variant: "destructive",
-          });
-          router.push("/clients");
-        }
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("Error loading client:", error);
-        toast({
-          title: "خطأ",
-          description: "حدث خطأ أثناء تحميل بيانات العميل",
-          variant: "destructive",
-        });
-        setLoading(false);
-      });
-  }, [user, clientId, router, toast]);
-
-  // Load ledger entries for this client
-  useEffect(() => {
-    if (!user || !client) {return;}
-
-    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const q = query(
-      ledgerRef,
-      where("associatedParty", "==", client.name)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const entries: LedgerEntry[] = [];
-        let sales = 0;
-        let purchases = 0;
-        let loanReceivable = 0;
-        let loanPayable = 0;
-
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const entry = {
-            id: doc.id,
-            ...data,
-            date: data.date?.toDate?.() || new Date(),
-          } as LedgerEntry;
-          entries.push(entry);
-
-          // Track loan balances (separate from regular income/expense)
-          if (isLoanTransaction(entry.type, entry.category)) {
-            if (isInitialLoan(entry.subCategory)) {
-              const loanType = getLoanType(entry.category);
-              if (loanType === "receivable") {
-                loanReceivable += entry.remainingBalance ?? entry.amount ?? 0;
-              } else if (loanType === "payable") {
-                loanPayable += entry.remainingBalance ?? entry.amount ?? 0;
-              }
-            }
-          } else if (!isAdvanceEntry(entry)) {
-            // Calculate regular totals (exclude advances and loans)
-            if (entry.type === "دخل" || entry.type === "إيراد") {
-              sales += entry.amount;
-            } else if (entry.type === "مصروف") {
-              purchases += entry.amount;
-            }
-          }
-        });
-
-        // Sort by date in JavaScript instead of Firestore
-        entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-        setLedgerEntries(entries);
-        setTotalSales(sales);
-        setTotalPurchases(purchases);
-        setLoansReceivable(loanReceivable);
-        setLoansPayable(loanPayable);
-      },
-      (error) => {
-        console.error("Error loading ledger entries:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, client]);
-
-  // Load payments for this client
-  useEffect(() => {
-    if (!user || !client) {return;}
-
-    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-    const q = query(
-      paymentsRef,
-      where("clientName", "==", client.name)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const paymentsList: Payment[] = [];
-
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const payment = {
-            id: doc.id,
-            ...data,
-            date: data.date?.toDate?.() || new Date(),
-          } as Payment;
-          paymentsList.push(payment);
-        });
-
-        // Sort by date in JavaScript
-        paymentsList.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-        setPayments(paymentsList);
-      },
-      (error) => {
-        console.error("Error loading payments:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, client]);
-
-  // Load cheques for this client
-  useEffect(() => {
-    if (!user || !client) {return;}
-
-    const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
-    const q = query(
-      chequesRef,
-      where("clientName", "==", client.name)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const chequesList: Cheque[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          chequesList.push({
-            id: doc.id,
-            ...data,
-            issueDate: data.issueDate?.toDate?.() || new Date(),
-            dueDate: data.dueDate?.toDate?.() || data.issueDate?.toDate?.() || new Date(),
-          } as Cheque);
-        });
-        // Sort by issue date in JavaScript
-        chequesList.sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime());
-        setCheques(chequesList);
-      },
-      (error) => {
-        console.error("Error loading cheques:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, client]);
+  // ============================================================================
+  // EXPORT FUNCTIONS
+  // ============================================================================
 
   // Export statement to Excel
   const exportStatement = async () => {
@@ -1295,7 +787,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   {/* Show filtered count */}
                   {(dateFrom || dateTo) && (
                     <span className="text-sm text-gray-500 mr-auto">
-                      ({statementData.filteredTransactions.length} من {allTransactions.length} معاملة)
+                      ({rowsWithBalance.length} من {allTransactions.length} معاملة)
                     </span>
                   )}
                 </div>
@@ -1315,11 +807,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                     <tbody>
                       {/* Opening Balance Row */}
                       <tr className="bg-gray-100">
-                        <td className={`pl-1 pr-2 py-3 font-medium ${statementData.openingBalance > 0 ? 'text-red-600' : statementData.openingBalance < 0 ? 'text-green-600' : ''}`}>
-                          د.أ {statementData.openingBalance > 0 ? 'عليه' : statementData.openingBalance < 0 ? 'له' : ''}
+                        <td className={`pl-1 pr-2 py-3 font-medium ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
+                          د.أ {openingBalance > 0 ? 'عليه' : openingBalance < 0 ? 'له' : ''}
                         </td>
-                        <td className={`pl-0 pr-4 py-3 font-medium text-left ${statementData.openingBalance > 0 ? 'text-red-600' : statementData.openingBalance < 0 ? 'text-green-600' : ''}`}>
-                          {formatNumber(Math.abs(statementData.openingBalance))}
+                        <td className={`pl-0 pr-4 py-3 font-medium text-left ${openingBalance > 0 ? 'text-red-600' : openingBalance < 0 ? 'text-green-600' : ''}`}>
+                          {formatNumber(Math.abs(openingBalance))}
                         </td>
                         <td className="px-4 py-3"></td>
                         <td className="px-4 py-3"></td>
@@ -1327,14 +819,14 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       </tr>
 
                       {/* Transaction Rows */}
-                      {statementData.rowsWithBalance.length === 0 ? (
+                      {rowsWithBalance.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                             لا توجد معاملات
                           </td>
                         </tr>
                       ) : (
-                        statementData.rowsWithBalance.map((transaction, index) => (
+                        rowsWithBalance.map((transaction, index) => (
                           <tr
                             key={index}
                             onClick={() => {
@@ -1383,25 +875,25 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                       )}
 
                       {/* Totals Row */}
-                      {statementData.rowsWithBalance.length > 0 && (
+                      {rowsWithBalance.length > 0 && (
                         <tr className="bg-blue-800 text-white font-semibold">
                           <td className="pl-1 pr-0 py-4"></td>
                           <td className="pl-0 pr-4 py-4"></td>
-                          <td className="px-4 py-4">{formatNumber(statementData.totalCredit)}</td>
-                          <td className="px-4 py-4">{formatNumber(statementData.totalDebit)}</td>
+                          <td className="px-4 py-4">{formatNumber(totalCredit)}</td>
+                          <td className="px-4 py-4">{formatNumber(totalDebit)}</td>
                           <td className="px-4 py-4">المجموع</td>
                           <td className="px-4 py-4"></td>
                         </tr>
                       )}
 
                       {/* Final Balance Row */}
-                      {statementData.rowsWithBalance.length > 0 && (
+                      {rowsWithBalance.length > 0 && (
                         <tr className="bg-green-50">
-                          <td className={`pl-1 pr-2 py-4 font-bold ${statementData.finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            د.أ {statementData.finalBalance > 0 ? 'عليه' : statementData.finalBalance < 0 ? 'له' : '(مسدد)'}
+                          <td className={`pl-1 pr-2 py-4 font-bold ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            د.أ {finalBalance > 0 ? 'عليه' : finalBalance < 0 ? 'له' : '(مسدد)'}
                           </td>
-                          <td className={`pl-0 pr-4 py-4 font-bold text-lg text-left ${statementData.finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatNumber(Math.abs(statementData.finalBalance))}
+                          <td className={`pl-0 pr-4 py-4 font-bold text-lg text-left ${finalBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatNumber(Math.abs(finalBalance))}
                           </td>
                           <td className="px-4 py-4 font-bold text-gray-800" colSpan={3}>
                             الرصيد المستحق
@@ -1419,7 +911,7 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                   if (pendingCheques.length === 0) {return null;}
 
                   const totalPendingCheques = pendingCheques.reduce((sum, c) => sum + (c.amount || 0), 0);
-                  const { balanceAfterCheques } = calculateBalanceAfterCheques(statementData.finalBalance, pendingCheques);
+                  const { balanceAfterCheques } = calculateBalanceAfterCheques(finalBalance, pendingCheques);
 
                   return (
                     <div className="mt-6 border-t-2 border-gray-200 pt-6 px-4" dir="rtl">
