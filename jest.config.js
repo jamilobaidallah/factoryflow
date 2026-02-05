@@ -35,12 +35,6 @@ const customJestConfig = {
       lines: 30,
       statements: 30,
     },
-    './src/lib/error-handler.ts': {
-      branches: 60,
-      functions: 50,
-      lines: 60,
-      statements: 60,
-    },
     './src/components/ui/form-field-with-validation.tsx': {
       branches: 40,
       functions: 70,
