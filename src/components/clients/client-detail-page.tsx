@@ -835,11 +835,11 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                             }}
                             className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                           >
-                            <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              د.أ {transaction.balance > 0 ? 'عليه' : transaction.balance < 0 ? 'له' : ''}
+                            <td className={`pl-1 pr-2 py-3 text-sm font-semibold ${(transaction.balance ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              د.أ {(transaction.balance ?? 0) > 0 ? 'عليه' : (transaction.balance ?? 0) < 0 ? 'له' : ''}
                             </td>
-                            <td className={`pl-0 pr-4 py-3 text-sm font-semibold text-left ${transaction.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {formatNumber(Math.abs(transaction.balance))}
+                            <td className={`pl-0 pr-4 py-3 text-sm font-semibold text-left ${(transaction.balance ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {formatNumber(Math.abs(transaction.balance ?? 0))}
                             </td>
                             <td className="px-4 py-3 text-sm text-green-600 font-medium">
                               {transaction.credit > 0 ? formatNumber(transaction.credit) : ''}
