@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { formatNumber } from './date-utils';
 import { roundCurrency } from './currency';
+import { EXCEL_COLORS } from './excel';
 
 interface ReportData {
   revenueByCategory: Record<string, number>;
@@ -47,11 +48,11 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const titleCell = worksheet.getCell(`A${rowNum}`);
   titleCell.value = 'Financial Report - التقارير المالية';
-  titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.font = { size: 18, bold: true, color: { argb: EXCEL_COLORS.WHITE } };
   titleCell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FF1E3A5F' }
+    fgColor: { argb: EXCEL_COLORS.TITLE_BG }
   };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   worksheet.getRow(rowNum).height = 32;
@@ -61,11 +62,11 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const subtitleCell = worksheet.getCell(`A${rowNum}`);
   subtitleCell.value = 'Income Statement Report';
-  subtitleCell.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+  subtitleCell.font = { size: 12, bold: true, color: { argb: EXCEL_COLORS.WHITE } };
   subtitleCell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FFB8860B' }
+    fgColor: { argb: EXCEL_COLORS.SUBTITLE_BG }
   };
   subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   worksheet.getRow(rowNum).height = 24;
@@ -83,7 +84,7 @@ export async function exportReportsToExcelProfessional(
   const genCell = worksheet.getCell(`A${rowNum}`);
   genCell.value = `Generated: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
   genCell.font = { size: 11 };
-  genCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+  genCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.INFO_BG } };
   rowNum++;
 
   // Period
@@ -91,7 +92,7 @@ export async function exportReportsToExcelProfessional(
   const periodCell = worksheet.getCell(`A${rowNum}`);
   periodCell.value = `Period: ${periodStart} - ${periodEnd}`;
   periodCell.font = { size: 11, bold: true };
-  periodCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+  periodCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.INFO_BG } };
   rowNum++;
 
   // Empty row
@@ -101,8 +102,8 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const revenueTitleCell = worksheet.getCell(`A${rowNum}`);
   revenueTitleCell.value = 'REVENUE - الإيرادات';
-  revenueTitleCell.font = { size: 13, bold: true, color: { argb: 'FF16A34A' } };
-  revenueTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+  revenueTitleCell.font = { size: 13, bold: true, color: { argb: EXCEL_COLORS.SUCCESS } };
+  revenueTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.SUCCESS_BG_LIGHT } };
   revenueTitleCell.alignment = { horizontal: 'center' };
   worksheet.getRow(rowNum).height = 26;
   rowNum++;
@@ -112,14 +113,14 @@ export async function exportReportsToExcelProfessional(
   revenueHeaderRow.values = ['Category', 'Type', 'Amount (JOD)'];
   revenueHeaderRow.eachCell((cell, colNumber) => {
     if (colNumber <= 3) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.HEADER_BG } };
+      cell.font = { bold: true, color: { argb: EXCEL_COLORS.WHITE } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = {
-        top: { style: 'thin', color: { argb: 'FF0F172A' } },
-        bottom: { style: 'thin', color: { argb: 'FF0F172A' } },
-        left: { style: 'thin', color: { argb: 'FF0F172A' } },
-        right: { style: 'thin', color: { argb: 'FF0F172A' } }
+        top: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        bottom: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        left: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        right: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } }
       };
     }
   });
@@ -132,20 +133,20 @@ export async function exportReportsToExcelProfessional(
     const row = worksheet.getRow(rowNum);
     row.values = [category, 'إيراد', formatNumber(amount, 2)];
 
-    const bgColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB';
+    const bgColor = index % 2 === 0 ? EXCEL_COLORS.ROW_EVEN : EXCEL_COLORS.ROW_ODD;
     row.eachCell((cell, colNumber) => {
       if (colNumber <= 3) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
         cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          top: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          bottom: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          left: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          right: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } }
         };
         if (colNumber === 2) { cell.alignment = { horizontal: 'center' }; }
         if (colNumber === 3) {
           cell.alignment = { horizontal: 'right' };
-          cell.font = { color: { argb: 'FF16A34A' }, bold: true };
+          cell.font = { color: { argb: EXCEL_COLORS.SUCCESS }, bold: true };
         }
       }
     });
@@ -157,13 +158,13 @@ export async function exportReportsToExcelProfessional(
   revenueTotalRow.values = ['Total Revenue - إجمالي الإيرادات', '', formatNumber(data.totalRevenue, 2)];
   revenueTotalRow.eachCell((cell, colNumber) => {
     if (colNumber <= 3) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16A34A' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.SUCCESS } };
+      cell.font = { bold: true, color: { argb: EXCEL_COLORS.WHITE } };
       cell.border = {
-        top: { style: 'medium', color: { argb: 'FF166534' } },
-        bottom: { style: 'medium', color: { argb: 'FF166534' } },
-        left: { style: 'medium', color: { argb: 'FF166534' } },
-        right: { style: 'medium', color: { argb: 'FF166534' } }
+        top: { style: 'medium', color: { argb: EXCEL_COLORS.SUCCESS_BORDER } },
+        bottom: { style: 'medium', color: { argb: EXCEL_COLORS.SUCCESS_BORDER } },
+        left: { style: 'medium', color: { argb: EXCEL_COLORS.SUCCESS_BORDER } },
+        right: { style: 'medium', color: { argb: EXCEL_COLORS.SUCCESS_BORDER } }
       };
       if (colNumber === 3) { cell.alignment = { horizontal: 'right' }; }
     }
@@ -175,8 +176,8 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const expensesTitleCell = worksheet.getCell(`A${rowNum}`);
   expensesTitleCell.value = 'EXPENSES - المصروفات';
-  expensesTitleCell.font = { size: 13, bold: true, color: { argb: 'FFDC2626' } };
-  expensesTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+  expensesTitleCell.font = { size: 13, bold: true, color: { argb: EXCEL_COLORS.DANGER } };
+  expensesTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.DANGER_BG_LIGHT } };
   expensesTitleCell.alignment = { horizontal: 'center' };
   worksheet.getRow(rowNum).height = 26;
   rowNum++;
@@ -186,14 +187,14 @@ export async function exportReportsToExcelProfessional(
   expensesHeaderRow.values = ['Category', 'Type', 'Amount (JOD)'];
   expensesHeaderRow.eachCell((cell, colNumber) => {
     if (colNumber <= 3) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.HEADER_BG } };
+      cell.font = { bold: true, color: { argb: EXCEL_COLORS.WHITE } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = {
-        top: { style: 'thin', color: { argb: 'FF0F172A' } },
-        bottom: { style: 'thin', color: { argb: 'FF0F172A' } },
-        left: { style: 'thin', color: { argb: 'FF0F172A' } },
-        right: { style: 'thin', color: { argb: 'FF0F172A' } }
+        top: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        bottom: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        left: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } },
+        right: { style: 'thin', color: { argb: EXCEL_COLORS.HEADER_BORDER } }
       };
     }
   });
@@ -206,20 +207,20 @@ export async function exportReportsToExcelProfessional(
     const row = worksheet.getRow(rowNum);
     row.values = [category, 'مصروف', formatNumber(amount, 2)];
 
-    const bgColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB';
+    const bgColor = index % 2 === 0 ? EXCEL_COLORS.ROW_EVEN : EXCEL_COLORS.ROW_ODD;
     row.eachCell((cell, colNumber) => {
       if (colNumber <= 3) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
         cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          top: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          bottom: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          left: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } },
+          right: { style: 'thin', color: { argb: EXCEL_COLORS.DATA_BORDER } }
         };
         if (colNumber === 2) { cell.alignment = { horizontal: 'center' }; }
         if (colNumber === 3) {
           cell.alignment = { horizontal: 'right' };
-          cell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          cell.font = { color: { argb: EXCEL_COLORS.DANGER }, bold: true };
         }
       }
     });
@@ -231,13 +232,13 @@ export async function exportReportsToExcelProfessional(
   expensesTotalRow.values = ['Total Expenses - إجمالي المصروفات', '', formatNumber(data.totalExpenses, 2)];
   expensesTotalRow.eachCell((cell, colNumber) => {
     if (colNumber <= 3) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.DANGER } };
+      cell.font = { bold: true, color: { argb: EXCEL_COLORS.WHITE } };
       cell.border = {
-        top: { style: 'medium', color: { argb: 'FF991B1B' } },
-        bottom: { style: 'medium', color: { argb: 'FF991B1B' } },
-        left: { style: 'medium', color: { argb: 'FF991B1B' } },
-        right: { style: 'medium', color: { argb: 'FF991B1B' } }
+        top: { style: 'medium', color: { argb: EXCEL_COLORS.DANGER_BORDER } },
+        bottom: { style: 'medium', color: { argb: EXCEL_COLORS.DANGER_BORDER } },
+        left: { style: 'medium', color: { argb: EXCEL_COLORS.DANGER_BORDER } },
+        right: { style: 'medium', color: { argb: EXCEL_COLORS.DANGER_BORDER } }
       };
       if (colNumber === 3) { cell.alignment = { horizontal: 'right' }; }
     }
@@ -249,11 +250,11 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const netIncomeLabel = worksheet.getCell(`A${rowNum}`);
   netIncomeLabel.value = 'NET INCOME - صافي الدخل';
-  netIncomeLabel.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  netIncomeLabel.font = { size: 14, bold: true, color: { argb: EXCEL_COLORS.WHITE } };
   netIncomeLabel.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: data.netProfit >= 0 ? 'FF16A34A' : 'FFDC2626' }
+    fgColor: { argb: data.netProfit >= 0 ? EXCEL_COLORS.SUCCESS : EXCEL_COLORS.DANGER }
   };
   netIncomeLabel.alignment = { horizontal: 'center' };
   worksheet.getRow(rowNum).height = 28;
@@ -262,11 +263,11 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const netIncomeValue = worksheet.getCell(`A${rowNum}`);
   netIncomeValue.value = `${formatNumber(roundCurrency(data.netProfit), 2)} JOD`;
-  netIncomeValue.font = { size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
+  netIncomeValue.font = { size: 20, bold: true, color: { argb: EXCEL_COLORS.WHITE } };
   netIncomeValue.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: data.netProfit >= 0 ? 'FF16A34A' : 'FFDC2626' }
+    fgColor: { argb: data.netProfit >= 0 ? EXCEL_COLORS.SUCCESS : EXCEL_COLORS.DANGER }
   };
   netIncomeValue.alignment = { horizontal: 'center', vertical: 'middle' };
   worksheet.getRow(rowNum).height = 36;
@@ -276,7 +277,7 @@ export async function exportReportsToExcelProfessional(
   worksheet.mergeCells(`A${rowNum}:C${rowNum}`);
   const footerCell = worksheet.getCell(`A${rowNum}`);
   footerCell.value = 'Generated by FactoryFlow - Factory Management System';
-  footerCell.font = { size: 9, color: { argb: 'FF9CA3AF' }, italic: true };
+  footerCell.font = { size: 9, color: { argb: EXCEL_COLORS.MUTED }, italic: true };
   footerCell.alignment = { horizontal: 'center' };
 
   // === SAVE FILE ===

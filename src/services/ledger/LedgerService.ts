@@ -74,6 +74,7 @@ import {
   calculatePaymentStatus,
   calculateRemainingBalance,
 } from "@/lib/arap-utils";
+import { sanitizeFileName } from "@/lib/utils";
 
 // Import types
 import type {
@@ -116,23 +117,6 @@ export type {
 // Collection path helpers
 const getUserCollectionPath = (userId: string, collectionName: string) =>
   `users/${userId}/${collectionName}`;
-
-/**
- * Sanitizes a filename by replacing spaces and special characters
- */
-function sanitizeFileName(filename: string): string {
-  const lastDot = filename.lastIndexOf(".");
-  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
-  const ext = lastDot > 0 ? filename.substring(lastDot) : "";
-
-  const sanitized = name
-    .replace(/\s+/g, "_")
-    .replace(/[^\w\-_.]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-
-  return sanitized + ext.toLowerCase();
-}
 
 /**
  * LedgerService - Centralizes all ledger-related Firestore operations

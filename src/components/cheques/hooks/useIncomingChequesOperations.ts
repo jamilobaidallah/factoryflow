@@ -56,6 +56,7 @@ import {
   createJournalPostingEngine,
   getEntriesByLinkedPaymentId,
 } from "@/services/journal";
+import { sanitizeFileName } from "@/lib/utils";
 
 /** Allocation entry for multi-allocation endorsement */
 interface EndorsementAllocation {
@@ -95,26 +96,6 @@ interface UseIncomingChequesOperationsReturn {
     allocationData: EndorsementAllocationData
   ) => Promise<boolean>;
   cancelEndorsement: (cheque: Cheque) => Promise<boolean>;
-}
-
-/**
- * Sanitizes a filename by replacing spaces and special characters
- * with underscores to prevent URL encoding issues in Firebase Storage
- */
-function sanitizeFileName(filename: string): string {
-  // Get file extension
-  const lastDot = filename.lastIndexOf('.');
-  const name = lastDot > 0 ? filename.substring(0, lastDot) : filename;
-  const ext = lastDot > 0 ? filename.substring(lastDot) : '';
-
-  // Replace spaces and special characters with underscores
-  const sanitized = name
-    .replace(/\s+/g, '_')           // Replace spaces with underscores
-    .replace(/[^\w\-_.]/g, '_')     // Replace other special chars with underscores
-    .replace(/_+/g, '_')            // Collapse multiple underscores
-    .replace(/^_|_$/g, '');         // Trim leading/trailing underscores
-
-  return sanitized + ext.toLowerCase();
 }
 
 export function useIncomingChequesOperations(): UseIncomingChequesOperationsReturn {
