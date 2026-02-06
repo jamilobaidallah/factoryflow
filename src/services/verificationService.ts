@@ -75,16 +75,26 @@ export async function verifyDataIntegrity(
   // Step 1: Load all data (reuse existing functions)
   onProgress?.({ phase: 'loading', message: 'جارٍ تحميل القيود...' });
 
-  // Define date range - current year by default
-  const today = new Date();
-  const startOfYear = new Date(today.getFullYear(), 0, 1);
-
   const ledgerService = createLedgerService(userId);
   const ledgerEntries = await ledgerService.getAllLedgerEntries();
 
+  // Calculate date range from ledger entries (dynamic, not hardcoded to current year)
+  // This ensures we load journals for ALL ledger entries, regardless of when they were created
+  let minDate = new Date();
+  let maxDate = new Date();
+
+  if (ledgerEntries.length > 0) {
+    const dates = ledgerEntries.map(e => e.date instanceof Date ? e.date : new Date(e.date));
+    minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+    maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+    // Extend range by 1 day on each side to handle timezone edge cases
+    minDate.setDate(minDate.getDate() - 1);
+    maxDate.setDate(maxDate.getDate() + 1);
+  }
+
   // Note: getEntriesInDateRange defaults onlyActive=true, so only 'posted' journals are returned
   // We pass false to also check for non-posted journals
-  const journalEntries = await getEntriesInDateRange(userId, startOfYear, today, false);
+  const journalEntries = await getEntriesInDateRange(userId, minDate, maxDate, false);
 
   // Step 2: Build indexes (index by BOTH V1 and V2 fields for safety)
   onProgress?.({ phase: 'indexing', message: 'جارٍ فهرسة البيانات...' });
