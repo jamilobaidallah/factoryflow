@@ -115,6 +115,14 @@ export const QUICK_REPORTS: QuickReport[] = [
     link: '/reports/trial-balance',
   },
   {
+    id: 'verification',
+    icon: '🔍',
+    title: 'التحقق من البيانات',
+    description: 'فحص سلامة القيود المحاسبية',
+    color: 'purple',
+    link: '/reports/verification',
+  },
+  {
     id: 'cashflow',
     icon: '💰',
     title: 'التدفقات النقدية',
