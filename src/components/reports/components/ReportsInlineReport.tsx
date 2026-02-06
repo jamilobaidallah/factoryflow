@@ -1,10 +1,11 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { X, TrendingUp, TrendingDown, Clock, DollarSign, PieChart, BarChart3, Scale, FileCheck } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Clock, DollarSign, PieChart, BarChart3, Scale, FileCheck, Search } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
 import { BalanceSheetTab } from "../tabs/BalanceSheetTab";
 import { TrialBalanceTab } from "../tabs/TrialBalanceTab";
+import { VerificationTab } from "../tabs/VerificationTab";
 import {
   isEquityTransaction,
   isLoanTransaction,
@@ -118,6 +119,12 @@ function ReportsInlineReportComponent({
       color: "amber",
       fullPage: true,
     },
+    verification: {
+      title: "التحقق من البيانات",
+      icon: <Search className="w-5 h-5" />,
+      color: "purple",
+      fullPage: true,
+    },
     cashflow: {
       title: "التدفقات النقدية",
       icon: <BarChart3 className="w-5 h-5" />,
@@ -161,6 +168,7 @@ function ReportsInlineReportComponent({
         </div>
         {reportId === "balancesheet" && <BalanceSheetTab />}
         {reportId === "trialbalance" && <TrialBalanceTab onExportCSV={() => {}} />}
+        {reportId === "verification" && <VerificationTab />}
       </div>
     );
   }

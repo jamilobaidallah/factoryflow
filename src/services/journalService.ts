@@ -45,6 +45,7 @@ import {
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
+import { QUERY_LIMITS } from '@/lib/constants';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
 import {
   createJournalLines,
@@ -248,7 +249,7 @@ export async function getAccounts(userId: string): Promise<ServiceResult<Account
   try {
     validateUserId(userId);
     const accountsRef = collection(firestore, getAccountsPath(userId));
-    const q = query(accountsRef, orderBy('code'));
+    const q = query(accountsRef, orderBy('code'), limit(QUERY_LIMITS.ACCOUNTS));
     const snapshot = await getDocs(q);
 
     const accounts: Account[] = snapshot.docs.map((doc) => {
@@ -512,7 +513,7 @@ export async function getJournalEntries(
     // Query all entries ordered by date, filter status client-side
     // This avoids requiring a composite index (status + date) in Firestore
     // and maintains backward compatibility with existing data without status field
-    const q = query(journalRef, orderBy('date', 'desc'), limit(5000));
+    const q = query(journalRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.JOURNAL_ENTRIES));
 
     const snapshot = await getDocs(q);
     let entries: JournalEntry[] = snapshot.docs.map((doc) => ({

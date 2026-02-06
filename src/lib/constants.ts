@@ -318,6 +318,10 @@ export const QUERY_LIMITS = {
   OVERTIME_ENTRIES: 1000,
   /** Maximum favorites to fetch */
   LEDGER_FAVORITES: 50,
+  /** Maximum journal entries for verification/reports */
+  JOURNAL_ENTRIES: 10000,
+  /** Maximum accounts in chart of accounts */
+  ACCOUNTS: 500,
 } as const;
 
 // Employee Advances
