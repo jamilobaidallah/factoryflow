@@ -339,7 +339,7 @@ export function exportStatementToHTML(data: {
   const fromDate = data.dateFrom ? formatShortDate(data.dateFrom) : 'البداية';
   const toDate = data.dateTo ? formatShortDate(data.dateTo) : 'اليوم';
   const balanceColor = data.finalBalance > 0 ? '#dc2626' : data.finalBalance < 0 ? '#16a34a' : '#6b7280';
-  const balanceLabel = data.finalBalance > 0 ? 'رصيد مدين (له علينا)' : data.finalBalance < 0 ? 'رصيد دائن (لنا عليه)' : 'الحساب مسوّى';
+  const balanceLabel = data.finalBalance > 0 ? 'رصيد مدين (لنا عليه)' : data.finalBalance < 0 ? 'رصيد دائن (له علينا)' : 'الحساب مسوّى';
   const balanceBg = data.finalBalance > 0 ? '#fef2f2' : data.finalBalance < 0 ? '#f0fdf4' : '#f9fafb';
 
   const html = `<!DOCTYPE html>
@@ -439,7 +439,7 @@ export function exportStatementToHTML(data: {
         <td>رصيد افتتاحي</td>
         <td></td>
         <td></td>
-        <td>${formatNumber(data.openingBalance, 2)} ${data.openingBalance > 0 ? 'د.أ له' : data.openingBalance < 0 ? 'د.أ علية' : ''}</td>
+        <td>${formatNumber(data.openingBalance, 2)} ${data.openingBalance > 0 ? 'د.أ عليه' : data.openingBalance < 0 ? 'د.أ له' : ''}</td>
       </tr>
       ${data.transactions.map(t => `
       <tr>
@@ -447,7 +447,7 @@ export function exportStatementToHTML(data: {
         <td>${t.description || '-'}</td>
         <td class="debit">${t.debit > 0 ? formatNumber(t.debit, 2) : ''}</td>
         <td class="credit">${t.credit > 0 ? formatNumber(t.credit, 2) : ''}</td>
-        <td>${formatNumber(Math.abs(t.balance), 2)} ${t.balance > 0 ? 'د.أ له' : t.balance < 0 ? 'د.أ علية' : ''}</td>
+        <td>${formatNumber(Math.abs(t.balance), 2)} ${t.balance > 0 ? 'د.أ عليه' : t.balance < 0 ? 'د.أ له' : ''}</td>
       </tr>`).join('')}
       <tr class="totals-row">
         <td></td>
@@ -495,7 +495,7 @@ export function exportStatementToHTML(data: {
     ${data.expectedBalanceAfterCheques !== undefined ? `
     <div class="expected-balance">
       <span class="expected-label">الرصيد المتوقع بعد تحصيل الشيكات:</span>
-      <span class="expected-value">${formatNumber(Math.abs(data.expectedBalanceAfterCheques), 2)} ${data.expectedBalanceAfterCheques > 0 ? 'د.أ له' : data.expectedBalanceAfterCheques < 0 ? 'د.أ علية' : 'د.أ'}</span>
+      <span class="expected-value">${formatNumber(Math.abs(data.expectedBalanceAfterCheques), 2)} ${data.expectedBalanceAfterCheques > 0 ? 'د.أ عليه' : data.expectedBalanceAfterCheques < 0 ? 'د.أ له' : 'د.أ'}</span>
     </div>` : ''}
   </div>` : ''}
 
