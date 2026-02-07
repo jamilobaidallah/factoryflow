@@ -258,7 +258,6 @@ describe("Cheque Handlers", () => {
 
     describe("Validation - Invalid Cheques", () => {
       it("should skip cheque with missing cheque number", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ chequeNumber: "" });
         const ctx = createMockContext(formData, "دخل");
@@ -266,15 +265,9 @@ describe("Cheque Handlers", () => {
         handleIncomingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          expect.stringContaining("invalid incoming cheque")
-        );
-
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with whitespace-only cheque number", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ chequeNumber: "   " });
         const ctx = createMockContext(formData, "دخل");
@@ -282,11 +275,9 @@ describe("Cheque Handlers", () => {
         handleIncomingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with zero amount", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ chequeAmount: "0" });
         const ctx = createMockContext(formData, "دخل");
@@ -294,11 +285,9 @@ describe("Cheque Handlers", () => {
         handleIncomingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with negative amount", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ chequeAmount: "-100" });
         const ctx = createMockContext(formData, "دخل");
@@ -306,11 +295,9 @@ describe("Cheque Handlers", () => {
         handleIncomingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with NaN amount", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createCheckFormData({ chequeAmount: "invalid" });
         const ctx = createMockContext(formData, "دخل");
@@ -318,7 +305,6 @@ describe("Cheque Handlers", () => {
         handleIncomingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
     });
 
@@ -519,7 +505,6 @@ describe("Cheque Handlers", () => {
 
     describe("Validation - Invalid Cheques", () => {
       it("should skip cheque with missing cheque number", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createOutgoingCheckFormData({ chequeNumber: "" });
         const ctx = createMockContext(formData, "مصروف");
@@ -527,15 +512,9 @@ describe("Cheque Handlers", () => {
         handleOutgoingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          expect.stringContaining("invalid outgoing cheque")
-        );
-
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with zero amount", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createOutgoingCheckFormData({ chequeAmount: "0" });
         const ctx = createMockContext(formData, "مصروف");
@@ -543,11 +522,9 @@ describe("Cheque Handlers", () => {
         handleOutgoingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
 
       it("should skip cheque with negative amount", () => {
-        const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
         const formData = createBaseFormData();
         const checkData = createOutgoingCheckFormData({ chequeAmount: "-500" });
         const ctx = createMockContext(formData, "مصروف");
@@ -555,7 +532,6 @@ describe("Cheque Handlers", () => {
         handleOutgoingCheckBatch(ctx, checkData);
 
         expect(ctx.batch.set).not.toHaveBeenCalled();
-        consoleWarnSpy.mockRestore();
       });
     });
 

@@ -8,6 +8,7 @@
 import { createLedgerService } from '@/services/ledger';
 import { getEntriesInDateRange, type JournalEntryV2 } from '@/services/journal';
 import { getTrialBalance } from '@/services/journalService';
+import { ACCOUNTING_TOLERANCE } from '@/lib/constants';
 
 // ============================================================================
 // TYPES
@@ -148,7 +149,7 @@ export async function verifyDataIntegrity(
       const totalDebit = journal.lines.reduce((sum, l) => sum + l.debit, 0);
       const totalCredit = journal.lines.reduce((sum, l) => sum + l.credit, 0);
 
-      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      if (Math.abs(totalDebit - totalCredit) > ACCOUNTING_TOLERANCE) {
         discrepancies.push({
           type: 'unbalanced_journal',
           severity: 'error',

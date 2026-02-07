@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
+import Decimal from 'decimal.js-light';
 
 // ======================
 // Arabic Error Messages
@@ -345,13 +346,13 @@ export function parseNumericInput(value: string): number | null {
   }
 
   const cleaned = value.trim().replace(/,/g, '');
-  const num = parseFloat(cleaned);
 
-  if (isNaN(num)) {
+  try {
+    const decimal = new Decimal(cleaned);
+    return decimal.toNumber();
+  } catch {
     return null;
   }
-
-  return num;
 }
 
 // ======================

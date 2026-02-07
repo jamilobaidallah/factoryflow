@@ -44,7 +44,6 @@ export function handleIncomingCheckBatch(
   const chequeAmount = parseFloat(checkFormData.chequeAmount);
 
   if (!isValidChequeData(checkFormData.chequeNumber, chequeAmount)) {
-    console.warn("Skipping invalid incoming cheque - missing cheque number or invalid amount");
     return;
   }
 
@@ -162,7 +161,6 @@ export function handleOutgoingCheckBatch(
   const chequeAmount = parseFloat(outgoingCheckFormData.chequeAmount);
 
   if (!isValidChequeData(outgoingCheckFormData.chequeNumber, chequeAmount)) {
-    console.warn("Skipping invalid outgoing cheque - missing cheque number or invalid amount");
     return;
   }
 

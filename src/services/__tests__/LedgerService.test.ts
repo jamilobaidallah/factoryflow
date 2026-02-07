@@ -153,6 +153,20 @@ jest.mock('@/lib/constants', () => ({
   CHEQUE_STATUS_AR: { PENDING: 'قيد الانتظار', CASHED: 'محصل', BOUNCED: 'مرتجع', ENDORSED: 'مجيّر' },
   PAYMENT_TYPES: { RECEIPT: 'قبض', DISBURSEMENT: 'صرف' },
   LOAN_CATEGORIES: { GIVEN: 'قروض ممنوحة', RECEIVED: 'قروض مستلمة' },
+  QUERY_LIMITS: {
+    CLIENTS: 500,
+    LEDGER_ENTRIES: 10000,
+    PAYMENTS: 10000,
+    PENDING_CHEQUES: 5000,
+    DASHBOARD_ENTRIES: 5000,
+    DEFAULT_PAGE_SIZE: 50,
+    PARTNERS: 100,
+    ADVANCES: 500,
+    OVERTIME_ENTRIES: 1000,
+    LEDGER_FAVORITES: 50,
+    JOURNAL_ENTRIES: 10000,
+    ACCOUNTS: 500,
+  },
 }));
 
 // Mock ledger helpers

@@ -50,7 +50,7 @@ import {
   getJournalTemplateForTransaction,
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
-import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES, QUERY_LIMITS } from "@/lib/constants";
 import {
   parseAmount,
   safeAdd,
@@ -219,12 +219,8 @@ export class LedgerService {
 
     if (!result.success) {
       const error = result.error || "Unknown error creating journal entry";
-      console.error(`❌ Failed to create ${context}:`, error);
       throw new Error(`Failed to create ${context}: ${error}`);
     }
-
-    // eslint-disable-next-line no-console
-    console.log(`✅ ${context} created successfully:`, result.entryNumber);
   }
 
   /**
@@ -258,11 +254,6 @@ export class LedgerService {
     try {
       // Attempt to delete the orphaned ledger entry
       await deleteDoc(ledgerRef);
-      // eslint-disable-next-line no-console
-      console.log("✅ Rollback successful: Orphaned ledger entry deleted", {
-        ledgerId: ledgerRef.id,
-        transactionId,
-      });
 
       // Re-throw the original error so the UI sees it
       throw new Error(
@@ -301,11 +292,8 @@ export class LedgerService {
           timestamp: serverTimestamp(),
           createdBy: this.userEmail,
         });
-
-        // eslint-disable-next-line no-console
-        console.log("📝 Logged to failed_rollbacks collection for manual cleanup");
-      } catch (logError) {
-        console.error("🚨 CRITICAL: Failed to log to failed_rollbacks", logError);
+      } catch {
+        // Failed to log to failed_rollbacks - error already tracked via Sentry
       }
 
       // Re-throw with enhanced error message
@@ -998,21 +986,24 @@ export class LedgerService {
         // Query 1: Single-transaction payments (linkedTransactionId)
         const singlePaymentsQuery = query(
           this.paymentsRef,
-          where("linkedTransactionId", "==", existingTransactionId)
+          where("linkedTransactionId", "==", existingTransactionId),
+          limit(QUERY_LIMITS.PAYMENTS)
         );
         const singlePaymentsSnapshot = await getDocs(singlePaymentsQuery);
 
         // Query 2: Multi-allocation payments from payments page (allocationTransactionIds array)
         const multiAllocPaymentsQuery = query(
           this.paymentsRef,
-          where("allocationTransactionIds", "array-contains", existingTransactionId)
+          where("allocationTransactionIds", "array-contains", existingTransactionId),
+          limit(QUERY_LIMITS.PAYMENTS)
         );
         const multiAllocPaymentsSnapshot = await getDocs(multiAllocPaymentsQuery);
 
         // Query 3: Endorsement payments (paidTransactionIds array)
         const endorsementPaymentsQuery = query(
           this.paymentsRef,
-          where("paidTransactionIds", "array-contains", existingTransactionId)
+          where("paidTransactionIds", "array-contains", existingTransactionId),
+          limit(QUERY_LIMITS.PAYMENTS)
         );
         const endorsementPaymentsSnapshot = await getDocs(endorsementPaymentsQuery);
 
@@ -1124,7 +1115,8 @@ export class LedgerService {
         // Also sync to linked cheques and handle cashed cheque payments
         const chequesQuery = query(
           this.chequesRef,
-          where("linkedTransactionId", "==", existingTransactionId)
+          where("linkedTransactionId", "==", existingTransactionId),
+          limit(QUERY_LIMITS.PENDING_CHEQUES)
         );
         const chequesSnapshot = await getDocs(chequesQuery);
 
@@ -1519,7 +1511,8 @@ export class LedgerService {
       // So we need to find payments first, then delete their associated journal entries
       const paymentsQuery = query(
         this.paymentsRef,
-        where("linkedTransactionId", "==", entry.transactionId)
+        where("linkedTransactionId", "==", entry.transactionId),
+        limit(QUERY_LIMITS.PAYMENTS)
       );
       const paymentsSnapshot = await getDocs(paymentsQuery);
       const paymentIds: string[] = [];
@@ -1550,7 +1543,8 @@ export class LedgerService {
       // Bug #8: Cashed cheques create payments with linkedChequeId, which need cleanup
       const chequesQuery = query(
         this.chequesRef,
-        where("linkedTransactionId", "==", entry.transactionId)
+        where("linkedTransactionId", "==", entry.transactionId),
+        limit(QUERY_LIMITS.PENDING_CHEQUES)
       );
       const chequesSnapshot = await getDocs(chequesQuery);
       const chequeIds: string[] = [];
@@ -1601,7 +1595,8 @@ export class LedgerService {
       // Delete related fixed assets
       const fixedAssetsQuery = query(
         this.fixedAssetsRef,
-        where("linkedTransactionId", "==", entry.transactionId)
+        where("linkedTransactionId", "==", entry.transactionId),
+        limit(100) // Fixed assets per transaction are limited
       );
       const fixedAssetsSnapshot = await getDocs(fixedAssetsQuery);
       fixedAssetsSnapshot.forEach((doc) => {
@@ -1612,7 +1607,8 @@ export class LedgerService {
       // Revert inventory quantities and delete movements
       const movementsQuery = query(
         this.inventoryMovementsRef,
-        where("linkedTransactionId", "==", entry.transactionId)
+        where("linkedTransactionId", "==", entry.transactionId),
+        limit(100) // Inventory movements per transaction are limited
       );
       const movementsSnapshot = await getDocs(movementsQuery);
 
@@ -1682,7 +1678,8 @@ export class LedgerService {
       // Delete auto-generated COGS entries
       const cogsQuery = query(
         this.ledgerRef,
-        where("transactionId", "==", `COGS-${entry.transactionId}`)
+        where("transactionId", "==", `COGS-${entry.transactionId}`),
+        limit(10) // COGS entries per transaction are limited
       );
       const cogsSnapshot = await getDocs(cogsQuery);
       cogsSnapshot.forEach((doc) => {
@@ -1693,7 +1690,8 @@ export class LedgerService {
       // Delete linked journal entries (prevents orphaned accounting records)
       const journalQuery = query(
         this.journalEntriesRef,
-        where("linkedTransactionId", "==", entry.transactionId)
+        where("linkedTransactionId", "==", entry.transactionId),
+        limit(QUERY_LIMITS.JOURNAL_ENTRIES)
       );
       const journalSnapshot = await getDocs(journalQuery);
       journalSnapshot.forEach((journalDoc) => {

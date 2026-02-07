@@ -248,7 +248,7 @@ describe('Journal Utilities', () => {
       });
 
       it('should return true within tolerance', () => {
-        expect(isBalanceSheetBalanced(10000, 10000.005)).toBe(true);
+        expect(isBalanceSheetBalanced(10000, 10000.0005)).toBe(true);
       });
 
       it('should return false when unbalanced', () => {
@@ -262,7 +262,7 @@ describe('Journal Utilities', () => {
       });
 
       it('should return true within tolerance', () => {
-        expect(isTrialBalanceBalanced(5000, 5000.009)).toBe(true);
+        expect(isTrialBalanceBalanced(5000, 5000.0009)).toBe(true);
       });
 
       it('should return false when unbalanced', () => {

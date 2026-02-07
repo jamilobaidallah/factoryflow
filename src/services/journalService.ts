@@ -45,7 +45,7 @@ import {
   getAccountNameAr,
 } from '@/lib/account-mapping';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
-import { QUERY_LIMITS } from '@/lib/constants';
+import { QUERY_LIMITS, ACCOUNTING_TOLERANCE } from '@/lib/constants';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
 import {
   createJournalLines,
@@ -700,7 +700,7 @@ export async function getTrialBalance(
     accountBalances.sort((a, b) => a.accountCode.localeCompare(b.accountCode));
 
     const difference = Math.abs(safeSubtract(totalDebits, totalCredits));
-    const isBalanced = difference < 0.01;
+    const isBalanced = difference < ACCOUNTING_TOLERANCE;
 
     return {
       success: true,
@@ -883,7 +883,7 @@ export async function getBalanceSheet(
     const totalLiabilitiesAndEquity = safeAdd(totalLiabilities, totalEquityWithNetIncome);
 
     const difference = Math.abs(safeSubtract(totalAssets, totalLiabilitiesAndEquity));
-    const isBalanced = difference < 0.01;
+    const isBalanced = difference < ACCOUNTING_TOLERANCE;
 
     // Add net income as a pseudo-account in equity section
     if (netIncome !== 0) {

@@ -10,6 +10,7 @@
 import { AccountType, JournalLine, ACCOUNT_CODES } from '@/types/accounting';
 import { AccountMapping } from '@/lib/account-mapping';
 import { roundCurrency } from '@/lib/currency';
+import { ACCOUNTING_TOLERANCE } from '@/lib/constants';
 
 // ============================================================================
 // Input Validation
@@ -208,7 +209,7 @@ export function sumAccountBalances(
 export function isBalanceSheetBalanced(
   totalAssets: number,
   totalLiabilitiesAndEquity: number,
-  tolerance: number = 0.01
+  tolerance: number = ACCOUNTING_TOLERANCE
 ): boolean {
   return Math.abs(totalAssets - totalLiabilitiesAndEquity) < tolerance;
 }
@@ -219,7 +220,7 @@ export function isBalanceSheetBalanced(
 export function isTrialBalanceBalanced(
   totalDebits: number,
   totalCredits: number,
-  tolerance: number = 0.01
+  tolerance: number = ACCOUNTING_TOLERANCE
 ): boolean {
   return Math.abs(totalDebits - totalCredits) < tolerance;
 }

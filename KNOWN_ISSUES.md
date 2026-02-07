@@ -2,9 +2,9 @@
 
 This document tracks known issues, technical debt, and the comprehensive improvement roadmap for FactoryFlow.
 
-**Last Audit Date**: 2026-02-06
+**Last Audit Date**: 2026-02-07 (24-piece comprehensive audit)
 **Overall Health Score**: 82/100
-**Roadmap Status**: Phase 1-5 Complete (Phase 3.3 deferred, Phase 4.1, 4.2, 4.4 deferred, Phase 5.1 deferred)
+**Roadmap Status**: Phase 1-5 Complete, Phase 8 In Progress (Phase 3.3, 4.1, 4.2, 4.4, 5.1 deferred)
 
 ---
 
@@ -433,6 +433,7 @@ src/components/clients/
 | Phase 5: Data Integrity | ✅ Partial | 2/3 tasks (5.1 deferred) | 2026-02-06 |
 | Phase 6: Performance | ⏳ Not Started | 0/3 tasks | - |
 | Phase 7: Best-in-Class | ⏳ Planned | 0/4 tasks | - |
+| Phase 8: Security Audit | ✅ Complete | 8/10 tasks (8.8, 8.9 deferred) | 2026-02-07 |
 
 ### Metrics Before/After
 | Metric | Before | After Phase 1 | After Phase 2 | After Phase 3 | After Phase 4 | Final |
@@ -576,6 +577,174 @@ Warning: The current testing environment is not configured to support act(...)
 
 ---
 
+## Phase 8: Security Audit Fixes (February 2026) 🔴 SECURITY
+
+**Status**: ⏳ In Progress
+**Audit Date**: 2026-02-06
+**Estimated Effort**: 6-8 hours (core fixes) + separate PR for jsPDF
+**Impact**: Security hardening, consistency improvements, code quality
+
+This phase addresses findings from the comprehensive 24-piece codebase audit.
+
+### 8.1 Replace parseFloat with parseAmount in LedgerFormDialog ✅
+- **File:** `src/components/ledger/components/LedgerFormDialog.tsx:163`
+- **Issue:** Uses `parseFloat(formData.amount)` for currency validation
+- **Risk:** Floating-point precision errors (e.g., `0.1 + 0.2 = 0.30000000000004`)
+- **Fix:** Replace with `parseAmount()` from `@/lib/currency`
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.2 Remove localStorage for Invite Token ✅
+- **File:** `src/app/invite/[token]/page.tsx:133-137, 161-165`
+- **Issue:** localStorage stores invite token but it's never read anywhere
+- **Risk:** XSS attack vector (malicious scripts could read token)
+- **Fix:** Remove both setItem and removeItem calls - token already in URL
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.3 Remove Console Statements from Production Code ✅
+- **Files:**
+  - `src/services/ledger/LedgerService.ts:227,262,306` (console.log with eslint-disable)
+  - `src/services/ledger/handlers/chequeHandlers.ts:47,165` (console.warn)
+- **Issue:** Debug statements leak information in production
+- **Risk:** Information disclosure (entry numbers, IDs)
+- **Fix:** Remove console statements, keep return statements
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.4 Standardize Balance Tolerance to 0.001 ✅
+- **Files:**
+  - `src/services/verificationService.ts:151` (0.01 → 0.001)
+  - `src/services/journalService.ts:703,886` (0.01 → 0.001)
+  - `src/lib/journal-utils.ts:211,222` (0.01 → 0.001)
+  - `firestore.rules:322` (0.01 → 0.001)
+- **Issue:** Inconsistent tolerance between files (0.01 vs 0.001)
+- **Reference:** `src/types/accounting.ts:232` already uses 0.001 (correct)
+- **Risk:** Accumulated rounding errors may not be detected
+- **Fix:** Standardize all to 0.001
+- **Status:** ✅ Complete (2026-02-07) - Requires `firebase deploy --only firestore:rules`
+
+### 8.5 Add limit() to Unbounded Queries ✅
+- **File:** `src/services/ledger/LedgerService.ts` (multiple locations)
+- **Issue:** Queries bounded only by `where()` clause, no explicit limit
+- **Risk:** Memory issues if data grows unexpectedly
+- **Fix:** Added `limit(QUERY_LIMITS.*)` to all transaction-related queries
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.6 Update Next.js to 14.2.35 ✅
+- **Current:** `next@14.2.33` → `next@14.2.35`
+- **Vulnerabilities Fixed:**
+  - GHSA-9g9p-9gw9-jx7f (High) - DoS via Image Optimizer remotePatterns
+  - GHSA-h25m-26qc-wcjf (High) - HTTP request deserialization DoS
+- **Fix:** `npm install next@14.2.35`
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.7 Downgrade eslint-config-next to 14.2.33 ✅
+- **Previous:** `eslint-config-next@15.5.6` (for Next.js 15.x)
+- **Issue:** Version mismatch with Next.js 14.x
+- **Fix:** `npm install eslint-config-next@14.2.33`
+- **Status:** ✅ Complete (2026-02-07)
+
+### 8.8 Update jsPDF to 4.1.0 ⏸️ DEFERRED (Separate PR)
+- **Current:** `jspdf@3.0.4`
+- **Vulnerabilities (5 Critical/High):**
+  - GHSA-f8cm-6447-x5h2 (Critical) - Path Traversal
+  - GHSA-pqxr-3g65-p328 (Critical) - PDF Injection → JS Execution
+  - GHSA-95fx-jjr5-f39c (High) - DoS via BMP Dimensions
+  - GHSA-vm32-vv63-p422 (High) - XMP Metadata Injection
+  - GHSA-cjw8-79x6-5cj4 (Medium) - Race Condition
+- **Risk of Fix:** HIGH - Arabic font handling (Amiri) may break
+- **Status:** ⏸️ Deferred to separate branch/PR with thorough testing
+
+### 8.9 Remove localStorage for pendingOwnerSetup ⏸️ KEPT
+- **Files:** `login-page.tsx:111-116`, `provider.tsx:122-127`
+- **Issue:** Uses localStorage for account type flag during signup
+- **Risk:** Low - only affects onboarding flow
+- **Status:** ⏸️ Kept - Required for owner/employee signup flow distinction
+- **Note:** Audit marked as "Acceptable trade-off for UX"
+
+### 8.10 Replace parseFloat in parseNumericInput ✅
+- **File:** `src/lib/validation.ts:348`
+- **Issue:** Uses `parseFloat` instead of Decimal.js
+- **Risk:** Potential precision issues for currency values
+- **Fix:** Use Decimal.js for parsing (maintains null semantics for invalid input)
+- **Status:** ✅ Complete (2026-02-07)
+
+---
+
+### Phase 8 Backlog (Medium Priority)
+
+These issues from the audit are documented for future attention:
+
+#### Code Quality
+| Issue | File(s) | Severity | Status |
+|-------|---------|----------|--------|
+| `any` types in backup-utils.ts | backup-utils.ts:23-30,78,132,228 | 🟡 MEDIUM | Backlog |
+| `any` types in export-utils.ts | export-utils.ts:20,80,104,124,146,169 | 🟡 MEDIUM | Backlog |
+| `any` types in error-handling.ts | error-handling.ts:188,323,482 | 🟡 MEDIUM | Backlog |
+| No barrel exports (index.ts) for types | src/types/ | 🟢 LOW | Backlog |
+| console.error in journalService | journalService.ts:110 | 🟢 LOW | Backlog |
+| console.error in checkDuplicate | validation.ts:254 | 🟢 LOW | Backlog |
+
+#### Architecture
+| Issue | File(s) | Severity | Status |
+|-------|---------|----------|--------|
+| LedgerService too large (2546 lines) | LedgerService.ts | 🟡 MEDIUM | Backlog |
+| ledger-page.tsx too large (636 lines) | ledger-page.tsx | 🟡 MEDIUM | Backlog |
+| clients-page.tsx too large (702 lines) | clients-page.tsx | 🟡 MEDIUM | Backlog |
+| updateLedgerEntry too complex (~400 lines) | LedgerService.ts | 🟡 MEDIUM | Backlog |
+| No schema migration strategy | Database | 🟡 MEDIUM | Backlog |
+
+#### Testing
+| Issue | File(s) | Severity | Status |
+|-------|---------|----------|--------|
+| No Firestore rules tests | firestore.rules | 🟡 MEDIUM | Backlog |
+| No validation tests | validation.ts | 🟢 LOW | Backlog |
+| No LedgerFormDialog tests | LedgerFormDialog.tsx | 🟢 LOW | Backlog |
+| No dashboard component tests | dashboard/ | 🟢 LOW | Backlog |
+| Low test coverage thresholds | jest.config.js | 🟢 LOW | Backlog |
+
+#### Accessibility
+| Issue | File(s) | Severity | Status |
+|-------|---------|----------|--------|
+| No aria-describedby for form errors | validated-input.tsx | 🟢 LOW | Backlog |
+| No skip links | layout.tsx | 🟢 LOW | Backlog |
+| No reduced motion support | globals.css | 🟢 LOW | Backlog |
+| No ARIA live regions for errors | error.tsx | 🟢 LOW | Backlog |
+
+#### Configuration
+| Issue | File(s) | Severity | Status |
+|-------|---------|----------|--------|
+| No CSP headers | next.config.js | 🟡 MEDIUM | Backlog |
+| No bundle analyzer | next.config.js | 🟢 LOW | Backlog |
+| Node.js 18 in CI (LTS until 2025) | ci.yml | 🟢 LOW | Backlog |
+
+---
+
+### Phase 8 Deferred Security Items (Requires Backend Work)
+
+These security items require Cloud Functions or significant backend changes:
+
+#### Storage Rules RBAC ⏸️
+- **File:** `storage.rules`
+- **Issue:** Storage rules only check auth, no RBAC enforcement
+- **Risk:** Team members could upload files they shouldn't
+- **Fix:** Add Cloud Function for upload validation
+- **Status:** ⏸️ Deferred (requires backend implementation)
+
+#### Email Spoofing in Invitations ⏸️
+- **File:** `src/services/invitationService.ts:54-79`
+- **Issue:** Inviter email could be spoofed in invitation metadata
+- **Risk:** Could send invitations appearing from unauthorized users
+- **Fix:** Send invitations via Cloud Function with server-side verification
+- **Status:** ⏸️ Deferred (requires Cloud Function implementation)
+
+#### Service-Level Authorization ⏸️
+- **File:** `src/services/LedgerService.ts` constructor
+- **Issue:** Service accepts userId without validation
+- **Risk:** If caller passes wrong userId, could access other user's data
+- **Note:** Firestore rules prevent actual data access, but service trusts input
+- **Status:** ⏸️ Deferred (defense-in-depth, low priority)
+
+---
+
 ## 🔄 Future Improvements
 
 ### Performance Optimizations
@@ -591,10 +760,13 @@ Warning: The current testing environment is not configured to support act(...)
 
 ## 📝 Notes
 
-**Last Updated**: 2026-02-06
-**Last Reviewed**: Comprehensive forensic audit completed
+**Last Updated**: 2026-02-07
+**Last Reviewed**: 24-piece comprehensive security audit completed
 
 **Change Log**:
+- 2026-02-07: ⏳ Phase 8 Started - Security audit fixes (10 tasks, 1 deferred to separate PR)
+- 2026-02-07: 📋 Added all 51 audit findings to KNOWN_ISSUES.md with severity levels
+- 2026-02-07: 📊 Documented 3 deferred security items requiring Cloud Functions
 - 2026-02-06: ✅ Phase 5.2 Complete - Created transaction-level verification system (verificationService.ts, VerificationTab.tsx)
 - 2026-02-06: ✅ Phase 5.3 Complete - Replaced hardcoded query limits with QUERY_LIMITS constant
 - 2026-02-06: ⏸️ Phase 5.1 Deferred - True atomicity deferred (current rollback works for 95%+ cases)

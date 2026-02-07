@@ -314,12 +314,12 @@ service cloud.firestore {
         // Helper function to validate journal entry balance
         function isBalanced() {
           let data = request.resource.data;
-          // totalDebits and totalCredits must be present and equal (within 0.01 tolerance for floating point)
+          // totalDebits and totalCredits must be present and equal (within 0.001 tolerance for floating point)
           return data.totalDebits is number
             && data.totalCredits is number
             && data.totalDebits >= 0
             && data.totalCredits >= 0
-            && math.abs(data.totalDebits - data.totalCredits) < 0.01;
+            && math.abs(data.totalDebits - data.totalCredits) < 0.001;
         }
 
         allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);

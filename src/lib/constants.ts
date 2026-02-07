@@ -324,6 +324,11 @@ export const QUERY_LIMITS = {
   ACCOUNTS: 500,
 } as const;
 
+// Accounting Precision
+// Tolerance for floating-point comparison in balance validation
+// Used for debits=credits checks across the application
+export const ACCOUNTING_TOLERANCE = 0.001;
+
 // Employee Advances
 export const ADVANCE_STATUS = {
   ACTIVE: 'active',

@@ -212,9 +212,10 @@ export function validateJournalEntry(lines: JournalLine[]): {
   totalCredits: number;
   difference: number;
 } {
-  // Import safeAdd and safeSubtract inline to avoid circular dependencies
+  // Import inline to avoid circular dependencies
   // These use Decimal.js for precise money arithmetic
   const Decimal = require('decimal.js-light');
+  const { ACCOUNTING_TOLERANCE } = require('@/lib/constants');
 
   const safeAdd = (a: number, b: number): number => {
     return new Decimal(a || 0).plus(b || 0).toNumber();
@@ -228,8 +229,8 @@ export function validateJournalEntry(lines: JournalLine[]): {
   const totalCredits = lines.reduce((sum, line) => safeAdd(sum, line.credit), 0);
   const difference = Math.abs(safeSubtract(totalDebits, totalCredits));
 
-  // Allow for small floating point differences (use 0.001 tolerance)
-  const isValid = difference < 0.001;
+  // Allow for small floating point differences
+  const isValid = difference < ACCOUNTING_TOLERANCE;
 
   return {
     isValid,

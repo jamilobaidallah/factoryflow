@@ -129,13 +129,7 @@ export default function InvitationPage() {
         await signInWithEmailAndPassword(auth, email, password);
         // The auto-accept useEffect will handle accepting the invitation
       } else {
-        // Signup flow - store invitation token for provider to use
-        try {
-          localStorage.setItem('pendingInvitationToken', token);
-        } catch {
-          // localStorage not available
-        }
-
+        // Signup flow
         await createUserWithEmailAndPassword(auth, email, password);
 
         // Accept invitation immediately after signup
@@ -156,13 +150,6 @@ export default function InvitationPage() {
                 title: "تم إنشاء الحساب وقبول الدعوة بنجاح",
                 description: `مرحباً بك كـ ${USER_ROLE_LABELS[invitation.role]}`,
               });
-
-              // Clear the token
-              try {
-                localStorage.removeItem('pendingInvitationToken');
-              } catch {
-                // Ignore
-              }
 
               // Redirect to dashboard
               router.push("/dashboard");

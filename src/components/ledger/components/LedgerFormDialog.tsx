@@ -11,6 +11,7 @@ import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
 import { useAllClients } from "@/hooks/useAllClients";
 import { useInventoryItems } from "@/hooks/useInventoryItems";
 import { cn } from "@/lib/utils";
+import { parseAmount } from "@/lib/currency";
 import {
   Dialog,
   DialogContent,
@@ -159,7 +160,7 @@ export function LedgerFormDialog() {
         setStepError("الفئة الفرعية مطلوبة");
         return false;
       }
-      if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      if (!formData.amount || parseAmount(formData.amount) <= 0) {
         setStepError("المبلغ مطلوب ويجب أن يكون أكبر من صفر");
         return false;
       }

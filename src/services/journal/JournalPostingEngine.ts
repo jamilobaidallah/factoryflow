@@ -44,6 +44,7 @@ import {
 } from "./JournalSequence";
 import { validatePostingDate } from "./JournalLockDate";
 import { resolveTemplateAccounts, getTemplate } from "./JournalTemplates";
+import { ACCOUNTING_TOLERANCE } from "@/lib/constants";
 
 /**
  * Journal Posting Engine
@@ -639,8 +640,8 @@ export class JournalPostingEngine {
       new Decimal(totalDebits).minus(totalCredits).toNumber()
     );
 
-    // Allow for small floating point differences (0.001 tolerance)
-    const isValid = difference < 0.001;
+    // Allow for small floating point differences
+    const isValid = difference < ACCOUNTING_TOLERANCE;
 
     return { isValid, totalDebits, totalCredits };
   }
