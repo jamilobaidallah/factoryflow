@@ -48,14 +48,15 @@ jest.mock('@/hooks/use-toast', () => ({
 
 // Mock export functions
 const mockExportStatementToExcel = jest.fn().mockResolvedValue(undefined);
-const mockExportStatementToPDF = jest.fn().mockResolvedValue(undefined);
+const mockExportStatementToHTML = jest.fn();
 
 jest.mock('@/lib/export-statement-excel', () => ({
   exportStatementToExcel: (...args: unknown[]) => mockExportStatementToExcel(...args),
 }));
 
-jest.mock('@/lib/export-statement-pdf', () => ({
-  exportStatementToPDF: (...args: unknown[]) => mockExportStatementToPDF(...args),
+jest.mock('@/lib/export-utils', () => ({
+  ...jest.requireActual('@/lib/export-utils'),
+  exportStatementToHTML: (...args: unknown[]) => mockExportStatementToHTML(...args),
 }));
 
 // Mock date-fns format
@@ -712,7 +713,7 @@ describe('ClientDetailPage', () => {
       await user.click(screen.getByRole('button', { name: /PDF/ }));
 
       await waitFor(() => {
-        expect(mockExportStatementToPDF).toHaveBeenCalled();
+        expect(mockExportStatementToHTML).toHaveBeenCalled();
       });
     });
 

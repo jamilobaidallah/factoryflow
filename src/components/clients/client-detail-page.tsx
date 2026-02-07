@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { exportStatementToPDF } from "@/lib/export-statement-pdf";
+import { exportStatementToHTML } from "@/lib/export-utils";
 import { exportStatementToExcel } from "@/lib/export-statement-excel";
 
 // Import extracted hooks and types
@@ -131,38 +131,27 @@ export default function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     }
   };
 
-  const handlePdfExport = async () => {
+  const handlePdfExport = () => {
     if (!client) { return; }
 
     const clientInitialBalance = client.balance || 0;
     const exportData = buildExportData(ledgerEntries, payments, cheques, clientInitialBalance);
 
-    try {
-      await exportStatementToPDF({
-        clientName: client.name,
-        clientPhone: client.phone,
-        clientEmail: client.email,
-        openingBalance: clientInitialBalance,
-        transactions: exportData.transactions,
-        totalDebit: exportData.totalDebit,
-        totalCredit: exportData.totalCredit,
-        finalBalance: exportData.finalBalance,
-        pendingCheques: exportData.pendingCheques.length > 0 ? exportData.pendingCheques : undefined,
-        expectedBalanceAfterCheques: exportData.pendingCheques.length > 0 ? exportData.balanceAfterCheques : undefined,
-      });
-
-      toast({
-        title: "تم التصدير",
-        description: "تم تصدير كشف الحساب بنجاح",
-      });
-    } catch (error) {
-      console.error('PDF export error:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل تصدير الملف",
-        variant: "destructive",
-      });
-    }
+    // Use HTML-based export for proper Arabic RTL support
+    exportStatementToHTML({
+      clientName: client.name,
+      clientPhone: client.phone,
+      clientEmail: client.email,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      openingBalance: clientInitialBalance,
+      transactions: exportData.transactions,
+      totalDebit: exportData.totalDebit,
+      totalCredit: exportData.totalCredit,
+      finalBalance: exportData.finalBalance,
+      pendingCheques: exportData.pendingCheques.length > 0 ? exportData.pendingCheques : undefined,
+      expectedBalanceAfterCheques: exportData.pendingCheques.length > 0 ? exportData.balanceAfterCheques : undefined,
+    });
   };
 
   // ============================================================================
