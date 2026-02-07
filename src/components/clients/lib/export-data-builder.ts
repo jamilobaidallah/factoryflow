@@ -47,12 +47,24 @@ export function buildExportData(
       const isAdvance = isAdvanceEntry(e);
       const isLoan = isLoanTransaction(e.type, e.category);
 
+      // Skip advances that were created from multi-allocation payments
+      // These have linkedPaymentId and their cash movement is already captured
+      // in the payment record (avoids double-counting the advance amount)
+      if (isAdvance && e.linkedPaymentId) {
+        return [];
+      }
+
       // Calculate debit/credit based on transaction type
       let debit = 0;
       let credit = 0;
       if (isAdvance) {
-        debit = 0;
-        credit = 0;
+        // Customer advance (سلفة عميل): We received cash, we owe them goods → credit
+        // Supplier advance (سلفة مورد): We paid cash, they owe us goods → debit
+        if (e.category === "سلفة عميل") {
+          credit = e.amount;
+        } else if (e.category === "سلفة مورد") {
+          debit = e.amount;
+        }
       } else if (isLoan) {
         const loanType = getLoanType(e.category);
         if (isInitialLoan(e.subCategory)) {
@@ -74,13 +86,11 @@ export function buildExportData(
         credit = e.amount;
       }
 
-      // Row 1: The invoice/loan itself
+      // Row 1: The invoice/loan/advance itself
       rows.push({
         date: e.date,
         type: "Invoice" as const,
-        description: isAdvance
-          ? `${e.description} (${e.amount.toFixed(2)} - لا يؤثر على الرصيد)`
-          : e.description,
+        description: e.description,
         debit,
         credit,
         balance: 0,
