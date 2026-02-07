@@ -163,7 +163,7 @@ export function buildExportData(
       return [{
         date: p.date,
         type: "Payment" as const,
-        description: p.notes || p.description || '',
+        description: p.notes || p.description || 'دفعة',
         debit: p.type === "صرف" ? p.amount : 0,
         credit: p.type === "قبض" ? p.amount : 0,
         balance: 0,
