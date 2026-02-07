@@ -120,16 +120,55 @@ export function buildExportData(
         });
       }
 
+      // Row 4: Expense discount (if any) - reduces what we owe supplier (DEBIT)
+      if (e.totalDiscount && e.totalDiscount > 0 && e.type === "مصروف") {
+        rows.push({
+          date: e.date,
+          type: "Payment" as const,
+          description: "خصم من المورد",
+          debit: e.totalDiscount,
+          credit: 0,
+          balance: 0,
+        });
+      }
+
+      // Row 5: Expense writeoff (if any) - reduces what we owe supplier (DEBIT)
+      if (e.writeoffAmount && e.writeoffAmount > 0 && e.type === "مصروف") {
+        rows.push({
+          date: e.date,
+          type: "Payment" as const,
+          description: "إعفاء من المورد",
+          debit: e.writeoffAmount,
+          credit: 0,
+          balance: 0,
+        });
+      }
+
       return rows;
     }),
-    ...payments.map((p) => ({
-      date: p.date,
-      type: "Payment" as const,
-      description: p.notes || p.description || '',
-      debit: p.type === "صرف" ? p.amount : 0,
-      credit: p.type === "قبض" ? p.amount : 0,
-      balance: 0,
-    })),
+    ...payments.flatMap((p) => {
+      // Skip zero-amount payments
+      if (p.amount <= 0) {
+        return [];
+      }
+
+      // Skip payments linked to advance entries (already shown as سلفة)
+      if (p.linkedTransactionId) {
+        const linkedEntry = ledgerEntries.find(e => e.transactionId === p.linkedTransactionId);
+        if (linkedEntry && isAdvanceEntry(linkedEntry)) {
+          return [];
+        }
+      }
+
+      return [{
+        date: p.date,
+        type: "Payment" as const,
+        description: p.notes || p.description || '',
+        debit: p.type === "صرف" ? p.amount : 0,
+        credit: p.type === "قبض" ? p.amount : 0,
+        balance: 0,
+      }];
+    }),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Calculate running balances
