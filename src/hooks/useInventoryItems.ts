@@ -6,9 +6,10 @@
  */
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { QUERY_LIMITS } from '@/lib/constants';
 
 export interface InventoryItemOption {
   id: string;
@@ -36,7 +37,7 @@ export function useInventoryItems(): UseInventoryItemsResult {
 
     setError(null);
     const inventoryRef = collection(firestore, `users/${user.dataOwnerId}/inventory`);
-    const q = query(inventoryRef, orderBy('itemName', 'asc'));
+    const q = query(inventoryRef, orderBy('itemName', 'asc'), limit(QUERY_LIMITS.INVENTORY_ITEMS));
 
     const unsubscribe = onSnapshot(
       q,

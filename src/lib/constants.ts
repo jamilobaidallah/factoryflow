@@ -322,6 +322,8 @@ export const QUERY_LIMITS = {
   JOURNAL_ENTRIES: 10000,
   /** Maximum accounts in chart of accounts */
   ACCOUNTS: 500,
+  /** Maximum inventory items to fetch */
+  INVENTORY_ITEMS: 1000,
 } as const;
 
 // Accounting Precision

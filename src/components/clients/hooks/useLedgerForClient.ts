@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { QUERY_LIMITS } from '@/lib/constants';
 import {
   isLoanTransaction,
   isInitialLoan,
@@ -71,7 +72,9 @@ export function useLedgerForClient(client: Client | null) {
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     const q = query(
       ledgerRef,
-      where("associatedParty", "==", client.name)
+      where("associatedParty", "==", client.name),
+      orderBy("date", "desc"),
+      limit(QUERY_LIMITS.LEDGER_ENTRIES)
     );
 
     const unsubscribe = onSnapshot(
@@ -112,9 +115,7 @@ export function useLedgerForClient(client: Client | null) {
           }
         });
 
-        // Sort by date in JavaScript instead of Firestore
-        entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-
+        // Sorted by Firestore orderBy, no client-side sort needed
         setLedgerEntries(entries);
         setMetrics({
           totalSales: sales,

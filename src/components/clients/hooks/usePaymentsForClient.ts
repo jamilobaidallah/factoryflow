@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { QUERY_LIMITS } from '@/lib/constants';
 import type { Client } from './useClientData';
 
 export interface Payment {
@@ -34,7 +35,9 @@ export function usePaymentsForClient(client: Client | null) {
     const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
     const q = query(
       paymentsRef,
-      where("clientName", "==", client.name)
+      where("clientName", "==", client.name),
+      orderBy("date", "desc"),
+      limit(QUERY_LIMITS.PAYMENTS)
     );
 
     const unsubscribe = onSnapshot(
@@ -52,9 +55,7 @@ export function usePaymentsForClient(client: Client | null) {
           paymentsList.push(payment);
         });
 
-        // Sort by date in JavaScript
-        paymentsList.sort((a, b) => b.date.getTime() - a.date.getTime());
-
+        // Sorted by Firestore orderBy, no client-side sort needed
         setPayments(paymentsList);
       },
       (error) => {

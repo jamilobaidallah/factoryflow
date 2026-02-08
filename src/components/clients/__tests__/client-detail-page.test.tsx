@@ -20,6 +20,8 @@ const mockCollection = jest.fn();
 const mockDoc = jest.fn();
 const mockQuery = jest.fn();
 const mockWhere = jest.fn();
+const mockOrderBy = jest.fn();
+const mockLimit = jest.fn();
 
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -28,6 +30,8 @@ jest.mock('firebase/firestore', () => ({
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   where: (...args: unknown[]) => mockWhere(...args),
+  orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  limit: (...args: unknown[]) => mockLimit(...args),
 }));
 
 jest.mock('@/firebase/config', () => ({
