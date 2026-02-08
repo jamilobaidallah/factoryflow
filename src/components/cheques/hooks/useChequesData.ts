@@ -119,11 +119,11 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
       // Clear cursors for pages after current if data changed (prevents stale pagination)
       if (!snapshot.metadata.fromCache && snapshot.docChanges().length > 0) {
         const cursors = chequesCursorStore.getCursors(user.dataOwnerId);
-        for (const page of cursors.keys()) {
+        Array.from(cursors.keys()).forEach((page) => {
           if (page > currentPage) {
             cursors.delete(page);
           }
-        }
+        });
       }
 
       const chequesData: Cheque[] = [];
