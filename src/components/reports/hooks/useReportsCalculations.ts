@@ -278,7 +278,7 @@ export function useReportsCalculations({
     // Count all payments from Payments collection
     // Instant settlement automatically creates payment records, so we only need to count from payments
     // EXCLUDE endorsed cheques, no-cash-movement payments, and advance-related payments
-    payments.forEach((payment: any) => {
+    payments.forEach((payment) => {
       // Skip endorsed cheques and no-cash-movement payments
       if (payment.isEndorsement || payment.noCashMovement) {
         return;

@@ -27,10 +27,22 @@ import { firestore } from "@/firebase/config";
 import { toDate, toDateOptional } from "@/lib/firestore-utils";
 import { formatShortDate } from "@/lib/date-utils";
 
+/** Common search result data fields across all collection types */
+interface SearchResultData {
+  transactionId?: string;
+  description?: string;
+  amount?: number;
+  type?: string;
+  category?: string;
+  date?: Date;
+  dueDate?: Date;
+  [key: string]: unknown;
+}
+
 interface SearchResult {
   type: "ledger" | "payment" | "cheque" | "inventory";
   id: string;
-  data: any;
+  data: SearchResultData;
 }
 
 export default function TransactionSearchPage() {

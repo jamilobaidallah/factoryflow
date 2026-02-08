@@ -185,14 +185,14 @@ export function handleError(error: unknown): AppError {
 export interface ErrorLog {
   timestamp: Date;
   error: AppError;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   userId?: string;
 }
 
 /**
  * Log error for debugging and send to Sentry in production
  */
-export function logError(error: AppError, context?: Record<string, any>, userId?: string): void {
+export function logError(error: AppError, context?: Record<string, unknown>, userId?: string): void {
   const errorLog: ErrorLog = {
     timestamp: new Date(),
     error,
@@ -320,7 +320,7 @@ export async function retryOperation<T>(
  * Validate that required fields are not empty
  */
 export function validateRequiredFields(
-  data: Record<string, any>,
+  data: Record<string, unknown>,
   requiredFields: string[]
 ): AppError | null {
   for (const field of requiredFields) {
@@ -479,7 +479,7 @@ export function handleFirebaseErrorSimple(error: unknown): ErrorResult {
 export function logErrorSimple(
   context: string,
   error: unknown,
-  additionalData?: Record<string, any>
+  additionalData?: Record<string, unknown>
 ): void {
   const appError = handleError(error);
   logError(appError, { ...additionalData, context });
