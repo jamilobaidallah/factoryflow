@@ -2,9 +2,9 @@
 
 This document tracks known issues, technical debt, and the comprehensive improvement roadmap for FactoryFlow.
 
-**Last Audit Date**: 2026-02-07 (24-piece comprehensive audit)
-**Overall Health Score**: 82/100
-**Roadmap Status**: Phase 1-5 Complete, Phase 8 In Progress (Phase 3.3, 4.1, 4.2, 4.4, 5.1 deferred)
+**Last Audit Date**: 2026-02-08 (24-piece comprehensive audit)
+**Overall Health Score**: 85/100
+**Roadmap Status**: Phase 1-5, 8 Complete (Phase 3.3, 4.1, 4.2, 4.4, 5.1 deferred)
 
 ---
 
@@ -433,7 +433,7 @@ src/components/clients/
 | Phase 5: Data Integrity | ✅ Partial | 2/3 tasks (5.1 deferred) | 2026-02-06 |
 | Phase 6: Performance | ⏳ Not Started | 0/3 tasks | - |
 | Phase 7: Best-in-Class | ⏳ Planned | 0/4 tasks | - |
-| Phase 8: Security Audit | ✅ Complete | 8/10 tasks (8.8, 8.9 deferred) | 2026-02-07 |
+| Phase 8: Security Audit | ✅ Complete | 9/10 tasks (8.9 kept intentionally) | 2026-02-08 |
 
 ### Metrics Before/After
 | Metric | Before | After Phase 1 | After Phase 2 | After Phase 3 | After Phase 4 | Final |
@@ -642,16 +642,19 @@ This phase addresses findings from the comprehensive 24-piece codebase audit.
 - **Fix:** `npm install eslint-config-next@14.2.33`
 - **Status:** ✅ Complete (2026-02-07)
 
-### 8.8 Update jsPDF to 4.1.0 ⏸️ DEFERRED (Separate PR)
-- **Current:** `jspdf@3.0.4`
-- **Vulnerabilities (5 Critical/High):**
+### 8.8 Update jsPDF to 4.1.0 ✅ COMPLETE
+- **Previous:** `jspdf@3.0.4` → `jspdf@4.1.0`, `jspdf-autotable@5.0.2` → `5.0.7`
+- **Vulnerabilities Fixed (5 Critical/High):**
   - GHSA-f8cm-6447-x5h2 (Critical) - Path Traversal
   - GHSA-pqxr-3g65-p328 (Critical) - PDF Injection → JS Execution
   - GHSA-95fx-jjr5-f39c (High) - DoS via BMP Dimensions
   - GHSA-vm32-vv63-p422 (High) - XMP Metadata Injection
   - GHSA-cjw8-79x6-5cj4 (Medium) - Race Condition
-- **Risk of Fix:** HIGH - Arabic font handling (Amiri) may break
-- **Status:** ⏸️ Deferred to separate branch/PR with thorough testing
+- **Solution:** Switched client statement export to HTML-based (browser print) instead of jsPDF
+  - New `exportStatementToHTML()` function with proper Arabic RTL support using Cairo font
+  - Fixed advance handling, expense discount/writeoff rows, payment filtering in export-data-builder
+  - Added "دفعة" fallback for empty payment descriptions
+- **Status:** ✅ Complete (2026-02-08)
 
 ### 8.9 Remove localStorage for pendingOwnerSetup ⏸️ KEPT
 - **Files:** `login-page.tsx:111-116`, `provider.tsx:122-127`
@@ -760,10 +763,13 @@ These security items require Cloud Functions or significant backend changes:
 
 ## 📝 Notes
 
-**Last Updated**: 2026-02-07
+**Last Updated**: 2026-02-08
 **Last Reviewed**: 24-piece comprehensive security audit completed
 
 **Change Log**:
+- 2026-02-08: ✅ Phase 8.8 Complete - Updated jsPDF 3.0.4→4.1.0, jspdf-autotable 5.0.2→5.0.7 (5 vulnerabilities fixed)
+- 2026-02-08: ✅ Client statement export rewritten to use HTML-based export with proper Arabic RTL support
+- 2026-02-08: ✅ Fixed export-data-builder: advance handling, expense discounts/writeoffs, payment filtering, description fallback
 - 2026-02-07: ⏳ Phase 8 Started - Security audit fixes (10 tasks, 1 deferred to separate PR)
 - 2026-02-07: 📋 Added all 51 audit findings to KNOWN_ISSUES.md with severity levels
 - 2026-02-07: 📊 Documented 3 deferred security items requiring Cloud Functions
