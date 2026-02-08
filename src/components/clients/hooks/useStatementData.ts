@@ -233,7 +233,7 @@ export function useStatementData(
           date: p.date,
           isPayment: true,
           entryType: p.type,
-          description: p.notes || p.description || '',
+          description: p.notes || p.description || 'دفعة',
           notes: p.notes,
           isEndorsement: p.isEndorsement || false, // Track endorsement payments
           // Payment received (قبض): goes in دائن (reduces what they owe us)
