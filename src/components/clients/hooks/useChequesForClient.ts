@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { QUERY_LIMITS } from '@/lib/constants';
 import type { Client } from './useClientData';
 
 export interface Cheque {
@@ -35,7 +36,9 @@ export function useChequesForClient(client: Client | null) {
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
     const q = query(
       chequesRef,
-      where("clientName", "==", client.name)
+      where("clientName", "==", client.name),
+      orderBy("issueDate", "desc"),
+      limit(QUERY_LIMITS.PENDING_CHEQUES)
     );
 
     const unsubscribe = onSnapshot(
@@ -51,8 +54,7 @@ export function useChequesForClient(client: Client | null) {
             dueDate: data.dueDate?.toDate?.() || data.issueDate?.toDate?.() || new Date(),
           } as Cheque);
         });
-        // Sort by issue date in JavaScript
-        chequesList.sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime());
+        // Sorted by Firestore orderBy, no client-side sort needed
         setCheques(chequesList);
       },
       (error) => {

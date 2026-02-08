@@ -10,10 +10,39 @@ import {
   limit,
   getCountFromServer,
   getDocs,
+  startAfter,
+  type DocumentSnapshot,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
+
+// Singleton cursor store for pagination (persists across re-renders)
+// Cursors are cleared when:
+// - User navigates to page 1 (natural refresh point)
+// - Data changes are detected in the snapshot
+const chequesCursorStore = {
+  cursors: new Map<string, Map<number, DocumentSnapshot>>(),
+
+  getCursors(ownerId: string): Map<number, DocumentSnapshot> {
+    if (!this.cursors.has(ownerId)) {
+      this.cursors.set(ownerId, new Map());
+    }
+    return this.cursors.get(ownerId)!;
+  },
+
+  setCursor(ownerId: string, page: number, doc: DocumentSnapshot) {
+    this.getCursors(ownerId).set(page, doc);
+  },
+
+  getCursor(ownerId: string, page: number): DocumentSnapshot | undefined {
+    return this.getCursors(ownerId).get(page);
+  },
+
+  clear(ownerId: string) {
+    this.cursors.delete(ownerId);
+  },
+};
 
 interface UseChequesDataOptions {
   pageSize: number;
@@ -65,14 +94,38 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
     return () => unsubscribe();
   }, [user]);
 
-  // Fetch cheques with pagination
+  // Fetch cheques with cursor-based pagination
   useEffect(() => {
     if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
-    const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
+
+    // Clear all cursors when navigating to page 1 (fresh start)
+    if (currentPage === 1) {
+      chequesCursorStore.clear(user.dataOwnerId);
+    }
+
+    // Get cursor for previous page (if not on page 1)
+    const startAfterDoc = currentPage > 1
+      ? chequesCursorStore.getCursor(user.dataOwnerId, currentPage - 1)
+      : undefined;
+
+    // Build query with or without cursor
+    const q = startAfterDoc
+      ? query(chequesRef, orderBy("dueDate", "desc"), startAfter(startAfterDoc), limit(pageSize))
+      : query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Clear cursors for pages after current if data changed (prevents stale pagination)
+      if (!snapshot.metadata.fromCache && snapshot.docChanges().length > 0) {
+        const cursors = chequesCursorStore.getCursors(user.dataOwnerId);
+        for (const page of cursors.keys()) {
+          if (page > currentPage) {
+            cursors.delete(page);
+          }
+        }
+      }
+
       const chequesData: Cheque[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -81,6 +134,13 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
           ...convertFirestoreDates(data),
         } as Cheque);
       });
+
+      // Store cursor for this page (last document)
+      const lastVisible = snapshot.docs[snapshot.docs.length - 1];
+      if (lastVisible) {
+        chequesCursorStore.setCursor(user.dataOwnerId, currentPage, lastVisible);
+      }
+
       setCheques(chequesData);
       setLoading(false);
     });
@@ -92,7 +152,17 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
     if (!user) {return;}
 
     const chequesRef = collection(firestore, `users/${user.dataOwnerId}/cheques`);
-    const q = query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
+
+    // Get cursor for previous page (if not on page 1)
+    const startAfterDoc = currentPage > 1
+      ? chequesCursorStore.getCursor(user.dataOwnerId, currentPage - 1)
+      : undefined;
+
+    // Build query with or without cursor
+    const q = startAfterDoc
+      ? query(chequesRef, orderBy("dueDate", "desc"), startAfter(startAfterDoc), limit(pageSize))
+      : query(chequesRef, orderBy("dueDate", "desc"), limit(pageSize));
+
     const snapshot = await getDocs(q);
 
     const chequesData: Cheque[] = [];
@@ -103,6 +173,12 @@ export function useChequesData({ pageSize, currentPage }: UseChequesDataOptions)
         ...convertFirestoreDates(data),
       } as Cheque);
     });
+
+    // Update cursor for this page
+    const lastVisible = snapshot.docs[snapshot.docs.length - 1];
+    if (lastVisible) {
+      chequesCursorStore.setCursor(user.dataOwnerId, currentPage, lastVisible);
+    }
 
     setCheques(chequesData);
   };
