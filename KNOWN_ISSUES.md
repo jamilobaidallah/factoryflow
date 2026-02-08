@@ -380,10 +380,10 @@ Fixed 5 unbounded Firestore queries:
 - [x] `usePaymentsForClient.ts` - Added `orderBy + limit(QUERY_LIMITS.PAYMENTS)`
 - [x] Added `INVENTORY_ITEMS: 1000` to QUERY_LIMITS constant
 
-**Firestore Indexes Required** (create manually when errors appear):
-- `cheques`: clientName (ASC), issueDate (DESC)
-- `ledger`: associatedParty (ASC), date (DESC)
-- `payments`: clientName (ASC), date (DESC)
+**Firestore Indexes** (verified working 2026-02-08):
+- ✅ `cheques`: clientName (ASC), issueDate (DESC) - Created via console link
+- ✅ `ledger`: associatedParty (ASC), date (DESC) - Already existed
+- ✅ `payments`: clientName (ASC), date (DESC) - Already existed
 
 ### 6.2 Optimize Dashboard Listeners ✅
 - [x] `useChequesAlerts.ts` - Changed from fetching ALL cheques to server-side filtering
@@ -781,6 +781,7 @@ These security items require Cloud Functions or significant backend changes:
 **Last Reviewed**: 24-piece comprehensive security audit completed
 
 **Change Log**:
+- 2026-02-08: ✅ Firestore indexes verified working - cheques (created), ledger & payments (already existed)
 - 2026-02-08: ✅ Phase 6 Complete - Performance optimization (5 unbounded queries fixed, dashboard listener optimized, cheques pagination fixed)
 - 2026-02-08: ✅ Phase 8.8 Complete - Updated jsPDF 3.0.4→4.1.0, jspdf-autotable 5.0.2→5.0.7 (5 vulnerabilities fixed)
 - 2026-02-08: ✅ Client statement export rewritten to use HTML-based export with proper Arabic RTL support
