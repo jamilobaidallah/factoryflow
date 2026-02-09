@@ -8,8 +8,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { handleFirebaseErrorSimple as handleFirebaseError, logErrorSimple as logError, ErrorResult } from '../error-handling';
 
-interface UseAsyncOperationOptions {
-  onSuccess?: (data?: any) => void;
+interface UseAsyncOperationOptions<T = unknown> {
+  onSuccess?: (data?: T) => void;
   onError?: (error: ErrorResult) => void;
   context?: string;
 }
@@ -20,7 +20,7 @@ interface AsyncOperationState<T> {
   error: ErrorResult | null;
 }
 
-interface AsyncOperationReturn<T, Args extends any[]> {
+interface AsyncOperationReturn<T, Args extends unknown[]> {
   execute: (...args: Args) => Promise<T | undefined>;
   loading: boolean;
   error: ErrorResult | null;
@@ -44,9 +44,9 @@ interface AsyncOperationReturn<T, Args extends any[]> {
  *   }
  * );
  */
-export function useAsyncOperation<T, Args extends any[] = []>(
+export function useAsyncOperation<T, Args extends unknown[] = []>(
   asyncFunction: (...args: Args) => Promise<T>,
-  options: UseAsyncOperationOptions = {}
+  options: UseAsyncOperationOptions<T> = {}
 ): AsyncOperationReturn<T, Args> {
   const { onSuccess, onError, context = 'AsyncOperation' } = options;
 

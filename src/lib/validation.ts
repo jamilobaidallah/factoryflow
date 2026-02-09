@@ -431,10 +431,10 @@ export async function validateFormWithDuplicateCheck<T>(
 /**
  * Safe form data extractor with validation
  */
-export function extractFormData(
-  formData: Record<string, any>,
-  schema: z.ZodSchema
-): { success: boolean; data?: any; errors?: string[] } {
+export function extractFormData<T>(
+  formData: Record<string, unknown>,
+  schema: z.ZodSchema<T>
+): { success: boolean; data?: T; errors?: string[] } {
   try {
     const validated = schema.parse(formData);
     return { success: true, data: validated };

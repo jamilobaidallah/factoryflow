@@ -55,7 +55,7 @@ export function generateId(): string {
 }
 
 // Debounce function
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
   func: T,
   delay: number
 ): (...args: Parameters<T>) => void {

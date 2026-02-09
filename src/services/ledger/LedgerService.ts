@@ -24,6 +24,8 @@ import {
   getCountFromServer,
   DocumentSnapshot,
   DocumentReference,
+  QueryDocumentSnapshot,
+  DocumentData,
   Unsubscribe,
   QueryConstraint,
   increment,
@@ -239,7 +241,7 @@ export class LedgerService {
   private async handleJournalFailure(
     ledgerRef: DocumentReference,
     transactionId: string,
-    originalError: any
+    originalError: unknown
   ): Promise<void> {
     const errorMessage = originalError instanceof Error
       ? originalError.message
@@ -1150,7 +1152,7 @@ export class LedgerService {
         const cashedChequePaymentSnapshots = await Promise.all(cashedChequePaymentPromises);
 
         // Collect unprocessed payment docs and their data
-        const unprocessedChequePayments: { doc: any; data: any; id: string }[] = [];
+        const unprocessedChequePayments: { doc: QueryDocumentSnapshot<DocumentData>; data: DocumentData; id: string }[] = [];
         for (const chequePaymentSnapshot of cashedChequePaymentSnapshots) {
           for (const paymentDoc of chequePaymentSnapshot.docs) {
             const paymentId = paymentDoc.id;
@@ -1567,7 +1569,7 @@ export class LedgerService {
       const chequePaymentSnapshots = await Promise.all(chequePaymentPromises);
 
       // Collect all payment docs and their IDs
-      const chequePaymentDocs: { ref: any; id: string }[] = [];
+      const chequePaymentDocs: { ref: DocumentReference<DocumentData>; id: string }[] = [];
       for (const chequePaymentSnapshot of chequePaymentSnapshots) {
         for (const paymentDoc of chequePaymentSnapshot.docs) {
           chequePaymentDocs.push({ ref: paymentDoc.ref, id: paymentDoc.id });

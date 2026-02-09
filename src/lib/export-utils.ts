@@ -2,6 +2,10 @@
 
 import { formatShortDate, formatNumber } from './date-utils';
 
+/** Generic record type for export functions - represents a row of data
+ * Uses `any` intentionally - these deprecated functions accept any object shape */
+type ExportRecord = Record<string, any>;
+
 // ExcelJS is dynamically imported only when needed to reduce bundle size (~23MB)
 
 /**
@@ -17,7 +21,7 @@ import { formatShortDate, formatNumber } from './date-utils';
  * @param sheetName Name of the worksheet
  */
 export async function exportToExcel(
-  data: any[],
+  data: ExportRecord[],
   filename: string,
   sheetName: string = 'Sheet1'
 ): Promise<void> {
@@ -77,7 +81,7 @@ export async function exportToExcel(
  * @param entries Ledger entries to export
  * @param filename Name of the file
  */
-export async function exportLedgerToExcel(entries: any[], filename: string = 'ledger-entries'): Promise<void> {
+export async function exportLedgerToExcel(entries: ExportRecord[], filename: string = 'ledger-entries'): Promise<void> {
   const exportData = entries.map((entry) => ({
     'رقم المعاملة': entry.transactionId || '',
     'التاريخ': entry.date instanceof Date ? formatShortDate(entry.date) : '',
@@ -101,7 +105,7 @@ export async function exportLedgerToExcel(entries: any[], filename: string = 'le
  * @param payments Payment entries to export
  * @param filename Name of the file
  */
-export async function exportPaymentsToExcel(payments: any[], filename: string = 'payments'): Promise<void> {
+export async function exportPaymentsToExcel(payments: ExportRecord[], filename: string = 'payments'): Promise<void> {
   const exportData = payments.map((payment) => ({
     'اسم العميل': payment.clientName || '',
     'التاريخ': payment.date instanceof Date ? formatShortDate(payment.date) : '',
@@ -121,7 +125,7 @@ export async function exportPaymentsToExcel(payments: any[], filename: string = 
  * @param cheques Cheque entries to export
  * @param filename Name of the file
  */
-export async function exportChequesToExcel(cheques: any[], filename: string = 'cheques'): Promise<void> {
+export async function exportChequesToExcel(cheques: ExportRecord[], filename: string = 'cheques'): Promise<void> {
   const exportData = cheques.map((cheque) => ({
     'رقم الشيك': cheque.chequeNumber || '',
     'اسم العميل': cheque.clientName || '',
@@ -143,7 +147,7 @@ export async function exportChequesToExcel(cheques: any[], filename: string = 'c
  * @param items Inventory items to export
  * @param filename Name of the file
  */
-export async function exportInventoryToExcel(items: any[], filename: string = 'inventory'): Promise<void> {
+export async function exportInventoryToExcel(items: ExportRecord[], filename: string = 'inventory'): Promise<void> {
   const exportData = items.map((item) => ({
     'اسم العنصر': item.itemName || '',
     'الفئة': item.category || '',
@@ -166,7 +170,7 @@ export async function exportInventoryToExcel(items: any[], filename: string = 'i
  * @param entries Ledger entries
  * @param title Report title
  */
-export function exportLedgerToHTML(entries: any[], title: string = 'الحركات المالية'): void {
+export function exportLedgerToHTML(entries: ExportRecord[], title: string = 'الحركات المالية'): void {
   const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>

@@ -4,6 +4,11 @@
  */
 
 import { LedgerEntry } from "../utils/ledger-constants";
+import type {
+  PaymentFormData,
+  ChequeRelatedFormData,
+  InventoryRelatedFormData,
+} from "../types/ledger";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +33,12 @@ interface RelatedRecordsDialogProps {
   onAddCheque: (e: React.FormEvent) => void;
   onAddInventory: (e: React.FormEvent) => void;
   // Form data
-  paymentFormData: any;
-  setPaymentFormData: (data: any) => void;
-  chequeFormData: any;
-  setChequeFormData: (data: any) => void;
-  inventoryFormData: any;
-  setInventoryFormData: (data: any) => void;
+  paymentFormData: PaymentFormData;
+  setPaymentFormData: (data: PaymentFormData) => void;
+  chequeFormData: ChequeRelatedFormData;
+  setChequeFormData: (data: ChequeRelatedFormData) => void;
+  inventoryFormData: InventoryRelatedFormData;
+  setInventoryFormData: (data: InventoryRelatedFormData) => void;
 }
 
 export function RelatedRecordsDialog({

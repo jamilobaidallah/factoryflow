@@ -27,10 +27,38 @@ import { firestore } from "@/firebase/config";
 import { toDate, toDateOptional } from "@/lib/firestore-utils";
 import { formatShortDate } from "@/lib/date-utils";
 
+/** Common search result data fields across all collection types.
+ * Data comes from Firestore and is rendered directly in table cells. */
+interface SearchResultData {
+  // Common fields
+  transactionId?: string;
+  description?: string;
+  amount?: number;
+  type?: string;
+  category?: string;
+  date?: Date;
+  dueDate?: Date;
+  // Ledger-specific
+  associatedParty?: string;
+  subCategory?: string;
+  // Payment-specific
+  notes?: string;
+  clientName?: string;
+  // Cheque-specific
+  chequeNumber?: string;
+  partyName?: string;
+  status?: string;
+  // Inventory-specific
+  itemName?: string;
+  quantity?: number;
+  unit?: string;
+  movementType?: string;
+}
+
 interface SearchResult {
   type: "ledger" | "payment" | "cheque" | "inventory";
   id: string;
-  data: any;
+  data: SearchResultData;
 }
 
 export default function TransactionSearchPage() {

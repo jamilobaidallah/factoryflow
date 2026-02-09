@@ -12,6 +12,9 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 
+/** Backup document type - allows any valid Firestore data structure */
+type BackupDocument = Record<string, unknown> & { id: string };
+
 export interface BackupData {
   metadata: {
     createdAt: string;
@@ -20,14 +23,14 @@ export interface BackupData {
     totalDocuments: number;
   };
   data: {
-    ledger: any[];
-    payments: any[];
-    cheques: any[];
-    inventory: any[];
-    clients: any[];
-    partners: any[];
-    suppliers: any[];
-    assets: any[];
+    ledger: BackupDocument[];
+    payments: BackupDocument[];
+    cheques: BackupDocument[];
+    inventory: BackupDocument[];
+    clients: BackupDocument[];
+    partners: BackupDocument[];
+    suppliers: BackupDocument[];
+    assets: BackupDocument[];
   };
 }
 
@@ -75,7 +78,7 @@ export async function createBackup(userId: string): Promise<BackupData> {
         const data = doc.data();
 
         // Convert Firestore Timestamps to ISO strings for JSON serialization
-        const serializedData: any = { id: doc.id };
+        const serializedData: BackupDocument = { id: doc.id };
 
         Object.keys(data).forEach((key) => {
           if (data[key] instanceof Timestamp) {
@@ -129,20 +132,23 @@ export function downloadBackup(backupData: BackupData, filename?: string): void 
  * @param data Parsed backup data
  * @returns True if valid, throws error if invalid
  */
-export function validateBackup(data: any): data is BackupData {
+export function validateBackup(data: unknown): data is BackupData {
   if (!data || typeof data !== 'object') {
     throw new Error('Invalid backup file: Not a valid JSON object');
   }
 
-  if (!data.metadata || !data.data) {
+  // Type narrow using 'in' operator
+  if (!('metadata' in data) || !('data' in data)) {
     throw new Error('Invalid backup file: Missing metadata or data sections');
   }
 
+  const backupData = data as { metadata: unknown; data: Record<string, unknown> };
+
   const requiredCollections = ['ledger', 'payments', 'cheques', 'inventory', 'clients', 'partners', 'suppliers', 'assets'];
 
-  for (const collection of requiredCollections) {
-    if (!Array.isArray(data.data[collection])) {
-      throw new Error(`Invalid backup file: Collection '${collection}' is missing or not an array`);
+  for (const collectionName of requiredCollections) {
+    if (!Array.isArray(backupData.data[collectionName])) {
+      throw new Error(`Invalid backup file: Collection '${collectionName}' is missing or not an array`);
     }
   }
 
@@ -225,7 +231,7 @@ export async function restoreBackup(
           const { id, ...data } = docData;
 
           // Convert ISO strings back to Timestamps
-          const firestoreData: any = {};
+          const firestoreData: Record<string, unknown> = {};
           Object.keys(data).forEach((key) => {
             if (typeof data[key] === 'string' && data[key].match(/^\d{4}-\d{2}-\d{2}T/)) {
               try {
