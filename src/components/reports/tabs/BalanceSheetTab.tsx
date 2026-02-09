@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import {
   useBalanceSheet,
   formatBalanceSheetAmount,
@@ -33,7 +33,7 @@ interface BalanceSheetTabProps {
 }
 
 export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps) {
-  const { balanceSheet, loading, error, refresh, isBalanced } = useBalanceSheet(asOfDate);
+  const { balanceSheet, loading, error, warning, refresh, isBalanced } = useBalanceSheet(asOfDate);
 
   if (loading) {
     return (
@@ -114,6 +114,12 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
           </div>
         </CardHeader>
         <CardContent>
+          {warning && (
+            <div className="bg-yellow-50 text-yellow-700 p-4 rounded-lg flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5" />
+              <span>{warning}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Assets Section */}
             <div>

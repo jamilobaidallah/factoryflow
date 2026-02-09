@@ -11,23 +11,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase/provider';
+import { toast } from '@/hooks/use-toast';
 import { formatNumber } from '@/lib/date-utils';
 import {
   getBalanceSheet,
-  getTrialBalance,
   seedChartOfAccounts,
 } from '@/services/journalService';
-import {
-  BalanceSheet,
-  TrialBalanceSummary,
-  AccountBalance,
-} from '@/types/accounting';
+import { BalanceSheet } from '@/types/accounting';
 
 interface UseBalanceSheetResult {
   balanceSheet: BalanceSheet | null;
-  trialBalance: TrialBalanceSummary | null;
   loading: boolean;
   error: string | null;
+  warning: string | null;
   refresh: () => Promise<void>;
   isBalanced: boolean;
 }
@@ -35,9 +31,9 @@ interface UseBalanceSheetResult {
 export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
   const { user } = useUser();
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null);
-  const [trialBalance, setTrialBalance] = useState<TrialBalanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user) {
@@ -47,29 +43,43 @@ export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
 
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       // Ensure chart of accounts exists
       await seedChartOfAccounts(user.dataOwnerId);
 
-      // Fetch balance sheet and trial balance in parallel
-      const [bsResult, tbResult] = await Promise.all([
-        getBalanceSheet(user.dataOwnerId, asOfDate),
-        getTrialBalance(user.dataOwnerId, asOfDate),
-      ]);
+      // Fetch balance sheet (internally calls getTrialBalance, no need for duplicate call)
+      const bsResult = await getBalanceSheet(user.dataOwnerId, asOfDate);
 
       if (bsResult.success && bsResult.data) {
         setBalanceSheet(bsResult.data);
+        // Check for query limit warning
+        if (bsResult.warning) {
+          setWarning(bsResult.warning);
+          toast({
+            title: 'تحذير',
+            description: bsResult.warning,
+          });
+        }
       } else {
-        setError(bsResult.error || 'Failed to load balance sheet');
-      }
-
-      if (tbResult.success && tbResult.data) {
-        setTrialBalance(tbResult.data);
+        const errorMsg = bsResult.error || 'فشل تحميل الميزانية العمومية';
+        setError(errorMsg);
+        toast({
+          title: 'خطأ',
+          description: 'فشل تحميل الميزانية العمومية. يرجى المحاولة مرة أخرى',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
       console.error('Error fetching balance sheet:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const errorMsg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      setError(errorMsg);
+      toast({
+        title: 'خطأ',
+        description: 'فشل تحميل الميزانية العمومية. يرجى المحاولة مرة أخرى',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -83,9 +93,9 @@ export function useBalanceSheet(asOfDate?: Date): UseBalanceSheetResult {
 
   return {
     balanceSheet,
-    trialBalance,
     loading,
     error,
+    warning,
     refresh: fetchData,
     isBalanced,
   };

@@ -7,6 +7,9 @@
  * - Self-balancing verification
  */
 
+import { safeAdd, safeSubtract } from '@/lib/currency';
+import { ACCOUNTING_TOLERANCE } from '@/lib/constants';
+
 /**
  * Account Types (5 fundamental types)
  *
@@ -189,13 +192,6 @@ export function calculateAccountBalance(
   totalCredits: number,
   normalBalance: NormalBalance
 ): number {
-  // Use Decimal.js for precise money arithmetic
-  const Decimal = require('decimal.js-light');
-
-  const safeSubtract = (a: number, b: number): number => {
-    return new Decimal(a || 0).minus(b || 0).toNumber();
-  };
-
   if (normalBalance === 'debit') {
     return safeSubtract(totalDebits, totalCredits);
   }
@@ -212,24 +208,11 @@ export function validateJournalEntry(lines: JournalLine[]): {
   totalCredits: number;
   difference: number;
 } {
-  // Import inline to avoid circular dependencies
-  // These use Decimal.js for precise money arithmetic
-  const Decimal = require('decimal.js-light');
-  const { ACCOUNTING_TOLERANCE } = require('@/lib/constants');
-
-  const safeAdd = (a: number, b: number): number => {
-    return new Decimal(a || 0).plus(b || 0).toNumber();
-  };
-
-  const safeSubtract = (a: number, b: number): number => {
-    return new Decimal(a || 0).minus(b || 0).toNumber();
-  };
-
   const totalDebits = lines.reduce((sum, line) => safeAdd(sum, line.debit), 0);
   const totalCredits = lines.reduce((sum, line) => safeAdd(sum, line.credit), 0);
   const difference = Math.abs(safeSubtract(totalDebits, totalCredits));
 
-  // Allow for small floating point differences
+  // Allow for small floating point differences (ACCOUNTING_TOLERANCE = 0.001)
   const isValid = difference < ACCOUNTING_TOLERANCE;
 
   return {

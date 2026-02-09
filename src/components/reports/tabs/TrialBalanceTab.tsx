@@ -18,6 +18,7 @@ import { Download, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useTrialBalance } from "../hooks/useTrialBalance";
 import { AccountBalance } from "@/types/accounting";
 import { formatNumber } from "@/lib/date-utils";
+import { safeSubtract } from "@/lib/currency";
 
 interface TrialBalanceTabProps {
   ledgerEntries?: unknown[];
@@ -28,7 +29,7 @@ interface TrialBalanceTabProps {
 function TrialBalanceTabComponent({
   onExportCSV,
 }: TrialBalanceTabProps) {
-  const { trialBalance, loading, error, refresh, isBalanced } = useTrialBalance();
+  const { trialBalance, loading, error, warning, refresh, isBalanced } = useTrialBalance();
 
   // Memoize grouped accounts to prevent recalculation on every render
   const groupedAccounts = useMemo(() => {
@@ -83,14 +84,14 @@ function TrialBalanceTabComponent({
       'الرصيد': account.balance,
     }));
 
-    // Add totals row
+    // Add totals row (using safeSubtract to prevent floating-point errors)
     csvData.push({
       'رمز الحساب': '',
       'اسم الحساب': 'المجموع الكلي',
       'النوع': '',
       'المدين': trialBalance.totalDebits,
       'الدائن': trialBalance.totalCredits,
-      'الرصيد': trialBalance.totalDebits - trialBalance.totalCredits,
+      'الرصيد': safeSubtract(trialBalance.totalDebits, trialBalance.totalCredits),
     });
 
     // Convert to CSV
@@ -140,6 +141,13 @@ function TrialBalanceTabComponent({
             <div className="bg-red-50 text-red-700 p-4 rounded-lg flex items-center gap-2">
               <AlertTriangle className="w-5 h-5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {warning && (
+            <div className="bg-yellow-50 text-yellow-700 p-4 rounded-lg flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5" />
+              <span>{warning}</span>
             </div>
           )}
 
@@ -225,9 +233,25 @@ function TrialBalanceTabComponent({
               </Table>
 
               {trialBalance.accounts.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  لا توجد قيود محاسبية لعرض ميزان المراجعة
-                </p>
+                <div className="text-center py-8">
+                  {trialBalance.totalDebits === 0 && trialBalance.totalCredits === 0 ? (
+                    // No journal entries exist at all
+                    <>
+                      <p className="text-gray-500">لا توجد قيود محاسبية</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        قم بإضافة معاملات مالية لعرض ميزان المراجعة
+                      </p>
+                    </>
+                  ) : (
+                    // Journal entries exist but all accounts balanced to zero
+                    <>
+                      <p className="text-gray-500">جميع الحسابات متوازنة عند صفر</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        توجد قيود محاسبية لكن جميع الأرصدة صفر
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
             </>
           )}
