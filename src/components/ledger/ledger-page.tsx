@@ -538,6 +538,11 @@ export default function LedgerPage() {
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
                 <p className="text-sm text-slate-500">
                   نتائج البحث: {filteredEntries.length} حركة من إجمالي {allEntriesForStats.length}
+                  {filteredEntries.length > 100 && (
+                    <span className="text-amber-600 ml-2">
+                      (يُنصح بتضييق البحث للحصول على نتائج أفضل)
+                    </span>
+                  )}
                 </p>
               </div>
             )}

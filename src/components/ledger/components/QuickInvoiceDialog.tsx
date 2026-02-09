@@ -172,6 +172,19 @@ export function QuickInvoiceDialog({
     e.preventDefault();
     if (!user || !pendingData) { return; }
 
+    // Validate items: quantity and price must be > 0, description required
+    const invalidItems = items.filter(item =>
+      item.quantity <= 0 || item.unitPrice <= 0 || !item.description.trim()
+    );
+    if (invalidItems.length > 0) {
+      toast({
+        title: "خطأ في البنود",
+        description: "يجب أن تكون الكمية والسعر أكبر من صفر ووصف البند مطلوب لجميع البنود",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));

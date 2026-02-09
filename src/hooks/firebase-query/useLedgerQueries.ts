@@ -224,9 +224,12 @@ export function useLedgerStatsSubscription() {
  * Cursors must be stored outside the hook to persist across re-renders and hook re-instantiations.
  * Using a ref inside the hook doesn't work because when currentPage changes, the cursor
  * for the previous page may not be available if the hook re-runs before the cursor was stored.
+ *
+ * Includes cleanup logic to prevent unbounded memory growth (max 20 cursors per user).
  */
 const ledgerCursorStore = {
   cursors: new Map<string, Map<number, DocumentSnapshot>>(),
+  MAX_CURSORS_PER_USER: 20,
 
   getCursors(ownerId: string): Map<number, DocumentSnapshot> {
     if (!this.cursors.has(ownerId)) {
@@ -236,7 +239,15 @@ const ledgerCursorStore = {
   },
 
   setCursor(ownerId: string, page: number, doc: DocumentSnapshot) {
-    this.getCursors(ownerId).set(page, doc);
+    const userCursors = this.getCursors(ownerId);
+    userCursors.set(page, doc);
+
+    // Cleanup old cursors if exceeding limit (keep most recent pages)
+    if (userCursors.size > this.MAX_CURSORS_PER_USER) {
+      const sortedPages = Array.from(userCursors.keys()).sort((a, b) => a - b);
+      const toDelete = sortedPages.slice(0, sortedPages.length - this.MAX_CURSORS_PER_USER);
+      toDelete.forEach((p) => userCursors.delete(p));
+    }
   },
 
   getCursor(ownerId: string, page: number): DocumentSnapshot | undefined {

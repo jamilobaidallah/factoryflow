@@ -106,6 +106,12 @@ export const UNITS = {
   CARTON: 'كرتون',
 } as const;
 
+/**
+ * @deprecated Use CATEGORIES from '@/components/ledger/utils/ledger-constants.ts' instead.
+ * These legacy category constants are kept for backward compatibility and testing.
+ * The authoritative source is ledger-constants.ts which has the complete category list
+ * with types (income, expense, equity, loan) and all subcategories.
+ */
 // Ledger Categories - Income
 export const INCOME_CATEGORIES = [
   {
