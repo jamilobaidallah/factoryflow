@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase/provider';
+import { toast } from '@/hooks/use-toast';
 import {
   getTrialBalance,
   seedChartOfAccounts,
@@ -18,6 +19,7 @@ interface UseTrialBalanceResult {
   trialBalance: TrialBalanceSummary | null;
   loading: boolean;
   error: string | null;
+  warning: string | null;
   refresh: () => Promise<void>;
   isBalanced: boolean;
 }
@@ -27,6 +29,7 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
   const [trialBalance, setTrialBalance] = useState<TrialBalanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user) {
@@ -36,6 +39,7 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
 
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       // Ensure chart of accounts exists
@@ -46,12 +50,33 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
 
       if (result.success && result.data) {
         setTrialBalance(result.data);
+
+        // Handle query limit warning
+        if (result.warning) {
+          setWarning(result.warning);
+          toast({
+            title: 'تحذير',
+            description: result.warning,
+            variant: 'default',
+          });
+        }
       } else {
-        setError(result.error || 'Failed to load trial balance');
+        setError(result.error || 'فشل تحميل ميزان المراجعة');
+        toast({
+          title: 'خطأ',
+          description: result.error || 'فشل تحميل ميزان المراجعة',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
       console.error('Error fetching trial balance:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const errorMsg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      setError(errorMsg);
+      toast({
+        title: 'خطأ',
+        description: 'فشل تحميل ميزان المراجعة. يرجى المحاولة مرة أخرى',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -67,6 +92,7 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
     trialBalance,
     loading,
     error,
+    warning,
     refresh: fetchData,
     isBalanced,
   };
