@@ -277,7 +277,7 @@ export function StepPartyARAP({
                 disabled={isAdvance}
               />
               <span>مدفوع بالكامل (نقدي أو شيك صرف)</span>
-              {isAdvance && <span className="text-xs text-amber-600 mr-2">(غير متاح للسلف)</span>}
+              {isAdvance && <span className="text-xs text-amber-600 ml-2">(غير متاح للسلف)</span>}
             </label>
 
             {/* Option 2: On Credit */}
@@ -320,7 +320,7 @@ export function StepPartyARAP({
                   placeholder="المبلغ المدفوع"
                   value={initialPaymentAmount}
                   onChange={(e) => setInitialPaymentAmount(e.target.value)}
-                  className="mr-6 max-w-[200px]"
+                  className="ml-6 max-w-[200px]"
                 />
               )}
             </div>

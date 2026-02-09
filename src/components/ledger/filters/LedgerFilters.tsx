@@ -122,7 +122,7 @@ function LedgerFiltersComponent({
               >
                 {tab.label}
                 {tab.id === "unpaid" && unpaidCount > 0 && (
-                  <span className="mr-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded-full">
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded-full">
                     {unpaidCount}
                   </span>
                 )}

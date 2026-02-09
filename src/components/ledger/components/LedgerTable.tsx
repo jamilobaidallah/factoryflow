@@ -190,7 +190,12 @@ const LedgerTableRow = memo(function LedgerTableRow({
               <p className="text-[10px] text-slate-400 font-mono">
                 {entry.transactionId.slice(-12)}
               </p>
-              <CopyButton text={entry.transactionId} size="sm" />
+              <div className={cn(
+                "transition-opacity duration-200",
+                isHovered ? "opacity-100" : "opacity-0"
+              )}>
+                <CopyButton text={entry.transactionId} size="sm" />
+              </div>
             </div>
           )}
         </div>

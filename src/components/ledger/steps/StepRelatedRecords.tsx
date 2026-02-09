@@ -3,11 +3,13 @@
  * Orchestrates all related record forms: cheques, inventory, fixed assets, invoice info
  */
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, AlertTriangle } from "lucide-react";
 import { ChequeFormCard } from "../forms/ChequeFormCard";
 import { InventoryFormCard } from "../forms/InventoryFormCard";
 import { FixedAssetFormCard } from "../forms/FixedAssetFormCard";
+import { safeAdd, safeSubtract, parseAmount, formatNumber } from "@/lib/currency";
 import type {
   LedgerFormData,
   CheckFormDataItem,
@@ -78,6 +80,26 @@ export function StepRelatedRecords({
   onUpdateFixedAsset,
   createInvoice,
 }: StepRelatedRecordsProps) {
+  // Calculate cheque totals using Decimal.js for precision
+  const incomingChequesTotal = useMemo(() => {
+    return incomingChequesList.reduce(
+      (sum, c) => safeAdd(sum, parseAmount(c.chequeAmount)),
+      0
+    );
+  }, [incomingChequesList]);
+
+  const outgoingChequesTotal = useMemo(() => {
+    return outgoingChequesList.reduce(
+      (sum, c) => safeAdd(sum, parseAmount(c.chequeAmount)),
+      0
+    );
+  }, [outgoingChequesList]);
+
+  // Calculate difference from entry amount
+  const entryAmount = parseAmount(formData.amount);
+  const incomingDifference = safeSubtract(entryAmount, incomingChequesTotal);
+  const outgoingDifference = safeSubtract(entryAmount, outgoingChequesTotal);
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-sm">تفاصيل السجلات المرتبطة</h3>
@@ -113,12 +135,23 @@ export function StepRelatedRecords({
                 />
               ))}
 
-              {/* Total cheques amount */}
-              {incomingChequesList.length > 1 && (
-                <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                  <p className="text-sm font-medium text-blue-700">
-                    مجموع الشيكات: {incomingChequesList.reduce((sum, c) => sum + (parseFloat(c.chequeAmount) || 0), 0).toFixed(2)} دينار
-                  </p>
+              {/* Total cheques amount with difference warning */}
+              {incomingChequesList.length >= 1 && (
+                <div className="space-y-2">
+                  <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                    <p className="text-sm font-medium text-blue-700">
+                      مجموع الشيكات: {formatNumber(incomingChequesTotal)} دينار
+                    </p>
+                  </div>
+                  {Math.abs(incomingDifference) > 0.01 && (
+                    <div className="p-3 bg-amber-50 rounded-md border border-amber-200 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                      <p className="text-sm text-amber-700">
+                        الفرق عن مبلغ الحركة ({formatNumber(entryAmount)} دينار): {formatNumber(Math.abs(incomingDifference))} دينار
+                        {incomingDifference > 0 ? " (أقل)" : " (أكثر)"}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -157,12 +190,23 @@ export function StepRelatedRecords({
                 />
               ))}
 
-              {/* Total cheques amount */}
-              {outgoingChequesList.length > 1 && (
-                <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                  <p className="text-sm font-medium text-blue-700">
-                    مجموع الشيكات: {outgoingChequesList.reduce((sum, c) => sum + (parseFloat(c.chequeAmount) || 0), 0).toFixed(2)} دينار
-                  </p>
+              {/* Total cheques amount with difference warning */}
+              {outgoingChequesList.length >= 1 && (
+                <div className="space-y-2">
+                  <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                    <p className="text-sm font-medium text-blue-700">
+                      مجموع الشيكات: {formatNumber(outgoingChequesTotal)} دينار
+                    </p>
+                  </div>
+                  {Math.abs(outgoingDifference) > 0.01 && (
+                    <div className="p-3 bg-amber-50 rounded-md border border-amber-200 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                      <p className="text-sm text-amber-700">
+                        الفرق عن مبلغ الحركة ({formatNumber(entryAmount)} دينار): {formatNumber(Math.abs(outgoingDifference))} دينار
+                        {outgoingDifference > 0 ? " (أقل)" : " (أكثر)"}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

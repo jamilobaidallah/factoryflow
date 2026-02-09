@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle, Wallet, CheckCircle2, Lock } from "lucide-react";
 import { formatNumber } from "@/lib/date-utils";
 import { parseAmount } from "@/lib/currency";
-import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { AvailableAdvance } from "../hooks/useAvailableAdvances";
 
 export interface AdvanceAllocationResult {
@@ -50,8 +50,6 @@ export function AdvanceAllocationDialog({
   partyName,
   isCustomer,
 }: AdvanceAllocationDialogProps) {
-  const { toast } = useToast();
-
   // Track which advances are selected and their allocation amounts
   const [selectedAdvances, setSelectedAdvances] = useState<Map<string, number>>(
     new Map()
@@ -108,21 +106,17 @@ export function AdvanceAllocationDialog({
   // Update allocation amount for a specific advance
   // BUG 3 FIX: Added validation to prevent over-allocation
   // BUG 5 FIX: Uses parseAmount (Decimal.js) instead of parseFloat
+  // IMPROVED: Removed toast, using inline visual feedback instead
   const handleAmountChange = (advanceId: string, inputValue: string, maxAmount: number) => {
     const amount = parseAmount(inputValue);
     const newSelected = new Map(selectedAdvances);
 
-    // Validate: amount cannot exceed remaining balance
-    if (amount > maxAmount) {
-      toast({
-        title: "تجاوز الحد المسموح",
-        description: `لا يمكن تخصيص أكثر من ${formatNumber(maxAmount)} (المتبقي من السلفة)`,
-        variant: "destructive",
-      });
-      // Cap at max amount instead of rejecting
-      newSelected.set(advanceId, maxAmount);
-    } else if (amount > 0) {
-      newSelected.set(advanceId, amount);
+    // Validate and cap: amount cannot exceed remaining balance
+    // Inline visual feedback is shown in the UI instead of toast
+    const cappedAmount = Math.min(amount, maxAmount);
+
+    if (cappedAmount > 0) {
+      newSelected.set(advanceId, cappedAmount);
     } else {
       newSelected.delete(advanceId);
     }
@@ -269,12 +263,18 @@ export function AdvanceAllocationDialog({
                                 advance.remainingBalance
                               )
                             }
-                            className="w-32 h-8 text-sm"
+                            className={cn(
+                              "w-32 h-8 text-sm",
+                              allocatedAmount >= advance.remainingBalance && "border-amber-300 bg-amber-50"
+                            )}
                             min={0}
                             max={advance.remainingBalance}
                             step={0.01}
                           />
                           <span className="text-xs text-slate-500">دينار</span>
+                          {allocatedAmount >= advance.remainingBalance && (
+                            <span className="text-[10px] text-amber-600 font-medium">الحد الأقصى</span>
+                          )}
                         </div>
                       )}
                     </div>
