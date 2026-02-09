@@ -73,7 +73,6 @@ export interface ServiceResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
-  warning?: string; // For non-fatal issues like query limit reached
 }
 
 // Re-export ValidationError for consumers
@@ -517,13 +516,6 @@ export async function getJournalEntries(
     const q = query(journalRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.JOURNAL_ENTRIES));
 
     const snapshot = await getDocs(q);
-
-    // Check if we've hit the query limit - data may be incomplete
-    let warning: string | undefined;
-    if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
-      warning = `تحذير: تم الوصول للحد الأقصى (${QUERY_LIMITS.JOURNAL_ENTRIES.toLocaleString()} قيد). قد تكون البيانات غير مكتملة.`;
-    }
-
     let entries: JournalEntry[] = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...convertFirestoreDates(doc.data()),
@@ -552,7 +544,7 @@ export async function getJournalEntries(
       });
     }
 
-    return { success: true, data: entries, warning };
+    return { success: true, data: entries };
   } catch (error) {
     console.error('Error getting journal entries:', error);
     return {
@@ -650,9 +642,6 @@ export async function getTrialBalance(
       return { success: false, error: entriesResult.error };
     }
 
-    // Propagate any query limit warning
-    const warning = entriesResult.warning;
-
     // Build account balances map
     const balanceMap = new Map<string, { debits: number; credits: number }>();
 
@@ -723,7 +712,6 @@ export async function getTrialBalance(
         difference: roundCurrency(difference),
         asOfDate: asOfDate || new Date(),
       },
-      warning,
     };
   } catch (error) {
     console.error('Error calculating trial balance:', error);
@@ -867,9 +855,6 @@ export async function getBalanceSheet(
       return { success: false, error: trialResult.error };
     }
 
-    // Propagate any query limit warning from trial balance
-    const warning = trialResult.warning;
-
     const accounts = trialResult.data.accounts;
 
     // Group by type (raw grouping before reclassification)
@@ -940,7 +925,6 @@ export async function getBalanceSheet(
         isBalanced,
         difference: roundCurrency(difference),
       },
-      warning,
     };
   } catch (error) {
     console.error('Error calculating balance sheet:', error);

@@ -11,8 +11,6 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
-    // Mock sonner for testing
-    '^sonner$': '<rootDir>/src/__mocks__/sonner.ts',
   },
   testMatch: [
     '**/__tests__/**/*.[jt]s?(x)',
