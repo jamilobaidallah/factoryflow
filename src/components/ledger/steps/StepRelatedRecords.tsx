@@ -9,7 +9,8 @@ import { Plus, AlertTriangle } from "lucide-react";
 import { ChequeFormCard } from "../forms/ChequeFormCard";
 import { InventoryFormCard } from "../forms/InventoryFormCard";
 import { FixedAssetFormCard } from "../forms/FixedAssetFormCard";
-import { safeAdd, safeSubtract, parseAmount, formatNumber } from "@/lib/currency";
+import { safeAdd, safeSubtract, parseAmount } from "@/lib/currency";
+import { formatNumber } from "@/lib/date-utils";
 import type {
   LedgerFormData,
   CheckFormDataItem,
