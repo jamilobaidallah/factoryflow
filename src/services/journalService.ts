@@ -73,6 +73,7 @@ export interface ServiceResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
+  warning?: string;
 }
 
 // Re-export ValidationError for consumers
@@ -544,7 +545,13 @@ export async function getJournalEntries(
       });
     }
 
-    return { success: true, data: entries };
+    // Check if we hit the query limit - warn about potential data truncation
+    let warning: string | undefined;
+    if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
+      warning = `تحذير: تم الوصول للحد الأقصى (${QUERY_LIMITS.JOURNAL_ENTRIES.toLocaleString()} قيد). قد تكون البيانات غير مكتملة.`;
+    }
+
+    return { success: true, data: entries, warning };
   } catch (error) {
     console.error('Error getting journal entries:', error);
     return {
@@ -642,6 +649,9 @@ export async function getTrialBalance(
       return { success: false, error: entriesResult.error };
     }
 
+    // Capture any warnings from the journal entries query (e.g., query limit reached)
+    const queryWarning = entriesResult.warning;
+
     // Build account balances map
     const balanceMap = new Map<string, { debits: number; credits: number }>();
 
@@ -712,6 +722,7 @@ export async function getTrialBalance(
         difference: roundCurrency(difference),
         asOfDate: asOfDate || new Date(),
       },
+      warning: queryWarning,
     };
   } catch (error) {
     console.error('Error calculating trial balance:', error);
@@ -855,6 +866,9 @@ export async function getBalanceSheet(
       return { success: false, error: trialResult.error };
     }
 
+    // Capture any warnings from the trial balance (e.g., query limit reached)
+    const queryWarning = trialResult.warning;
+
     const accounts = trialResult.data.accounts;
 
     // Group by type (raw grouping before reclassification)
@@ -925,6 +939,7 @@ export async function getBalanceSheet(
         isBalanced,
         difference: roundCurrency(difference),
       },
+      warning: queryWarning,
     };
   } catch (error) {
     console.error('Error calculating balance sheet:', error);

@@ -14,10 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Download, RefreshCw, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { useTrialBalance } from "../hooks/useTrialBalance";
 import { AccountBalance } from "@/types/accounting";
 import { formatNumber } from "@/lib/date-utils";
+import { safeSubtract } from "@/lib/currency";
 
 interface TrialBalanceTabProps {
   ledgerEntries?: unknown[];
@@ -28,7 +29,7 @@ interface TrialBalanceTabProps {
 function TrialBalanceTabComponent({
   onExportCSV,
 }: TrialBalanceTabProps) {
-  const { trialBalance, loading, error, refresh, isBalanced } = useTrialBalance();
+  const { trialBalance, loading, error, refresh, isBalanced, warning } = useTrialBalance();
 
   // Memoize grouped accounts to prevent recalculation on every render
   const groupedAccounts = useMemo(() => {
@@ -90,7 +91,7 @@ function TrialBalanceTabComponent({
       'النوع': '',
       'المدين': trialBalance.totalDebits,
       'الدائن': trialBalance.totalCredits,
-      'الرصيد': trialBalance.totalDebits - trialBalance.totalCredits,
+      'الرصيد': safeSubtract(trialBalance.totalDebits, trialBalance.totalCredits),
     });
 
     // Convert to CSV
@@ -140,6 +141,13 @@ function TrialBalanceTabComponent({
             <div className="bg-red-50 text-red-700 p-4 rounded-lg flex items-center gap-2">
               <AlertTriangle className="w-5 h-5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {warning && (
+            <div className="bg-amber-50 text-amber-700 p-4 rounded-lg flex items-center gap-2 mb-4">
+              <Info className="w-5 h-5 flex-shrink-0" />
+              <span>{warning}</span>
             </div>
           )}
 
