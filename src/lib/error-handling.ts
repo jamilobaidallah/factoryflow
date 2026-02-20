@@ -6,7 +6,6 @@
 
 import { FirebaseError } from 'firebase/app';
 import { z } from 'zod';
-import * as Sentry from '@sentry/nextjs';
 import { formatShortDate } from './date-utils';
 
 // ======================
@@ -200,25 +199,7 @@ export function logError(error: AppError, context?: Record<string, unknown>, use
     userId,
   };
 
-  // In development, log to console only
-  if (process.env.NODE_ENV === 'development') {
-    console.error('Error logged:', errorLog);
-    return;
-  }
-
-  // In production, send to Sentry for error tracking
-  Sentry.captureException(error, {
-    extra: {
-      ...context,
-      errorDetails: error.details,
-      errorField: error.field,
-    },
-    tags: {
-      errorType: error.type,
-      errorCode: error.code || 'unknown',
-    },
-    user: userId ? { id: userId } : undefined,
-  });
+  console.error('Error logged:', errorLog);
 }
 
 // ======================

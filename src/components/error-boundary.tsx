@@ -8,7 +8,6 @@
 
 import React, { Component, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import * as Sentry from '@sentry/nextjs';
 import { Button } from './ui/button';
 
 interface ErrorBoundaryProps {
@@ -41,14 +40,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log error to console
     console.error('Error Boundary caught an error:', error, errorInfo);
-
-    // Send to Sentry in production only
-    if (process.env.NODE_ENV === 'production') {
-      Sentry.withScope((scope) => {
-        scope.setExtras({ componentStack: errorInfo.componentStack });
-        Sentry.captureException(error);
-      });
-    }
 
     // Call custom error handler if provided
     if (this.props.onError) {

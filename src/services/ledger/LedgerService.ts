@@ -295,7 +295,7 @@ export class LedgerService {
           createdBy: this.userEmail,
         });
       } catch {
-        // Failed to log to failed_rollbacks - error already tracked via Sentry
+        // Failed to log to failed_rollbacks - original error already logged
       }
 
       // Re-throw with enhanced error message
