@@ -41,6 +41,7 @@ import { useClientTransactions } from "./hooks/useClientTransactions";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
 import { AllocationEntry, initialMultiAllocationFormData, MultiAllocationFormData, ChequePaymentData } from "./types";
 import { formatShortDate } from "@/lib/date-utils";
+import { calculateEntryDebitCredit, type BalanceLedgerEntry } from "@/lib/client-balance";
 
 /** Payment type constants */
 const PAYMENT_TYPES = {
@@ -254,13 +255,30 @@ export function MultiAllocationDialog({
 
         // Only include if there's outstanding balance
         if (remaining > 0) {
+          // Use calculateEntryDebitCredit to determine direction
+          // (same function used by account statement and client list)
+          const entry: BalanceLedgerEntry = {
+            id: doc.id,
+            type: data.type,
+            amount,
+            category: data.category,
+            subCategory: data.subCategory,
+            totalDiscount: data.totalDiscount,
+            writeoffAmount: data.writeoffAmount,
+            linkedPaymentId: data.linkedPaymentId,
+          };
+          const { debit, credit } = calculateEntryDebitCredit(entry);
+          // debit > 0 → they owe us → add; credit > 0 → we owe them → subtract
+          const sign = debit > 0 ? 1 : credit > 0 ? -1 : 0;
+
           const current = partyMap.get(partyName) || 0;
-          partyMap.set(partyName, current + remaining);
+          partyMap.set(partyName, current + (sign * remaining));
         }
       });
 
-      // Convert to array and sort by name
+      // Convert to array, exclude zero balances, and sort by name
       const parties: PartyWithDebt[] = Array.from(partyMap.entries())
+        .filter(([, total]) => Math.abs(total) > 0.01)
         .map(([name, totalOutstanding]) => ({ name, totalOutstanding }))
         .sort((a, b) => a.name.localeCompare(b.name, "ar"));
 
@@ -502,8 +520,8 @@ export function MultiAllocationDialog({
                         onClick={() => handleClientSelect(party.name)}
                       >
                         <span>{party.name}</span>
-                        <span className="text-xs text-orange-600 font-medium">
-                          {party.totalOutstanding.toFixed(0)} دينار
+                        <span className={`text-xs font-medium ${party.totalOutstanding >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {Math.abs(party.totalOutstanding).toFixed(0)} {party.totalOutstanding >= 0 ? 'عليه' : 'له'}
                         </span>
                       </button>
                     ))
