@@ -192,6 +192,8 @@ export interface ErrorLog {
  * Log error for debugging and send to Sentry in production
  */
 export function logError(error: AppError, context?: Record<string, unknown>, userId?: string): void {
+  if (process.env.NODE_ENV === 'production') return;
+
   const errorLog: ErrorLog = {
     timestamp: new Date(),
     error,
