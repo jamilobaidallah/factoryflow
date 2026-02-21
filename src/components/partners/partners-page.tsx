@@ -35,6 +35,7 @@ import {
   doc,
   onSnapshot,
   query,
+  where,
   orderBy,
   limit,
 } from "firebase/firestore";
@@ -43,6 +44,7 @@ import { convertFirestoreDates } from "@/lib/firestore-utils";
 import PartnersEquityReport from "./partners-equity-report";
 import { formatNumber } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
+import { parseAmount, sumAmounts, safeAdd } from "@/lib/currency";
 
 interface Partner {
   id: string;
@@ -121,9 +123,9 @@ export default function PartnersPage() {
     if (!user || partners.length === 0) {return;}
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    // Query equity entries (by type or category for backward compatibility)
+    // Query only equity entries (filtered at Firestore level instead of fetching 500 docs)
     const unsubscribe = onSnapshot(
-      query(ledgerRef, orderBy("date", "desc"), limit(500)),
+      query(ledgerRef, where("type", "==", "حركة رأس مال"), orderBy("date", "desc"), limit(500)),
       (snapshot) => {
         const equityMap = new Map<string, PartnerEquityData>();
 
@@ -137,13 +139,11 @@ export default function PartnersPage() {
           });
         });
 
-        // Process ledger entries
+        // Process ledger entries (already filtered to equity type by query)
         snapshot.forEach((doc) => {
           const data = doc.data();
 
-          // Check if this is an equity transaction (by type or category)
-          const isEquity = data.type === "حركة رأس مال" || data.category === "رأس المال";
-          if (!isEquity || !data.ownerName) {return;}
+          if (!data.ownerName) {return;}
 
           const partnerData = equityMap.get(data.ownerName);
           if (!partnerData) {return;}
@@ -201,12 +201,12 @@ export default function PartnersPage() {
     if (!user) {return;}
 
     // Validate ownership percentage
-    const newPercentage = parseFloat(formData.ownershipPercentage);
-    const totalPercentage = partners
+    const newPercentage = parseAmount(formData.ownershipPercentage);
+    const totalPercentage = sumAmounts(partners
       .filter((p) => p.active && (!editingPartner || p.id !== editingPartner.id))
-      .reduce((sum, p) => sum + p.ownershipPercentage, 0);
+      .map(p => p.ownershipPercentage));
 
-    if (totalPercentage + newPercentage > 100) {
+    if (safeAdd(totalPercentage, newPercentage) > 100) {
       toast({
         title: "خطأ في النسبة",
         description: `مجموع نسب الشراكة سيتجاوز 100%. النسبة المتاحة: ${(100 - totalPercentage).toFixed(2)}%`,
@@ -222,10 +222,10 @@ export default function PartnersPage() {
         const partnerRef = doc(firestore, `users/${user.dataOwnerId}/partners`, editingPartner.id);
         await updateDoc(partnerRef, {
           name: formData.name,
-          ownershipPercentage: parseFloat(formData.ownershipPercentage),
+          ownershipPercentage: parseAmount(formData.ownershipPercentage),
           phone: formData.phone,
           email: formData.email,
-          initialInvestment: parseFloat(formData.initialInvestment),
+          initialInvestment: parseAmount(formData.initialInvestment),
           active: formData.active,
         });
 
@@ -238,8 +238,8 @@ export default function PartnersPage() {
           userEmail: user.email || '',
           description: `تعديل بيانات شريك: ${formData.name}`,
           metadata: {
-            ownershipPercentage: parseFloat(formData.ownershipPercentage),
-            investment: parseFloat(formData.initialInvestment),
+            ownershipPercentage: parseAmount(formData.ownershipPercentage),
+            investment: parseAmount(formData.initialInvestment),
             name: formData.name,
           },
         });
@@ -253,10 +253,10 @@ export default function PartnersPage() {
         const partnersRef = collection(firestore, `users/${user.dataOwnerId}/partners`);
         const docRef = await addDoc(partnersRef, {
           name: formData.name,
-          ownershipPercentage: parseFloat(formData.ownershipPercentage),
+          ownershipPercentage: parseAmount(formData.ownershipPercentage),
           phone: formData.phone,
           email: formData.email,
-          initialInvestment: parseFloat(formData.initialInvestment),
+          initialInvestment: parseAmount(formData.initialInvestment),
           joinDate: new Date(),
           active: true,
         });
@@ -270,8 +270,8 @@ export default function PartnersPage() {
           userEmail: user.email || '',
           description: `إضافة شريك: ${formData.name}`,
           metadata: {
-            ownershipPercentage: parseFloat(formData.ownershipPercentage),
-            investment: parseFloat(formData.initialInvestment),
+            ownershipPercentage: parseAmount(formData.ownershipPercentage),
+            investment: parseAmount(formData.initialInvestment),
             name: formData.name,
           },
         });

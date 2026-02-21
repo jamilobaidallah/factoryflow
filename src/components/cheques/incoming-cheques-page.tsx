@@ -7,6 +7,7 @@ import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { parseAmount } from "@/lib/currency";
 
 // Types and hooks
 import { Cheque, ChequeFormData } from "./types/cheques";
@@ -176,7 +177,7 @@ export default function IncomingChequesPage() {
         chequeId: editingCheque.id,
         chequeNumber: formData.chequeNumber,
         clientName: formData.clientName,
-        amount: parseFloat(formData.amount),
+        amount: parseAmount(formData.amount),
         dueDate: new Date(formData.dueDate),
         chequeType: "incoming",
       });

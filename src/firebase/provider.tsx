@@ -51,7 +51,7 @@ async function checkIfLegacyOwner(uid: string): Promise<'legacy' | 'new' | 'unkn
       if (result.value.hasData) {
         // User has data - they are a legacy owner
         // المستخدم لديه بيانات - هو مالك قديم
-        console.log(`Legacy owner detected: found data in ${result.value.collectionName}`);
+        console.log(`Legacy owner detected: found data in ${result.value.collectionName} for uid ${uid.slice(0, 6)}...`);
         return 'legacy';
       }
     }
@@ -125,10 +125,10 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
               // localStorage not available (SSR)
             }
 
-            if (legacyStatus === 'legacy' || legacyStatus === 'unknown' || pendingOwnerSetup) {
+            if (legacyStatus === 'legacy' || pendingOwnerSetup) {
               // Create as owner: legacy user with data OR user selected "owner" at signup
               // إنشاء كمالك: مستخدم قديم لديه بيانات أو مستخدم اختار "مالك" عند التسجيل
-              console.log(`User ${firebaseUser.email} created as owner (legacy: ${legacyStatus}, pendingSetup: ${pendingOwnerSetup})`);
+              console.log(`User created as owner (legacy: ${legacyStatus}, pendingSetup: ${pendingOwnerSetup})`);
 
               // Create their user document with owner role
               // إنشاء مستند المستخدم بدور المالك
@@ -152,9 +152,20 @@ export function FirebaseClientProvider({ children }: FirebaseProviderProps) {
             } else {
               // New user who selected "employee" - must request access
               // مستخدم جديد اختار "موظف" - يجب طلب الوصول
-              console.log(`New user ${firebaseUser.email} - role set to null (employee flow)`);
+              console.log('New user - role set to null (employee flow)');
               userRole = null;
             }
+          }
+
+          // Non-owner without ownerId = data integrity issue — sign out
+          // مستخدم غير مالك بدون معرف مالك = مشكلة بيانات — تسجيل خروج
+          if (userRole !== 'owner' && userRole !== null && !ownerId) {
+            console.error('Non-owner user missing ownerId — signing out');
+            await firebaseSignOut(auth);
+            setUser(null);
+            setRole(null);
+            setLoading(false);
+            return;
           }
 
           // Calculate dataOwnerId: for owners use their uid, for non-owners use ownerId

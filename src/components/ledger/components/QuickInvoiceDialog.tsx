@@ -23,7 +23,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { createLedgerService } from "@/services/ledgerService";
-import { roundCurrency, safeMultiply, safeDivide } from "@/lib/currency";
+import { roundCurrency, safeMultiply, safeDivide, parseAmount } from "@/lib/currency";
 
 // وحدات القياس للمصنع - Unit types for manufacturing
 type InvoiceItemUnit = 'm' | 'm2' | 'piece';
@@ -187,7 +187,7 @@ export function QuickInvoiceDialog({
 
     setLoading(true);
     try {
-      const { subtotal, taxAmount, total } = calculateTotals(items, parseFloat(formData.taxRate));
+      const { subtotal, taxAmount, total } = calculateTotals(items, parseAmount(formData.taxRate));
 
       // تنظيف البنود من القيم الفارغة - Firestore لا يقبل undefined
       // Clean items from undefined values - Firestore doesn't accept undefined
@@ -230,7 +230,7 @@ export function QuickInvoiceDialog({
         dueDate,
         items: cleanedItems,
         subtotal,
-        taxRate: parseFloat(formData.taxRate),
+        taxRate: parseAmount(formData.taxRate),
         taxAmount,
         total,
         notes: formData.notes,
@@ -295,7 +295,7 @@ export function QuickInvoiceDialog({
     onClose();
   };
 
-  const totals = calculateTotals(items, parseFloat(formData.taxRate));
+  const totals = calculateTotals(items, parseAmount(formData.taxRate));
 
   if (!pendingData) { return null; }
 
@@ -531,7 +531,7 @@ export function QuickInvoiceDialog({
                           type="number"
                           step="0.01"
                           value={item.quantity}
-                          onChange={(e) => handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => handleItemChange(index, "quantity", parseAmount(e.target.value) || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -542,7 +542,7 @@ export function QuickInvoiceDialog({
                           type="number"
                           step="0.01"
                           value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, "unitPrice", roundCurrency(parseFloat(e.target.value)) || 0)}
+                          onChange={(e) => handleItemChange(index, "unitPrice", roundCurrency(parseAmount(e.target.value)) || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -553,7 +553,7 @@ export function QuickInvoiceDialog({
                           type="number"
                           step="0.01"
                           value={item.total}
-                          onChange={(e) => handleItemChange(index, "total", roundCurrency(parseFloat(e.target.value)) || 0)}
+                          onChange={(e) => handleItemChange(index, "total", roundCurrency(parseAmount(e.target.value)) || 0)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>

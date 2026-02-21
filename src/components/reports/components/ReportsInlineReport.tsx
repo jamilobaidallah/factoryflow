@@ -681,7 +681,7 @@ function ExpenseAnalysisReport({
                     </div>
                     <div className="text-left">
                       <span className="font-bold text-slate-800">{formatNumber(data.total)} د.أ</span>
-                      <span className="text-xs text-slate-500 mr-2">({percent.toFixed(1)}%)</span>
+                      <span className="text-xs text-slate-500 ml-2">({percent.toFixed(1)}%)</span>
                     </div>
                   </div>
                   {/* Progress Bar */}

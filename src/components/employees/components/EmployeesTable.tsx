@@ -241,7 +241,7 @@ export function EmployeesTable({
                     <Wallet className="h-4 w-4 text-slate-400" />
                     <div>
                       <span className="text-slate-500">الراتب:</span>
-                      <span className="font-semibold text-slate-900 mr-1">
+                      <span className="font-semibold text-slate-900 ml-1">
                         {formatNumber(employee.currentSalary)}
                       </span>
                     </div>
@@ -250,7 +250,7 @@ export function EmployeesTable({
                     <Clock className="h-4 w-4 text-slate-400" />
                     <div>
                       <span className="text-slate-500">إضافي:</span>
-                      <span className={`font-medium mr-1 ${employee.overtimeEligible ? "text-success-600" : "text-slate-400"}`}>
+                      <span className={`font-medium ml-1 ${employee.overtimeEligible ? "text-success-600" : "text-slate-400"}`}>
                         {employee.overtimeEligible ? "مؤهل" : "غير مؤهل"}
                       </span>
                     </div>

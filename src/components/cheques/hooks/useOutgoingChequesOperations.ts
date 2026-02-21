@@ -41,11 +41,11 @@ import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
-import { safeAdd, safeSubtract } from "@/lib/currency";
+import { parseAmount, safeAdd, safeSubtract } from "@/lib/currency";
+import { calculatePaymentStatus } from "@/lib/arap-utils";
 import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
 import {
   validateTransition,
-  validateDeletion,
   InvalidChequeTransitionError,
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
@@ -71,55 +71,6 @@ interface UseOutgoingChequesOperationsReturn {
 export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsReturn {
   const { user } = useUser();
   const { toast } = useToast();
-
-  const updateARAPTracking = async (
-    linkedTransactionId: string,
-    amount: number,
-    isAddition: boolean
-  ) => {
-    if (!user || !linkedTransactionId) {return;}
-
-    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const ledgerQuery = query(
-      ledgerRef,
-      where("transactionId", "==", linkedTransactionId.trim())
-    );
-    const ledgerSnapshot = await getDocs(ledgerQuery);
-
-    if (!ledgerSnapshot.empty) {
-      const ledgerDoc = ledgerSnapshot.docs[0];
-      const ledgerData = ledgerDoc.data();
-
-      if (ledgerData.isARAPEntry) {
-        const currentTotalPaid = ledgerData.totalPaid || 0;
-        const transactionAmount = ledgerData.amount || 0;
-        const rawNewTotalPaid = isAddition
-          ? currentTotalPaid + amount
-          : currentTotalPaid - amount;
-
-        // Fail fast on negative totalPaid - this indicates data corruption
-        const newTotalPaid = assertNonNegative(rawNewTotalPaid, {
-          operation: 'updateARAPTracking',
-          entityId: ledgerDoc.id,
-          entityType: 'ledger'
-        });
-        const newRemainingBalance = transactionAmount - newTotalPaid;
-
-        let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
-        if (newRemainingBalance <= 0) {
-          newPaymentStatus = "paid";
-        } else if (newTotalPaid > 0) {
-          newPaymentStatus = "partial";
-        }
-
-        await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
-          totalPaid: newTotalPaid,
-          remainingBalance: newRemainingBalance,
-          paymentStatus: newPaymentStatus,
-        });
-      }
-    }
-  };
 
   /**
    * Submit outgoing cheque with atomic batch operation
@@ -182,7 +133,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),
@@ -207,7 +158,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
         const isNowBouncedOrReverted = bouncedOrRevertedStatuses.includes(newStatus);
-        const chequeAmount = parseFloat(formData.amount);
+        const chequeAmount = parseAmount(formData.amount);
 
         // === VALIDATION: Prevent edits that would corrupt accounting on cashed cheques ===
 
@@ -308,8 +259,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
                 const transactionAmount = ledgerData.amount || 0;
                 const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
@@ -374,7 +324,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
 
           // مهم: حذف سجل الدفع وقيد اليومية عند إرجاع الشيك (مرتجع أو إلغاء الصرف)
           // Important: Delete payment record AND journal entry when cheque is bounced or reverted
-          const reversalAmount = parseFloat(formData.amount);
+          const reversalAmount = parseAmount(formData.amount);
 
           // Query payments before batch
           const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
@@ -441,8 +391,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
                   entityType: 'ledger'
                 });
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
@@ -524,7 +473,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
             userEmail: user.email || '',
             description: `تعديل شيك صادر: ${formData.chequeNumber}`,
             metadata: {
-              amount: parseFloat(formData.amount),
+              amount: parseAmount(formData.amount),
               chequeNumber: formData.chequeNumber,
               status: formData.status,
               type: CHEQUE_TYPES.OUTGOING,
@@ -538,7 +487,7 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           type: CHEQUE_TYPES.OUTGOING,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
@@ -561,9 +510,9 @@ export function useOutgoingChequesOperations(): UseOutgoingChequesOperationsRetu
           targetId: formData.chequeNumber,
           userId: user.uid,
           userEmail: user.email || '',
-          description: `إنشاء شيك صادر: ${formData.chequeNumber} - ${parseFloat(formData.amount)} دينار`,
+          description: `إنشاء شيك صادر: ${formData.chequeNumber} - ${parseAmount(formData.amount)} دينار`,
           metadata: {
-            amount: parseFloat(formData.amount),
+            amount: parseAmount(formData.amount),
             chequeNumber: formData.chequeNumber,
             status: formData.status,
             type: CHEQUE_TYPES.OUTGOING,

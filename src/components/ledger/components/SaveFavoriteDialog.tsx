@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLedgerFavorites } from "@/hooks/useLedgerFavorites";
+import { parseAmount } from "@/lib/currency";
 import type { LedgerFormData } from "../types/ledger";
 
 interface SaveFavoriteDialogProps {
@@ -41,7 +42,7 @@ export function SaveFavoriteDialog({
       return;
     }
 
-    const amount = parseFloat(formData.amount);
+    const amount = parseAmount(formData.amount);
     if (isNaN(amount) || amount <= 0) {
       setError("المبلغ غير صحيح");
       return;

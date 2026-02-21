@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Download, TrendingUp, Calendar } from "lucide-react";
 import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
 import {
   collection,
   query,
@@ -41,6 +42,7 @@ interface PartnerEquity {
 
 export default function PartnersEquityReport() {
   const { user } = useUser();
+  const { toast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [equityData, setEquityData] = useState<PartnerEquity[]>([]);
   const [loading, setLoading] = useState(false);
@@ -174,6 +176,7 @@ export default function PartnersEquityReport() {
       setEquityData(equityResults);
     } catch (error) {
       console.error("Error calculating equity:", error);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء حساب تقرير حقوق الملكية", variant: "destructive" });
     }
     setLoading(false);
   };

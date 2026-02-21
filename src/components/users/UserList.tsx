@@ -119,7 +119,7 @@ export function UserList({ members, ownerId, onMemberUpdated }: UserListProps) {
                   <TableCell className="font-medium">
                     {member.displayName || "-"}
                     {isOwner && (
-                      <span className="mr-2 text-xs badge-primary">أنت</span>
+                      <span className="ml-2 text-xs badge-primary">أنت</span>
                     )}
                   </TableCell>
                   <TableCell dir="ltr" className="text-left">

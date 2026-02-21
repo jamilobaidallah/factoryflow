@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
+import { safeAdd, safeSubtract } from "@/lib/currency";
 import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
 import { calculatePaymentStatus } from "@/lib/arap-utils";
 
@@ -75,12 +76,12 @@ export function useReversePayment() {
             const originalAmount = ledgerData.amount || 0;
 
             // Fail fast on negative values - indicates data corruption
-            const newTotalPaid = assertNonNegative(currentTotalPaid - allocatedAmount, {
+            const newTotalPaid = assertNonNegative(safeSubtract(currentTotalPaid, allocatedAmount), {
               operation: 'reverseChequePayment',
               entityId: ledgerDocId,
               entityType: 'ledger'
             });
-            const newRemainingBalance = currentRemainingBalance + allocatedAmount;
+            const newRemainingBalance = safeAdd(currentRemainingBalance, allocatedAmount);
             const newPaymentStatus = calculatePaymentStatus(newTotalPaid, originalAmount);
 
             batch.update(ledgerRef, {

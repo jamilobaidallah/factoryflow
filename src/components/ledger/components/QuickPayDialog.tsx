@@ -23,7 +23,7 @@ import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { createLedgerService } from "@/services/ledgerService";
 import { LedgerEntry } from "../utils/ledger-constants";
-import { safeAdd } from "@/lib/currency";
+import { safeAdd, parseAmount } from "@/lib/currency";
 
 interface QuickPayDialogProps {
   isOpen: boolean;
@@ -56,8 +56,8 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
   // Calculate totals and validation
   const calculations = useMemo(() => {
-    const paymentValue = parseFloat(amount) || 0;
-    const discountValue = parseFloat(discountAmount) || 0;
+    const paymentValue = parseAmount(amount) || 0;
+    const discountValue = parseAmount(discountAmount) || 0;
     const totalSettlement = safeAdd(paymentValue, discountValue);
     const remaining = entry?.remainingBalance ?? 0;
     const isOverpaying = totalSettlement > remaining;
@@ -174,7 +174,7 @@ export function QuickPayDialog({ isOpen, onClose, entry, onSuccess }: QuickPayDi
 
   // Helper to set full settlement (payment = remaining - discount, or just remaining if no discount)
   const handleFullSettlement = () => {
-    const discountValue = parseFloat(discountAmount) || 0;
+    const discountValue = parseAmount(discountAmount) || 0;
     const remaining = entry?.remainingBalance ?? 0;
     const paymentNeeded = Math.max(0, remaining - discountValue);
     setAmount(paymentNeeded.toFixed(2));

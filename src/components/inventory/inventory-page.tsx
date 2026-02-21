@@ -12,7 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
 import { exportInventoryToExcelProfessional } from "@/lib/export-inventory-excel";
 import { logActivity } from "@/services/activityLogService";
-import { safeAdd, safeSubtract, roundCurrency } from "@/lib/currency";
+import { safeAdd, safeSubtract, roundCurrency, parseAmount } from "@/lib/currency";
 import {
   collection,
   addDoc,
@@ -80,9 +80,9 @@ export default function InventoryPage() {
           itemName: formData.itemName,
           category: formData.category,
           subCategory: formData.subCategory,
-          quantity: roundCurrency(parseFloat(formData.quantity)),
+          quantity: roundCurrency(parseAmount(formData.quantity)),
           unit: formData.unit,
-          unitPrice: roundCurrency(parseFloat(formData.unitPrice)),
+          unitPrice: roundCurrency(parseAmount(formData.unitPrice)),
           minStock: roundCurrency(parseFloat(formData.minStock)),
           location: formData.location,
           notes: formData.notes,
@@ -99,7 +99,7 @@ export default function InventoryPage() {
           userEmail: user.email || '',
           description: `تعديل صنف: ${formData.itemName}`,
           metadata: {
-            quantity: parseFloat(formData.quantity),
+            quantity: parseAmount(formData.quantity),
             unit: formData.unit,
             itemName: formData.itemName,
           },
@@ -115,9 +115,9 @@ export default function InventoryPage() {
           itemName: formData.itemName,
           category: formData.category,
           subCategory: formData.subCategory,
-          quantity: roundCurrency(parseFloat(formData.quantity)),
+          quantity: roundCurrency(parseAmount(formData.quantity)),
           unit: formData.unit,
-          unitPrice: roundCurrency(parseFloat(formData.unitPrice)),
+          unitPrice: roundCurrency(parseAmount(formData.unitPrice)),
           minStock: roundCurrency(parseFloat(formData.minStock)),
           location: formData.location,
           notes: formData.notes,
@@ -135,7 +135,7 @@ export default function InventoryPage() {
           userEmail: user.email || '',
           description: `إضافة صنف: ${formData.itemName}`,
           metadata: {
-            quantity: parseFloat(formData.quantity),
+            quantity: parseAmount(formData.quantity),
             unit: formData.unit,
             itemName: formData.itemName,
           },

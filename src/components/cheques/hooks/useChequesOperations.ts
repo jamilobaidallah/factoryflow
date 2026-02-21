@@ -49,48 +49,6 @@ export function useChequesOperations(): UseChequesOperationsReturn {
   const { user } = useUser();
   const { toast } = useToast();
 
-  const updateARAPTracking = async (
-    linkedTransactionId: string,
-    amount: number,
-    isAddition: boolean
-  ) => {
-    if (!user || !linkedTransactionId) {return;}
-
-    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const ledgerQuery = query(
-      ledgerRef,
-      where("transactionId", "==", linkedTransactionId.trim())
-    );
-    const ledgerSnapshot = await getDocs(ledgerQuery);
-
-    if (!ledgerSnapshot.empty) {
-      const ledgerDoc = ledgerSnapshot.docs[0];
-      const ledgerData = ledgerDoc.data();
-
-      if (ledgerData.isARAPEntry) {
-        const currentTotalPaid = ledgerData.totalPaid || 0;
-        const transactionAmount = ledgerData.amount || 0;
-        const newTotalPaid = isAddition
-          ? safeAdd(currentTotalPaid, amount)
-          : zeroFloor(safeSubtract(currentTotalPaid, amount));
-        const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-
-        let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-        if (newRemainingBalance <= 0) {
-          newStatus = "paid";
-        } else if (newTotalPaid > 0) {
-          newStatus = "partial";
-        }
-
-        await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
-          totalPaid: newTotalPaid,
-          remainingBalance: newRemainingBalance,
-          paymentStatus: newStatus,
-        });
-      }
-    }
-  };
-
   /**
    * Submit cheque with atomic batch operation
    * Ensures cheque + payment + ARAP update succeed or fail together
@@ -185,8 +143,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
                 const transactionAmount = ledgerData.amount || 0;
                 const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
@@ -272,8 +229,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
               const transactionAmount = ledgerData.amount || 0;
               const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
               const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-              const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+              const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
               batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                 totalPaid: newTotalPaid,
@@ -664,8 +620,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
             const transactionAmount = ledgerData.amount || 0;
             const newTotalPaid = safeAdd(currentTotalPaid, cheque.amount);
             const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-            const newPaymentStatus: "paid" | "unpaid" | "partial" =
-              newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+            const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
             batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
               totalPaid: newTotalPaid,
@@ -767,8 +722,7 @@ export function useChequesOperations(): UseChequesOperationsReturn {
             // Subtract the cheque amount (reverse the payment)
             const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, cheque.amount));
             const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-            const newPaymentStatus: "paid" | "unpaid" | "partial" =
-              newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+            const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
             batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
               totalPaid: newTotalPaid,

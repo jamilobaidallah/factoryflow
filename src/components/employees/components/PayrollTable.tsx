@@ -359,10 +359,10 @@ export function PayrollTable({
             <div className="flex items-center gap-4">
               <div className="text-sm">
                 <span className="text-slate-500">الحالة:</span>
-                <span className="mr-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700">
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700">
                   مدفوع: {payrollSummary?.paidCount || 0}
                 </span>
-                <span className="mr-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700">
+                <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700">
                   غير مدفوع: {payrollSummary?.unpaidCount || 0}
                 </span>
               </div>
@@ -562,29 +562,29 @@ export function PayrollTable({
               <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                 <div>
                   <span className="text-primary-600">الرواتب الأساسية:</span>
-                  <span className="font-bold text-primary-900 mr-2">{formatNumber(previewSummary.totalBase)}</span>
+                  <span className="font-bold text-primary-900 ml-2">{formatNumber(previewSummary.totalBase)}</span>
                 </div>
                 <div>
                   <span className="text-primary-600">الأجر الإضافي:</span>
-                  <span className="font-bold text-success-600 mr-2">+{formatNumber(previewSummary.totalOvertime)}</span>
+                  <span className="font-bold text-success-600 ml-2">+{formatNumber(previewSummary.totalOvertime)}</span>
                 </div>
                 <div>
                   <span className="text-primary-600">المكافآت:</span>
-                  <span className="font-bold text-success-600 mr-2">+{formatNumber(previewSummary.totalBonuses)}</span>
+                  <span className="font-bold text-success-600 ml-2">+{formatNumber(previewSummary.totalBonuses)}</span>
                 </div>
                 <div>
                   <span className="text-primary-600">الخصومات:</span>
-                  <span className="font-bold text-danger-600 mr-2">-{formatNumber(previewSummary.totalDeductions)}</span>
+                  <span className="font-bold text-danger-600 ml-2">-{formatNumber(previewSummary.totalDeductions)}</span>
                 </div>
                 {previewSummary.totalAdvanceDeductions > 0 && (
                   <div>
                     <span className="text-primary-600">خصم السلف:</span>
-                    <span className="font-bold text-warning-600 mr-2">-{formatNumber(previewSummary.totalAdvanceDeductions)}</span>
+                    <span className="font-bold text-warning-600 ml-2">-{formatNumber(previewSummary.totalAdvanceDeductions)}</span>
                   </div>
                 )}
                 <div className="col-span-2 md:col-span-1">
                   <span className="text-primary-600">صافي المستحق:</span>
-                  <span className="font-bold text-primary-900 mr-2 text-lg">{formatNumber(previewSummary.grandNetTotal)} دينار</span>
+                  <span className="font-bold text-primary-900 ml-2 text-lg">{formatNumber(previewSummary.grandNetTotal)} دينار</span>
                 </div>
               </div>
             </div>

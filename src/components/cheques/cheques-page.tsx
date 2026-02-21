@@ -20,6 +20,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { parseAmount } from "@/lib/currency";
 
 // Types and hooks
 import { Cheque, ChequeFormData, initialChequeFormData } from "./types/cheques";
@@ -240,7 +241,7 @@ export default function ChequesPage() {
           chequeId: editingCheque.id,
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           dueDate: new Date(formData.dueDate),
           chequeType: formData.type === CHEQUE_TYPES.INCOMING ? "incoming" : "outgoing",
         }

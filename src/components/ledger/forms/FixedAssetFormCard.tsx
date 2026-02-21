@@ -5,6 +5,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { parseAmount } from "@/lib/currency";
 
 export interface FixedAssetFormCardProps {
   formData: {
@@ -23,8 +24,8 @@ export function FixedAssetFormCard({
 }: FixedAssetFormCardProps) {
   // Calculate monthly depreciation
   const calculateMonthlyDepreciation = (): string => {
-    const amount = parseFloat(entryAmount || "0");
-    const salvage = parseFloat(formData.salvageValue || "0");
+    const amount = parseAmount(entryAmount || "0");
+    const salvage = parseAmount(formData.salvageValue || "0");
     const years = parseFloat(formData.usefulLifeYears || "0");
 
     if (years <= 0) {

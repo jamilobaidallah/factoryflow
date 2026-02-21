@@ -14,6 +14,7 @@ import { firestore } from "@/firebase/config";
 import { Cheque } from "../types/cheques";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { sumAmounts } from "@/lib/currency";
 
 interface UseIncomingChequesDataReturn {
   cheques: Cheque[];
@@ -68,8 +69,8 @@ export function useIncomingChequesData(): UseIncomingChequesDataReturn {
   const endorsedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.ENDORSED);
   const bouncedCheques = cheques.filter(c => c.status === CHEQUE_STATUS_AR.BOUNCED);
 
-  const totalPendingValue = pendingCheques.reduce((sum, c) => sum + c.amount, 0);
-  const totalClearedValue = clearedCheques.reduce((sum, c) => sum + c.amount, 0);
+  const totalPendingValue = sumAmounts(pendingCheques.map(c => c.amount));
+  const totalClearedValue = sumAmounts(clearedCheques.map(c => c.amount));
 
   return {
     cheques,

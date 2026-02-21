@@ -39,7 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { formatShortDate } from "@/lib/date-utils";
-import { safeSubtract, safeAdd, sumAmounts } from "@/lib/currency";
+import { safeSubtract, safeAdd, sumAmounts, parseAmount } from "@/lib/currency";
 import { Cheque } from "../types/cheques";
 
 // ============================================================================
@@ -404,7 +404,7 @@ export function EndorsementAllocationDialog({
 
   // Handle manual allocation change for client
   const handleClientAllocationChange = useCallback((index: number, value: string) => {
-    const amount = parseFloat(value) || 0;
+    const amount = parseAmount(value) || 0;
     setClientAllocations((prev) => {
       const maxAmount = prev[index].remainingBalance;
       const updated = [...prev];
@@ -418,7 +418,7 @@ export function EndorsementAllocationDialog({
 
   // Handle manual allocation change for supplier
   const handleSupplierAllocationChange = useCallback((index: number, value: string) => {
-    const amount = parseFloat(value) || 0;
+    const amount = parseAmount(value) || 0;
     setSupplierAllocations((prev) => {
       const maxAmount = prev[index].remainingBalance;
       const updated = [...prev];

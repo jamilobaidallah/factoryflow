@@ -17,6 +17,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { AlertTriangle, CheckCircle2, Search, RefreshCw } from "lucide-react";
 import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
 import {
   verifyDataIntegrity,
   getDiscrepancyTypeLabel,
@@ -27,6 +28,7 @@ import { formatNumber } from "@/lib/date-utils";
 
 function VerificationTabComponent() {
   const { user } = useUser();
+  const { toast } = useToast();
   const [phase, setPhase] = useState<VerificationPhase>({ phase: 'idle' });
 
   const runVerification = async () => {
@@ -39,6 +41,7 @@ function VerificationTabComponent() {
       setPhase({ phase: 'complete', result });
     } catch (error) {
       console.error('Verification failed:', error);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء التحقق من البيانات", variant: "destructive" });
       setPhase({ phase: 'idle' });
     }
   };

@@ -71,7 +71,7 @@ export function EmployeeSalaryHistory({
                       {formatNumber(entry.oldSalary)} → {formatNumber(entry.newSalary)}
                     </span>
                     <span
-                      className={`mr-2 text-sm font-medium ${
+                      className={`ml-2 text-sm font-medium ${
                         isIncrease ? "text-success-600" : "text-danger-600"
                       }`}
                     >

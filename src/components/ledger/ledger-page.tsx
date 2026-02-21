@@ -59,6 +59,7 @@ import {
   EntryType,
   ViewMode,
 } from "./filters";
+import { parseAmount } from "@/lib/currency";
 import { isEquityTransaction, getCategoryType } from "./utils/ledger-helpers";
 import { useAvailableAdvances, getAdvanceTypeForEntry, isAdvanceCategory } from "./hooks/useAvailableAdvances";
 import type { AdvanceAllocationResult } from "./components/AdvanceAllocationDialog";
@@ -232,10 +233,10 @@ export default function LedgerPage() {
     dispatch({ type: "SET_LOADING", payload: true });
 
     // Save pending invoice data before submission
-    const shouldCreateInvoice = state.ui.createInvoice && state.form.formData.associatedParty && parseFloat(state.form.formData.amount) > 0;
+    const shouldCreateInvoice = state.ui.createInvoice && state.form.formData.associatedParty && parseAmount(state.form.formData.amount) > 0;
     const invoiceData = shouldCreateInvoice ? {
       clientName: state.form.formData.associatedParty,
-      amount: parseFloat(state.form.formData.amount),
+      amount: parseAmount(state.form.formData.amount),
     } : null;
 
     try {
@@ -612,8 +613,8 @@ export default function LedgerPage() {
         onSkip={handleAdvanceAllocationSkip}
         advances={availableAdvances}
         invoiceAmount={
-          (parseFloat(state.form.formData.amount) || 0) -
-          (state.form.hasInitialPayment ? parseFloat(state.form.initialPaymentAmount) || 0 : 0)
+          (parseAmount(state.form.formData.amount) || 0) -
+          (state.form.hasInitialPayment ? parseAmount(state.form.initialPaymentAmount) || 0 : 0)
         }
         partyName={state.form.formData.associatedParty}
         isCustomer={advanceType === "customer"}

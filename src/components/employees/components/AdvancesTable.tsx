@@ -126,7 +126,7 @@ export function AdvancesTable({
                   <Wallet className="h-4 w-4 text-slate-400" />
                   <div>
                     <span className="text-slate-500">المبلغ:</span>
-                    <span className="font-semibold text-slate-900 mr-1">
+                    <span className="font-semibold text-slate-900 ml-1">
                       {formatNumber(advance.amount)}
                     </span>
                   </div>
@@ -135,7 +135,7 @@ export function AdvancesTable({
                   <Wallet className="h-4 w-4 text-warning-500" />
                   <div>
                     <span className="text-slate-500">المتبقي:</span>
-                    <span className={`font-semibold mr-1 ${advance.remainingAmount > 0 ? "text-warning-600" : "text-success-600"}`}>
+                    <span className={`font-semibold ml-1 ${advance.remainingAmount > 0 ? "text-warning-600" : "text-success-600"}`}>
                       {formatNumber(advance.remainingAmount)}
                     </span>
                   </div>
@@ -202,7 +202,7 @@ export function AdvancesTable({
                 >
                   {formatNumber(advance.remainingAmount)}
                 </span>
-                <span className="text-slate-500 font-normal mr-1">دينار</span>
+                <span className="text-slate-500 font-normal ml-1">دينار</span>
               </TableCell>
               <TableCell className="hidden sm:table-cell text-slate-600">
                 {formatShortDate(advance.date)}

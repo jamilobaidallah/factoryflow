@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
+import { useToast } from '@/hooks/use-toast';
 import {
   UnpaidTransaction,
   AllocationEntry,
@@ -76,6 +77,7 @@ interface UsePaymentAllocationsResult {
  */
 export function usePaymentAllocations(): UsePaymentAllocationsResult {
   const { user } = useUser();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -515,6 +517,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     } catch (err) {
       console.error('Error saving payment with allocations:', err);
       setError('حدث خطأ أثناء حفظ الدفعة');
+      toast({ title: "خطأ", description: "حدث خطأ أثناء حفظ المدفوعة", variant: "destructive" });
       setLoading(false);
       return null;
     }
@@ -731,11 +734,10 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
             );
 
             // Recalculate totalPaid based on remaining allocations
-            const newAdvanceTotalPaid = filteredAllocations.reduce((sum, alloc) => sum + (alloc.amount || 0), 0);
+            const newAdvanceTotalPaid = sumAmounts(filteredAllocations.map(alloc => alloc.amount || 0));
             const advanceAmount = (advanceData.amount as number) || 0;
             const newAdvanceRemainingBalance = zeroFloor(safeSubtract(advanceAmount, newAdvanceTotalPaid));
-            const newAdvanceStatus = newAdvanceTotalPaid <= 0 ? 'unpaid' :
-              newAdvanceRemainingBalance <= 0 ? 'paid' : 'partial';
+            const newAdvanceStatus = calculatePaymentStatus(newAdvanceTotalPaid, advanceAmount);
 
             transaction.update(advanceRef, {
               advanceAllocations: filteredAllocations,
@@ -781,6 +783,7 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
     } catch (err) {
       console.error('Error reversing payment allocations:', err);
       setError('حدث خطأ أثناء حذف الدفعة');
+      toast({ title: "خطأ", description: "حدث خطأ أثناء عكس المدفوعة", variant: "destructive" });
       setLoading(false);
       return false;
     }

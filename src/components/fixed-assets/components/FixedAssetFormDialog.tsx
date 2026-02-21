@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FixedAsset, FixedAssetFormData, ASSET_CATEGORIES } from "../types/fixed-assets";
+import { parseAmount, safeSubtract, safeDivide } from "@/lib/currency";
 
 interface FixedAssetFormDialogProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function FixedAssetFormDialog({
   onSubmit,
 }: FixedAssetFormDialogProps) {
   const monthlyDepreciation = formData.purchaseCost && formData.salvageValue && formData.usefulLifeYears
-    ? (parseFloat(formData.purchaseCost) - parseFloat(formData.salvageValue)) / (parseFloat(formData.usefulLifeYears) * 12)
+    ? safeDivide(safeSubtract(parseAmount(formData.purchaseCost), parseAmount(formData.salvageValue)), parseFloat(formData.usefulLifeYears) * 12)
     : 0;
 
   return (

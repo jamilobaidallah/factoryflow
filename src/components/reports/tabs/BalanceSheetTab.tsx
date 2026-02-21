@@ -39,7 +39,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-        <span className="mr-2 text-gray-500">جاري تحميل الميزانية العمومية...</span>
+        <span className="ml-2 text-gray-500">جاري تحميل الميزانية العمومية...</span>
       </div>
     );
   }
@@ -241,7 +241,7 @@ export function BalanceSheetTab({ asOfDate, onExportCSV }: BalanceSheetTabProps)
                             )}
                             {account.accountNameAr}
                             {account.accountCode === 'NET_INCOME' && (
-                              <span className="text-xs text-gray-400 mr-2">(محسوب)</span>
+                              <span className="text-xs text-gray-400 ml-2">(محسوب)</span>
                             )}
                           </TableCell>
                           <TableCell className={`text-left font-mono ${

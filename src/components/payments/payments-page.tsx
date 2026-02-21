@@ -47,6 +47,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
+import { safeAdd, safeSubtract, zeroFloor, parseAmount } from "@/lib/currency";
 
 // Import extracted components
 import {
@@ -218,7 +219,7 @@ export default function PaymentsPage() {
     try {
       if (editingPayment) {
         const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, editingPayment.id);
-        const newAmount = parseFloat(formData.amount);
+        const newAmount = parseAmount(formData.amount);
         const oldAmount = editingPayment.amount || 0;
         const amountDifference = newAmount - oldAmount;
         const oldLinkedId = editingPayment.linkedTransactionId;
@@ -251,7 +252,7 @@ export default function PaymentsPage() {
               if (oldLedgerData.isARAPEntry) {
                 const oldTotalPaid = oldLedgerData.totalPaid || 0;
                 const oldTransactionAmount = oldLedgerData.amount || 0;
-                const newTotalPaid = Math.max(0, oldTotalPaid - oldAmount);
+                const newTotalPaid = zeroFloor(safeSubtract(oldTotalPaid, oldAmount));
                 const newRemainingBalance = calculateRemainingBalance(oldTransactionAmount, newTotalPaid, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
                 const newStatus = calculatePaymentStatus(newTotalPaid, oldTransactionAmount, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
                 await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, oldLedgerDoc.id), {
@@ -275,7 +276,7 @@ export default function PaymentsPage() {
                 const transactionAmount = newLedgerData.amount || 0;
                 // If same entry, just apply difference; if new entry, add full amount
                 const adjustmentAmount = oldLinkedId === newLinkedId ? amountDifference : newAmount;
-                const updatedTotalPaid = Math.max(0, currentTotalPaid + adjustmentAmount);
+                const updatedTotalPaid = zeroFloor(safeAdd(currentTotalPaid, adjustmentAmount));
                 const updatedRemainingBalance = calculateRemainingBalance(transactionAmount, updatedTotalPaid, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
                 const updatedStatus = calculatePaymentStatus(updatedTotalPaid, transactionAmount, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
                 await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, newLedgerDoc.id), {
@@ -339,7 +340,7 @@ export default function PaymentsPage() {
         });
       } else {
         const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-        const paymentAmount = parseFloat(formData.amount);
+        const paymentAmount = parseAmount(formData.amount);
 
         const docRef = await addDoc(paymentsRef, {
           clientName: formData.clientName,
@@ -404,15 +405,10 @@ export default function PaymentsPage() {
             if (ledgerData.isARAPEntry) {
               const currentTotalPaid = ledgerData.totalPaid || 0;
               const transactionAmount = ledgerData.amount || 0;
-              const newTotalPaid = currentTotalPaid + paymentAmount;
-              const newRemainingBalance = transactionAmount - newTotalPaid;
+              const newTotalPaid = safeAdd(currentTotalPaid, paymentAmount);
+              const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
 
-              let newStatus: "paid" | "unpaid" | "partial" = "unpaid";
-              if (newRemainingBalance <= 0) {
-                newStatus = "paid";
-              } else if (newTotalPaid > 0) {
-                newStatus = "partial";
-              }
+              const newStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
               await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                 totalPaid: newTotalPaid,
@@ -540,7 +536,7 @@ export default function PaymentsPage() {
                 const transactionAmount = ledgerData.amount || 0;
 
                 // Reverse the payment amount
-                const newTotalPaid = assertNonNegative(currentTotalPaid - payment.amount, {
+                const newTotalPaid = assertNonNegative(safeSubtract(currentTotalPaid, payment.amount), {
                   operation: 'reversePaymentDelete',
                   entityId: ledgerDoc.id,
                   entityType: 'ledger'
@@ -548,7 +544,7 @@ export default function PaymentsPage() {
 
                 // Reverse discount if payment had one
                 const paymentDiscountAmount = payment.discountAmount || 0;
-                const newTotalDiscount = assertNonNegative(currentTotalDiscount - paymentDiscountAmount, {
+                const newTotalDiscount = assertNonNegative(safeSubtract(currentTotalDiscount, paymentDiscountAmount), {
                   operation: 'reverseDiscountDelete',
                   entityId: ledgerDoc.id,
                   entityType: 'ledger'
@@ -556,7 +552,7 @@ export default function PaymentsPage() {
 
                 // Reverse writeoff if payment was a writeoff
                 const paymentWriteoffAmount = payment.writeoffAmount || 0;
-                const newWriteoffAmount = assertNonNegative(currentWriteoff - paymentWriteoffAmount, {
+                const newWriteoffAmount = assertNonNegative(safeSubtract(currentWriteoff, paymentWriteoffAmount), {
                   operation: 'reverseWriteoffDelete',
                   entityId: ledgerDoc.id,
                   entityType: 'ledger'

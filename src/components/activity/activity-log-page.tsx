@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { formatDateTime, formatCurrency } from "@/lib/date-utils";
 import { useUser } from "@/firebase/provider";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { getRecentActivities } from "@/services/activityLogService";
 import {
@@ -35,6 +36,7 @@ import {
 export default function ActivityLogPage() {
   const { user, loading: authLoading } = useUser();
   const { role } = usePermissions();
+  const { toast } = useToast();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [moduleFilter, setModuleFilter] = useState<ActivityModule | "all">("all");
@@ -57,10 +59,11 @@ export default function ActivityLogPage() {
       setActivities(data);
     } catch (error) {
       console.error("Error fetching activities:", error);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء تحميل سجل النشاط", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, moduleFilter, actionFilter]);
+  }, [user?.uid, moduleFilter, actionFilter, toast]);
 
   useEffect(() => {
     fetchActivities();

@@ -41,6 +41,7 @@ import { useClientTransactions } from "./hooks/useClientTransactions";
 import { usePaymentAllocations } from "./hooks/usePaymentAllocations";
 import { AllocationEntry, initialMultiAllocationFormData, MultiAllocationFormData, ChequePaymentData } from "./types";
 import { formatShortDate } from "@/lib/date-utils";
+import { parseAmount } from "@/lib/currency";
 import { calculateEntryDebitCredit, type BalanceLedgerEntry } from "@/lib/client-balance";
 
 /** Payment type constants */
@@ -316,7 +317,7 @@ export function MultiAllocationDialog({
   }, [partiesWithDebt, formData.clientName]);
 
   // Calculate totals
-  const paymentAmount = parseFloat(formData.amount) || 0;
+  const paymentAmount = parseAmount(formData.amount) || 0;
   const totalAllocated = allocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
   const difference = paymentAmount - totalAllocated;
   const isBalanced = Math.abs(difference) < 0.01;
@@ -355,7 +356,7 @@ export function MultiAllocationDialog({
 
   // Handle manual allocation change
   const handleAllocationChange = (index: number, value: string) => {
-    const amount = parseFloat(value) || 0;
+    const amount = parseAmount(value) || 0;
     const maxAmount = allocations[index].remainingBalance;
 
     // Show toast if user entered more than remaining balance

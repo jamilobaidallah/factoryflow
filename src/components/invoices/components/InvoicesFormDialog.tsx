@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Trash2, Upload, X } from "lucide-react";
 import { Invoice, InvoiceFormData, InvoiceItem, InvoiceItemUnit, InvoiceItemType } from "../types/invoices";
-import { roundCurrency, safeMultiply, safeDivide } from "@/lib/currency";
+import { roundCurrency, safeMultiply, safeDivide, parseAmount } from "@/lib/currency";
 
 interface InvoicesFormDialogProps {
   isOpen: boolean;
@@ -103,7 +103,7 @@ export function InvoicesFormDialog({
     reader.readAsDataURL(file);
   };
 
-  const totals = calculateTotals(items, parseFloat(formData.taxRate));
+  const totals = calculateTotals(items, parseAmount(formData.taxRate));
 
   return (
     <>
@@ -342,7 +342,7 @@ export function InvoicesFormDialog({
                           type="number"
                           step="0.01"
                           value={item.quantity}
-                          onChange={(e) => handleItemChange(index, "quantity", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => handleItemChange(index, "quantity", parseAmount(e.target.value) || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -353,7 +353,7 @@ export function InvoicesFormDialog({
                           type="number"
                           step="0.01"
                           value={item.unitPrice}
-                          onChange={(e) => handleItemChange(index, "unitPrice", roundCurrency(parseFloat(e.target.value)) || 0)}
+                          onChange={(e) => handleItemChange(index, "unitPrice", roundCurrency(parseAmount(e.target.value)) || 0)}
                           required
                           className="h-8 text-sm text-center w-full"
                         />
@@ -364,7 +364,7 @@ export function InvoicesFormDialog({
                           type="number"
                           step="0.01"
                           value={item.total}
-                          onChange={(e) => handleItemChange(index, "total", roundCurrency(parseFloat(e.target.value)) || 0)}
+                          onChange={(e) => handleItemChange(index, "total", roundCurrency(parseAmount(e.target.value)) || 0)}
                           className="h-8 text-sm text-center w-full"
                         />
                       </td>

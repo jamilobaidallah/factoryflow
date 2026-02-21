@@ -56,10 +56,7 @@ export function useAvailableAdvances(
     : SUPPLIER_ADVANCE_CATEGORY;
 
   const fetchAdvances = useCallback(async () => {
-    console.log(`[useAvailableAdvances] fetchAdvances called: partyName="${partyName}", advanceType="${advanceType}"`);
-
     if (!user?.dataOwnerId || !partyName) {
-      console.log(`[useAvailableAdvances] Skipping: no user (${!!user?.dataOwnerId}) or no partyName (${!!partyName})`);
       setAdvances([]);
       return;
     }
@@ -79,9 +76,7 @@ export function useAvailableAdvances(
         orderBy("date", "asc") // FIFO - oldest advances first
       );
 
-      console.log(`[useAvailableAdvances] Querying for category="${category}", party="${partyName}"`);
       const snapshot = await getDocs(advancesQuery);
-      console.log(`[useAvailableAdvances] Found ${snapshot.docs.length} advance entries`);
 
       const availableAdvances: AvailableAdvance[] = [];
 
@@ -97,8 +92,6 @@ export function useAvailableAdvances(
         const totalUsed = data.totalPaid ?? data.totalUsedFromAdvance ?? 0;
         const remaining = data.remainingBalance ?? (data.amount - totalUsed);
 
-        console.log(`[useAvailableAdvances] Entry ${doc.id}: amount=${data.amount}, totalPaid=${data.totalPaid ?? 'N/A'}, totalUsedFromAdvance=${data.totalUsedFromAdvance ?? 'N/A'}, remaining=${remaining}`);
-
         // Only include advances with remaining balance > 0
         if (remaining > 0) {
           availableAdvances.push({
@@ -113,7 +106,6 @@ export function useAvailableAdvances(
         }
       });
 
-      console.log(`[useAvailableAdvances] ${availableAdvances.length} advances with remaining balance > 0`);
       setAdvances(availableAdvances);
     } catch (err) {
       console.error("[useAvailableAdvances] Error fetching advances:", err);

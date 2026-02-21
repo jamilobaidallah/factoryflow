@@ -133,7 +133,7 @@ function TrialBalanceTabComponent({
           {loading && (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-              <span className="mr-2 text-gray-500">جاري التحميل...</span>
+              <span className="ml-2 text-gray-500">جاري التحميل...</span>
             </div>
           )}
 

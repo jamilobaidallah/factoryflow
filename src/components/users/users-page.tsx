@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Clock, Shield, Mail } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { UserList } from "./UserList";
 import { PendingRequestsList } from "./PendingRequestsList";
@@ -21,6 +22,7 @@ import type { OrganizationMember, AccessRequest, Invitation } from "@/types/rbac
 export default function UsersPage() {
   const { user, loading: authLoading } = useUser();
   const { role } = usePermissions();
+  const { toast } = useToast();
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -58,10 +60,11 @@ export default function UsersPage() {
       setInvitations(invitationsData.filter(i => i.status === 'pending'));
     } catch (error) {
       console.error("Error fetching user data:", error);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء تحميل بيانات المستخدمين", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, user?.email, user?.displayName]);
+  }, [user?.uid, user?.email, user?.displayName, toast]);
 
   useEffect(() => {
     fetchData();
@@ -152,7 +155,7 @@ export default function UsersPage() {
             <Clock className="w-4 h-4" />
             طلبات الانتظار
             {pendingRequests.length > 0 && (
-              <span className="mr-1 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">
+              <span className="ml-1 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">
                 {pendingRequests.length}
               </span>
             )}
@@ -161,7 +164,7 @@ export default function UsersPage() {
             <Mail className="w-4 h-4" />
             الدعوات المعلقة
             {invitations.length > 0 && (
-              <span className="mr-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+              <span className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
                 {invitations.length}
               </span>
             )}

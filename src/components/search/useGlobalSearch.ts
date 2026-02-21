@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useUser } from "@/firebase/provider";
+import { useToast } from "@/hooks/use-toast";
 import { collection, orderBy, limit, getDocs, query as firestoreQuery } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { formatNumber } from "@/lib/date-utils";
@@ -48,6 +49,7 @@ export const typeIcons: Record<string, string> = {
  */
 export function useGlobalSearch(): UseGlobalSearchReturn {
   const { user } = useUser();
+  const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -179,6 +181,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
         setResults(searchResults.slice(0, 20));
       } catch (error) {
         console.error("Search error:", error);
+        toast({ title: "خطأ", description: "حدث خطأ أثناء البحث", variant: "destructive" });
         setResults([]);
       } finally {
         setIsLoading(false);
@@ -187,7 +190,7 @@ export function useGlobalSearch(): UseGlobalSearchReturn {
     // NOTE: For production scale, consider Algolia or ElasticSearch for server-side search
 
     return () => clearTimeout(searchTimeout);
-  }, [query, user]);
+  }, [query, user, toast]);
 
   const groupedResults = useMemo(() => {
     return results.reduce((acc, result) => {

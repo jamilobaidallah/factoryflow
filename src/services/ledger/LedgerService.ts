@@ -676,7 +676,7 @@ export class LedgerService {
 
       // Handle initial payment
       if (options.hasInitialPayment && options.initialPaymentAmount && formData.trackARAP) {
-        handleInitialPaymentBatch(ctx, parseFloat(options.initialPaymentAmount));
+        handleInitialPaymentBatch(ctx, parseAmount(options.initialPaymentAmount));
       }
 
       // Handle inventory update
@@ -2447,14 +2447,14 @@ export class LedgerService {
     totalAmount: number
   ): string | null {
     if (options.hasIncomingCheck && formData.immediateSettlement && options.checkFormData) {
-      const checkAmount = parseFloat(options.checkFormData.chequeAmount);
+      const checkAmount = parseAmount(options.checkFormData.chequeAmount);
       if (checkAmount > totalAmount) {
         return "مبلغ الشيك لا يمكن أن يكون أكبر من المبلغ الإجمالي";
       }
     }
 
     if (options.hasInitialPayment && options.initialPaymentAmount) {
-      const paymentAmt = parseFloat(options.initialPaymentAmount);
+      const paymentAmt = parseAmount(options.initialPaymentAmount);
       if (paymentAmt > totalAmount) {
         return "مبلغ الدفعة الأولية لا يمكن أن يكون أكبر من المبلغ الإجمالي";
       }
@@ -2485,7 +2485,7 @@ export class LedgerService {
 
         // Add initial payment if exists (partial payment option)
         if (options.hasInitialPayment && options.initialPaymentAmount) {
-          initialPaid += parseFloat(options.initialPaymentAmount);
+          initialPaid += parseAmount(options.initialPaymentAmount);
         }
 
         // Add cashed incoming cheques
@@ -2494,13 +2494,13 @@ export class LedgerService {
             options.incomingChequesList.forEach((cheque) => {
               const accountingType = cheque.accountingType || "cashed";
               if (accountingType === "cashed") {
-                initialPaid += parseFloat(cheque.chequeAmount || "0");
+                initialPaid += parseAmount(cheque.chequeAmount || "0");
               }
             });
           } else if (options.checkFormData) {
             const chequeAccountingType = options.checkFormData.accountingType || "cashed";
             if (chequeAccountingType === "cashed") {
-              initialPaid += parseFloat(options.checkFormData.chequeAmount || "0");
+              initialPaid += parseAmount(options.checkFormData.chequeAmount || "0");
             }
           }
         }
@@ -2511,13 +2511,13 @@ export class LedgerService {
             options.outgoingChequesList.forEach((cheque) => {
               const accountingType = cheque.accountingType || "cashed";
               if (accountingType === "cashed" || accountingType === "endorsed") {
-                initialPaid += parseFloat(cheque.chequeAmount || "0");
+                initialPaid += parseAmount(cheque.chequeAmount || "0");
               }
             });
           } else if (options.outgoingCheckFormData) {
             const chequeAccountingType = options.outgoingCheckFormData.accountingType || "cashed";
             if (chequeAccountingType === "cashed" || chequeAccountingType === "endorsed") {
-              initialPaid += parseFloat(options.outgoingCheckFormData.chequeAmount || "0");
+              initialPaid += parseAmount(options.outgoingCheckFormData.chequeAmount || "0");
             }
           }
         }

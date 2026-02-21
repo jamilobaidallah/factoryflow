@@ -36,6 +36,7 @@ import { AlertTriangle } from "lucide-react";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { createLedgerService } from "@/services/ledgerService";
+import { parseAmount } from "@/lib/currency";
 import { LedgerEntry } from "../utils/ledger-constants";
 
 interface WriteOffDialogProps {
@@ -77,7 +78,7 @@ export function WriteOffDialog({ isOpen, onClose, entry, onSuccess }: WriteOffDi
 
   // Calculate values
   const calculations = useMemo(() => {
-    const writeoffValue = parseFloat(amount) || 0;
+    const writeoffValue = parseAmount(amount) || 0;
     const remaining = entry?.remainingBalance ?? 0;
     const isOverAmount = writeoffValue > remaining;
     const willFullyWriteOff = Math.abs(writeoffValue - remaining) < 0.01;

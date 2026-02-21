@@ -42,11 +42,11 @@ import { ref, uploadBytes, getDownloadURL, StorageError } from "firebase/storage
 import { firestore, storage } from "@/firebase/config";
 import { Cheque, ChequeFormData } from "../types/cheques";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
-import { safeAdd, safeSubtract, zeroFloor } from "@/lib/currency";
-import { assertNonNegative, isDataIntegrityError } from "@/lib/errors";
+import { parseAmount, safeAdd, safeSubtract, zeroFloor, sumAmounts, currencyEquals } from "@/lib/currency";
+import { calculatePaymentStatus } from "@/lib/arap-utils";
+import { assertNonNegative } from "@/lib/errors";
 import {
   validateTransition,
-  validateDeletion,
   InvalidChequeTransitionError,
   type ChequeStatusValue,
 } from "@/lib/chequeStateMachine";
@@ -101,47 +101,6 @@ interface UseIncomingChequesOperationsReturn {
 export function useIncomingChequesOperations(): UseIncomingChequesOperationsReturn {
   const { user } = useUser();
   const { toast } = useToast();
-
-  const updateARAPTracking = async (
-    linkedTransactionId: string,
-    amount: number
-  ) => {
-    if (!user || !linkedTransactionId) {
-      return;
-    }
-
-    const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    const ledgerQuery = query(
-      ledgerRef,
-      where("transactionId", "==", linkedTransactionId.trim())
-    );
-    const ledgerSnapshot = await getDocs(ledgerQuery);
-
-    if (!ledgerSnapshot.empty) {
-      const ledgerDoc = ledgerSnapshot.docs[0];
-      const ledgerData = ledgerDoc.data();
-
-      if (ledgerData.isARAPEntry) {
-        const currentTotalPaid = ledgerData.totalPaid || 0;
-        const transactionAmount = ledgerData.amount || 0;
-        const newTotalPaid = currentTotalPaid + amount;
-        const newRemainingBalance = transactionAmount - newTotalPaid;
-
-        let newPaymentStatus: "paid" | "unpaid" | "partial" = "unpaid";
-        if (newRemainingBalance <= 0) {
-          newPaymentStatus = "paid";
-        } else if (newTotalPaid > 0) {
-          newPaymentStatus = "partial";
-        }
-
-        await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
-          totalPaid: newTotalPaid,
-          remainingBalance: newRemainingBalance,
-          paymentStatus: newPaymentStatus,
-        });
-      }
-    }
-  };
 
   /**
    * Submit incoming cheque with atomic batch operation
@@ -206,7 +165,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const updateData: Record<string, unknown> = {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
           issueDate: new Date(formData.issueDate),
@@ -229,7 +188,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const wasCleared = clearedStatuses.includes(oldStatus);
         const isNowCleared = clearedStatuses.includes(newStatus);
         const isNowBouncedOrReverted = bouncedOrRevertedStatuses.includes(newStatus);
-        const chequeAmount = parseFloat(formData.amount);
+        const chequeAmount = parseAmount(formData.amount);
 
         // === VALIDATION: Prevent edits that would corrupt accounting on cashed cheques ===
 
@@ -315,8 +274,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                 const transactionAmount = ledgerData.amount || 0;
                 const newTotalPaid = safeAdd(currentTotalPaid, chequeAmount);
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
@@ -381,7 +339,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           }
 
           // Bug #3: Delete payment record AND journal entry when cheque is bounced or reverted
-          const reversalAmount = parseFloat(formData.amount);
+          const reversalAmount = parseAmount(formData.amount);
 
           // Query payments before batch
           const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
@@ -448,8 +406,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                   entityType: 'ledger'
                 });
                 const newRemainingBalance = safeSubtract(transactionAmount, newTotalPaid);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,
@@ -471,13 +428,12 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
 
           try {
             const engine = createJournalPostingEngine(user.dataOwnerId);
-            for (const paymentId of paymentIdsForJournalReversal) {
-              // Find journals linked to this payment and reverse them
+            await Promise.all(paymentIdsForJournalReversal.map(async (paymentId) => {
               const linkedJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, paymentId);
               for (const journal of linkedJournals) {
                 await engine.reverse(journal.id, reasonAr);
               }
-            }
+            }));
           } catch (journalError) {
             // Graceful failure - the main operation succeeded
             console.error("Failed to reverse journal entries:", journalError);
@@ -533,7 +489,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             userEmail: user.email || '',
             description: `تعديل شيك وارد: ${formData.chequeNumber}`,
             metadata: {
-              amount: parseFloat(formData.amount),
+              amount: parseAmount(formData.amount),
               chequeNumber: formData.chequeNumber,
               status: formData.status,
               type: CHEQUE_TYPES.INCOMING,
@@ -547,7 +503,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         await addDoc(chequesRef, {
           chequeNumber: formData.chequeNumber,
           clientName: formData.clientName,
-          amount: parseFloat(formData.amount),
+          amount: parseAmount(formData.amount),
           type: CHEQUE_TYPES.INCOMING,
           status: formData.status,
           linkedTransactionId: formData.linkedTransactionId,
@@ -570,9 +526,9 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
           targetId: formData.chequeNumber,
           userId: user.uid,
           userEmail: user.email || '',
-          description: `إنشاء شيك وارد: ${formData.chequeNumber} - ${parseFloat(formData.amount)} دينار`,
+          description: `إنشاء شيك وارد: ${formData.chequeNumber} - ${parseAmount(formData.amount)} دينار`,
           metadata: {
-            amount: parseFloat(formData.amount),
+            amount: parseAmount(formData.amount),
             chequeNumber: formData.chequeNumber,
             status: formData.status,
             type: CHEQUE_TYPES.INCOMING,
@@ -781,8 +737,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             const newTotalPaid = safeAdd(currentTotalPaid, cheque.amount);
             const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
             const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-            const newPaymentStatus: "paid" | "unpaid" | "partial" =
-              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+            const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount, currentDiscount, writeoffAmount);
 
             batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
               totalPaid: newTotalPaid,
@@ -813,8 +768,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
             const newTotalPaid = safeAdd(currentTotalPaid, cheque.amount);
             const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
             const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-            const newPaymentStatus: "paid" | "unpaid" | "partial" =
-              newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+            const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount, currentDiscount, writeoffAmount);
 
             batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
               totalPaid: newTotalPaid,
@@ -926,10 +880,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
     }
 
     // Validate allocation amounts match cheque amount exactly
-    const totalClientAllocated = clientAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
-    const totalSupplierAllocated = supplierAllocations.reduce((sum, a) => sum + a.allocatedAmount, 0);
-    const isClientBalanced = totalClientAllocated === cheque.amount;
-    const isSupplierBalanced = totalSupplierAllocated === cheque.amount;
+    const totalClientAllocated = sumAmounts(clientAllocations.map(a => a.allocatedAmount));
+    const totalSupplierAllocated = sumAmounts(supplierAllocations.map(a => a.allocatedAmount));
+    const isClientBalanced = currencyEquals(totalClientAllocated, cheque.amount);
+    const isSupplierBalanced = currencyEquals(totalSupplierAllocated, cheque.amount);
     const hasOverflow = totalClientAllocated > cheque.amount || totalSupplierAllocated > cheque.amount;
 
     if (hasOverflow) {
@@ -978,8 +932,8 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       const disbursementDocRef = doc(paymentsRef);
 
       // Calculate totals
-      const clientTotalAllocated = clientAllocations.reduce((sum, a) => safeAdd(sum, a.allocatedAmount), 0);
-      const supplierTotalAllocated = supplierAllocations.reduce((sum, a) => safeAdd(sum, a.allocatedAmount), 0);
+      const clientTotalAllocated = sumAmounts(clientAllocations.map(a => a.allocatedAmount));
+      const supplierTotalAllocated = sumAmounts(supplierAllocations.map(a => a.allocatedAmount));
 
       // Get primary transaction IDs for linking
       const primaryClientTransactionId = clientAllocations[0]?.transactionId || cheque.linkedTransactionId || "";
@@ -1122,8 +1076,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const currentTotalPaid = safeSubtract(allocation.totalAmount, allocation.remainingBalance);
         const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
         const newRemainingBalance = safeSubtract(allocation.totalAmount, newTotalPaid);
-        const newPaymentStatus: "paid" | "unpaid" | "partial" =
-          newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+        const newPaymentStatus = calculatePaymentStatus(newTotalPaid, allocation.totalAmount);
 
         batch.update(ledgerDocRef, {
           totalPaid: newTotalPaid,
@@ -1139,8 +1092,7 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
         const currentTotalPaid = safeSubtract(allocation.totalAmount, allocation.remainingBalance);
         const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
         const newRemainingBalance = safeSubtract(allocation.totalAmount, newTotalPaid);
-        const newPaymentStatus: "paid" | "unpaid" | "partial" =
-          newRemainingBalance <= 0 ? "paid" : newTotalPaid > 0 ? "partial" : "unpaid";
+        const newPaymentStatus = calculatePaymentStatus(newTotalPaid, allocation.totalAmount);
 
         batch.update(ledgerDocRef, {
           totalPaid: newTotalPaid,
@@ -1505,11 +1457,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                     const transactionAmount = ledgerData.amount || 0;
 
                     // Reverse the allocation (subtract)
-                    const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, allocatedAmount));
+                    const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, allocatedAmount));
                     const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
                     const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-                    const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                      newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+                    const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount, currentDiscount, writeoffAmount);
 
                     batch.update(ledgerDocRef, {
                       totalPaid: newTotalPaid,
@@ -1547,11 +1498,10 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
                 const transactionAmount = ledgerData.amount || 0;
 
                 // Reverse the payment (subtract)
-                const newTotalPaid = Math.max(0, safeSubtract(currentTotalPaid, paymentAmount));
+                const newTotalPaid = zeroFloor(safeSubtract(currentTotalPaid, paymentAmount));
                 const effectiveSettled = safeAdd(safeAdd(newTotalPaid, currentDiscount), writeoffAmount);
                 const newRemainingBalance = safeSubtract(transactionAmount, effectiveSettled);
-                const newPaymentStatus: "paid" | "unpaid" | "partial" =
-                  newRemainingBalance <= 0 ? "paid" : effectiveSettled > 0 ? "partial" : "unpaid";
+                const newPaymentStatus = calculatePaymentStatus(newTotalPaid, transactionAmount, currentDiscount, writeoffAmount);
 
                 batch.update(doc(firestore, `users/${user.dataOwnerId}/ledger`, ledgerDoc.id), {
                   totalPaid: newTotalPaid,

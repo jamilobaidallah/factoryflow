@@ -16,6 +16,7 @@
 import { doc } from "firebase/firestore";
 import type { CheckFormData, OutgoingCheckFormData } from "@/components/ledger/types/ledger";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES } from "@/lib/constants";
+import { parseAmount } from "@/lib/currency";
 import { addPaymentJournalEntryToBatch } from "@/services/journalService";
 import type { HandlerContext } from "../types";
 
@@ -41,7 +42,7 @@ export function handleIncomingCheckBatch(
 ): void {
   const { batch, transactionId, formData, entryType, refs } = ctx;
   const accountingType = checkFormData.accountingType || "cashed";
-  const chequeAmount = parseFloat(checkFormData.chequeAmount);
+  const chequeAmount = parseAmount(checkFormData.chequeAmount);
 
   if (!isValidChequeData(checkFormData.chequeNumber, chequeAmount)) {
     return;
@@ -158,7 +159,7 @@ export function handleOutgoingCheckBatch(
 ): void {
   const { batch, transactionId, formData, refs } = ctx;
   const accountingType = outgoingCheckFormData.accountingType || "cashed";
-  const chequeAmount = parseFloat(outgoingCheckFormData.chequeAmount);
+  const chequeAmount = parseAmount(outgoingCheckFormData.chequeAmount);
 
   if (!isValidChequeData(outgoingCheckFormData.chequeNumber, chequeAmount)) {
     return;

@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
+import { parseAmount } from "@/lib/currency";
 import { OutgoingChequesSummaryHeader } from "./components/OutgoingChequesSummaryHeader";
 
 // Types and hooks
@@ -148,7 +149,7 @@ export default function OutgoingChequesPage() {
         chequeId: editingCheque.id,
         chequeNumber: formData.chequeNumber,
         clientName: formData.clientName,
-        amount: parseFloat(formData.amount),
+        amount: parseAmount(formData.amount),
         dueDate: new Date(formData.dueDate),
         chequeType: "outgoing",
       });
