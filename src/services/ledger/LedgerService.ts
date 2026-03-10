@@ -770,6 +770,11 @@ export class LedgerService {
             subCategory: formData.subCategory,
             isARAPEntry: formData.trackARAP ?? false,
             immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
+            // Inventory purchase: expense entry that adds stock (دخول), not wastage/samples (خروج).
+            // When true, journal debits Inventory asset (1300) instead of an expense account.
+            isInventoryPurchase: options.hasInventoryUpdate &&
+              entryType === "مصروف" &&
+              !["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? ""),
           },
         }, "main ledger journal");
 

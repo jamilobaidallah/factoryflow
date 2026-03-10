@@ -100,7 +100,9 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
           ctx.category || "مصاريف عامة",
           ctx.subCategory,
           ctx.isARAPEntry,
-          ctx.immediateSettlement
+          ctx.immediateSettlement,
+          undefined,
+          ctx.isInventoryPurchase
         )
       ),
   },

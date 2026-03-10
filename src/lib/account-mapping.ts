@@ -183,7 +183,8 @@ export function getAccountMappingForLedgerEntry(
   subCategory?: string,
   isARAPEntry?: boolean,
   immediateSettlement?: boolean,
-  isEndorsementAdvance?: boolean
+  isEndorsementAdvance?: boolean,
+  isInventoryPurchase?: boolean
 ): AccountMapping {
   // Determine the specific account from category/subcategory
   const specificCategory = subCategory || category;
@@ -252,6 +253,12 @@ export function getAccountMappingForLedgerEntry(
 
   // Expense transaction
   if (type === TRANSACTION_TYPES.EXPENSE) {
+    // Inventory purchase: adds to Inventory Asset (1300), not expensed immediately.
+    // Cost flows to COGS automatically when the item is later sold.
+    if (isInventoryPurchase) {
+      return getAccountMappingForInventoryPurchase(immediateSettlement ?? true);
+    }
+
     const expenseAccount =
       CATEGORY_TO_EXPENSE_ACCOUNT[specificCategory] ||
       CATEGORY_TO_EXPENSE_ACCOUNT[category] ||
