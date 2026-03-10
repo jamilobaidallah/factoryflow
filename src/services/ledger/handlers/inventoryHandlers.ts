@@ -129,7 +129,8 @@ export async function handleInventoryUpdate(
       inventoryChange = { itemId, quantityDelta: transactionResult.quantityDelta };
 
       // Auto-record COGS when selling
-      if (entryType === "إيراد" && movementType === "خروج") {
+      // entryType is "دخل" (from getCategoryType) — "إيراد" was never returned, so COGS was never triggered
+      if ((entryType === "دخل" || entryType === "إيراد") && movementType === "خروج") {
         const cogs = addCOGSRecord(
           batch,
           refs.ledger,
