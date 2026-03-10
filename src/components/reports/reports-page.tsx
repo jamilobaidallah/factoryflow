@@ -135,7 +135,8 @@ export default function ReportsPage() {
     filtered.forEach((entry: any) => {
       // Exclude owner equity AND advances from P&L
       // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
-      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
+      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
+          entry.isInventoryPurchase) {
         return;
       }
 
@@ -225,7 +226,8 @@ export default function ReportsPage() {
       const data = monthlyData.get(monthKey)!;
 
       // Exclude owner equity AND advances from P&L
-      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
+      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
+          entry.isInventoryPurchase) {
         return;
       }
 

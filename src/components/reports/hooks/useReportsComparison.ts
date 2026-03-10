@@ -22,6 +22,7 @@ interface LedgerEntry {
   date: Date;
   totalDiscount?: number;
   writeoffAmount?: number;  // Bad debt write-offs (ديون معدومة)
+  isInventoryPurchase?: boolean;
 }
 
 interface UseReportsComparisonProps {
@@ -158,7 +159,8 @@ function calculatePeriodData(entries: LedgerEntry[]): {
   entries.forEach((entry) => {
     // Exclude owner equity AND advances from P&L
     // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
-    if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number])) {
+    if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
+        entry.isInventoryPurchase) {
       return;
     }
 

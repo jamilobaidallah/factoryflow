@@ -54,6 +54,7 @@ interface LedgerEntry {
   totalDiscount?: number;
   writeoffAmount?: number;
   immediateSettlement?: boolean;
+  isInventoryPurchase?: boolean;
 }
 
 interface Payment {
@@ -622,7 +623,8 @@ function ExpenseAnalysisReport({
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
           isLoanTransaction(entry.type, entry.category) ||
-          isFixedAssetTransaction(entry.category)) {
+          isFixedAssetTransaction(entry.category) ||
+          entry.isInventoryPurchase) {
         return;
       }
 

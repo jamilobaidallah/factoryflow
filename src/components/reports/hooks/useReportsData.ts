@@ -33,6 +33,7 @@ interface LedgerEntry {
   isARAPEntry?: boolean;
   totalDiscount?: number;
   writeoffAmount?: number;
+  isInventoryPurchase?: boolean;
 }
 
 interface Payment {
