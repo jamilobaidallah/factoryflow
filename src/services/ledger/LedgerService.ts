@@ -659,9 +659,11 @@ export class LedgerService {
         // Use "cheque" method if payment involves cashed cheques
         const paymentMethod = (hasCashedIncoming || hasCashedOutgoing) ? "cheque" : "cash";
 
-        // For fixed assets: create payment record for tracking, but skip payment journal
-        // because FIXED_ASSET_PURCHASE template already handles cash movement (DR Assets, CR Cash)
-        const skipPaymentJournal = isFixedAssetTransaction(formData.category);
+        // Always skip payment journal for immediate settlements: the main ledger journal template
+        // already handles the full cash movement directly (DR Expense/CR Cash or DR Cash/CR Revenue).
+        // Creating a payment journal here would double-count cash (DR AP, CR Cash as extra entry).
+        // This is the same reason fixed assets skip it — the main template already covers cash.
+        const skipPaymentJournal = true;
         handleImmediateSettlementBatch(ctx, totalAmount, paymentMethod, skipPaymentJournal);
       }
 
