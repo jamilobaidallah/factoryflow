@@ -220,6 +220,10 @@ export interface TemplateContext {
 
   /** Payment type for payment templates */
   paymentType?: "قبض" | "صرف";
+
+  /** Whether this expense entry is an inventory purchase (stock IN, not wastage/samples).
+   *  When true, journal debits Inventory asset (1300) instead of an expense account. */
+  isInventoryPurchase?: boolean;
 }
 
 /**
