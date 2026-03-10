@@ -782,9 +782,67 @@ These security items require Cloud Functions or significant backend changes:
 
 ---
 
+---
+
+## 🔴 Accounting Bug: Wastage & Free Samples Do Not Reduce Inventory Asset (Account 1300)
+
+**Status**: Open
+**Priority**: High
+**Discovered**: 2026-03-10
+**Affected**: Balance Sheet (Inventory overstated), Trial Balance (Cash incorrectly credited)
+
+### Description
+
+When inventory goes OUT due to wastage (هدر وتالف) or free samples (عينات مجانية), the inventory **quantity** in the inventory module decreases correctly, but **account 1300 (Inventory asset) is NOT credited** in the journal entry. Instead, Cash (1000) is incorrectly credited — as if real cash was paid for a non-cash transaction.
+
+### Expected Journal Entry
+```
+DR COGS / Expense (5000)     [amount]
+    CR Inventory (1300)              [amount]   ← asset reduced
+```
+
+### Actual Journal Entry (current behavior)
+```
+DR COGS / Expense (5000)     [amount]
+    CR Cash (1000)                   [amount]   ← wrong: no cash paid
+```
+
+### Impact
+- **Balance Sheet**: Inventory asset (1300) stays overstated after every wastage/sample entry
+- **Trial Balance**: Cash is incorrectly reduced for non-cash transactions
+- **Cumulative**: The discrepancy grows over time with each wastage/sample entry
+
+### Root Cause
+
+`factoryflow/src/services/ledger/handlers/inventoryHandlers.ts` ~line 132:
+
+```typescript
+// Current — only auto-generates COGS (DR 5000 / CR 1300) for sales:
+if (entryType === "إيراد" && movementType === "خروج") {
+  addCOGSRecord(...)
+}
+```
+
+Wastage/samples have `entryType === "مصروف"`, so they never reach this branch. Their journal entry falls through to the standard `LEDGER_EXPENSE` template, which credits Cash/AP instead of Inventory (1300).
+
+### Fix Required
+
+Change the condition to trigger `addCOGSRecord()` for **any** inventory OUT, not just sales:
+
+```typescript
+// Fix: DR COGS / CR Inventory (1300) for any inventory OUT
+if (movementType === "خروج") {
+  addCOGSRecord(...)
+}
+```
+
+**File to modify**: `factoryflow/src/services/ledger/handlers/inventoryHandlers.ts` (~line 132)
+
+---
+
 ## 📝 Notes
 
-**Last Updated**: 2026-02-09
+**Last Updated**: 2026-03-10
 **Last Reviewed**: 24-piece comprehensive security audit completed
 
 **Change Log**:
