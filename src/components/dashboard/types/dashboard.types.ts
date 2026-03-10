@@ -18,6 +18,7 @@ export interface DashboardLedgerEntry {
   totalPaid?: number;
   totalDiscount?: number;
   isARAPEntry?: boolean;
+  isInventoryPurchase?: boolean;
 }
 
 /** Summary data for financial cards */

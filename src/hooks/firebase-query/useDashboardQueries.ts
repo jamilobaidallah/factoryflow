@@ -132,12 +132,13 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
       totalPaid: data.totalPaid,
       totalDiscount: data.totalDiscount,
       isARAPEntry: data.isARAPEntry,
+      isInventoryPurchase: data.isInventoryPurchase,
     };
 
     const isEquity = entry.type === EQUITY_TYPE;
     const isLoan = entry.type === LOAN_TYPE;
     const isExcludedCategory = EXCLUDED_CATEGORIES.some((cat) => entry.category === cat);
-    const isExcluded = isEquity || isLoan || isExcludedCategory;
+    const isExcluded = isEquity || isLoan || isExcludedCategory || entry.isInventoryPurchase;
 
     if (isExcluded) {
       if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
