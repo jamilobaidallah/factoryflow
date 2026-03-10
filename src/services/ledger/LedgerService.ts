@@ -586,6 +586,14 @@ export class LedgerService {
       // Determine if we should track AR/AP (either explicit or via cashed cheques)
       const shouldTrackARAP = formData.trackARAP || hasCashedCheques;
 
+      // Inventory purchase: expense that adds to inventory stock (دخول).
+      // Excludes wastage/samples which are inventory OUT despite being expenses.
+      // Stored on the ledger entry so P&L reports can exclude it (asset, not expense).
+      const isInventoryPurchase =
+        options.hasInventoryUpdate &&
+        entryType === "مصروف" &&
+        !["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? "");
+
       // Add ledger entry
       // Always store immediateSettlement and isARAPEntry for correct behavior during edit
       batch.set(ledgerDocRef, {
@@ -601,6 +609,7 @@ export class LedgerService {
         createdAt: new Date(),
         immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
         isARAPEntry: shouldTrackARAP,
+        ...(isInventoryPurchase && { isInventoryPurchase: true }),
         ...(shouldTrackARAP && {
           totalPaid: initialPaid,
           remainingBalance: safeSubtract(totalAmount, initialPaid),
@@ -770,11 +779,8 @@ export class LedgerService {
             subCategory: formData.subCategory,
             isARAPEntry: formData.trackARAP ?? false,
             immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
-            // Inventory purchase: expense entry that adds stock (دخول), not wastage/samples (خروج).
             // When true, journal debits Inventory asset (1300) instead of an expense account.
-            isInventoryPurchase: options.hasInventoryUpdate &&
-              entryType === "مصروف" &&
-              !["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? ""),
+            isInventoryPurchase,
           },
         }, "main ledger journal");
 

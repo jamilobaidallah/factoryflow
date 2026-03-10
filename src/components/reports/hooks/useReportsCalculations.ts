@@ -208,8 +208,9 @@ export function useReportsCalculations({
       if (isEquityTransaction(entry.type, entry.category) ||
           isAdvanceTransaction(entry.category) ||
           isLoanTransaction(entry.type, entry.category) ||
-          isFixedAssetTransaction(entry.category)) {
-        return; // Skip non-P&L transactions
+          isFixedAssetTransaction(entry.category) ||
+          entry.isInventoryPurchase) {
+        return; // Skip non-P&L transactions (inventory purchases are assets, not expenses)
       }
 
       if (entry.type === "دخل") {
