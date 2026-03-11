@@ -21,6 +21,7 @@ import {
   isPaidStatus,
   TRANSACTION_TYPES,
 } from "@/components/ledger/utils/ledger-helpers";
+import type { ReportsLedgerEntry as LedgerEntry } from "../types/reports.types";
 
 // Aging bucket labels - moved outside component for performance
 const AGING_BUCKET_LABELS = {
@@ -39,23 +40,6 @@ const AGING_BUCKET_COLORS = {
 } as const;
 
 type AgingBucket = keyof typeof AGING_BUCKET_LABELS;
-
-interface LedgerEntry {
-  id: string;
-  type: string;
-  amount: number;
-  category: string;
-  subCategory?: string;
-  date: Date;
-  paymentStatus?: string;
-  remainingBalance?: number;
-  totalPaid?: number;
-  isARAPEntry?: boolean;
-  totalDiscount?: number;
-  writeoffAmount?: number;
-  immediateSettlement?: boolean;
-  isInventoryPurchase?: boolean;
-}
 
 interface Payment {
   id: string;

@@ -164,23 +164,26 @@ export function isFixedAssetTransaction(category?: string): boolean {
 
 /**
  * Helper function to check if a transaction should be excluded from P&L
- * Combines equity, advance, loan, and fixed asset checks
+ * Combines equity, advance, loan, fixed asset, and inventory purchase checks
  *
  * Excluded transactions are Balance Sheet items, not Income Statement items:
  * - Equity: Capital contributions and owner drawings
  * - Advances: Customer and supplier prepayments
  * - Loans: Money borrowed or lent
  * - Fixed Assets: Capital expenditures (CapEx) - depreciated over time instead
+ * - Inventory Purchases: Asset additions (DR Inventory 1300) - not an expense
  *
  * @param type - Transaction type
  * @param category - Transaction category name
+ * @param isInventoryPurchase - Whether this is an inventory purchase (optional)
  * @returns true if this transaction should be excluded from P&L
  */
-export function isExcludedFromPL(type?: string, category?: string): boolean {
+export function isExcludedFromPL(type?: string, category?: string, isInventoryPurchase?: boolean): boolean {
     return isEquityTransaction(type, category) ||
            isAdvanceTransaction(category) ||
            isLoanTransaction(type, category) ||
-           isFixedAssetTransaction(category);
+           isFixedAssetTransaction(category) ||
+           !!isInventoryPurchase;
 }
 
 /**

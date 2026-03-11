@@ -11,19 +11,9 @@ import type {
   ComparisonData,
   ComparisonResult,
   UseReportsComparisonReturn,
+  ReportsLedgerEntry as LedgerEntry,
 } from '../types/reports.types';
 import { EXCLUDED_FROM_PL_CATEGORIES } from '../constants/reports.constants';
-
-interface LedgerEntry {
-  id: string;
-  type: string;
-  amount: number;
-  category: string;
-  date: Date;
-  totalDiscount?: number;
-  writeoffAmount?: number;  // Bad debt write-offs (ديون معدومة)
-  isInventoryPurchase?: boolean;
-}
 
 interface UseReportsComparisonProps {
   selectedPeriod: PeriodType;

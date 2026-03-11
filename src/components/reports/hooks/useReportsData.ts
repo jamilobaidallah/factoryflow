@@ -16,25 +16,7 @@ import {
 import { firestore } from "@/firebase/config";
 import { useToast } from "@/hooks/use-toast";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
-
-interface LedgerEntry {
-  id: string;
-  transactionId: string;
-  description: string;
-  type: string;
-  amount: number;
-  category: string;
-  subCategory: string;
-  associatedParty: string;
-  date: Date;
-  totalPaid?: number;
-  remainingBalance?: number;
-  paymentStatus?: "paid" | "unpaid" | "partial";
-  isARAPEntry?: boolean;
-  totalDiscount?: number;
-  writeoffAmount?: number;
-  isInventoryPurchase?: boolean;
-}
+import type { ReportsLedgerEntry as LedgerEntry } from "../types/reports.types";
 
 interface Payment {
   id: string;

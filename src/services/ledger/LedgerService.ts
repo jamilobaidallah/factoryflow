@@ -52,6 +52,7 @@ import {
   getJournalTemplateForTransaction,
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
+import { NON_CASH_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES, QUERY_LIMITS } from "@/lib/constants";
 import {
   parseAmount,
@@ -592,14 +593,14 @@ export class LedgerService {
       const isInventoryPurchase =
         options.hasInventoryUpdate &&
         entryType === "مصروف" &&
-        !["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? "");
+        !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
 
       // Wastage/samples: inventory leaves stock with no cash payment.
       // Journal must credit Inventory (1300) not Cash — there is no cash outflow.
       const isNonCashInventoryOut =
         options.hasInventoryUpdate &&
         entryType === "مصروف" &&
-        ["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? "");
+        (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
 
       // Add ledger entry
       // Always store immediateSettlement and isARAPEntry for correct behavior during edit

@@ -34,7 +34,8 @@ import type {
   CategoryData,
   CustomDateRange,
 } from "./types/reports.types";
-import { CATEGORY_COLORS, ANIMATION_CONFIG, OWNER_EQUITY_CATEGORIES, EXCLUDED_FROM_PL_CATEGORIES, ARABIC_MONTH_NAMES } from "./constants/reports.constants";
+import { CATEGORY_COLORS, ANIMATION_CONFIG, ARABIC_MONTH_NAMES } from "./constants/reports.constants";
+import { isExcludedFromPL } from "@/components/ledger/utils/ledger-helpers";
 
 export default function ReportsPage() {
   const { user } = useUser();
@@ -135,8 +136,7 @@ export default function ReportsPage() {
     filtered.forEach((entry: any) => {
       // Exclude owner equity AND advances from P&L
       // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
-      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
-          entry.isInventoryPurchase) {
+      if (isExcludedFromPL(entry.type, entry.category, entry.isInventoryPurchase)) {
         return;
       }
 
@@ -226,8 +226,7 @@ export default function ReportsPage() {
       const data = monthlyData.get(monthKey)!;
 
       // Exclude owner equity AND advances from P&L
-      if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
-          entry.isInventoryPurchase) {
+      if (isExcludedFromPL(entry.type, entry.category, entry.isInventoryPurchase)) {
         return;
       }
 

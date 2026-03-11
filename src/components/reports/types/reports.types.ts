@@ -3,6 +3,31 @@
  * TypeScript interfaces for the redesigned reports page
  */
 
+/**
+ * Shared ledger entry type for all reports hooks and components.
+ * Single source of truth — add new ledger fields here once instead of
+ * updating 5 separate local interface declarations.
+ */
+export interface ReportsLedgerEntry {
+  id: string;
+  transactionId?: string;
+  description?: string;
+  type: string;
+  amount: number;
+  category: string;
+  subCategory?: string;
+  associatedParty?: string;
+  date: Date;
+  totalPaid?: number;
+  remainingBalance?: number;
+  paymentStatus?: "paid" | "unpaid" | "partial";
+  isARAPEntry?: boolean;
+  immediateSettlement?: boolean;
+  totalDiscount?: number;
+  writeoffAmount?: number;
+  isInventoryPurchase?: boolean;
+}
+
 // Period selection types
 export type PeriodType = 'total' | 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 export type ComparisonType = 'lastMonth' | 'lastQuarter' | 'lastYear' | 'none';

@@ -17,25 +17,7 @@ import {
   LOAN_CATEGORIES,
   LOAN_SUBCATEGORIES,
 } from "@/components/ledger/utils/ledger-helpers";
-
-interface LedgerEntry {
-  id: string;
-  transactionId: string;
-  description: string;
-  type: string;
-  amount: number;
-  category: string;
-  subCategory: string;
-  associatedParty: string;
-  date: Date;
-  totalPaid?: number;
-  remainingBalance?: number;
-  paymentStatus?: "paid" | "unpaid" | "partial";
-  isARAPEntry?: boolean;
-  totalDiscount?: number;
-  writeoffAmount?: number;
-  isInventoryPurchase?: boolean;
-}
+import type { ReportsLedgerEntry as LedgerEntry } from "../types/reports.types";
 
 interface Payment {
   id: string;
