@@ -105,6 +105,7 @@ export const CATEGORIES: Category[] = [
         subcategories: [
             "مواد خام",
             "شحن",
+            "شحن مواد خام",        // Inbound freight — capitalizes to inventory (1300), not expensed immediately
             "شراء بضاعة جاهزة",
         ]
     },
@@ -198,3 +199,11 @@ export const CATEGORIES: Category[] = [
  * Used to auto-select the non-cash expense payment option
  */
 export const NON_CASH_SUBCATEGORIES = ["هدر وتالف", "عينات مجانية"] as const;
+
+/**
+ * Inbound freight subcategories — costs to bring raw materials to the factory.
+ * Per IAS 2, these must be capitalized into inventory cost (DR 1300), not expensed.
+ * The expense flows through COGS automatically when the inventory item is sold.
+ * No inventory update toggle needed — always treated as an inventory purchase.
+ */
+export const INBOUND_FREIGHT_SUBCATEGORIES = ["شحن مواد خام"] as const;

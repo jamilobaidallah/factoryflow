@@ -52,7 +52,7 @@ import {
   getJournalTemplateForTransaction,
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
-import { NON_CASH_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
+import { NON_CASH_SUBCATEGORIES, INBOUND_FREIGHT_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES, QUERY_LIMITS } from "@/lib/constants";
 import {
   parseAmount,
@@ -587,13 +587,24 @@ export class LedgerService {
       // Determine if we should track AR/AP (either explicit or via cashed cheques)
       const shouldTrackARAP = formData.trackARAP || hasCashedCheques;
 
+      // Inbound freight (شحن مواد خام): per IAS 2, shipping costs to bring raw materials
+      // to the factory must be capitalized into inventory (DR 1300), not expensed immediately.
+      // No inventory update toggle required — always treated as an inventory cost.
+      const isInboundFreight =
+        entryType === "مصروف" &&
+        (INBOUND_FREIGHT_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+
       // Inventory purchase: expense that adds to inventory stock (دخول).
       // Excludes wastage/samples which are inventory OUT despite being expenses.
+      // Also includes inbound freight (always capitalize, even without inventory update toggle).
       // Stored on the ledger entry so P&L reports can exclude it (asset, not expense).
       const isInventoryPurchase =
-        options.hasInventoryUpdate &&
-        entryType === "مصروف" &&
-        !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+        isInboundFreight ||
+        (
+          options.hasInventoryUpdate &&
+          entryType === "مصروف" &&
+          !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "")
+        );
 
       // Wastage/samples: inventory leaves stock with no cash payment.
       // Journal must credit Inventory (1300) not Cash — there is no cash outflow.
