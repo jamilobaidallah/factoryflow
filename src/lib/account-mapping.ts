@@ -184,7 +184,8 @@ export function getAccountMappingForLedgerEntry(
   isARAPEntry?: boolean,
   immediateSettlement?: boolean,
   isEndorsementAdvance?: boolean,
-  isInventoryPurchase?: boolean
+  isInventoryPurchase?: boolean,
+  isNonCashInventoryOut?: boolean
 ): AccountMapping {
   // Determine the specific account from category/subcategory
   const specificCategory = subCategory || category;
@@ -263,6 +264,17 @@ export function getAccountMappingForLedgerEntry(
       CATEGORY_TO_EXPENSE_ACCOUNT[specificCategory] ||
       CATEGORY_TO_EXPENSE_ACCOUNT[category] ||
       ACCOUNT_CODES.OTHER_EXPENSES;
+
+    // Wastage/samples: inventory leaves stock with no cash payment.
+    // DR Expense (5xxx), CR Inventory (1300) — not Cash/AP.
+    if (isNonCashInventoryOut) {
+      return {
+        debitAccount: expenseAccount,
+        creditAccount: ACCOUNT_CODES.INVENTORY,
+        debitAccountNameAr: getAccountNameAr(expenseAccount),
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.INVENTORY),
+      };
+    }
 
     // If AR/AP tracked and not immediate settlement: DR Expense, CR AP
     // If immediate settlement or not AR/AP: DR Expense, CR Cash

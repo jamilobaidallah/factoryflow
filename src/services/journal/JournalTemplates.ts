@@ -102,7 +102,8 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
           ctx.isARAPEntry,
           ctx.immediateSettlement,
           undefined,
-          ctx.isInventoryPurchase
+          ctx.isInventoryPurchase,
+          ctx.isNonCashInventoryOut
         )
       ),
   },

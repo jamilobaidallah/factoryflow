@@ -224,6 +224,10 @@ export interface TemplateContext {
   /** Whether this expense entry is an inventory purchase (stock IN, not wastage/samples).
    *  When true, journal debits Inventory asset (1300) instead of an expense account. */
   isInventoryPurchase?: boolean;
+
+  /** Whether this expense reduces inventory with no cash payment (wastage/samples).
+   *  When true, journal credits Inventory asset (1300) instead of Cash/AP. */
+  isNonCashInventoryOut?: boolean;
 }
 
 /**

@@ -594,6 +594,13 @@ export class LedgerService {
         entryType === "مصروف" &&
         !["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? "");
 
+      // Wastage/samples: inventory leaves stock with no cash payment.
+      // Journal must credit Inventory (1300) not Cash — there is no cash outflow.
+      const isNonCashInventoryOut =
+        options.hasInventoryUpdate &&
+        entryType === "مصروف" &&
+        ["هدر وتالف", "عينات مجانية"].includes(formData.subCategory ?? "");
+
       // Add ledger entry
       // Always store immediateSettlement and isARAPEntry for correct behavior during edit
       batch.set(ledgerDocRef, {
@@ -781,6 +788,8 @@ export class LedgerService {
             immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
             // When true, journal debits Inventory asset (1300) instead of an expense account.
             isInventoryPurchase,
+            // When true, journal credits Inventory asset (1300) instead of Cash/AP (wastage/samples).
+            isNonCashInventoryOut,
           },
         }, "main ledger journal");
 

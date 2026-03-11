@@ -784,9 +784,9 @@ These security items require Cloud Functions or significant backend changes:
 
 ---
 
-## 🔴 Accounting Bug: Wastage & Free Samples Do Not Reduce Inventory Asset (Account 1300)
+## ✅ Accounting Bug: Wastage & Free Samples Do Not Reduce Inventory Asset (Account 1300)
 
-**Status**: Open
+**Status**: Fixed (2026-03-11)
 **Priority**: High
 **Discovered**: 2026-03-10
 **Affected**: Balance Sheet (Inventory overstated), Trial Balance (Cash incorrectly credited)
