@@ -13,7 +13,7 @@ import type {
   UseReportsComparisonReturn,
   ReportsLedgerEntry as LedgerEntry,
 } from '../types/reports.types';
-import { EXCLUDED_FROM_PL_CATEGORIES } from '../constants/reports.constants';
+import { isExcludedFromPL } from '@/components/ledger/utils/ledger-helpers';
 
 interface UseReportsComparisonProps {
   selectedPeriod: PeriodType;
@@ -147,10 +147,7 @@ function calculatePeriodData(entries: LedgerEntry[]): {
   let expenseWriteoffs = 0;
 
   entries.forEach((entry) => {
-    // Exclude owner equity AND advances from P&L
-    // Advances (سلفة مورد, سلفة عميل) are prepaid credits, not actual income/expense
-    if (EXCLUDED_FROM_PL_CATEGORIES.includes(entry.category as typeof EXCLUDED_FROM_PL_CATEGORIES[number]) ||
-        entry.isInventoryPurchase) {
+    if (isExcludedFromPL(entry.type, entry.category, entry.isInventoryPurchase)) {
       return;
     }
 
