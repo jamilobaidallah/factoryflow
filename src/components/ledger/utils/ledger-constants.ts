@@ -106,8 +106,6 @@ export const CATEGORIES: Category[] = [
             "مواد خام",
             "شحن",
             "شراء بضاعة جاهزة",
-            "عينات مجانية",       // Free samples - inventory given away
-            "هدر وتالف",          // Wastage and spoilage - inventory consumed
         ]
     },
     {
@@ -127,6 +125,8 @@ export const CATEGORIES: Category[] = [
             "مصاريف مكتبية",
             "مستهلكات",        // Consumables (cleaning supplies, disposables, etc.)
             "أدوات ومعدات صغيرة",  // Small tools & equipment (below capitalization threshold)
+            "هدر وتالف",          // Wastage/spoilage → account 5040 (Inventory Losses)
+            "عينات مجانية",       // Free samples → account 5420 (Marketing Expense)
         ]
     },
     {

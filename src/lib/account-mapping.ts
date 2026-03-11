@@ -29,8 +29,8 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'شحن': '5020',
   'شراء بضاعة جاهزة': '5030',
   'نقل بضاعة': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Operating transport → 5440 (not COGS)
-  'هدر وتالف': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Waste/damage → COGS (inventory consumed)
-  'عينات مجانية': ACCOUNT_CODES.COST_OF_GOODS_SOLD, // Free samples → COGS (inventory given away)
+  'هدر وتالف': ACCOUNT_CODES.INVENTORY_LOSSES,   // Wastage/damage → Inventory Losses (5040), not COGS
+  'عينات مجانية': ACCOUNT_CODES.MARKETING_EXPENSE, // Free samples → Marketing Expense (5420), not COGS
 
   // Operating Expenses - مصاريف تشغيلية
   // Fallback to OTHER_EXPENSES for unmapped subcategories (not Salaries)
@@ -114,6 +114,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.SERVICE_REVENUE]: 'إيرادات الخدمات',
   [ACCOUNT_CODES.OTHER_INCOME]: 'إيرادات أخرى',
   [ACCOUNT_CODES.COST_OF_GOODS_SOLD]: 'تكلفة البضاعة المباعة',
+  [ACCOUNT_CODES.INVENTORY_LOSSES]: 'خسائر المخزون',
   [ACCOUNT_CODES.SALARIES_EXPENSE]: 'مصاريف الرواتب',
   [ACCOUNT_CODES.RENT_EXPENSE]: 'مصاريف الإيجار',
   [ACCOUNT_CODES.UTILITIES_EXPENSE]: 'مصاريف المرافق',

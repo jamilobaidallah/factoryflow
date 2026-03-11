@@ -270,6 +270,7 @@ export const ACCOUNT_CODES = {
 
   // Expenses
   COST_OF_GOODS_SOLD: '5000',
+  INVENTORY_LOSSES: '5040',        // Wastage, spoilage, write-offs (not sold — no revenue)
   PURCHASE_DISCOUNT: '5050',
   SALARIES_EXPENSE: '5100',
   RENT_EXPENSE: '5200',
