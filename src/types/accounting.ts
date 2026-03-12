@@ -266,6 +266,7 @@ export const ACCOUNT_CODES = {
   SERVICE_REVENUE: '4100',
   OTHER_INCOME: '4200',
   // Contra-Revenue
+  SALES_RETURNS: '4050',           // مردودات المبيعات (returned/rejected goods from clients)
   SALES_DISCOUNT: '4300',
 
   // Expenses

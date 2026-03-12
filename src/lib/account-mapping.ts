@@ -73,6 +73,10 @@ const CATEGORY_TO_REVENUE_ACCOUNT: Record<string, string> = {
   'مبيعات خدمات': '4110',
   'مبيعات أخرى': ACCOUNT_CODES.SALES_REVENUE,
 
+  // Contra-Revenue - مردودات المبيعات
+  'مردودات المبيعات': ACCOUNT_CODES.SALES_RETURNS,
+  'بضاعة مردودة من عميل': ACCOUNT_CODES.SALES_RETURNS,
+
   // Other Income - إيرادات أخرى
   'إيرادات أخرى': ACCOUNT_CODES.OTHER_INCOME,
   'فوائد بنكية': '4210',
@@ -134,6 +138,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.LOAN_INTEREST_EXPENSE]: 'فوائد قروض',
   [ACCOUNT_CODES.MISC_EXPENSES]: 'مصاريف متنوعة',
   [ACCOUNT_CODES.BAD_DEBT_EXPENSE]: 'مصروف ديون معدومة',
+  [ACCOUNT_CODES.SALES_RETURNS]: 'مردودات المبيعات',
   [ACCOUNT_CODES.SALES_DISCOUNT]: 'خصم المبيعات',
   [ACCOUNT_CODES.PURCHASE_DISCOUNT]: 'خصم المشتريات',
   // Sub-accounts (legacy codes for backward compatibility)

@@ -367,6 +367,29 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
         getAccountMappingForLoan(LOAN_CATEGORIES.RECEIVED, LOAN_SUBCATEGORIES.LOAN_REPAYMENT)
       ),
   },
+
+  /**
+   * Sales return (client returns rejected goods)
+   * 4-line compound entry — lines are ALWAYS passed explicitly via PostingRequest.lines:
+   *   DR: Sales Returns & Allowances (4050) | selling price
+   *   DR: Inventory (1300)                  | cost price
+   *   CR: Accounts Receivable (1200)         | selling price
+   *   CR: Cost of Goods Sold (5000)          | cost price
+   * This placeholder only provides fallback accounts; real lines override it.
+   */
+  SALES_RETURN: {
+    id: "SALES_RETURN",
+    nameAr: "مردودة عميل",
+    nameEn: "Sales Return",
+    resolveAccounts: () => ({
+      debitAccountCode: ACCOUNT_CODES.SALES_RETURNS,
+      debitAccountName: ACCOUNT_CODES.SALES_RETURNS,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+      creditAccountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      creditAccountName: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+    }),
+  },
 };
 
 /**

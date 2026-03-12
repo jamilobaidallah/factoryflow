@@ -79,6 +79,14 @@ export const CATEGORIES: Category[] = [
             "عمولات",
         ]
     },
+    // Contra-Revenue (reduces revenue — goods rejected/returned by client)
+    {
+        name: "مردودات المبيعات",
+        type: "دخل",
+        subcategories: [
+            "بضاعة مردودة من عميل",
+        ]
+    },
     // Equity Category (NOT P&L - affects cash balance but not profit/loss)
     {
         name: "رأس المال",

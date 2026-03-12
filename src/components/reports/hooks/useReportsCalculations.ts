@@ -197,9 +197,16 @@ export function useReportsCalculations({
       }
 
       if (entry.type === "دخل") {
-        totalRevenue = safeAdd(totalRevenue, entry.amount);
-        revenueByCategory[entry.category] =
-          safeAdd(revenueByCategory[entry.category] || 0, entry.amount);
+        if (entry.isReturnEntry) {
+          // Sales return: contra-revenue — subtract from total revenue
+          totalRevenue = safeSubtract(totalRevenue, entry.amount);
+          revenueByCategory[entry.category] =
+            safeSubtract(revenueByCategory[entry.category] || 0, entry.amount);
+        } else {
+          totalRevenue = safeAdd(totalRevenue, entry.amount);
+          revenueByCategory[entry.category] =
+            safeAdd(revenueByCategory[entry.category] || 0, entry.amount);
+        }
         // Track discounts on income entries (contra-revenue)
         if (entry.totalDiscount) {
           totalDiscounts = safeAdd(totalDiscounts, entry.totalDiscount);
@@ -414,6 +421,10 @@ export function useReportsCalculations({
     ledgerEntries.forEach((entry) => {
       if (entry.category === "إيرادات المبيعات") {
         totalSales = safeAdd(totalSales, entry.amount);
+      }
+      if (entry.isReturnEntry && entry.category === "مردودات المبيعات") {
+        // Sales returns reduce net sales
+        totalSales = safeSubtract(totalSales, entry.amount);
       }
       if (entry.category === "تكلفة البضاعة المباعة (COGS)") {
         totalCOGS = safeAdd(totalCOGS, entry.amount);

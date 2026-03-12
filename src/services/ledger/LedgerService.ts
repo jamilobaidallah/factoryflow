@@ -546,6 +546,190 @@ export class LedgerService {
   }
 
   /**
+   * Create a sales return entry (مردودة عميل)
+   *
+   * Records goods rejected/returned by a client:
+   *   - Reduces what the client owes (AR credit)
+   *   - Restores goods to inventory (inventory debit)
+   *   - Reverses COGS for the returned goods (COGS credit)
+   *   - Reduces revenue (Sales Returns debit)
+   *
+   * Posts ONE compound 4-line journal entry:
+   *   DR 4050 مردودات المبيعات  (selling price)
+   *   DR 1300 مخزون             (cost price)
+   *   CR 1200 ذمم مدينة         (selling price)
+   *   CR 5000 تكلفة البضاعة     (cost price)
+   *
+   * NOTE: Deliberately bypasses handleInventoryUpdate to avoid:
+   *   - Wrong inventory direction (handler creates خروج for دخل type)
+   *   - Unwanted auto-generated COGS ledger entry
+   *   - lastPurchasePrice/Date updates that don't apply to returns
+   */
+  async createSalesReturnEntry(
+    formData: LedgerFormData,
+    inventoryItemId: string,
+    returnQuantity: number
+  ): Promise<ServiceResult<string>> {
+    try {
+      const transactionId = generateTransactionId();
+      const saleAmount = parseAmount(formData.amount);
+      const costAmount = parseAmount(formData.returnCostAmount || '0');
+      const entryDate = new Date(formData.date);
+
+      if (saleAmount <= 0) {
+        return { success: false, error: "يجب أن يكون سعر البيع أكبر من صفر" };
+      }
+      if (costAmount < 0) {
+        return { success: false, error: "يجب أن تكون قيمة التكلفة صفراً أو أكثر" };
+      }
+      if (returnQuantity <= 0) {
+        return { success: false, error: "يجب أن تكون الكمية المردودة أكبر من صفر" };
+      }
+
+      // 1. Read current inventory state before batch
+      const invDocRef = doc(this.inventoryRef, inventoryItemId);
+      const invSnap = await getDoc(invDocRef);
+      if (!invSnap.exists()) {
+        return { success: false, error: "عنصر المخزون غير موجود" };
+      }
+      const invData = invSnap.data();
+      const currentQty = invData.quantity || 0;
+      const currentUnitPrice = invData.unitPrice || 0;
+      const newQty = safeAdd(currentQty, returnQuantity);
+
+      // Weighted average: blend existing stock cost with returned goods cost
+      const newWeightedAvg = newQty > 0
+        ? roundCurrency(
+            (safeAdd(
+              safeMultiply(currentQty, currentUnitPrice),
+              costAmount
+            )) / newQty
+          )
+        : currentUnitPrice;
+
+      // 2. Build batch: LedgerEntry + InventoryItem update + InventoryMovement
+      const batch = writeBatch(firestore);
+      const ledgerDocRef = doc(this.ledgerRef);
+
+      batch.set(ledgerDocRef, {
+        transactionId,
+        description: formData.description,
+        type: "دخل",
+        amount: saleAmount,
+        returnCostAmount: costAmount,
+        category: "مردودات المبيعات",
+        subCategory: "بضاعة مردودة من عميل",
+        associatedParty: formData.associatedParty,
+        ownerName: formData.ownerName || "",
+        date: entryDate,
+        createdAt: new Date(),
+        isARAPEntry: true,
+        isReturnEntry: true,
+        immediateSettlement: false,
+        paymentStatus: "unpaid",
+        remainingBalance: saleAmount,
+        totalPaid: 0,
+      });
+
+      // Update inventory quantity and weighted average unit price
+      // (does NOT update lastPurchasePrice/Date — this is a return, not a purchase)
+      batch.update(invDocRef, {
+        quantity: newQty,
+        unitPrice: newWeightedAvg,
+      });
+
+      // Create inventory movement record (دخول — goods entering stock)
+      const movementDocRef = doc(this.inventoryMovementsRef);
+      batch.set(movementDocRef, {
+        itemId: inventoryItemId,
+        itemName: invData.itemName || "",
+        type: "دخول",
+        quantity: returnQuantity,
+        linkedTransactionId: transactionId,
+        notes: `مردودة عميل: ${formData.associatedParty}`,
+        userEmail: this.userEmail,
+        createdAt: new Date(),
+      });
+
+      await batch.commit();
+
+      // 3. Post ONE 4-line compound journal entry (after batch commits)
+      try {
+        const engine = createJournalPostingEngine(this.userId);
+        await this.postJournalEntry(engine, {
+          templateId: "SALES_RETURN",
+          amount: saleAmount,
+          date: entryDate,
+          description: formData.description,
+          source: {
+            type: "ledger",
+            documentId: ledgerDocRef.id,
+            transactionId,
+          },
+          lines: [
+            {
+              accountCode: '4050',
+              accountName: '4050',
+              accountNameAr: 'مردودات المبيعات',
+              debit: saleAmount,
+              credit: 0,
+            },
+            {
+              accountCode: '1300',
+              accountName: '1300',
+              accountNameAr: 'المخزون',
+              debit: costAmount,
+              credit: 0,
+            },
+            {
+              accountCode: '1200',
+              accountName: '1200',
+              accountNameAr: 'ذمم مدينة',
+              debit: 0,
+              credit: saleAmount,
+            },
+            {
+              accountCode: '5000',
+              accountName: '5000',
+              accountNameAr: 'تكلفة البضاعة المباعة',
+              debit: 0,
+              credit: costAmount,
+            },
+          ],
+        }, "sales return journal");
+      } catch (journalError) {
+        await this.handleJournalFailure(ledgerDocRef, transactionId, journalError);
+      }
+
+      logActivity(this.userId, {
+        action: 'create',
+        module: 'ledger',
+        targetId: ledgerDocRef.id,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `مردودة عميل: ${formData.description}`,
+        metadata: {
+          amount: saleAmount,
+          costAmount,
+          returnQuantity,
+          inventoryItemId,
+          associatedParty: formData.associatedParty,
+        },
+      });
+
+      return { success: true, data: ledgerDocRef.id };
+    } catch (error) {
+      const { message, type } = handleError(error);
+      console.error("Error creating sales return entry:", error);
+      return {
+        success: false,
+        error: message,
+        errorType: type,
+      };
+    }
+  }
+
+  /**
    * Create a ledger entry with related records (batch operation)
    */
   async createLedgerEntryWithRelated(

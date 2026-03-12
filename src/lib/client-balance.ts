@@ -42,6 +42,7 @@ export interface BalanceLedgerEntry {
   totalDiscount?: number;
   writeoffAmount?: number;
   linkedPaymentId?: string; // For advances created from multi-allocation payments
+  isReturnEntry?: boolean;  // True for sales returns — reduces AR instead of increasing it
 }
 
 export interface BalancePayment {
@@ -129,7 +130,13 @@ export function calculateEntryDebitCredit(
       debit = entry.amount; // They owe us (asset)
     }
   } else if (isIncomeType(entry.type)) {
-    debit = entry.amount;
+    if (entry.isReturnEntry) {
+      // Sales return: client returned goods → reduces what they owe us (credit)
+      credit = entry.amount;
+    } else {
+      // Normal sale: client owes us more (debit)
+      debit = entry.amount;
+    }
     // Income discounts/writeoffs reduce what they owe (credit)
     if (entry.totalDiscount && entry.totalDiscount > 0) {
       discountCredit = entry.totalDiscount;

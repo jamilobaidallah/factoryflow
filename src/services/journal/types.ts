@@ -188,7 +188,8 @@ export type JournalTemplateId =
   | "LOAN_GIVEN"
   | "LOAN_COLLECTION"
   | "LOAN_RECEIVED"
-  | "LOAN_REPAYMENT";
+  | "LOAN_REPAYMENT"
+  | "SALES_RETURN";
 
 /**
  * Context for template account resolution

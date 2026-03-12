@@ -35,6 +35,9 @@ export interface LedgerEntry {
     date: Date;
   }>;
   totalPaidFromAdvances?: number;   // Total amount paid from advances
+  // Sales Return Fields
+  isReturnEntry?: boolean;          // True when goods are returned/rejected by client
+  returnCostAmount?: number;        // Cost price of returned goods (for COGS reversal journal line)
 }
 
 /**
@@ -50,6 +53,7 @@ export interface LedgerFormData {
   ownerName: string;
   trackARAP: boolean;
   immediateSettlement: boolean;
+  returnCostAmount?: string;        // Cost price of returned goods (sales return entries only)
 }
 
 /**
