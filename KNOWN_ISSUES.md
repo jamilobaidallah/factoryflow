@@ -784,68 +784,55 @@ These security items require Cloud Functions or significant backend changes:
 
 ---
 
-## ✅ Accounting Bug: Wastage & Free Samples Do Not Reduce Inventory Asset (Account 1300)
+## ✅ Accounting Bug: Wastage & Free Samples — Incorrect Accounts & Category
 
-**Status**: Fixed (2026-03-11)
+**Status**: ✅ Fixed (2026-03-11)
 **Priority**: High
 **Discovered**: 2026-03-10
-**Affected**: Balance Sheet (Inventory overstated), Trial Balance (Cash incorrectly credited)
 
-### Description
+### Issues Fixed
 
-When inventory goes OUT due to wastage (هدر وتالف) or free samples (عينات مجانية), the inventory **quantity** in the inventory module decreases correctly, but **account 1300 (Inventory asset) is NOT credited** in the journal entry. Instead, Cash (1000) is incorrectly credited — as if real cash was paid for a non-cash transaction.
+**Issue 1 — Wrong credit account:** Wastage/samples were crediting Cash (1000) instead of Inventory (1300). No cash leaves the business for these transactions.
 
-### Expected Journal Entry
+**Issue 2 — Wrong GL accounts:** Both subcategories mapped to account 5000 (COGS — cost of goods *sold*), which is wrong for goods lost or given away.
+
+**Issue 3 — Wrong category in UI:** Both subcategories appeared under "تكلفة البضاعة المباعة (COGS)" in the ledger dropdown, misleading users.
+
+**Issue 4 — COGS never auto-created on sales:** `inventoryHandlers.ts` checked `entryType === "إيراد"` but `getCategoryType()` returns `"دخل"` — condition never triggered.
+
+### Resolution
+
+**Journal fix** — Added `isNonCashInventoryOut` flag in `LedgerService.ts`. When set, `account-mapping.ts` routes the credit to Inventory (1300) instead of Cash.
+
+**GL account fix** — New account `INVENTORY_LOSSES: '5040'` (خسائر المخزون). Remapped:
+- "هدر وتالف" → 5040 خسائر المخزون
+- "عينات مجانية" → 5420 مصاريف تسويق
+
+**Category fix** — Moved both subcategories from "تكلفة البضاعة المباعة (COGS)" to "مصاريف تشغيلية" in `ledger-constants.ts`.
+
+**COGS trigger fix** — Changed condition in `inventoryHandlers.ts` to `(entryType === "دخل" || entryType === "إيراد")`.
+
+**Correct journal entries after fix:**
 ```
-DR COGS / Expense (5000)     [amount]
-    CR Inventory (1300)              [amount]   ← asset reduced
-```
-
-### Actual Journal Entry (current behavior)
-```
-DR COGS / Expense (5000)     [amount]
-    CR Cash (1000)                   [amount]   ← wrong: no cash paid
-```
-
-### Impact
-- **Balance Sheet**: Inventory asset (1300) stays overstated after every wastage/sample entry
-- **Trial Balance**: Cash is incorrectly reduced for non-cash transactions
-- **Cumulative**: The discrepancy grows over time with each wastage/sample entry
-
-### Root Cause
-
-`factoryflow/src/services/ledger/handlers/inventoryHandlers.ts` ~line 132:
-
-```typescript
-// Current — only auto-generates COGS (DR 5000 / CR 1300) for sales:
-if (entryType === "إيراد" && movementType === "خروج") {
-  addCOGSRecord(...)
-}
+Wastage:      DR 5040 خسائر المخزون  /  CR 1300 المخزون
+Free samples: DR 5420 مصاريف تسويق  /  CR 1300 المخزون
+COGS on sale: DR 5000 تكلفة البضاعة  /  CR 1300 المخزون  (auto-created)
 ```
 
-Wastage/samples have `entryType === "مصروف"`, so they never reach this branch. Their journal entry falls through to the standard `LEDGER_EXPENSE` template, which credits Cash/AP instead of Inventory (1300).
-
-### Fix Required
-
-Change the condition to trigger `addCOGSRecord()` for **any** inventory OUT, not just sales:
-
-```typescript
-// Fix: DR COGS / CR Inventory (1300) for any inventory OUT
-if (movementType === "خروج") {
-  addCOGSRecord(...)
-}
-```
-
-**File to modify**: `factoryflow/src/services/ledger/handlers/inventoryHandlers.ts` (~line 132)
+**Files modified**: `LedgerService.ts`, `account-mapping.ts`, `ledger-constants.ts`, `inventoryHandlers.ts`, `accounting.ts`, `journal/types.ts`, `JournalTemplates.ts`
 
 ---
 
 ## 📝 Notes
 
-**Last Updated**: 2026-03-10
+**Last Updated**: 2026-03-12
 **Last Reviewed**: 24-piece comprehensive security audit completed
 
 **Change Log**:
+- 2026-03-12: ✅ Fixed inbound raw material shipping (شحن مواد خام) — per IAS 2 now capitalizes to inventory (1300) instead of expensing to 5020. Eliminates double-counting of shipping in P&L.
+- 2026-03-12: ✅ Code simplification — consolidated 5 duplicate LedgerEntry interfaces into shared ReportsLedgerEntry type; extended isExcludedFromPL() to include isInventoryPurchase; unified NON_CASH_SUBCATEGORIES reference in LedgerService.ts
+- 2026-03-11: ✅ Fixed wastage (هدر وتالف) and free samples (عينات مجانية) — journal now credits Inventory (1300), correct GL accounts (5040/5420), moved to مصاريف تشغيلية category, COGS auto-creation fixed for sales
+- 2026-03-11: ✅ Fixed inventory purchases — correctly capitalize to asset (1300) not expense; P&L and dashboard no longer count inventory purchases as losses
 - 2026-02-09: ✅ Phase 4.4 Complete - Replaced 25+ `any` types with proper TypeScript types across 10 production files
 - 2026-02-09: ✅ Files fixed: error-handling.ts, utils.ts, use-async-operation.ts, LedgerService.ts, validation.ts, backup-utils.ts, export-utils.ts, useReportsCalculations.ts, RelatedRecordsDialog.tsx, transaction-search-page.tsx
 - 2026-02-08: ✅ Firestore indexes verified working - cheques (created), ledger & payments (already existed)
