@@ -104,7 +104,6 @@ export const CATEGORIES: Category[] = [
         type: "مصروف",
         subcategories: [
             "مواد خام",
-            "شحن",
             "شحن مواد خام",        // Inbound freight — capitalizes to inventory (1300), not expensed immediately
             "شراء بضاعة جاهزة",
         ]
