@@ -197,8 +197,9 @@ export function useReportsCalculations({
       }
 
       if (entry.type === "دخل") {
-        if (entry.isReturnEntry) {
+        if (entry.isReturnEntry || entry.category === "مردودات المبيعات") {
           // Sales return: contra-revenue — subtract from total revenue
+          // Category fallback covers entries created before isReturnEntry flag was added
           totalRevenue = safeSubtract(totalRevenue, entry.amount);
           revenueByCategory[entry.category] =
             safeSubtract(revenueByCategory[entry.category] || 0, entry.amount);
@@ -422,7 +423,7 @@ export function useReportsCalculations({
       if (entry.category === "إيرادات المبيعات") {
         totalSales = safeAdd(totalSales, entry.amount);
       }
-      if (entry.isReturnEntry && entry.category === "مردودات المبيعات") {
+      if (entry.category === "مردودات المبيعات") {
         // Sales returns reduce net sales
         totalSales = safeSubtract(totalSales, entry.amount);
       }

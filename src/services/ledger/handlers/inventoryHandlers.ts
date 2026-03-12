@@ -50,12 +50,14 @@ export async function handleInventoryUpdate(
   // - Expense (مصروف) for purchasing → inventory IN (دخول)
   // - Income (إيراد/دخل) for selling → inventory OUT (خروج)
   // - Non-cash expenses (wastage, samples) → inventory OUT (خروج) even though they're expenses
+  const isReturn = formData.category === "مردودات المبيعات";
   const isNonCashExpense = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
-  const movementType = (entryType === "مصروف" && !isNonCashExpense) ? "دخول" : "خروج";
+  const movementType = (isReturn || (entryType === "مصروف" && !isNonCashExpense)) ? "دخول" : "خروج";
   let cogsCreated = false;
   let cogsAmount = 0;
   let cogsDescription = "";
   let inventoryChange: { itemId: string; quantityDelta: number } | undefined;
+  let returnCostAmount = 0;
   const quantityChange = parseAmount(inventoryFormData.quantity);
 
   // Find if item exists
@@ -90,7 +92,14 @@ export async function handleInventoryUpdate(
           throw new InsufficientQuantityError(currentQuantity, quantityChange, inventoryFormData.itemName);
         }
 
-        if (movementType === "دخول" && formData.amount) {
+        if (isReturn) {
+          // Return goods at current weighted average cost
+          // No landed-cost recalculation (selling price ≠ cost price)
+          // No lastPurchasePrice update (this is a return, not a purchase)
+          // Weighted avg stays unchanged: (qty×price + returnQty×price) / (qty+returnQty) = price
+          transaction.update(itemDocRef, { quantity: newQuantity });
+          returnCostAmount = safeMultiply(quantityChange, currentUnitPrice);
+        } else if (movementType === "دخول" && formData.amount) {
           const shippingCost = inventoryFormData.shippingCost ? parseAmount(inventoryFormData.shippingCost) : 0;
           const otherCosts = inventoryFormData.otherCosts ? parseAmount(inventoryFormData.otherCosts) : 0;
           const purchaseAmount = parseAmount(formData.amount);
@@ -128,9 +137,8 @@ export async function handleInventoryUpdate(
 
       inventoryChange = { itemId, quantityDelta: transactionResult.quantityDelta };
 
-      // Auto-record COGS when selling
-      // entryType is "دخل" (from getCategoryType) — "إيراد" was never returned, so COGS was never triggered
-      if ((entryType === "دخل" || entryType === "إيراد") && movementType === "خروج") {
+      // Auto-record COGS when selling (not for returns — COGS reversal is in the 4-line journal)
+      if (!isReturn && (entryType === "دخل" || entryType === "إيراد") && movementType === "خروج") {
         const cogs = addCOGSRecord(
           batch,
           refs.ledger,
@@ -189,6 +197,7 @@ export async function handleInventoryUpdate(
     cogsAmount,
     cogsDescription,
     inventoryChange,
+    ...(isReturn && { returnCostAmount }),
   };
 }
 

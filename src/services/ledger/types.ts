@@ -34,6 +34,7 @@ export interface InventoryUpdateResult extends ServiceResult {
   cogsAmount?: number;
   cogsDescription?: string;
   inventoryChange?: { itemId: string; quantityDelta: number };
+  returnCostAmount?: number;  // Cost of returned goods (qty × current unit price)
 }
 
 // ============================================

@@ -813,6 +813,7 @@ export class LedgerService {
         immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
         isARAPEntry: shouldTrackARAP,
         ...(isInventoryPurchase && { isInventoryPurchase: true }),
+        ...(formData.category === "مردودات المبيعات" && { isReturnEntry: true }),
         ...(shouldTrackARAP && {
           totalPaid: initialPaid,
           remainingBalance: safeSubtract(totalAmount, initialPaid),
@@ -961,47 +962,70 @@ export class LedgerService {
         const engine = createJournalPostingEngine(this.userId);
         const entryDate = new Date(formData.date);
 
-        // Main ledger journal entry
-        const templateId = getJournalTemplateForTransaction(
-          entryType,
-          formData.category,
-          formData.subCategory
-        );
-        await this.postJournalEntry(engine, {
-          templateId,
-          amount: totalAmount,
-          date: entryDate,
-          description: formData.description,
-          source: {
-            type: "ledger",
-            documentId: ledgerDocRef.id,
-            transactionId,
-          },
-          context: {
-            category: formData.category,
-            subCategory: formData.subCategory,
-            isARAPEntry: formData.trackARAP ?? false,
-            immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
-            // When true, journal debits Inventory asset (1300) instead of an expense account.
-            isInventoryPurchase,
-            // When true, journal credits Inventory asset (1300) instead of Cash/AP (wastage/samples).
-            isNonCashInventoryOut,
-          },
-        }, "main ledger journal");
-
-        // COGS journal entry if applicable
-        if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
+        // Sales return: compound 4-line journal (DR 4050 + DR 1300 / CR 1200 + CR 5000)
+        // Must bypass the default 2-line template — always uses explicit lines override
+        if (formData.category === "مردودات المبيعات") {
+          const costAmount = inventoryResult?.returnCostAmount ?? 0;
           await this.postJournalEntry(engine, {
-            templateId: "COGS",
-            amount: inventoryResult.cogsAmount,
+            templateId: "SALES_RETURN",
+            amount: totalAmount,
             date: entryDate,
-            description: inventoryResult.cogsDescription,
+            description: formData.description,
             source: {
-              type: "inventory",
+              type: "ledger",
               documentId: ledgerDocRef.id,
               transactionId,
             },
-          }, "COGS journal");
+            lines: [
+              { accountCode: "4050", accountName: "4050", accountNameAr: "مردودات المبيعات",       debit: totalAmount, credit: 0 },
+              { accountCode: "1300", accountName: "1300", accountNameAr: "مخزون",                   debit: costAmount,  credit: 0 },
+              { accountCode: "1200", accountName: "1200", accountNameAr: "ذمم مدينة",                debit: 0, credit: totalAmount },
+              { accountCode: "5000", accountName: "5000", accountNameAr: "تكلفة البضاعة المباعة",    debit: 0, credit: costAmount  },
+            ],
+          }, "sales return journal");
+        } else {
+          // Main ledger journal entry
+          const templateId = getJournalTemplateForTransaction(
+            entryType,
+            formData.category,
+            formData.subCategory
+          );
+          await this.postJournalEntry(engine, {
+            templateId,
+            amount: totalAmount,
+            date: entryDate,
+            description: formData.description,
+            source: {
+              type: "ledger",
+              documentId: ledgerDocRef.id,
+              transactionId,
+            },
+            context: {
+              category: formData.category,
+              subCategory: formData.subCategory,
+              isARAPEntry: formData.trackARAP ?? false,
+              immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
+              // When true, journal debits Inventory asset (1300) instead of an expense account.
+              isInventoryPurchase,
+              // When true, journal credits Inventory asset (1300) instead of Cash/AP (wastage/samples).
+              isNonCashInventoryOut,
+            },
+          }, "main ledger journal");
+
+          // COGS journal entry if applicable
+          if (inventoryResult?.cogsCreated && inventoryResult.cogsAmount && inventoryResult.cogsDescription) {
+            await this.postJournalEntry(engine, {
+              templateId: "COGS",
+              amount: inventoryResult.cogsAmount,
+              date: entryDate,
+              description: inventoryResult.cogsDescription,
+              source: {
+                type: "inventory",
+                documentId: ledgerDocRef.id,
+                transactionId,
+              },
+            }, "COGS journal");
+          }
         }
       } catch (journalError) {
         // Rollback ledger entry and handle failure

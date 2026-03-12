@@ -302,7 +302,12 @@ export function getJournalTemplateForTransaction(
         return "FIXED_ASSET_PURCHASE";
     }
 
-    // 4. Default to income/expense templates
+    // 4. Sales returns: dedicated 4-line compound template
+    if (category === "مردودات المبيعات") {
+        return "SALES_RETURN";
+    }
+
+    // 5. Default to income/expense templates
     return entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
 }
 

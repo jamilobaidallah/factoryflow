@@ -25,6 +25,7 @@ export interface LedgerEntry {
   writeoffAmount?: number;       // Bad debt write-offs (ديون معدومة)
   totalPaidFromAdvances?: number; // Amount paid from customer/supplier advances
   linkedPaymentId?: string;       // For advances created from multi-allocation payments
+  isReturnEntry?: boolean;        // True for sales returns — reduces AR instead of increasing it
   // Advance allocation fields
   totalUsedFromAdvance?: number;  // Total amount consumed from this advance
   advanceAllocations?: Array<{    // Which invoices used this advance

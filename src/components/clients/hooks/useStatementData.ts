@@ -104,7 +104,11 @@ export function useStatementData(
             debit = e.amount; // They owe us (asset) - full amount paid
           }
         } else if (e.type === "دخل" || e.type === "إيراد") {
-          debit = e.amount;
+          if (e.isReturnEntry || e.category === "مردودات المبيعات") {
+            credit = e.amount;  // Sales return reduces AR (credit)
+          } else {
+            debit = e.amount;   // Normal income increases AR (debit)
+          }
         } else if (e.type === "مصروف") {
           credit = e.amount;
         }
