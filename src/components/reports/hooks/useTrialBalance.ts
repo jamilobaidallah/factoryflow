@@ -6,7 +6,9 @@
  * - Self-balancing verification (Debits = Credits)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -30,6 +32,11 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+
+  // Refs for auto-refresh logic
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
+  const isInitialSnapshotRef = useRef(true);
 
   const fetchData = useCallback(async () => {
     if (!user) {
@@ -82,9 +89,56 @@ export function useTrialBalance(asOfDate?: Date): UseTrialBalanceResult {
     }
   }, [user, asOfDate]);
 
+  // Keep ref up-to-date with latest fetchData
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
+  // Initial fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-refresh: subscribe to journal_entries changes and re-fetch on change
+  useEffect(() => {
+    if (!user) return;
+
+    isInitialSnapshotRef.current = true;
+
+    const journalRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
+    // Listen to the most recently created journal entry; fires when new entries are posted
+    const recentQuery = query(journalRef, orderBy('createdAt', 'desc'), limit(1));
+
+    const unsubscribe = onSnapshot(
+      recentQuery,
+      { includeMetadataChanges: false },
+      () => {
+        // Skip the initial snapshot (data already fetched by fetchData above)
+        if (isInitialSnapshotRef.current) {
+          isInitialSnapshotRef.current = false;
+          return;
+        }
+
+        // Debounce to handle multiple rapid journal entries (e.g., main + COGS)
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+        debounceTimerRef.current = setTimeout(() => {
+          fetchDataRef.current?.();
+        }, 800);
+      },
+      () => {
+        // Silently ignore subscription errors; manual refresh still works
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [user]);
 
   const isBalanced = trialBalance?.isBalanced ?? false;
 
