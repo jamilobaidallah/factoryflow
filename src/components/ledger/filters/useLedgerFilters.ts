@@ -330,6 +330,8 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
           }
         } else if (entry.type === "دخل") {
           acc.income += entry.amount || 0;
+        } else if (entry.type === "مردود") {
+          acc.income -= entry.amount || 0;  // returns reduce net income in summary
         } else if (entry.type === "مصروف") {
           acc.expenses += entry.amount || 0;
         }

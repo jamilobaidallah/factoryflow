@@ -208,6 +208,16 @@ export function isExpenseType(type?: string): boolean {
 }
 
 /**
+ * Helper function to check if a transaction type is a sales return (contra-revenue)
+ *
+ * @param type - Transaction type
+ * @returns true if this is a return transaction
+ */
+export function isReturnType(type?: string): boolean {
+    return type === TRANSACTION_TYPES.RETURN;
+}
+
+/**
  * Helper function to check if a payment status indicates fully paid
  * Handles both English and Arabic status values
  *
@@ -334,8 +344,8 @@ export function getPaymentTypeForTransaction(
     const RECEIPT = "قبض";
     const DISBURSEMENT = "صرف";
 
-    // 1. Income is always cash IN
-    if (entryType === "دخل") {
+    // 1. Income AND returns are always cash IN
+    if (entryType === "دخل" || entryType === TRANSACTION_TYPES.RETURN) {
         return RECEIPT;
     }
 

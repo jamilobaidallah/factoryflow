@@ -198,8 +198,7 @@ export function useReportsCalculations({
 
       if (entry.type === "دخل") {
         if (entry.isReturnEntry || entry.category === "مردودات المبيعات") {
-          // Sales return: contra-revenue — subtract from total revenue
-          // Category fallback covers entries created before isReturnEntry flag was added
+          // Backward compat: old entries stored as type "دخل" + isReturnEntry before migration
           totalRevenue = safeSubtract(totalRevenue, entry.amount);
           revenueByCategory[entry.category] =
             safeSubtract(revenueByCategory[entry.category] || 0, entry.amount);
@@ -215,6 +214,14 @@ export function useReportsCalculations({
         // Track bad debt write-offs (treated as expense, reduces profit)
         if (entry.writeoffAmount) {
           totalBadDebt = safeAdd(totalBadDebt, entry.writeoffAmount);
+        }
+      } else if (entry.type === "مردود") {
+        // Dedicated return type — always subtracts from revenue (contra-revenue)
+        totalRevenue = safeSubtract(totalRevenue, entry.amount);
+        revenueByCategory[entry.category] =
+          safeSubtract(revenueByCategory[entry.category] || 0, entry.amount);
+        if (entry.totalDiscount) {
+          totalDiscounts = safeAdd(totalDiscounts, entry.totalDiscount);
         }
       } else if (entry.type === "مصروف") {
         totalExpenses = safeAdd(totalExpenses, entry.amount);
@@ -355,7 +362,7 @@ export function useReportsCalculations({
 
         if (isAdvance) {
           // Advances: FLIP the normal logic
-          if (entry.type === "دخل") {
+          if (entry.type === "دخل" || entry.type === "مردود") {
             // Customer advance - we owe them goods (payable)
             payables.push(entry);
             totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
@@ -366,7 +373,7 @@ export function useReportsCalculations({
           }
         } else {
           // Regular transactions: normal logic
-          if (entry.type === "دخل") {
+          if (entry.type === "دخل" || entry.type === "مردود") {
             receivables.push(entry);
             totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
           } else if (entry.type === "مصروف") {

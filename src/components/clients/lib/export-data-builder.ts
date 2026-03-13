@@ -80,8 +80,10 @@ export function buildExportData(
             debit = e.amount;
           }
         }
-      } else if (e.type === "دخل" || e.type === "إيراد") {
+      } else if (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود") {
         debit = e.amount;
+      } else if (e.type === "مردود") {
+        credit = e.amount;  // return reduces AR balance
       } else if (e.type === "مصروف") {
         credit = e.amount;
       }
@@ -97,7 +99,7 @@ export function buildExportData(
       });
 
       // Row 2: Discount (if any) - reduces what client owes
-      if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+      if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود")) {
         rows.push({
           date: e.date,
           type: "Payment" as const,
@@ -109,7 +111,7 @@ export function buildExportData(
       }
 
       // Row 3: Writeoff (if any) - reduces what client owes
-      if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+      if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود")) {
         rows.push({
           date: e.date,
           type: "Payment" as const,

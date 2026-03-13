@@ -10,6 +10,9 @@ export {
   EQUITY_SUBCATEGORIES,
 } from "@/components/ledger/utils/ledger-helpers";
 
+/** Sales return type constant (contra-revenue) */
+export const RETURN_TYPE = "مردود" as const;
+
 /** Core dashboard configuration */
 export const DASHBOARD_CONFIG = {
   /** Number of days to look ahead for cheque due alerts */

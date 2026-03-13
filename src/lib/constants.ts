@@ -12,6 +12,7 @@ export const TRANSACTION_TYPES = {
   EXPENSE: 'مصروف',
   EQUITY: 'حركة رأس مال',
   LOAN: 'قرض',
+  RETURN: 'مردود',       // Sales/purchase returns (contra-revenue)
 } as const;
 
 export const PAYMENT_TYPES = {

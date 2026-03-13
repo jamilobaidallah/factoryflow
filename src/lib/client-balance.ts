@@ -129,10 +129,9 @@ export function calculateEntryDebitCredit(
     } else if (entry.category === 'سلفة مورد') {
       debit = entry.amount; // They owe us (asset)
     }
-  } else if (isIncomeType(entry.type)) {
-    if (entry.isReturnEntry || entry.category === 'مردودات المبيعات') {
+  } else if (isIncomeType(entry.type) || entry.type === 'مردود') {
+    if (entry.isReturnEntry || entry.category === 'مردودات المبيعات' || entry.type === 'مردود') {
       // Sales return: client returned goods → reduces what they owe us (credit)
-      // Category fallback covers entries created before isReturnEntry flag was added
       credit = entry.amount;
     } else {
       // Normal sale: client owes us more (debit)

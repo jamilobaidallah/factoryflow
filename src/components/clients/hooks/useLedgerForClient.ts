@@ -110,6 +110,8 @@ export function useLedgerForClient(client: Client | null) {
             // Calculate regular totals (exclude advances and loans)
             if (entry.type === "دخل" || entry.type === "إيراد") {
               sales += entry.amount;
+            } else if (entry.type === "مردود") {
+              sales = Math.max(0, sales - entry.amount); // returns reduce net sales
             } else if (entry.type === "مصروف") {
               purchases += entry.amount;
             }

@@ -112,14 +112,16 @@ function StatusBadge({
 
 /** Type badge component */
 function TypeBadge({ type }: { type: string }) {
-  const isIncome = type === "دخل";
-  const isEquity = type === "حركة رأس مال";
+  const isIncome  = type === "دخل";
+  const isReturn  = type === "مردود";
+  const isEquity  = type === "حركة رأس مال";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
-        isIncome ? "bg-emerald-50 text-emerald-700" :
-        isEquity ? "bg-purple-50 text-purple-700" :
+        isIncome  ? "bg-emerald-50 text-emerald-700" :
+        isReturn  ? "bg-amber-50  text-amber-700"   :
+        isEquity  ? "bg-purple-50  text-purple-700"  :
         "bg-slate-100 text-slate-600"
       )}
     >
@@ -130,7 +132,7 @@ function TypeBadge({ type }: { type: string }) {
 
 /** Determine if amount should be shown as positive (cash in) */
 function isPositiveAmount(type: string, subCategory: string): boolean {
-  if (type === "دخل") {return true;}
+  if (type === "دخل" || type === "مردود") {return true;}
   if (type === "حركة رأس مال") {
     return isCapitalContribution(subCategory); // Capital contribution = cash IN
   }

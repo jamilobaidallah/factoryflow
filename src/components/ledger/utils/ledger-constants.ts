@@ -82,7 +82,7 @@ export const CATEGORIES: Category[] = [
     // Contra-Revenue (reduces revenue — goods rejected/returned by client)
     {
         name: "مردودات المبيعات",
-        type: "دخل",
+        type: "مردود",
         subcategories: [
             "بضاعة مردودة من عميل",
         ]

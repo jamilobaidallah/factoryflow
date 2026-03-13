@@ -103,8 +103,8 @@ export function useStatementData(
           } else if (e.category === "سلفة مورد") {
             debit = e.amount; // They owe us (asset) - full amount paid
           }
-        } else if (e.type === "دخل" || e.type === "إيراد") {
-          if (e.isReturnEntry || e.category === "مردودات المبيعات") {
+        } else if (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود") {
+          if (e.isReturnEntry || e.category === "مردودات المبيعات" || e.type === "مردود") {
             credit = e.amount;  // Sales return reduces AR (credit)
           } else {
             debit = e.amount;   // Normal income increases AR (debit)
@@ -128,7 +128,7 @@ export function useStatementData(
         });
 
         // Row 2: Discount from ledger entry (if any) - reduces what client owes
-        if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+        if (e.totalDiscount && e.totalDiscount > 0 && (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود")) {
           rows.push({
             id: `${e.id}-discount`,
             transactionId: e.transactionId,
@@ -144,7 +144,7 @@ export function useStatementData(
         }
 
         // Row 3: Writeoff from ledger entry (if any) - reduces what client owes
-        if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد")) {
+        if (e.writeoffAmount && e.writeoffAmount > 0 && (e.type === "دخل" || e.type === "إيراد" || e.type === "مردود")) {
           rows.push({
             id: `${e.id}-writeoff`,
             transactionId: e.transactionId,
@@ -195,7 +195,7 @@ export function useStatementData(
         // Shows that invoice was paid using customer/supplier advance, but doesn't affect balance
         // The advance entry shows FULL amount, so this row is just for clarity
         if (e.totalPaidFromAdvances && e.totalPaidFromAdvances > 0) {
-          const isIncome = e.type === "دخل" || e.type === "إيراد";
+          const isIncome = e.type === "دخل" || e.type === "إيراد" || e.type === "مردود";
           rows.push({
             id: `${e.id}-advance-payment`,
             transactionId: e.transactionId,

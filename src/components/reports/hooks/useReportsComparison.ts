@@ -152,11 +152,18 @@ function calculatePeriodData(entries: LedgerEntry[]): {
     }
 
     if (entry.type === 'دخل') {
-      grossRevenue += entry.amount;
-      // Track discounts on income entries (contra-revenue)
+      if (entry.isReturnEntry || entry.category === 'مردودات المبيعات') {
+        // Backward compat: old entries stored as type "دخل" + isReturnEntry before migration
+        grossRevenue -= entry.amount;
+      } else {
+        grossRevenue += entry.amount;
+      }
       discounts += entry.totalDiscount || 0;
-      // Track bad debt write-offs (treated as expense)
       badDebt += entry.writeoffAmount || 0;
+    } else if (entry.type === 'مردود') {
+      // Dedicated return type — always subtracts from revenue (contra-revenue)
+      grossRevenue -= entry.amount;
+      discounts += entry.totalDiscount || 0;
     } else if (entry.type === 'مصروف') {
       grossExpenses += entry.amount;
       // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)

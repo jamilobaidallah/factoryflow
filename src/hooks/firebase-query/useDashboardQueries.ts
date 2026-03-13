@@ -164,9 +164,19 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
       }
     } else {
       const monthKey = formatMonthKey(entry.date);
-      const isIncome = INCOME_TYPES.some((type) => entry.type === type);
 
-      if (isIncome) {
+      // Detect returns: new dedicated type OR backward compat (old "دخل" + isReturnEntry flag)
+      const isReturn = entry.type === "مردود" ||
+        (INCOME_TYPES.some(t => t === entry.type) &&
+          (data.isReturnEntry || entry.category === "مردودات المبيعات"));
+
+      const isIncome = !isReturn && INCOME_TYPES.some((type) => entry.type === type);
+
+      if (isReturn) {
+        revenue = safeAdd(revenue, -entry.amount);
+        if (entry.totalDiscount) discounts = safeAdd(discounts, entry.totalDiscount);
+        updateMonthlyData(monthlyMap, monthKey, -entry.amount, 0, entry.totalDiscount || 0, 0);
+      } else if (isIncome) {
         revenue = safeAdd(revenue, entry.amount);
         if (entry.totalDiscount) {
           discounts = safeAdd(discounts, entry.totalDiscount);
