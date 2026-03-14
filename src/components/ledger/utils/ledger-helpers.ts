@@ -344,8 +344,8 @@ export function getPaymentTypeForTransaction(
     const RECEIPT = "قبض";
     const DISBURSEMENT = "صرف";
 
-    // 1. Income AND returns are always cash IN
-    if (entryType === "دخل" || entryType === TRANSACTION_TYPES.RETURN) {
+    // 1. Income is always cash IN (returns are DISBURSEMENT — we pay the customer back)
+    if (entryType === "دخل") {
         return RECEIPT;
     }
 

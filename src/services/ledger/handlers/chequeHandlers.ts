@@ -85,7 +85,7 @@ export function handleIncomingCheckBatch(
   // to avoid double payment. The settlement logic will handle it.
   if (accountingType === "cashed" && !formData.immediateSettlement) {
     const paymentDocRef = doc(refs.payments);
-    const paymentType = (entryType === "دخل" || entryType === "مردود") ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+    const paymentType = (entryType === "دخل") ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
     const paymentDescription = `شيك وارد رقم ${checkFormData.chequeNumber} - ${formData.description}`;
 
     batch.set(paymentDocRef, {

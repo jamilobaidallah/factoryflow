@@ -35,8 +35,8 @@ function getPaymentType(entryType: string, category: string): string {
   if (category === SUPPLIER_ADVANCE_CATEGORY) {
     return PAYMENT_TYPES.DISBURSEMENT;
   }
-  // Normal entries: income and returns = receipt, expense = disbursement
-  return (entryType === "دخل" || entryType === "مردود") ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
+  // Normal entries: income = receipt, expense/returns = disbursement (returns: we pay customer back)
+  return (entryType === "دخل") ? PAYMENT_TYPES.RECEIPT : PAYMENT_TYPES.DISBURSEMENT;
 }
 
 /**

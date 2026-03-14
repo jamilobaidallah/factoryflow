@@ -1623,7 +1623,7 @@ export class LedgerService {
 
         // 4. Create discount journals
         if (paymentsWithDiscounts.length > 0) {
-          const discountTemplateId = (entryType === "دخل" || entryType === "مردود") ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
+          const discountTemplateId = entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
           for (const discountPayment of paymentsWithDiscounts) {
             await this.postJournalEntry(engine, {
               templateId: discountTemplateId,
@@ -2202,7 +2202,7 @@ export class LedgerService {
 
           // Create journal entry for discount portion
           if (discountAmount > 0) {
-            const discountTemplateId = (data.entryType === "دخل" || data.entryType === "مردود") ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
+            const discountTemplateId = data.entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
             await this.postJournalEntry(engine, {
               templateId: discountTemplateId,
               amount: discountAmount,

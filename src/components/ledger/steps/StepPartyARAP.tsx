@@ -257,7 +257,7 @@ export function StepPartyARAP({
       )}
 
       {/* Payment Status - Only for new entries with income/expense/loan type */}
-      {!isEditMode && (currentEntryType === "دخل" || currentEntryType === "مصروف" || isLoan) && (
+      {!isEditMode && (currentEntryType === "دخل" || currentEntryType === "مصروف" || currentEntryType === "مردود" || isLoan) && (
         <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
           <Label className="font-medium">حالة الدفع</Label>
           <div className="space-y-3">
