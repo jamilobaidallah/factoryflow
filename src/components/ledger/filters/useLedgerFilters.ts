@@ -20,7 +20,7 @@ import {
 /** Date filter preset options */
 export type DatePreset = "today" | "week" | "month" | "all" | "custom";
 /** Entry type filter options (income/expense/capital/loan) */
-export type EntryType = "all" | "دخل" | "مصروف" | "حركة رأس مال" | "قرض";
+export type EntryType = "all" | "دخل" | "مردود" | "مصروف" | "حركة رأس مال" | "قرض";
 
 /** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
@@ -235,7 +235,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
 
         // View mode filter (main tabs)
         if (filters.viewMode !== "all") {
-          if (filters.viewMode === "income" && entry.type !== "دخل") {return false;}
+          if (filters.viewMode === "income" && entry.type !== "دخل" && entry.type !== "مردود") {return false;}
           if (filters.viewMode === "expense" && entry.type !== "مصروف") {return false;}
           if (filters.viewMode === "loans" && !isLoanTransaction(entry.type, entry.category)) {return false;}
           if (filters.viewMode === "unpaid") {

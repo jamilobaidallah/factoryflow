@@ -313,7 +313,8 @@ export function getJournalTemplateForTransaction(
     }
 
     // 4. Sales returns: dedicated 4-line compound template
-    if (category === "مردودات المبيعات") {
+    // Match by type first (مردود), fall back to category check for backward compat
+    if (entryType === TRANSACTION_TYPES.RETURN || category === "مردودات المبيعات") {
         return "SALES_RETURN";
     }
 
@@ -344,23 +345,28 @@ export function getPaymentTypeForTransaction(
     const RECEIPT = "قبض";
     const DISBURSEMENT = "صرف";
 
-    // 1. Income is always cash IN (returns are DISBURSEMENT — we pay the customer back)
+    // 1. Income is always cash IN
     if (entryType === "دخل") {
         return RECEIPT;
     }
 
-    // 2. Equity/Capital transactions
+    // 2a. Sales return: we pay the customer back → cash OUT
+    if (entryType === TRANSACTION_TYPES.RETURN) {
+        return DISBURSEMENT;
+    }
+
+    // 3. Equity/Capital transactions
     if (isEquityTransaction(entryType, category)) {
         // Capital contribution = cash IN, Drawings = cash OUT
         return isCapitalContribution(subCategory) ? RECEIPT : DISBURSEMENT;
     }
 
-    // 3. Loan transactions - use existing helper for cash direction
+    // 4. Loan transactions - use existing helper for cash direction
     if (isLoanTransaction(entryType, category)) {
         const cashDirection = getLoanCashDirection(subCategory);
         return cashDirection === "in" ? RECEIPT : DISBURSEMENT;
     }
 
-    // 4. Default: expenses and fixed assets are cash OUT
+    // 5. Default: expenses and fixed assets are cash OUT
     return DISBURSEMENT;
 }

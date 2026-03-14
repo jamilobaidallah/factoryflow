@@ -432,11 +432,11 @@ export function getAccountMappingForBadDebt(): AccountMapping {
  * When a discount is given during settlement:
  * - Income (AR) settlement discount:
  *   DR Sales Discount (contra-revenue), CR Accounts Receivable
- * - Expense (AP) settlement discount:
+ * - Expense/Return (AP) settlement discount:
  *   DR Accounts Payable, CR Purchase Discount (contra-expense)
  */
 export function getAccountMappingForSettlementDiscount(
-  entryType: 'دخل' | 'مصروف'
+  entryType: 'دخل' | 'مردود' | 'مصروف'
 ): AccountMapping {
   if (entryType === 'دخل') {
     // Income settlement: Sales discount reduces AR

@@ -369,7 +369,8 @@ export function useReportsCalculations({
 
         if (isAdvance) {
           // Advances: FLIP the normal logic
-          if (entry.type === "دخل" || entry.type === "مردود") {
+          // Note: مردود (returns) are never advances — no case needed
+          if (entry.type === "دخل") {
             // Customer advance - we owe them goods (payable)
             payables.push(entry);
             totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
@@ -380,10 +381,11 @@ export function useReportsCalculations({
           }
         } else {
           // Regular transactions: normal logic
-          if (entry.type === "دخل" || entry.type === "مردود") {
+          // مردود = customer return → we owe them money back → PAYABLE (صرف)
+          if (entry.type === "دخل") {
             receivables.push(entry);
             totalReceivables = safeAdd(totalReceivables, entry.remainingBalance || 0);
-          } else if (entry.type === "مصروف") {
+          } else if (entry.type === "مردود" || entry.type === "مصروف") {
             payables.push(entry);
             totalPayables = safeAdd(totalPayables, entry.remainingBalance || 0);
           }
