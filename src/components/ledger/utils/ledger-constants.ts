@@ -53,6 +53,8 @@ export interface LedgerEntry {
     // Advance Payment Fields (for invoice entries paid by advances)
     paidFromAdvances?: AdvancePaymentRecord[]; // Which advances paid this invoice
     totalPaidFromAdvances?: number;            // Total amount paid from advances
+    // COGS Reversal (auto-generated when returned goods come back to inventory)
+    isCOGSReversal?: boolean;                  // Subtracts from expenses in P&L reports
 }
 
 /**

@@ -224,15 +224,22 @@ export function useReportsCalculations({
           totalDiscounts = safeAdd(totalDiscounts, entry.totalDiscount);
         }
       } else if (entry.type === "مصروف") {
-        totalExpenses = safeAdd(totalExpenses, entry.amount);
-        expensesByCategory[entry.category] =
-          safeAdd(expensesByCategory[entry.category] || 0, entry.amount);
-        // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
-        if (entry.totalDiscount) {
-          totalExpenseDiscounts = safeAdd(totalExpenseDiscounts, entry.totalDiscount);
-        }
-        if (entry.writeoffAmount) {
-          totalExpenseWriteoffs = safeAdd(totalExpenseWriteoffs, entry.writeoffAmount);
+        if (entry.isCOGSReversal) {
+          // COGS reversal — subtracts from expenses (returned goods reduce COGS)
+          totalExpenses = safeSubtract(totalExpenses, entry.amount);
+          expensesByCategory[entry.category] =
+            safeSubtract(expensesByCategory[entry.category] || 0, entry.amount);
+        } else {
+          totalExpenses = safeAdd(totalExpenses, entry.amount);
+          expensesByCategory[entry.category] =
+            safeAdd(expensesByCategory[entry.category] || 0, entry.amount);
+          // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
+          if (entry.totalDiscount) {
+            totalExpenseDiscounts = safeAdd(totalExpenseDiscounts, entry.totalDiscount);
+          }
+          if (entry.writeoffAmount) {
+            totalExpenseWriteoffs = safeAdd(totalExpenseWriteoffs, entry.writeoffAmount);
+          }
         }
       }
     });
@@ -435,7 +442,9 @@ export function useReportsCalculations({
         totalSales = safeSubtract(totalSales, entry.amount);
       }
       if (entry.category === "تكلفة البضاعة المباعة (COGS)") {
-        totalCOGS = safeAdd(totalCOGS, entry.amount);
+        totalCOGS = entry.isCOGSReversal
+          ? safeSubtract(totalCOGS, entry.amount)
+          : safeAdd(totalCOGS, entry.amount);
       }
     });
 

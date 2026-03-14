@@ -165,10 +165,14 @@ function calculatePeriodData(entries: LedgerEntry[]): {
       grossRevenue -= entry.amount;
       discounts += entry.totalDiscount || 0;
     } else if (entry.type === 'مصروف') {
-      grossExpenses += entry.amount;
-      // Track discounts/writeoffs on expense entries (contra-expense - reduces net expenses)
-      expenseDiscounts += entry.totalDiscount || 0;
-      expenseWriteoffs += entry.writeoffAmount || 0;
+      if (entry.isCOGSReversal) {
+        // COGS reversal — subtracts from expenses (returned goods reduce COGS)
+        grossExpenses -= entry.amount;
+      } else {
+        grossExpenses += entry.amount;
+        expenseDiscounts += entry.totalDiscount || 0;
+        expenseWriteoffs += entry.writeoffAmount || 0;
+      }
     }
   });
 

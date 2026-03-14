@@ -133,6 +133,7 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
       totalDiscount: data.totalDiscount,
       isARAPEntry: data.isARAPEntry,
       isInventoryPurchase: data.isInventoryPurchase,
+      isCOGSReversal: data.isCOGSReversal,
     };
 
     const isEquity = entry.type === EQUITY_TYPE;
@@ -186,16 +187,23 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
         }
         updateMonthlyData(monthlyMap, monthKey, entry.amount, 0, entry.totalDiscount || 0, data.writeoffAmount || 0);
       } else if (entry.type === EXPENSE_TYPE) {
-        expenses = safeAdd(expenses, entry.amount);
-        // Track discounts/writeoffs on expense entries (contra-expense)
-        if (entry.totalDiscount) {
-          expenseDiscounts = safeAdd(expenseDiscounts, entry.totalDiscount);
+        if (entry.isCOGSReversal) {
+          // COGS reversal — subtracts from expenses (returned goods reduce COGS)
+          expenses = safeAdd(expenses, -entry.amount);
+          updateMonthlyData(monthlyMap, monthKey, 0, -entry.amount, 0, 0);
+          updateCategoryData(categoryMap, entry.category, monthKey, -entry.amount);
+        } else {
+          expenses = safeAdd(expenses, entry.amount);
+          // Track discounts/writeoffs on expense entries (contra-expense)
+          if (entry.totalDiscount) {
+            expenseDiscounts = safeAdd(expenseDiscounts, entry.totalDiscount);
+          }
+          if (data.writeoffAmount) {
+            expenseWriteoffs = safeAdd(expenseWriteoffs, data.writeoffAmount);
+          }
+          updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
+          updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
         }
-        if (data.writeoffAmount) {
-          expenseWriteoffs = safeAdd(expenseWriteoffs, data.writeoffAmount);
-        }
-        updateMonthlyData(monthlyMap, monthKey, 0, entry.amount, 0, 0);
-        updateCategoryData(categoryMap, entry.category, monthKey, entry.amount);
       }
     }
 

@@ -333,7 +333,11 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         } else if (entry.type === "مردود") {
           acc.income -= entry.amount || 0;  // returns reduce net income in summary
         } else if (entry.type === "مصروف") {
-          acc.expenses += entry.amount || 0;
+          if (entry.isCOGSReversal) {
+            acc.expenses -= entry.amount || 0;  // reversal reduces net expenses in summary
+          } else {
+            acc.expenses += entry.amount || 0;
+          }
         }
         acc.count++;
         return acc;

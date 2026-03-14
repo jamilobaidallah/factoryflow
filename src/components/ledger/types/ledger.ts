@@ -38,6 +38,8 @@ export interface LedgerEntry {
   // Sales Return Fields
   isReturnEntry?: boolean;          // True when goods are returned/rejected by client
   returnCostAmount?: number;        // Cost price of returned goods (for COGS reversal journal line)
+  // COGS Reversal (auto-generated when returned goods come back to inventory)
+  isCOGSReversal?: boolean;         // Subtracts from expenses in P&L reports
 }
 
 /**

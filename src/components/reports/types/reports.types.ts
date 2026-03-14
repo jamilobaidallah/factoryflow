@@ -27,6 +27,7 @@ export interface ReportsLedgerEntry {
   writeoffAmount?: number;
   isInventoryPurchase?: boolean;
   isReturnEntry?: boolean;
+  isCOGSReversal?: boolean;
 }
 
 // Period selection types
