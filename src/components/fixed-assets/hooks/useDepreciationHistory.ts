@@ -110,11 +110,15 @@ export function useDepreciationHistory(): UseDepreciationHistoryReturn {
     return map;
   }, [records]);
 
-  // Build set of processed periods for calendar view
+  // Build set of processed periods for calendar view.
+  // Only add global-run periods (format "YYYY-MM") — per-asset runs use
+  // compound keys ("assetId:YYYY-MM") and must not block the global dedup UI.
   const processedPeriods = useMemo(() => {
     const set = new Set<string>();
     for (const run of runs) {
-      set.add(run.period);
+      if (!run.period.includes(":")) {
+        set.add(run.period);
+      }
     }
     return set;
   }, [runs]);

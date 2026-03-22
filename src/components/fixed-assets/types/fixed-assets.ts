@@ -60,6 +60,10 @@ export interface DepreciationRun {
   totalDepreciation: number;
   ledgerEntryId: string;
   createdAt: Date;
+  /** "global" = all-assets run; "per-asset" = single-asset run */
+  runType?: "global" | "per-asset";
+  /** Display label for per-asset runs */
+  assetName?: string;
 }
 
 export interface PendingPeriod {

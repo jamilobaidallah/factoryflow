@@ -425,9 +425,22 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
         createdAt: new Date(),
       });
 
-      // Create depreciation_run only for global runs (not per-asset)
-      if (!selectedAsset) {
-        const runDocRef = doc(runsRef);
+      // Create depreciation_run for both global and per-asset runs.
+      // Per-asset uses a compound period key ("assetId:YYYY-MM") so the global
+      // dedup query (where period == "YYYY-MM") never matches it.
+      const runDocRef = doc(runsRef);
+      if (selectedAsset) {
+        batch.set(runDocRef, {
+          period: `${selectedAsset.id}:${periodLabel}`,
+          runDate: new Date(),
+          assetsCount: 1,
+          totalDepreciation: totalDepreciation,
+          ledgerEntryId: transactionId,
+          createdAt: new Date(),
+          runType: "per-asset",
+          assetName: selectedAsset.assetName,
+        });
+      } else {
         batch.set(runDocRef, {
           period: periodLabel,
           runDate: new Date(),
@@ -435,6 +448,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
           totalDepreciation: totalDepreciation,
           ledgerEntryId: transactionId,
           createdAt: new Date(),
+          runType: "global",
         });
       }
 

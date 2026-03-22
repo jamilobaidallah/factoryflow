@@ -12,7 +12,7 @@ import {
 import { Edit, Trash2, Clock, AlertTriangle, TrendingDown } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { FixedAsset, getRemainingLifeMonths } from "../types/fixed-assets";
-import { formatNumber } from "@/lib/date-utils";
+import { formatNumber, formatShortDate } from "@/lib/date-utils";
 
 interface FixedAssetsTableProps {
   assets: FixedAsset[];
@@ -64,6 +64,7 @@ export function FixedAssetsTable({ assets, onEdit, onDelete, onDepreciate }: Fix
             <TableHead className="text-right font-semibold text-slate-700">رقم الأصل</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">اسم الأصل</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">الفئة</TableHead>
+            <TableHead className="text-right font-semibold text-slate-700">تاريخ الشراء</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">التكلفة الأصلية</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">الاستهلاك الشهري</TableHead>
             <TableHead className="text-right font-semibold text-slate-700">الاستهلاك المتراكم</TableHead>
@@ -89,6 +90,9 @@ export function FixedAssetsTable({ assets, onEdit, onDelete, onDepreciate }: Fix
                   {asset.assetName}
                 </TableCell>
                 <TableCell>{asset.category}</TableCell>
+                <TableCell className="text-sm text-slate-600">
+                  {asset.purchaseDate ? formatShortDate(new Date(asset.purchaseDate as unknown as Date)) : "—"}
+                </TableCell>
                 <TableCell>
                   <span className="font-semibold text-slate-900">
                     {formatNumber(asset.purchaseCost ?? 0)} د

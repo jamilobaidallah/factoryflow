@@ -46,12 +46,14 @@ const ARABIC_MONTHS = [
 ];
 
 function formatPeriodLabel(period: string): string {
-  const [year, month] = period.split("-");
+  // Per-asset compound key: "assetId:YYYY-MM" → extract the YYYY-MM part
+  const periodPart = period.includes(":") ? period.split(":")[1] : period;
+  const [year, month] = periodPart.split("-");
   const monthIndex = parseInt(month, 10) - 1;
   if (monthIndex >= 0 && monthIndex < 12) {
     return `${ARABIC_MONTHS[monthIndex]} ${year}`;
   }
-  return period;
+  return periodPart;
 }
 
 export function DepreciationHistoryTable({
@@ -106,16 +108,27 @@ export function DepreciationHistoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedRuns.map((run) => (
+            {sortedRuns.map((run) => {
+              const isPerAsset = run.runType === "per-asset" || run.period.includes(":");
+              return (
               <TableRow key={run.id} className="table-row-hover">
                 <TableCell className="font-medium">
-                  {formatPeriodLabel(run.period)}
+                  <div>{formatPeriodLabel(run.period)}</div>
+                  {isPerAsset && run.assetName && (
+                    <div className="text-xs text-slate-500 mt-0.5">{run.assetName}</div>
+                  )}
                 </TableCell>
                 <TableCell>{formatShortDate(run.runDate)}</TableCell>
                 <TableCell>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                    {run.assetsCount} أصل
-                  </span>
+                  {isPerAsset ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                      أصل واحد
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                      {run.assetsCount} أصل
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <span className="font-semibold text-orange-600">
@@ -136,7 +149,8 @@ export function DepreciationHistoryTable({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+            );
+})}
           </TableBody>
         </Table>
       </div>
