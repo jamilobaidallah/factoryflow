@@ -22,6 +22,7 @@ import {
   DepreciationPeriod,
   PendingPeriod,
   AutoDepreciationResult,
+  isBeforePurchaseDate,
 } from "@/components/fixed-assets/types/fixed-assets";
 import {
   safeSubtract,
@@ -215,6 +216,9 @@ export async function runDepreciationForPeriod(
 
     // Process each asset
     for (const asset of activeAssets) {
+      // Bug 2 fix: skip if period is before this asset's purchase date
+      if (isBeforePurchaseDate(asset, period)) continue;
+
       // Check if asset is fully depreciated
       const depreciableTotal = safeSubtract(asset.purchaseCost, asset.salvageValue);
       if (asset.accumulatedDepreciation >= depreciableTotal) {

@@ -187,26 +187,60 @@ export function calculateExpectedDepreciation(assets: FixedAsset[]): number {
 }
 
 /**
- * Categorize assets into those that will be depreciated and those that are fully depreciated.
- * Single pass optimization to avoid multiple filter calls.
+ * Resolve a FixedAsset purchaseDate to a JS Date regardless of whether it
+ * arrived as a JS Date or a Firestore Timestamp.
  */
-export function categorizeAssetsForDepreciation(assets: FixedAsset[]): {
+function resolvePurchaseDate(asset: FixedAsset): Date {
+  if (asset.purchaseDate instanceof Date) return asset.purchaseDate;
+  const maybeTimestamp = asset.purchaseDate as unknown as { toDate?: () => Date };
+  return maybeTimestamp.toDate?.() ?? new Date(asset.purchaseDate as unknown as string);
+}
+
+/**
+ * Return true when the given period falls BEFORE the asset's purchase month.
+ */
+export function isBeforePurchaseDate(asset: FixedAsset, period: DepreciationPeriod): boolean {
+  const d = resolvePurchaseDate(asset);
+  const py = d.getFullYear();
+  const pm = d.getMonth() + 1; // 1-indexed
+  return period.year < py || (period.year === py && period.month < pm);
+}
+
+/**
+ * Categorize assets for depreciation.
+ *
+ * @param assets        Full asset list.
+ * @param period        Optional – when provided, assets purchased after the period are
+ *                      separated into `assetsBeforePurchaseDate` instead of `assetsToDepreciate`.
+ * @param selectedAsset Optional – when provided, only this asset is considered for depreciation.
+ */
+export function categorizeAssetsForDepreciation(
+  assets: FixedAsset[],
+  period?: DepreciationPeriod,
+  selectedAsset?: FixedAsset
+): {
   activeAssets: FixedAsset[];
   assetsToDepreciate: FixedAsset[];
   fullyDepreciatedAssets: FixedAsset[];
+  assetsBeforePurchaseDate: FixedAsset[];
   expectedDepreciation: number;
 } {
   const activeAssets: FixedAsset[] = [];
   const assetsToDepreciate: FixedAsset[] = [];
   const fullyDepreciatedAssets: FixedAsset[] = [];
+  const assetsBeforePurchaseDate: FixedAsset[] = [];
   let expectedDepreciation = 0;
 
   for (const asset of assets) {
-    if (asset.status !== "active") {continue;}
+    if (asset.status !== "active") continue;
+    // In per-asset mode, skip every asset except the selected one
+    if (selectedAsset && asset.id !== selectedAsset.id) continue;
 
     activeAssets.push(asset);
 
-    if (isFullyDepreciated(asset)) {
+    if (period && isBeforePurchaseDate(asset, period)) {
+      assetsBeforePurchaseDate.push(asset);
+    } else if (isFullyDepreciated(asset)) {
       fullyDepreciatedAssets.push(asset);
     } else {
       assetsToDepreciate.push(asset);
@@ -218,6 +252,7 @@ export function categorizeAssetsForDepreciation(assets: FixedAsset[]): {
     activeAssets,
     assetsToDepreciate,
     fullyDepreciatedAssets,
+    assetsBeforePurchaseDate,
     expectedDepreciation,
   };
 }

@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Edit, Trash2, Clock, AlertTriangle } from "lucide-react";
+import { Edit, Trash2, Clock, AlertTriangle, TrendingDown } from "lucide-react";
 import { PermissionGate } from "@/components/auth";
 import { FixedAsset, getRemainingLifeMonths } from "../types/fixed-assets";
 import { formatNumber } from "@/lib/date-utils";
@@ -18,6 +18,7 @@ interface FixedAssetsTableProps {
   assets: FixedAsset[];
   onEdit: (asset: FixedAsset) => void;
   onDelete: (assetId: string) => void;
+  onDepreciate?: (asset: FixedAsset) => void;
 }
 
 // Format remaining life for display
@@ -46,7 +47,7 @@ function formatRelativeDate(date: Date | undefined): string {
   return `منذ ${Math.floor(diffDays / 365)} سنة`;
 }
 
-export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableProps) {
+export function FixedAssetsTable({ assets, onEdit, onDelete, onDepreciate }: FixedAssetsTableProps) {
   if (assets.length === 0) {
     return (
       <p className="text-slate-500 text-center py-12">
@@ -143,6 +144,19 @@ export function FixedAssetsTable({ assets, onEdit, onDelete }: FixedAssetsTableP
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
+                    {onDepreciate && asset.status === "active" && !isFullyDepreciated && (
+                      <PermissionGate action="create" module="fixed-assets">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-orange-600 hover:bg-orange-50"
+                          onClick={() => onDepreciate(asset)}
+                          title="تسجيل استهلاك لهذا الأصل"
+                        >
+                          <TrendingDown className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
+                    )}
                     <PermissionGate action="update" module="fixed-assets">
                       <Button
                         variant="ghost"
