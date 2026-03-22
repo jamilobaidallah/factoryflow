@@ -21,6 +21,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, Check, X, Clock } from "lucide-r
 import {
   FixedAsset,
   DepreciationPeriod,
+  DepreciationRecord,
   isFullyDepreciated,
   isBeforePurchaseDate,
   categorizeAssetsForDepreciation,
@@ -36,6 +37,8 @@ interface DepreciationDialogProps {
   assets: FixedAsset[];
   onRunDepreciation: () => void;
   processedPeriods?: Set<string>;
+  /** All depreciation records — used to detect already-processed assets for the selected period */
+  existingRecords?: DepreciationRecord[];
   /** When set, the dialog targets only this specific asset (per-asset mode) */
   selectedAsset?: FixedAsset;
 }
@@ -49,6 +52,7 @@ export function DepreciationDialog({
   assets,
   onRunDepreciation,
   processedPeriods,
+  existingRecords,
   selectedAsset,
 }: DepreciationDialogProps) {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
@@ -68,7 +72,30 @@ export function DepreciationDialog({
       [assets, period, selectedAsset]
     );
 
-  const canProcess = !isAlreadyProcessed && assetsToDepreciate.length > 0;
+  // Determine which assets were already individually processed for this period
+  const alreadyProcessedAssetIds = useMemo(() => {
+    const set = new Set<string>();
+    if (existingRecords) {
+      for (const r of existingRecords) {
+        if (r.periodLabel === periodLabel) {
+          set.add(r.assetId);
+        }
+      }
+    }
+    return set;
+  }, [existingRecords, periodLabel]);
+
+  // Exclude already-processed assets from the effective depreciation list
+  const effectiveAssetsToDepreciate = useMemo(
+    () => assetsToDepreciate.filter((a) => !alreadyProcessedAssetIds.has(a.id)),
+    [assetsToDepreciate, alreadyProcessedAssetIds]
+  );
+  const effectiveDepreciation = effectiveAssetsToDepreciate.reduce(
+    (sum, a) => sum + (a.monthlyDepreciation ?? 0),
+    0
+  );
+
+  const canProcess = !isAlreadyProcessed && effectiveAssetsToDepreciate.length > 0;
 
   // Handle run with double-click prevention
   const handleRunClick = () => {
@@ -138,8 +165,14 @@ export function DepreciationDialog({
 
           <div className="bg-gray-50 p-4 rounded-lg space-y-2">
             <div className="text-sm text-gray-600">
-              <strong>الأصول التي سيتم استهلاكها:</strong> {assetsToDepreciate.length}
+              <strong>الأصول التي سيتم استهلاكها:</strong> {effectiveAssetsToDepreciate.length}
             </div>
+            {alreadyProcessedAssetIds.size > 0 && (
+              <div className="text-sm text-purple-600">
+                <strong>تمت المعالجة مسبقاً (سيتم تخطيها):</strong>{" "}
+                {alreadyProcessedAssetIds.size}
+              </div>
+            )}
             {fullyDepreciatedAssets.length > 0 && (
               <div className="text-sm text-amber-600">
                 <strong>الأصول المكتملة (سيتم تخطيها):</strong>{" "}
@@ -155,7 +188,7 @@ export function DepreciationDialog({
             <div className="text-sm text-gray-600">
               <strong>إجمالي الاستهلاك المتوقع:</strong>{" "}
               <span className="font-semibold text-orange-600">
-                {formatNumber(expectedDepreciation)} دينار
+                {formatNumber(effectiveDepreciation)} دينار
               </span>
             </div>
             <div className="text-xs text-gray-500 mt-2">
@@ -199,11 +232,12 @@ export function DepreciationDialog({
                       {activeAssets.map((asset) => {
                         const fullyDep = isFullyDepreciated(asset);
                         const beforePurchase = isBeforePurchaseDate(asset, period);
+                        const alreadyDone = alreadyProcessedAssetIds.has(asset.id);
                         return (
                           <tr
                             key={asset.id}
                             className={`border-t ${
-                              fullyDep || beforePurchase ? "bg-slate-50 text-slate-400" : ""
+                              fullyDep || beforePurchase || alreadyDone ? "bg-slate-50 text-slate-400" : ""
                             }`}
                           >
                             <td className="p-2">{asset.assetName}</td>
@@ -211,7 +245,12 @@ export function DepreciationDialog({
                               {formatNumber(asset.monthlyDepreciation)} د
                             </td>
                             <td className="p-2 text-center">
-                              {beforePurchase ? (
+                              {alreadyDone ? (
+                                <span className="inline-flex items-center gap-1 text-purple-500">
+                                  <Check className="h-3.5 w-3.5" />
+                                  تمت المعالجة
+                                </span>
+                              ) : beforePurchase ? (
                                 <span className="inline-flex items-center gap-1 text-blue-400">
                                   <Clock className="h-3.5 w-3.5" />
                                   قبل الشراء

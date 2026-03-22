@@ -37,7 +37,7 @@ export default function FixedAssetsPage() {
   // Data and operations hooks
   const { assets, loading: dataLoading } = useFixedAssetsData();
   const { submitAsset, deleteAsset, runDepreciation, deleteDepreciationRun } = useFixedAssetsOperations();
-  const { runs, loading: historyLoading, getProcessedPeriods } = useDepreciationHistory();
+  const { runs, records, loading: historyLoading, getProcessedPeriods } = useDepreciationHistory();
 
   // Auto-depreciation detection - only activate when assets are loaded
   const {
@@ -349,6 +349,7 @@ export default function FixedAssetsPage() {
         assets={assets}
         onRunDepreciation={handleRunDepreciation}
         processedPeriods={processedPeriods}
+        existingRecords={records}
         selectedAsset={selectedAssetForDepreciation ?? undefined}
       />
 
