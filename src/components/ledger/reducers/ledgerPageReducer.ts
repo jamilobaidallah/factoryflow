@@ -11,12 +11,14 @@ import {
   OutgoingCheckFormData,
   OutgoingCheckFormDataItem,
   InventoryFormData,
+  InventoryFormDataItem,
   FixedAssetFormData,
   initialLedgerFormData,
   initialCheckFormData,
   initialOutgoingCheckFormData,
   initialInventoryFormData,
   initialFixedAssetFormData,
+  createInventoryFormDataItem,
 } from "../types/ledger";
 import type { AdvanceAllocationResult } from "../components/AdvanceAllocationDialog";
 
@@ -78,7 +80,10 @@ export interface LedgerPageState {
     // Multiple cheques support
     incomingChequesList: CheckFormDataItem[];
     outgoingChequesList: OutgoingCheckFormDataItem[];
+    // Legacy single-item (kept for backward compat)
     inventoryFormData: InventoryFormData;
+    // Multi-item support
+    inventoryFormDataList: InventoryFormDataItem[];
     fixedAssetFormData: FixedAssetFormData;
   };
 }
@@ -130,6 +135,7 @@ export const initialLedgerPageState: LedgerPageState = {
     incomingChequesList: [],
     outgoingChequesList: [],
     inventoryFormData: initialInventoryFormData,
+    inventoryFormDataList: [createInventoryFormDataItem()],
     fixedAssetFormData: initialFixedAssetFormData,
   },
 };
@@ -185,6 +191,7 @@ export type LedgerPageAction =
   | { type: "SET_INCOMING_CHEQUES_LIST"; payload: CheckFormDataItem[] }
   | { type: "SET_OUTGOING_CHEQUES_LIST"; payload: OutgoingCheckFormDataItem[] }
   | { type: "SET_INVENTORY_FORM_DATA"; payload: InventoryFormData }
+  | { type: "SET_INVENTORY_FORM_DATA_LIST"; payload: InventoryFormDataItem[] }
   | { type: "SET_FIXED_ASSET_FORM_DATA"; payload: FixedAssetFormData }
 
   // Compound actions
@@ -472,6 +479,12 @@ export function ledgerPageReducer(
         form: { ...state.form, inventoryFormData: action.payload },
       };
 
+    case "SET_INVENTORY_FORM_DATA_LIST":
+      return {
+        ...state,
+        form: { ...state.form, inventoryFormDataList: action.payload },
+      };
+
     case "SET_FIXED_ASSET_FORM_DATA":
       return {
         ...state,
@@ -495,6 +508,7 @@ export function ledgerPageReducer(
           incomingChequesList: [],
           outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
+          inventoryFormDataList: [createInventoryFormDataItem()],
           fixedAssetFormData: initialFixedAssetFormData,
         },
       };
@@ -515,6 +529,7 @@ export function ledgerPageReducer(
           incomingChequesList: [],
           outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
+          inventoryFormDataList: [createInventoryFormDataItem()],
           fixedAssetFormData: initialFixedAssetFormData,
         },
         data: { ...state.data, editingEntry: null },
@@ -551,6 +566,7 @@ export function ledgerPageReducer(
           incomingChequesList: [],
           outgoingChequesList: [],
           inventoryFormData: initialInventoryFormData,
+          inventoryFormDataList: [createInventoryFormDataItem()],
           fixedAssetFormData: initialFixedAssetFormData,
         },
         data: { ...state.data, editingEntry: null },

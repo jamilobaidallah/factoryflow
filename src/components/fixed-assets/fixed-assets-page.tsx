@@ -15,6 +15,7 @@ import {
   FixedAssetFormData,
   DepreciationPeriod,
   DepreciationResult,
+  DepreciationRun,
   initialFormData,
   initialDepreciationPeriod,
 } from "./types/fixed-assets";
@@ -35,8 +36,8 @@ export default function FixedAssetsPage() {
 
   // Data and operations hooks
   const { assets, loading: dataLoading } = useFixedAssetsData();
-  const { submitAsset, deleteAsset, runDepreciation } = useFixedAssetsOperations();
-  const { runs, loading: historyLoading, getProcessedPeriods } = useDepreciationHistory();
+  const { submitAsset, deleteAsset, runDepreciation, deleteDepreciationRun } = useFixedAssetsOperations();
+  const { runs, records, loading: historyLoading, getProcessedPeriods } = useDepreciationHistory();
 
   // Auto-depreciation detection - only activate when assets are loaded
   const {
@@ -57,6 +58,9 @@ export default function FixedAssetsPage() {
 
   // Partial failure state - shows persistent alert when journal entry fails
   const [partialFailure, setPartialFailure] = useState<DepreciationResult | null>(null);
+
+  // Per-asset depreciation: which asset the dialog is targeting (null = global mode)
+  const [selectedAssetForDepreciation, setSelectedAssetForDepreciation] = useState<FixedAsset | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<FixedAssetFormData>(initialFormData);
@@ -119,21 +123,26 @@ export default function FixedAssetsPage() {
   };
 
   const handleRunDepreciation = () => {
+    const assetLabel = selectedAssetForDepreciation
+      ? `لأصل "${selectedAssetForDepreciation.assetName}"`
+      : "لجميع الأصول النشطة";
     confirm(
       "تسجيل الاستهلاك",
-      `هل أنت متأكد من تسجيل استهلاك شهر ${depreciationPeriod.month}/${depreciationPeriod.year}؟`,
+      `هل أنت متأكد من تسجيل استهلاك شهر ${depreciationPeriod.month}/${depreciationPeriod.year} ${assetLabel}؟`,
       async () => {
         setLoading(true);
-        const result = await runDepreciation(depreciationPeriod, assets);
+        const result = await runDepreciation(depreciationPeriod, assets, selectedAssetForDepreciation ?? undefined);
 
         if (result.success) {
           setIsDepreciationDialogOpen(false);
+          setSelectedAssetForDepreciation(null);
           // Clear any previous partial failure when a new run succeeds
           setPartialFailure(null);
         } else if (result.partialFailure) {
           // Show persistent alert for partial failure
           setPartialFailure(result);
           setIsDepreciationDialogOpen(false);
+          setSelectedAssetForDepreciation(null);
         }
         // For complete failures (no records saved), keep dialog open
 
@@ -141,6 +150,17 @@ export default function FixedAssetsPage() {
       },
       "warning"
     );
+  };
+
+  /** Open depreciation dialog targeting a single asset row */
+  const handleDepreciateAsset = (asset: FixedAsset) => {
+    setSelectedAssetForDepreciation(asset);
+    setIsDepreciationDialogOpen(true);
+  };
+
+  /** Delete a depreciation run from the history tab */
+  const handleDeleteRun = async (run: DepreciationRun) => {
+    await deleteDepreciationRun(run);
   };
 
   // Handle running all pending depreciation periods
@@ -284,6 +304,7 @@ export default function FixedAssetsPage() {
                   assets={assets}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
+                  onDepreciate={handleDepreciateAsset}
                 />
               )}
             </CardContent>
@@ -299,7 +320,7 @@ export default function FixedAssetsPage() {
               {historyLoading ? (
                 <TableSkeleton rows={10} />
               ) : (
-                <DepreciationHistoryTable runs={runs} />
+                <DepreciationHistoryTable runs={runs} onDelete={handleDeleteRun} />
               )}
             </CardContent>
           </Card>
@@ -318,13 +339,18 @@ export default function FixedAssetsPage() {
 
       <DepreciationDialog
         isOpen={isDepreciationDialogOpen}
-        onClose={() => setIsDepreciationDialogOpen(false)}
+        onClose={() => {
+          setIsDepreciationDialogOpen(false);
+          setSelectedAssetForDepreciation(null);
+        }}
         loading={loading}
         period={depreciationPeriod}
         setPeriod={setDepreciationPeriod}
         assets={assets}
         onRunDepreciation={handleRunDepreciation}
         processedPeriods={processedPeriods}
+        existingRecords={records}
+        selectedAsset={selectedAssetForDepreciation ?? undefined}
       />
 
       {confirmationDialog}

@@ -11,6 +11,7 @@ export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
   const activeAssets = assets.filter(a => a.status === "active");
   const totalOriginalCost = activeAssets.reduce((sum, a) => sum + (a.purchaseCost || 0), 0);
   const totalAccumulatedDepreciation = activeAssets.reduce((sum, a) => sum + (a.accumulatedDepreciation || 0), 0);
+  const totalMonthlyDepreciation = activeAssets.reduce((sum, a) => sum + (a.monthlyDepreciation || 0), 0);
   const totalBookValue = activeAssets.reduce((sum, a) => sum + (a.bookValue || 0), 0);
 
   return (
@@ -42,6 +43,9 @@ export function FixedAssetsStatsCards({ assets }: FixedAssetsStatsCardsProps) {
         <CardContent>
           <div className="text-3xl font-bold text-orange-600">
             {totalAccumulatedDepreciation.toFixed(0)} د
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {totalMonthlyDepreciation.toFixed(0)} د / شهرياً
           </div>
         </CardContent>
       </Card>

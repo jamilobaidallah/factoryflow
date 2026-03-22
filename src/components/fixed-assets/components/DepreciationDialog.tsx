@@ -17,11 +17,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { AlertTriangle, ChevronDown, ChevronUp, Check, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Check, X, Clock } from "lucide-react";
 import {
   FixedAsset,
   DepreciationPeriod,
+  DepreciationRecord,
   isFullyDepreciated,
+  isBeforePurchaseDate,
   categorizeAssetsForDepreciation,
 } from "../types/fixed-assets";
 import { formatNumber } from "@/lib/date-utils";
@@ -35,6 +37,10 @@ interface DepreciationDialogProps {
   assets: FixedAsset[];
   onRunDepreciation: () => void;
   processedPeriods?: Set<string>;
+  /** All depreciation records — used to detect already-processed assets for the selected period */
+  existingRecords?: DepreciationRecord[];
+  /** When set, the dialog targets only this specific asset (per-asset mode) */
+  selectedAsset?: FixedAsset;
 }
 
 export function DepreciationDialog({
@@ -46,19 +52,50 @@ export function DepreciationDialog({
   assets,
   onRunDepreciation,
   processedPeriods,
+  existingRecords,
+  selectedAsset,
 }: DepreciationDialogProps) {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   // Prevent double-click: track if we've already triggered a run
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const periodLabel = `${period.year}-${String(period.month).padStart(2, "0")}`;
-  const isAlreadyProcessed = processedPeriods?.has(periodLabel) ?? false;
 
-  // Single-pass categorization using shared utility (optimized from 4 iterations to 1)
-  const { activeAssets, assetsToDepreciate, fullyDepreciatedAssets, expectedDepreciation } =
-    useMemo(() => categorizeAssetsForDepreciation(assets), [assets]);
+  // In global mode, warn if the whole period was already globally processed.
+  // In per-asset mode, we skip this check (the service handles per-asset dedup).
+  const isAlreadyProcessed = !selectedAsset && (processedPeriods?.has(periodLabel) ?? false);
 
-  const canProcess = !isAlreadyProcessed && assetsToDepreciate.length > 0;
+  // Categorize assets: pass period + selectedAsset to enable purchase-date filtering
+  const { activeAssets, assetsToDepreciate, fullyDepreciatedAssets, assetsBeforePurchaseDate, expectedDepreciation } =
+    useMemo(
+      () => categorizeAssetsForDepreciation(assets, period, selectedAsset),
+      [assets, period, selectedAsset]
+    );
+
+  // Determine which assets were already individually processed for this period
+  const alreadyProcessedAssetIds = useMemo(() => {
+    const set = new Set<string>();
+    if (existingRecords) {
+      for (const r of existingRecords) {
+        if (r.periodLabel === periodLabel) {
+          set.add(r.assetId);
+        }
+      }
+    }
+    return set;
+  }, [existingRecords, periodLabel]);
+
+  // Exclude already-processed assets from the effective depreciation list
+  const effectiveAssetsToDepreciate = useMemo(
+    () => assetsToDepreciate.filter((a) => !alreadyProcessedAssetIds.has(a.id)),
+    [assetsToDepreciate, alreadyProcessedAssetIds]
+  );
+  const effectiveDepreciation = effectiveAssetsToDepreciate.reduce(
+    (sum, a) => sum + (a.monthlyDepreciation ?? 0),
+    0
+  );
+
+  const canProcess = !isAlreadyProcessed && effectiveAssetsToDepreciate.length > 0;
 
   // Handle run with double-click prevention
   const handleRunClick = () => {
@@ -69,17 +106,23 @@ export function DepreciationDialog({
     setTimeout(() => setIsSubmitting(false), 2000);
   };
 
+  const dialogTitle = selectedAsset
+    ? `تسجيل استهلاك: ${selectedAsset.assetName}`
+    : "تسجيل استهلاك شهري";
+
+  const dialogDescription = selectedAsset
+    ? "اختر الشهر والسنة لتسجيل استهلاك هذا الأصل"
+    : "اختر الشهر والسنة لتسجيل الاستهلاك لجميع الأصول النشطة";
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>تسجيل استهلاك شهري</DialogTitle>
-          <DialogDescription>
-            اختر الشهر والسنة لتسجيل الاستهلاك لجميع الأصول النشطة
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {/* Period already processed warning */}
+          {/* Period already processed warning (global mode only) */}
           {isAlreadyProcessed && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
               <AlertTriangle className="h-5 w-5 flex-shrink-0" />
@@ -122,18 +165,30 @@ export function DepreciationDialog({
 
           <div className="bg-gray-50 p-4 rounded-lg space-y-2">
             <div className="text-sm text-gray-600">
-              <strong>الأصول التي سيتم استهلاكها:</strong> {assetsToDepreciate.length}
+              <strong>الأصول التي سيتم استهلاكها:</strong> {effectiveAssetsToDepreciate.length}
             </div>
+            {alreadyProcessedAssetIds.size > 0 && (
+              <div className="text-sm text-purple-600">
+                <strong>تمت المعالجة مسبقاً (سيتم تخطيها):</strong>{" "}
+                {alreadyProcessedAssetIds.size}
+              </div>
+            )}
             {fullyDepreciatedAssets.length > 0 && (
               <div className="text-sm text-amber-600">
                 <strong>الأصول المكتملة (سيتم تخطيها):</strong>{" "}
                 {fullyDepreciatedAssets.length}
               </div>
             )}
+            {assetsBeforePurchaseDate.length > 0 && (
+              <div className="text-sm text-blue-600">
+                <strong>غير مؤهل (قبل تاريخ الشراء):</strong>{" "}
+                {assetsBeforePurchaseDate.length}
+              </div>
+            )}
             <div className="text-sm text-gray-600">
               <strong>إجمالي الاستهلاك المتوقع:</strong>{" "}
               <span className="font-semibold text-orange-600">
-                {formatNumber(expectedDepreciation)} دينار
+                {formatNumber(effectiveDepreciation)} دينار
               </span>
             </div>
             <div className="text-xs text-gray-500 mt-2">
@@ -176,11 +231,13 @@ export function DepreciationDialog({
                     <tbody>
                       {activeAssets.map((asset) => {
                         const fullyDep = isFullyDepreciated(asset);
+                        const beforePurchase = isBeforePurchaseDate(asset, period);
+                        const alreadyDone = alreadyProcessedAssetIds.has(asset.id);
                         return (
                           <tr
                             key={asset.id}
                             className={`border-t ${
-                              fullyDep ? "bg-slate-50 text-slate-400" : ""
+                              fullyDep || beforePurchase || alreadyDone ? "bg-slate-50 text-slate-400" : ""
                             }`}
                           >
                             <td className="p-2">{asset.assetName}</td>
@@ -188,7 +245,17 @@ export function DepreciationDialog({
                               {formatNumber(asset.monthlyDepreciation)} د
                             </td>
                             <td className="p-2 text-center">
-                              {fullyDep ? (
+                              {alreadyDone ? (
+                                <span className="inline-flex items-center gap-1 text-purple-500">
+                                  <Check className="h-3.5 w-3.5" />
+                                  تمت المعالجة
+                                </span>
+                              ) : beforePurchase ? (
+                                <span className="inline-flex items-center gap-1 text-blue-400">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  قبل الشراء
+                                </span>
+                              ) : fullyDep ? (
                                 <span className="inline-flex items-center gap-1 text-slate-400">
                                   <X className="h-3.5 w-3.5" />
                                   مكتمل

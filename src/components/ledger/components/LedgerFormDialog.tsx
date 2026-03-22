@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { CATEGORIES } from "../utils/ledger-constants";
 import { getCategoryType, isLoanTransaction } from "../utils/ledger-helpers";
 import { useLedgerFormContext } from "../context/LedgerFormContext";
-import { CheckFormDataItem, OutgoingCheckFormDataItem } from "../types/ledger";
+import { CheckFormDataItem, OutgoingCheckFormDataItem, createInventoryFormDataItem } from "../types/ledger";
 import { useAllClients } from "@/hooks/useAllClients";
 import { useInventoryItems } from "@/hooks/useInventoryItems";
 import { cn } from "@/lib/utils";
@@ -55,8 +55,8 @@ export function LedgerFormDialog() {
     setIncomingChequesList,
     outgoingChequesList,
     setOutgoingChequesList,
-    inventoryFormData,
-    setInventoryFormData,
+    inventoryFormDataList,
+    setInventoryFormDataList,
     fixedAssetFormData,
     setFixedAssetFormData,
     createInvoice,
@@ -139,6 +139,35 @@ export function LedgerFormDialog() {
 
   const removeOutgoingCheque = (id: string) => {
     setOutgoingChequesList(outgoingChequesList.filter((cheque) => cheque.id !== id));
+  };
+
+  // Helper functions for multiple inventory items management
+  const addInventoryItem = () => {
+    setInventoryFormDataList([...inventoryFormDataList, createInventoryFormDataItem()]);
+  };
+
+  const updateInventoryItem = (id: string, field: string, value: string) => {
+    setInventoryFormDataList(
+      inventoryFormDataList.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const removeInventoryItem = (id: string) => {
+    if (inventoryFormDataList.length > 1) {
+      setInventoryFormDataList(inventoryFormDataList.filter((item) => item.id !== id));
+    }
+  };
+
+  const handleInventoryItemSelect = (id: string, itemId: string, itemName: string, unit: string) => {
+    setInventoryFormDataList(
+      inventoryFormDataList.map((item) =>
+        item.id === id
+          ? { ...item, itemId, itemName, unit: unit || item.unit }
+          : item
+      )
+    );
   };
 
   const currentEntryType = getCategoryType(formData.category, formData.subCategory);
@@ -326,18 +355,11 @@ export function LedgerFormDialog() {
                 onUpdateOutgoingCheque={updateOutgoingCheque}
                 onRemoveOutgoingCheque={removeOutgoingCheque}
                 hasInventoryUpdate={hasInventoryUpdate}
-                inventoryFormData={inventoryFormData}
-                onUpdateInventory={(field, value) =>
-                  setInventoryFormData({ ...inventoryFormData, [field]: value })
-                }
-                onInventoryItemSelect={(itemId, itemName, unit) =>
-                  setInventoryFormData({
-                    ...inventoryFormData,
-                    itemId,
-                    itemName,
-                    unit: unit || inventoryFormData.unit,
-                  })
-                }
+                inventoryFormDataList={inventoryFormDataList}
+                onAddInventoryItem={addInventoryItem}
+                onUpdateInventoryItem={updateInventoryItem}
+                onRemoveInventoryItem={removeInventoryItem}
+                onInventoryItemSelect={handleInventoryItemSelect}
                 inventoryItems={inventoryItems}
                 inventoryItemsLoading={inventoryLoading}
                 inventoryItemsError={inventoryError}

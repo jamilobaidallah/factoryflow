@@ -15,7 +15,7 @@ import type {
   LedgerFormData,
   CheckFormDataItem,
   OutgoingCheckFormDataItem,
-  InventoryFormData,
+  InventoryFormDataItem,
   FixedAssetFormData,
 } from "../types/ledger";
 import type { InventoryItemOption } from "@/hooks/useInventoryItems";
@@ -38,11 +38,13 @@ interface StepRelatedRecordsProps {
   onUpdateOutgoingCheque: (id: string, field: string, value: string) => void;
   onRemoveOutgoingCheque: (id: string) => void;
 
-  // Inventory
+  // Inventory (multi-item list)
   hasInventoryUpdate: boolean;
-  inventoryFormData: InventoryFormData;
-  onUpdateInventory: (field: string, value: string) => void;
-  onInventoryItemSelect: (itemId: string, itemName: string, unit: string) => void;
+  inventoryFormDataList: InventoryFormDataItem[];
+  onAddInventoryItem: () => void;
+  onUpdateInventoryItem: (id: string, field: string, value: string) => void;
+  onRemoveInventoryItem: (id: string) => void;
+  onInventoryItemSelect: (id: string, itemId: string, itemName: string, unit: string) => void;
   inventoryItems: InventoryItemOption[];
   inventoryItemsLoading: boolean;
   inventoryItemsError: string | null;
@@ -70,8 +72,10 @@ export function StepRelatedRecords({
   onUpdateOutgoingCheque,
   onRemoveOutgoingCheque,
   hasInventoryUpdate,
-  inventoryFormData,
-  onUpdateInventory,
+  inventoryFormDataList,
+  onAddInventoryItem,
+  onUpdateInventoryItem,
+  onRemoveInventoryItem,
   onInventoryItemSelect,
   inventoryItems,
   inventoryItemsLoading,
@@ -100,6 +104,15 @@ export function StepRelatedRecords({
   const entryAmount = parseAmount(formData.amount);
   const incomingDifference = safeSubtract(entryAmount, incomingChequesTotal);
   const outgoingDifference = safeSubtract(entryAmount, outgoingChequesTotal);
+
+  // Calculate total of per-item amounts (for purchases with multiple items)
+  const inventoryItemsTotal = useMemo(() => {
+    return inventoryFormDataList.reduce(
+      (sum, item) => safeAdd(sum, parseAmount(item.itemAmount ?? "")),
+      0
+    );
+  }, [inventoryFormDataList]);
+  const inventoryAmountDifference = safeSubtract(entryAmount, inventoryItemsTotal);
 
   return (
     <div className="space-y-4">
@@ -215,16 +228,63 @@ export function StepRelatedRecords({
         </div>
       )}
 
-      {/* Inventory Update Details */}
+      {/* Inventory Update Details (multi-item) */}
       {hasInventoryUpdate && (
-        <InventoryFormCard
-          formData={inventoryFormData}
-          onUpdate={onUpdateInventory}
-          onItemSelect={onInventoryItemSelect}
-          inventoryItems={inventoryItems}
-          isLoadingItems={inventoryItemsLoading}
-          error={inventoryItemsError}
-        />
+        <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-sm">تحديث المخزون</h4>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onAddInventoryItem}
+              className="flex items-center gap-1"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة صنف آخر
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {inventoryFormDataList.map((item, index) => (
+              <InventoryFormCard
+                key={item.id}
+                formData={item}
+                index={index}
+                canRemove={inventoryFormDataList.length > 1}
+                onRemove={() => onRemoveInventoryItem(item.id)}
+                onUpdate={(field, value) => onUpdateInventoryItem(item.id, field, value)}
+                onItemSelect={(itemId, itemName, unit) =>
+                  onInventoryItemSelect(item.id, itemId, itemName, unit)
+                }
+                entryType={currentEntryType}
+                inventoryItems={inventoryItems}
+                isLoadingItems={inventoryItemsLoading}
+                error={inventoryItemsError}
+              />
+            ))}
+          </div>
+
+          {/* For purchases with multiple items: show total vs entry amount */}
+          {currentEntryType === "مصروف" && inventoryFormDataList.length > 1 && inventoryItemsTotal > 0 && (
+            <div className="space-y-2">
+              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">
+                  مجموع تكاليف الأصناف: {formatNumber(inventoryItemsTotal)} دينار
+                </p>
+              </div>
+              {Math.abs(inventoryAmountDifference) > 0.01 && (
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-200 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <p className="text-sm text-amber-700">
+                    الفرق عن مبلغ الحركة ({formatNumber(entryAmount)} دينار): {formatNumber(Math.abs(inventoryAmountDifference))} دينار
+                    {inventoryAmountDifference > 0 ? " (أقل)" : " (أكثر)"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Fixed Asset Details */}

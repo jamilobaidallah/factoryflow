@@ -173,7 +173,7 @@ describe("Inventory Handlers", () => {
       const setCall = (batch.set as jest.Mock).mock.calls[0];
 
       expect(setCall[1]).toMatchObject({
-        transactionId: "COGS-TXN-123",
+        transactionId: "COGS-TXN-123-0",
         description: "تكلفة البضاعة المباعة - حديد مجلفن",
         type: "مصروف",
         amount: 500,

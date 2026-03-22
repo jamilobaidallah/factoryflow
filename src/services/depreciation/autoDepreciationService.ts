@@ -22,6 +22,7 @@ import {
   DepreciationPeriod,
   PendingPeriod,
   AutoDepreciationResult,
+  isBeforePurchaseDate,
 } from "@/components/fixed-assets/types/fixed-assets";
 import {
   safeSubtract,
@@ -213,8 +214,30 @@ export async function runDepreciationForPeriod(
     // Calculate the last day of the depreciation period
     const periodEndDate = new Date(period.year, period.month, 0);
 
+    // Pre-fetch already-processed asset IDs for this period.
+    // This prevents double-depreciation when some assets were already processed
+    // via per-asset runs (which use compound keys and are invisible to the
+    // global depreciation_runs dedup check above).
+    const recordsRef = collection(
+      firestore,
+      `users/${dataOwnerId}/depreciation_records`
+    );
+    const existingRecordsSnap = await getDocs(
+      query(recordsRef, where("periodLabel", "==", periodLabel))
+    );
+    const alreadyProcessedAssetIds = new Set<string>();
+    existingRecordsSnap.forEach((d) =>
+      alreadyProcessedAssetIds.add(d.data().assetId as string)
+    );
+
     // Process each asset
     for (const asset of activeAssets) {
+      // Skip assets already processed for this period (e.g. via per-asset run)
+      if (alreadyProcessedAssetIds.has(asset.id)) continue;
+
+      // Bug 2 fix: skip if period is before this asset's purchase date
+      if (isBeforePurchaseDate(asset, period)) continue;
+
       // Check if asset is fully depreciated
       const depreciableTotal = safeSubtract(asset.purchaseCost, asset.salvageValue);
       if (asset.accumulatedDepreciation >= depreciableTotal) {
