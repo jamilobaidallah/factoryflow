@@ -1994,7 +1994,7 @@ export class LedgerService {
         });
 
         // Revert each asset's accumulatedDepreciation and bookValue
-        for (const [assetId, amountToRevert] of assetReversals) {
+        for (const [assetId, amountToRevert] of Array.from(assetReversals)) {
           const assetDocRef = doc(this.fixedAssetsRef, assetId);
           const assetSnap = await getDoc(assetDocRef);
           if (assetSnap.exists()) {

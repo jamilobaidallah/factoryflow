@@ -557,7 +557,7 @@ export function useFixedAssetsOperations(): UseFixedAssetsOperationsReturn {
       });
 
       // 3. Revert each affected asset's accumulated depreciation and book value
-      for (const [assetId, amountToRevert] of assetReversals) {
+      for (const [assetId, amountToRevert] of Array.from(assetReversals)) {
         const assetRef  = doc(firestore, `users/${user.dataOwnerId}/fixed_assets`, assetId);
         const assetSnap = await getDoc(assetRef);
         if (assetSnap.exists()) {
