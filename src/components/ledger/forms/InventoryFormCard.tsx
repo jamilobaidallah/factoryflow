@@ -1,10 +1,12 @@
 /**
  * InventoryFormCard - Reusable component for inventory update forms
- * Extracted from LedgerFormDialog.tsx to improve maintainability
+ * Supports multiple inventory items per ledger entry
  */
 
+import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import type { InventoryItemOption } from "@/hooks/useInventoryItems";
 
 export interface InventoryFormCardProps {
@@ -18,12 +20,18 @@ export interface InventoryFormCardProps {
     length: string;
     shippingCost: string;
     otherCosts: string;
+    itemAmount?: string;
   };
   onUpdate: (field: string, value: string) => void;
   onItemSelect: (itemId: string, itemName: string, unit: string) => void;
   inventoryItems: InventoryItemOption[];
   isLoadingItems?: boolean;
   error?: string | null;
+  // Multi-item support
+  index?: number;
+  canRemove?: boolean;
+  onRemove?: () => void;
+  entryType?: string; // shows itemAmount field for expense entries
 }
 
 export function InventoryFormCard({
@@ -33,10 +41,13 @@ export function InventoryFormCard({
   inventoryItems,
   isLoadingItems = false,
   error = null,
+  index,
+  canRemove = false,
+  onRemove,
+  entryType,
 }: InventoryFormCardProps) {
   const handleItemSelect = (itemId: string) => {
     if (!itemId) {
-      // Clear selection
       onItemSelect("", "", "");
       return;
     }
@@ -46,9 +57,32 @@ export function InventoryFormCard({
     }
   };
 
+  const cardLabel =
+    index !== undefined
+      ? `صنف ${(index + 1).toLocaleString("ar-EG")}`
+      : "تحديث المخزون";
+
+  const isPurchase = entryType === "مصروف";
+
   return (
     <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-      <h4 className="font-medium text-sm">تحديث المخزون</h4>
+      {/* Card header with label and optional remove button */}
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-sm">{cardLabel}</h4>
+        {canRemove && onRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRemove}
+            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+            aria-label="إزالة الصنف"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
       <div className="space-y-2">
         {/* Item Selection Dropdown */}
         <div className="space-y-2">
@@ -99,6 +133,17 @@ export function InventoryFormCard({
             className={formData.itemId ? "bg-gray-100" : ""}
           />
         </div>
+
+        {/* Per-item cost — only shown for expense/purchase entries */}
+        {isPurchase && (
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="مبلغ الصنف (تكلفة هذا الصنف)"
+            value={formData.itemAmount ?? ""}
+            onChange={(e) => onUpdate("itemAmount", e.target.value)}
+          />
+        )}
 
         {/* Dimensions - All in cm */}
         <div className="grid grid-cols-3 gap-2">

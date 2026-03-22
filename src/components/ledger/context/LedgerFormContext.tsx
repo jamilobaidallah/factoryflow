@@ -11,6 +11,7 @@ import {
   OutgoingCheckFormData,
   OutgoingCheckFormDataItem,
   InventoryFormData,
+  InventoryFormDataItem,
   FixedAssetFormData,
   LedgerEntry,
 } from "../types/ledger";
@@ -70,6 +71,10 @@ export interface LedgerFormContextValue {
   outgoingChequesList: OutgoingCheckFormDataItem[];
   setOutgoingChequesList: (data: OutgoingCheckFormDataItem[]) => void;
 
+  // Multiple inventory items support
+  inventoryFormDataList: InventoryFormDataItem[];
+  setInventoryFormDataList: (data: InventoryFormDataItem[]) => void;
+  // kept for any legacy read paths during transition
   inventoryFormData: InventoryFormData;
   setInventoryFormData: (data: InventoryFormData) => void;
   fixedAssetFormData: FixedAssetFormData;

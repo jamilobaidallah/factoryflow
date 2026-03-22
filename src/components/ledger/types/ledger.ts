@@ -109,6 +109,15 @@ export interface InventoryFormData {
   length: string;
   shippingCost: string;
   otherCosts: string;
+  itemAmount?: string; // per-item cost for purchases; if undefined, falls back to formData.amount (backward compat)
+}
+
+/**
+ * Inventory Form Data Item (for multiple inventory items per ledger entry)
+ * Mirrors the CheckFormDataItem pattern
+ */
+export interface InventoryFormDataItem extends InventoryFormData {
+  id: string; // UI-only unique identifier for list management
 }
 
 /**
@@ -238,6 +247,11 @@ export const initialInventoryFormData: InventoryFormData = {
   shippingCost: "",
   otherCosts: "",
 };
+
+export const createInventoryFormDataItem = (): InventoryFormDataItem => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2, 7),
+  ...initialInventoryFormData,
+});
 
 export const initialFixedAssetFormData: FixedAssetFormData = {
   assetName: "",

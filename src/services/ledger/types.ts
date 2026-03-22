@@ -9,6 +9,7 @@ import type {
   CheckFormData,
   OutgoingCheckFormData,
   InventoryFormData,
+  InventoryFormDataItem,
   FixedAssetFormData,
 } from "@/components/ledger/types/ledger";
 import type { ErrorType } from "@/lib/error-handling";
@@ -35,6 +36,7 @@ export interface InventoryUpdateResult extends ServiceResult {
   cogsDescription?: string;
   inventoryChange?: { itemId: string; quantityDelta: number };
   returnCostAmount?: number;  // Cost of returned goods (qty × current unit price)
+  inventoryChanges?: { itemId: string; quantityDelta: number }[]; // for multi-item rollback
 }
 
 // ============================================
@@ -49,7 +51,8 @@ export interface CreateLedgerEntryOptions {
   incomingChequesList?: CheckFormData[];
   outgoingChequesList?: OutgoingCheckFormData[];
   hasInventoryUpdate?: boolean;
-  inventoryFormData?: InventoryFormData;
+  inventoryFormData?: InventoryFormData; // kept for backward compat; prefer inventoryFormDataList
+  inventoryFormDataList?: InventoryFormDataItem[]; // multi-item support
   hasFixedAsset?: boolean;
   fixedAssetFormData?: FixedAssetFormData;
   hasInitialPayment?: boolean;

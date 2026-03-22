@@ -13,6 +13,7 @@ import type {
   CheckFormData,
   OutgoingCheckFormData,
   InventoryFormData,
+  InventoryFormDataItem,
   FixedAssetFormData,
   PaymentFormData,
   ChequeRelatedFormData,
@@ -40,6 +41,7 @@ export function useLedgerOperations() {
       outgoingChequesList?: OutgoingCheckFormData[];
       hasInventoryUpdate?: boolean;
       inventoryFormData?: InventoryFormData;
+      inventoryFormDataList?: InventoryFormDataItem[];
       hasFixedAsset?: boolean;
       fixedAssetFormData?: FixedAssetFormData;
       hasInitialPayment?: boolean;
@@ -99,6 +101,7 @@ export function useLedgerOperations() {
           outgoingChequesList: options.outgoingChequesList,
           hasInventoryUpdate: options.hasInventoryUpdate,
           inventoryFormData: options.inventoryFormData,
+          inventoryFormDataList: options.inventoryFormDataList,
           hasFixedAsset: options.hasFixedAsset,
           fixedAssetFormData: options.fixedAssetFormData,
           hasInitialPayment: options.hasInitialPayment,
