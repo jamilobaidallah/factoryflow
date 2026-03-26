@@ -72,7 +72,7 @@ export function MovementHistoryTable({ movements, loading, isOwner, onDelete }: 
               <TableCell className="text-slate-600 text-sm">
                 {movement.linkedTransactionId || '-'}
               </TableCell>
-              <TableCell className="text-slate-600 text-sm max-w-[200px] truncate">
+              <TableCell className="text-slate-600 text-sm max-w-[200px] truncate" title={movement.notes || undefined}>
                 {movement.notes || '-'}
               </TableCell>
               <TableCell className="text-slate-600 text-sm">

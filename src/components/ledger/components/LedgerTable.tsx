@@ -205,7 +205,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       {/* Description */}
       <TableCell>
-        <p className="text-sm font-medium text-slate-800 truncate max-w-[200px]">
+        <p className="text-sm font-medium text-slate-800 truncate max-w-[200px]" title={entry.description}>
           {entry.description}
         </p>
       </TableCell>
@@ -217,7 +217,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       {/* Category */}
       <TableCell>
-        <p className="text-sm text-slate-600 truncate">{entry.category}</p>
+        <p className="text-sm text-slate-600 truncate" title={entry.category}>{entry.category}</p>
       </TableCell>
 
       {/* Subcategory - Highlighted when filtered */}
@@ -229,6 +229,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
               ? "bg-purple-100 text-purple-700 font-medium"
               : "text-slate-500"
           )}
+          title={entry.subCategory || undefined}
         >
           {entry.subCategory || "-"}
         </span>
@@ -236,7 +237,12 @@ const LedgerTableRow = memo(function LedgerTableRow({
 
       {/* Party - For equity entries, show ownerName instead of associatedParty */}
       <TableCell>
-        <p className="text-sm text-slate-600 truncate">
+        <p
+          className="text-sm text-slate-600 truncate"
+          title={isEquityTransaction(entry.type, entry.category)
+            ? (entry.ownerName || undefined)
+            : (entry.associatedParty || undefined)}
+        >
           {isEquityTransaction(entry.type, entry.category)
             ? (entry.ownerName || "-")
             : (entry.associatedParty || "-")}
