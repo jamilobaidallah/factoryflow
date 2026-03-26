@@ -1324,14 +1324,22 @@ export class LedgerService {
         for (const paymentDoc of allPaymentDocs) {
           const paymentData = paymentDoc.data();
 
+          // For immediate settlement transactions, the payment amount equals the transaction amount
+          // and should be updated when the transaction amount changes.
+          // For partial payments, keep the original amount (it represents what was actually paid).
+          const oldTransactionAmount = currentData?.amount || 0;
+          const shouldSyncPaymentAmount =
+            !!currentData?.immediateSettlement &&
+            newAmount !== oldTransactionAmount &&
+            paymentData.amount === oldTransactionAmount;
+
           // Update the payment record
           batch.update(paymentDoc.ref, {
             clientName: newClientName,
             date: new Date(formData.date),
             category: formData.category,
             subCategory: formData.subCategory,
-            // Note: Keep original payment amount, don't change to newAmount
-            // The payment amount was the amount actually paid, not the invoice total
+            ...(shouldSyncPaymentAmount ? { amount: newAmount } : {}),
           });
 
           // Recreate the payment journal entry (DR Cash, CR AR for receipts)
