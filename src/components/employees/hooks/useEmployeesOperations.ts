@@ -756,13 +756,19 @@ export function useEmployeesOperations(): UseEmployeesOperationsReturn {
       }
 
       // Clear linkedPayrollMonth from advances (so they can be used in future payroll)
-      for (const advanceId of allAdvanceIds) {
-        const advanceRef = doc(
-          firestore,
-          `users/${user.dataOwnerId}/advances`,
-          advanceId
+      // Fetch all advance docs in parallel first — batch.update() on a deleted document
+      // throws NOT_FOUND and aborts the entire batch, so we skip missing advances.
+      if (allAdvanceIds.length > 0) {
+        const advanceDocRefs = allAdvanceIds.map((id) =>
+          doc(firestore, `users/${user.dataOwnerId}/advances`, id)
         );
-        batch.update(advanceRef, { linkedPayrollMonth: null });
+        const advanceSnaps = await Promise.all(advanceDocRefs.map((ref) => getDoc(ref)));
+        for (let i = 0; i < allAdvanceIds.length; i++) {
+          if (advanceSnaps[i].exists()) {
+            batch.update(advanceDocRefs[i], { linkedPayrollMonth: null });
+          }
+          // Skip silently if the advance was deleted — don't block the reversal
+        }
       }
 
       // Clear linkedPayrollId from overtime entries that were linked to any of these payroll entries
