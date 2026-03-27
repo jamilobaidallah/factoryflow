@@ -106,6 +106,10 @@ export interface UseLedgerFiltersOptions {
   initialViewMode?: ViewMode;
   /** Initial search query */
   initialSearch?: string;
+  /** Initial date range start */
+  initialDateFrom?: Date;
+  /** Initial date range end */
+  initialDateTo?: Date;
 }
 
 /**
@@ -129,6 +133,11 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
     subCategory: options?.initialSubCategory || "all",
     viewMode: options?.initialViewMode || "all",
     search: options?.initialSearch || "",
+    datePreset: (options?.initialDateFrom || options?.initialDateTo) ? "custom" : "all",
+    dateRange: {
+      from: options?.initialDateFrom || null,
+      to: options?.initialDateTo || null,
+    },
   };
   const [filters, setFilters] = useState<LedgerFiltersState>(initialFilters);
 

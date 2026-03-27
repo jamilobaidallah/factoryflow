@@ -81,6 +81,7 @@ export default function LedgerPage() {
   const urlCategory = searchParams.get("category");
   const urlSubcategory = searchParams.get("subcategory");
   const urlSearch = searchParams.get("search");
+  const urlMonth = searchParams.get("month"); // format: "YYYY-MM"
 
   // Map URL type param to EntryType
   const initialEntryType: EntryType | undefined = urlType === "income" ? "دخل" : urlType === "expense" ? "مصروف" : undefined;
@@ -94,6 +95,19 @@ export default function LedgerPage() {
       : urlType === "expense"
       ? "expense"
       : undefined;
+
+  // Parse month param into date range (start and end of that month)
+  let initialDateFrom: Date | undefined;
+  let initialDateTo: Date | undefined;
+  if (urlMonth) {
+    const [yearStr, monthStr] = urlMonth.split("-");
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (!isNaN(year) && !isNaN(month)) {
+      initialDateFrom = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      initialDateTo = new Date(year, month, 0, 23, 59, 59, 999);
+    }
+  }
 
   // Consolidated state management
   const [state, dispatch] = useReducer(ledgerPageReducer, initialLedgerPageState);
@@ -147,6 +161,8 @@ export default function LedgerPage() {
     initialSubCategory: urlSubcategory || undefined,
     initialViewMode: initialViewMode,
     initialSearch: urlSearch || undefined,
+    initialDateFrom: initialDateFrom,
+    initialDateTo: initialDateTo,
   });
 
   // Apply filters to entries

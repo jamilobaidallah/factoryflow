@@ -54,9 +54,9 @@ function DashboardSummaryCardsComponent({
 
       {/* Summary cards grid - 4 columns when unpaid data is available */}
       <div className={`grid grid-cols-1 gap-4 ${hasUnpaidData ? "md:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-3"}`}>
-        <RevenueCard amount={revenue} />
-        <ExpensesCard amount={expenses} />
-        <ProfitCard amount={profit} isLoss={isLoss} />
+        <RevenueCard amount={revenue} selectedMonth={viewMode === "month" ? selectedMonth : undefined} />
+        <ExpensesCard amount={expenses} selectedMonth={viewMode === "month" ? selectedMonth : undefined} />
+        <ProfitCard amount={profit} isLoss={isLoss} selectedMonth={viewMode === "month" ? selectedMonth : undefined} />
         {hasUnpaidData && (
           <UnpaidCard
             unpaidReceivables={unpaidReceivables}
@@ -107,11 +107,13 @@ function ViewModeToggle({
 }
 
 /** Revenue card component - Clickable to drill down to income ledger entries */
-function RevenueCard({ amount }: { amount: number }) {
+function RevenueCard({ amount, selectedMonth }: { amount: number; selectedMonth?: string }) {
   const router = useRouter();
 
   const handleClick = () => {
-    router.push("/ledger?type=income");
+    const params = new URLSearchParams({ type: "income" });
+    if (selectedMonth) { params.set("month", selectedMonth); }
+    router.push(`/ledger?${params.toString()}`);
   };
 
   return (
@@ -138,11 +140,13 @@ function RevenueCard({ amount }: { amount: number }) {
 }
 
 /** Expenses card component - Clickable to drill down to expense ledger entries */
-function ExpensesCard({ amount }: { amount: number }) {
+function ExpensesCard({ amount, selectedMonth }: { amount: number; selectedMonth?: string }) {
   const router = useRouter();
 
   const handleClick = () => {
-    router.push("/ledger?type=expense");
+    const params = new URLSearchParams({ type: "expense" });
+    if (selectedMonth) { params.set("month", selectedMonth); }
+    router.push(`/ledger?${params.toString()}`);
   };
 
   return (
@@ -169,11 +173,15 @@ function ExpensesCard({ amount }: { amount: number }) {
 }
 
 /** Profit/Loss card component - Clickable to view all ledger entries */
-function ProfitCard({ amount, isLoss }: { amount: number; isLoss: boolean }) {
+function ProfitCard({ amount, isLoss, selectedMonth }: { amount: number; isLoss: boolean; selectedMonth?: string }) {
   const router = useRouter();
 
   const handleClick = () => {
-    router.push("/ledger");
+    if (selectedMonth) {
+      router.push(`/ledger?month=${selectedMonth}`);
+    } else {
+      router.push("/ledger");
+    }
   };
 
   return (
