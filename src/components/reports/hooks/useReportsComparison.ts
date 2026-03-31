@@ -251,7 +251,7 @@ export function useReportsComparison({
     // Build comparison data
     const comparison: ComparisonData = {
       revenue: calculateComparisonResult(currentData.revenue, previousData.revenue, false),
-      expenses: calculateComparisonResult(currentData.expenses, previousData.expenses, true),
+      expenses: calculateComparisonResult(currentData.expenses + currentData.badDebt, previousData.expenses + previousData.badDebt, true),
       profit: calculateComparisonResult(currentData.profit, previousData.profit, false),
       margin: calculateComparisonResult(currentData.margin, previousData.margin, false),
       // Include gross revenue, discounts, and bad debt for detailed breakdown
