@@ -53,7 +53,7 @@ export default function DashboardPage() {
   } = useDashboardData();
 
   const { chequesDueSoon } = useChequesAlerts();
-  const { unpaidReceivables, unpaidPayables } = useReceivablesAlerts();
+  const { unpaidReceivables, unpaidPayables } = useReceivablesAlerts(summaryView === "month" ? selectedMonth : undefined);
 
   // Generate available months for dropdown
   const availableMonths = useMemo<MonthOption[]>(() => {
@@ -93,7 +93,7 @@ export default function DashboardPage() {
       const profit = netRevenue - netExpenses - totalBadDebt;
       return {
         revenue: netRevenue,  // Show net revenue on dashboard
-        expenses: netExpenses,  // Show net expenses (after expense discounts)
+        expenses: netExpenses + totalBadDebt,  // Include bad debt expense so revenue - expenses = profit
         profit,
         isLoss: profit < 0,
       };
@@ -104,7 +104,7 @@ export default function DashboardPage() {
       const profit = netRevenue - monthData.expenses - (monthData.badDebt || 0);
       return {
         revenue: netRevenue,  // Show net revenue on dashboard
-        expenses: monthData.expenses,
+        expenses: monthData.expenses + (monthData.badDebt || 0),  // Include bad debt expense so revenue - expenses = profit
         profit,
         isLoss: profit < 0,
       };
