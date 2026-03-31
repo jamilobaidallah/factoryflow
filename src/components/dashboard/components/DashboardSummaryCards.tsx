@@ -61,6 +61,7 @@ function DashboardSummaryCardsComponent({
           <UnpaidCard
             unpaidReceivables={unpaidReceivables}
             unpaidPayables={unpaidPayables}
+            selectedMonth={viewMode === "month" ? selectedMonth : undefined}
           />
         )}
       </div>
@@ -221,15 +222,20 @@ function ProfitCard({ amount, isLoss, selectedMonth }: { amount: number; isLoss:
 function UnpaidCard({
   unpaidReceivables,
   unpaidPayables,
+  selectedMonth,
 }: {
   unpaidReceivables: { count: number; total: number };
   unpaidPayables: { count: number; total: number };
+  selectedMonth?: string;
 }) {
   const totalUnpaidCount = unpaidReceivables.count + unpaidPayables.count;
   const totalUnpaidAmount = unpaidReceivables.total + unpaidPayables.total;
+  const href = selectedMonth
+    ? `/ledger?paymentStatus=outstanding&month=${selectedMonth}`
+    : "/ledger?paymentStatus=outstanding";
 
   return (
-    <Link href="/ledger?paymentStatus=outstanding" className="block">
+    <Link href={href} className="block">
       <article
         className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer h-full"
         role="button"

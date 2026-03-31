@@ -33,10 +33,11 @@ function showLimitWarning(limitType: string, limitValue: number, message: string
 }
 
 /**
- * Hook for fetching unpaid receivables and payables alerts
- * Queries AR/AP entries with unpaid or partial payment status
+ * Hook for fetching unpaid receivables and payables alerts.
+ * When selectedMonth is provided (format "YYYY-MM"), only entries
+ * created in that month are counted.
  */
-export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
+export function useReceivablesAlerts(selectedMonth?: string): UseReceivablesAlertsReturn {
   const { user } = useUser();
   const [unpaidReceivables, setUnpaidReceivables] = useState<AlertData>({ count: 0, total: 0 });
   const [unpaidPayables, setUnpaidPayables] = useState<AlertData>({ count: 0, total: 0 });
@@ -47,6 +48,17 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
     // Add limit to prevent loading unbounded data
     const ledgerQuery = query(ledgerRef, limit(QUERY_LIMITS.DASHBOARD_ENTRIES));
+
+    // Pre-compute month boundaries once (avoid recomputing inside forEach)
+    let monthFrom: Date | null = null;
+    let monthTo: Date | null = null;
+    if (selectedMonth) {
+      const [yearStr, monthStr] = selectedMonth.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      monthFrom = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      monthTo = new Date(year, month, 0, 23, 59, 59, 999);
+    }
 
     const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
       // Show warning if limit is reached (data may be incomplete)
@@ -65,6 +77,14 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
+
+        // When a month is selected, only include entries from that month
+        if (monthFrom && monthTo) {
+          const raw = data.date;
+          const entryDate: Date = raw?.toDate ? raw.toDate() : new Date(raw as string);
+          if (entryDate < monthFrom || entryDate > monthTo) { return; }
+        }
+
         const outstanding = getOutstandingAmount(data);
 
         // Count AR entries (income type) with outstanding balances
@@ -85,7 +105,7 @@ export function useReceivablesAlerts(): UseReceivablesAlertsReturn {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, selectedMonth]);
 
   return { unpaidReceivables, unpaidPayables };
 }
