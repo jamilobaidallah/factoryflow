@@ -773,7 +773,7 @@ These security items require Cloud Functions or significant backend changes:
 
 ### Performance Optimizations
 - Client balance calculation is O(n) - consider server-side aggregation
-- Some pages have 4+ `onSnapshot` listeners - evaluate consolidation
+- ~~Some pages have 4+ `onSnapshot` listeners - evaluate consolidation~~ (invoices page resolved 2026-04-05)
 - Dashboard queries unbounded by date - add date range filter for large datasets
 
 ### Code Quality
@@ -830,6 +830,7 @@ COGS on sale: DR 5000 تكلفة البضاعة  /  CR 1300 المخزون  (aut
 
 **Change Log**:
 - 2026-03-12: ✅ Fixed inbound raw material shipping (شحن مواد خام) — per IAS 2 now capitalizes to inventory (1300) instead of expensing to 5020. Eliminates double-counting of shipping in P&L.
+- 2026-04-05: ✅ Invoices page performance — replaced `onSnapshot(limit 1000)` with `getDocs(limit 500)`, fixed overdue write-loop (batch update instead of writes inside snapshot callback), added 50-per-page client-side pagination with auto-page-correction on delete
 - 2026-03-12: ✅ Code simplification — consolidated 5 duplicate LedgerEntry interfaces into shared ReportsLedgerEntry type; extended isExcludedFromPL() to include isInventoryPurchase; unified NON_CASH_SUBCATEGORIES reference in LedgerService.ts
 - 2026-03-11: ✅ Fixed wastage (هدر وتالف) and free samples (عينات مجانية) — journal now credits Inventory (1300), correct GL accounts (5040/5420), moved to مصاريف تشغيلية category, COGS auto-creation fixed for sales
 - 2026-03-11: ✅ Fixed inventory purchases — correctly capitalize to asset (1300) not expense; P&L and dashboard no longer count inventory purchases as losses
