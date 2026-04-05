@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useReducer } from "react";
+import { useState, useMemo, useReducer, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
