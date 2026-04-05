@@ -273,26 +273,6 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         },
       });
 
-      // If marked as paid, create ledger entry
-      if (newStatus === "paid") {
-        if (invoice) {
-          const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-          await addDoc(ledgerRef, {
-            transactionId: `PAY-${invoice.invoiceNumber}`,
-            description: `دفعة فاتورة ${invoice.invoiceNumber} - ${invoice.clientName}`,
-            type: "دخل",
-            amount: invoice.total,
-            category: "إيرادات المبيعات",
-            subCategory: "مبيعات منتجات",
-            associatedParty: invoice.clientName,
-            date: new Date(),
-            reference: invoice.invoiceNumber,
-            notes: `دفعة فاتورة مرتبطة`,
-            createdAt: new Date(),
-          });
-        }
-      }
-
       toast({
         title: "تم التحديث",
         description: `تم تحديث حالة الفاتورة إلى: ${getStatusLabel(newStatus)}`,
