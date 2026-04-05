@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useReducer } from "react";
+import { useState, useMemo, useReducer, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -31,6 +31,14 @@ import { InvoicePreviewDialog } from "./components/InvoicePreviewDialog";
 import { InvoicesSummaryHeader } from "./components/InvoicesSummaryHeader";
 import { ContextualEmptyState } from "@/components/ui/empty-state";
 import { formatShortDate, formatNumber } from "@/lib/date-utils";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 // UI state management with useReducer
 interface UIState {
@@ -92,7 +100,7 @@ export default function InvoicesPage() {
   const { confirm, dialog: confirmationDialog } = useConfirmation();
 
   // Data and operations hooks
-  const { invoices, loading: dataLoading } = useInvoicesData();
+  const { invoices, loading: dataLoading, refresh } = useInvoicesData();
   const { submitInvoice, deleteInvoice, updateStatus, exportPDF } = useInvoicesOperations();
 
   // UI state - consolidated with useReducer
@@ -106,7 +114,11 @@ export default function InvoicesPage() {
   const [sortField, setSortField] = useState<InvoiceSortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  // Sort handler
+  // Pagination state
+  const PAGE_SIZE = 50;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Sort handler — resets to page 1 on field change
   const handleSort = (field: InvoiceSortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -114,6 +126,7 @@ export default function InvoicesPage() {
       setSortField(field);
       setSortDirection("asc");
     }
+    setCurrentPage(1);
   };
 
   // Sort icon component
@@ -162,6 +175,18 @@ export default function InvoicesPage() {
     });
   }, [invoices, sortField, sortDirection]);
 
+  // Pagination derived values
+  const totalPages = Math.max(1, Math.ceil(sortedInvoices.length / PAGE_SIZE));
+  const paginatedInvoices = sortedInvoices.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  // Auto-correct page if data shrinks (e.g. delete last item on last page)
+  useEffect(() => {
+    if (currentPage > totalPages) { setCurrentPage(totalPages); }
+  }, [totalPages, currentPage]);
+
   // Memoized calculations for statistics cards
   const invoiceStats = useMemo(() => ({
     total: invoices.length,
@@ -208,6 +233,7 @@ export default function InvoicesPage() {
     if (success) {
       resetForm();
       dispatch({ type: 'CLOSE_DIALOG' });
+      await refresh();
     }
     dispatch({ type: 'SET_LOADING', value: false });
   };
@@ -218,6 +244,7 @@ export default function InvoicesPage() {
       "هل أنت متأكد من حذف هذه الفاتورة؟ لا يمكن التراجع عن هذا الإجراء.",
       async () => {
         await deleteInvoice(invoiceId);
+        await refresh();
       },
       "destructive"
     );
@@ -225,6 +252,7 @@ export default function InvoicesPage() {
 
   const handleUpdateStatus = async (invoiceId: string, newStatus: Invoice["status"]) => {
     await updateStatus(invoiceId, newStatus, invoices);
+    await refresh();
   };
 
   const getStatusLabel = (status: Invoice["status"]) => {
@@ -328,7 +356,7 @@ export default function InvoicesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedInvoices.map((invoice) => (
+                paginatedInvoices.map((invoice) => (
                   <TableRow key={invoice.id} className="table-row-hover">
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell className="text-slate-600 text-sm">
@@ -429,6 +457,39 @@ export default function InvoicesPage() {
           </Table>
         </div>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                aria-disabled={currentPage === 1}
+                className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  isActive={page === currentPage}
+                  onClick={() => setCurrentPage(page)}
+                  className="cursor-pointer"
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                aria-disabled={currentPage === totalPages}
+                className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
 
       {/* Dialogs */}
       <InvoicesFormDialog

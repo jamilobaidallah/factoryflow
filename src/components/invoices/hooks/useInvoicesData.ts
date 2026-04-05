@@ -1,63 +1,76 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/firebase/provider";
 import {
   collection,
-  onSnapshot,
+  getDocs,
   query,
   orderBy,
   limit,
-  updateDoc,
+  writeBatch,
   doc,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import { Invoice } from "../types/invoices";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface UseInvoicesDataReturn {
   invoices: Invoice[];
   loading: boolean;
+  refresh: () => Promise<void>;
 }
 
 export function useInvoicesData(): UseInvoicesDataReturn {
   const { user } = useUser();
+  const { toast } = useToast();
+  const dataOwnerId = user?.dataOwnerId;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) {
+  const fetchInvoices = useCallback(async (showLoader = true) => {
+    if (!dataOwnerId) {
       setLoading(false);
       return;
     }
 
-    const invoicesRef = collection(firestore, `users/${user.dataOwnerId}/invoices`);
-    // Limit to 1000 most recent invoices
-    const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(1000));
+    if (showLoader) { setLoading(true); }
+    try {
+      const invoicesRef = collection(firestore, `users/${dataOwnerId}/invoices`);
+      const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(500));
+      const snapshot = await getDocs(q);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const invoicesData: Invoice[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        invoicesData.push({
-          id: doc.id,
-          ...convertFirestoreDates(data),
-        } as Invoice);
-      });
-      setInvoices(invoicesData);
+      const data: Invoice[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...convertFirestoreDates(d.data()),
+      } as Invoice));
+
+      // Fix overdue in a single batch — no loop, no re-trigger
+      const overdue = data.filter(
+        (inv) => inv.status === "sent" && new Date() > inv.dueDate
+      );
+      if (overdue.length > 0) {
+        const batch = writeBatch(firestore);
+        overdue.forEach((inv) => {
+          batch.update(doc(invoicesRef, inv.id), { status: "overdue" });
+          inv.status = "overdue"; // update local copy immediately
+        });
+        await batch.commit();
+      }
+
+      setInvoices(data);
+    } catch {
+      toast({ title: "فشل تحميل الفواتير. يرجى المحاولة مرة أخرى", variant: "destructive" });
+    } finally {
       setLoading(false);
+    }
+  }, [dataOwnerId, toast]);
 
-      // Auto-update overdue status
-      invoicesData.forEach(async (invoice) => {
-        if (invoice.status === "sent" && new Date() > invoice.dueDate) {
-          const invoiceRef = doc(firestore, `users/${user.dataOwnerId}/invoices`, invoice.id);
-          await updateDoc(invoiceRef, { status: "overdue" });
-        }
-      });
-    });
+  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
-    return () => unsubscribe();
-  }, [user]);
+  // Refresh without showing the full skeleton (no flash)
+  const refresh = useCallback(() => fetchInvoices(false), [fetchInvoices]);
 
-  return { invoices, loading };
+  return { invoices, loading, refresh };
 }
