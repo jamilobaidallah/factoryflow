@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Phone, Check, Calendar, Banknote, User, CreditCard, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/auth";
 import {
   Sheet,
   SheetContent,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/sheet";
 import { useSwipe } from "@/hooks/use-swipe";
 import { useState } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR } from "@/lib/constants";
 import { formatDate as formatDateUtil, formatNumber as formatNumberUtil } from "@/lib/date-utils";
 
@@ -110,16 +112,18 @@ export function ChequeCard({
   onCall,
 }: ChequeCardProps) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const { can } = usePermissions();
+  const canUpdate = can("update", "cheques");
   const isPending = cheque.status === CHEQUE_STATUS_AR.PENDING || cheque.status === "pending";
 
   // إعداد السحب - Swipe configuration
   const [swipeState, swipeHandlers] = useSwipe({
     threshold: 60,
     maxSwipeDistance: 100,
-    enableLeftSwipe: isPending, // السحب لليسار للتحصيل
+    enableLeftSwipe: isPending && canUpdate, // السحب لليسار للتحصيل (للمصرح لهم فقط)
     enableRightSwipe: !!cheque.clientPhone, // السحب لليمين للاتصال
     onSwipeLeft: () => {
-      if (isPending) {
+      if (isPending && canUpdate) {
         onMarkCleared(cheque);
       }
     },
@@ -328,35 +332,37 @@ export function ChequeCard({
 
           {/* أزرار الإجراءات - Action buttons */}
           <SheetFooter className="flex-col gap-2 sm:flex-col">
-            <div className="grid grid-cols-2 gap-2 w-full">
-              {/* تم الصرف - Mark Cleared */}
-              {isPending && (
-                <Button
-                  onClick={() => {
-                    setIsDetailOpen(false);
-                    onMarkCleared(cheque);
-                  }}
-                  className="bg-green-600 hover:bg-green-700 gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  تم الصرف
-                </Button>
-              )}
+            <PermissionGate action="update" module="cheques">
+              <div className="grid grid-cols-2 gap-2 w-full">
+                {/* تم الصرف - Mark Cleared */}
+                {isPending && (
+                  <Button
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      onMarkCleared(cheque);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    تم الصرف
+                  </Button>
+                )}
 
-              {/* مرتجع - Mark Bounced */}
-              {isPending && (
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    setIsDetailOpen(false);
-                    onMarkBounced(cheque);
-                  }}
-                  className="gap-2"
-                >
-                  مرتجع
-                </Button>
-              )}
-            </div>
+                {/* مرتجع - Mark Bounced */}
+                {isPending && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      onMarkBounced(cheque);
+                    }}
+                    className="gap-2"
+                  >
+                    مرتجع
+                  </Button>
+                )}
+              </div>
+            </PermissionGate>
 
             <div className="grid grid-cols-2 gap-2 w-full">
               {/* اتصال - Call */}
@@ -374,16 +380,18 @@ export function ChequeCard({
               )}
 
               {/* تعديل - Edit */}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsDetailOpen(false);
-                  onEdit(cheque);
-                }}
-                className="gap-2"
-              >
-                تعديل
-              </Button>
+              <PermissionGate action="update" module="cheques">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsDetailOpen(false);
+                    onEdit(cheque);
+                  }}
+                  className="gap-2"
+                >
+                  تعديل
+                </Button>
+              </PermissionGate>
             </div>
           </SheetFooter>
         </SheetContent>
