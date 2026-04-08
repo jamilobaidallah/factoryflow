@@ -211,12 +211,19 @@ export function MultiAllocationDialog({
     }
   }, [chequeData, open]);
 
-  // Fetch client's unpaid transactions
+  // Reset allocations immediately when payment type changes.
+  // Explicit rather than relying on the re-fetch cascade — safe if the hook ever
+  // switches from getDocs to onSnapshot.
+  useEffect(() => {
+    setAllocations([]);
+  }, [formData.type]);
+
+  // Fetch client's unpaid transactions, filtered by payment direction
   const {
     transactions,
     loading: transactionsLoading,
     totalOutstanding,
-  } = useClientTransactions(formData.clientName);
+  } = useClientTransactions(formData.clientName, formData.type);
 
   // Payment allocations hook
   const {

@@ -20,6 +20,7 @@ import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
 import { UnpaidTransaction } from '../types';
 import { safeSubtract, sumAmounts } from '@/lib/currency';
+import { calculateEntryDebitCredit, type BalanceLedgerEntry } from '@/lib/client-balance';
 
 // Advance categories to exclude from multi-allocation payments
 // These have their own allocation flow and should not be mixed with regular invoices
@@ -39,7 +40,7 @@ interface UseClientTransactionsResult {
  * @param clientName - The client name to fetch transactions for
  * @returns Object containing transactions, loading state, error, and refetch function
  */
-export function useClientTransactions(clientName: string): UseClientTransactionsResult {
+export function useClientTransactions(clientName: string, paymentType?: string): UseClientTransactionsResult {
   const { user } = useUser();
   const [transactions, setTransactions] = useState<UnpaidTransaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,6 +80,26 @@ export function useClientTransactions(clientName: string): UseClientTransactions
           return;
         }
 
+        // Filter by payment direction using the same debit/credit logic as the balance sheet.
+        // قبض (receipt) → show entries where party owes us (debit > 0)
+        // صرف (disbursement) → show entries where we owe party (credit > 0)
+        if (paymentType) {
+          const entry: BalanceLedgerEntry = {
+            id: doc.id,
+            type: data.type,
+            amount: data.amount || 0,
+            category: data.category || '',
+            subCategory: data.subCategory,
+            totalDiscount: data.totalDiscount,
+            writeoffAmount: data.writeoffAmount,
+            linkedPaymentId: data.linkedPaymentId,
+            isReturnEntry: data.isReturnEntry,
+          };
+          const { debit, credit } = calculateEntryDebitCredit(entry);
+          if (paymentType === 'قبض' && debit <= 0) return;
+          if (paymentType === 'صرف' && credit <= 0) return;
+        }
+
         // Only include unpaid or partial transactions
         if (paymentStatus === 'paid') {
           return;
@@ -116,7 +137,7 @@ export function useClientTransactions(clientName: string): UseClientTransactions
     } finally {
       setLoading(false);
     }
-  }, [user, clientName]);
+  }, [user, clientName, paymentType]);
 
   // Fetch on mount and when clientName changes
   useEffect(() => {
