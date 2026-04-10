@@ -31,6 +31,7 @@ import {
 import { useLedgerData } from "./hooks/useLedgerData";
 import { useLedgerForm } from "./hooks/useLedgerForm";
 import { useLedgerOperations } from "./hooks/useLedgerOperations";
+import { useLedgerUnpaidCount } from "@/hooks/firebase-query";
 
 // Reducer
 import { ledgerPageReducer, initialLedgerPageState } from "./reducers/ledgerPageReducer";
@@ -60,7 +61,7 @@ import {
   ViewMode,
 } from "./filters";
 import { parseAmount } from "@/lib/currency";
-import { isEquityTransaction, getCategoryType } from "./utils/ledger-helpers";
+import { getCategoryType } from "./utils/ledger-helpers";
 import { useAvailableAdvances, getAdvanceTypeForEntry, isAdvanceCategory } from "./hooks/useAvailableAdvances";
 import type { AdvanceAllocationResult } from "./components/AdvanceAllocationDialog";
 
@@ -178,15 +179,10 @@ export default function LedgerPage() {
   // Calculate totals for filtered entries
   const filteredTotals = useMemo(() => calculateTotals(filteredEntries), [calculateTotals, filteredEntries]);
 
-  // Calculate unpaid count for stats and filter tabs (from all entries, not just current page)
-  // Exclude equity/capital transactions - they don't have AR/AP
-  const unpaidCount = useMemo(() => {
-    return allEntriesForStats.filter(
-      (e) => e.isARAPEntry &&
-             e.paymentStatus !== "paid" &&
-             !isEquityTransaction(e.type, e.category)
-    ).length;
-  }, [allEntriesForStats]);
+  // Real-time count of unpaid/partial AR-AP entries via filtered Firestore subscription.
+  // Replaces the previous approach of iterating the full 10,000-entry stats array.
+  // Equity entries are excluded automatically (LedgerService sets isARAPEntry=false for them).
+  const unpaidCount = useLedgerUnpaidCount();
 
   // Related records forms (from original hook)
   const {

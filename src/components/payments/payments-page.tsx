@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus, Layers } from "lucide-react";
@@ -9,6 +10,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
 import { handleError, getErrorTitle } from "@/lib/error-handling";
+import { QUERY_LIMITS } from "@/lib/constants";
 import { logActivity } from "@/services/activityLogService";
 import {
   createJournalPostingEngine,
@@ -33,6 +35,8 @@ import {
   limit,
   startAfter,
   getCountFromServer,
+  getAggregateFromServer,
+  sum,
   DocumentSnapshot,
   QueryConstraint,
 } from "firebase/firestore";
@@ -76,13 +80,54 @@ export default function PaymentsPage() {
   const urlSearch = searchParams.get("search");
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [allPaymentsForStats, setAllPaymentsForStats] = useState<Payment[]>([]); // All payments for accurate stats
+  const [totalReceived, setTotalReceived] = useState<number | null>(null);
+  const [totalPaid, setTotalPaid] = useState<number | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMultiAllocationDialogOpen, setIsMultiAllocationDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(urlSearch || "");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Fetch payment totals via server-side aggregation.
+  // Uses subtraction approach to handle noCashMovement field:
+  //   total = allByType − whereNoCashMovement=true
+  // This correctly treats missing/undefined noCashMovement as "include in total".
+  const fetchPaymentStats = useCallback(async () => {
+    if (!user) { return; }
+    setStatsLoading(true);
+    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
+    try {
+      const [receivedAll, receivedExcluded, paidAll, paidExcluded] = await Promise.all([
+        getAggregateFromServer(
+          query(paymentsRef, where("type", "==", "قبض")),
+          { total: sum("amount") }
+        ),
+        getAggregateFromServer(
+          query(paymentsRef, where("type", "==", "قبض"), where("noCashMovement", "==", true)),
+          { total: sum("amount") }
+        ),
+        getAggregateFromServer(
+          query(paymentsRef, where("type", "==", "صرف")),
+          { total: sum("amount") }
+        ),
+        getAggregateFromServer(
+          query(paymentsRef, where("type", "==", "صرف"), where("noCashMovement", "==", true)),
+          { total: sum("amount") }
+        ),
+      ]);
+      setTotalReceived((receivedAll.data().total ?? 0) - (receivedExcluded.data().total ?? 0));
+      setTotalPaid((paidAll.data().total ?? 0) - (paidExcluded.data().total ?? 0));
+    } catch {
+      // On failure (offline / index building): keep null state.
+      // PaymentsSummaryCards stays in loading skeleton — no misleading zero shown.
+      // Stats refresh automatically on next successful mutation.
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [user]);
 
   // Multi-allocation hook for delete reversal
   const { reversePaymentAllocations } = usePaymentAllocations();
@@ -116,28 +161,11 @@ export default function PaymentsPage() {
     });
   }, [user]);
 
-  // Subscribe to ALL payments for stats calculation (not paginated)
-  // This ensures PaymentsSummaryCards shows accurate totals across all payments
+  // Fetch payment stats (totalReceived / totalPaid) via server-side aggregation.
+  // Replaces the previous 10,000-document onSnapshot subscription.
   useEffect(() => {
-    if (!user) {return;}
-
-    const paymentsRef = collection(firestore, `users/${user.dataOwnerId}/payments`);
-    const q = query(paymentsRef, orderBy("date", "desc"), limit(10000));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allPaymentsData: Payment[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        allPaymentsData.push({
-          id: docSnap.id,
-          ...convertFirestoreDates(data),
-        } as Payment);
-      });
-      setAllPaymentsForStats(allPaymentsData);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    fetchPaymentStats();
+  }, [fetchPaymentStats]);
 
   // Fetch payments with cursor-based pagination
   useEffect(() => {
@@ -186,10 +214,10 @@ export default function PaymentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, pageSize, currentPage]);
 
-  // Filtered payments based on search term
+  // Filtered payments based on debounced search term — avoids running 7 checks per keystroke
   const filteredPayments = useMemo(() => {
-    if (!searchTerm.trim()) {return payments;}
-    const term = searchTerm.toLowerCase().trim();
+    if (!debouncedSearchTerm.trim()) {return payments;}
+    const term = debouncedSearchTerm.toLowerCase().trim();
     return payments.filter((p) =>
       p.id.toLowerCase().includes(term) ||
       p.clientName?.toLowerCase().includes(term) ||
@@ -199,17 +227,8 @@ export default function PaymentsPage() {
       p.subCategory?.toLowerCase().includes(term) ||
       p.allocationTransactionIds?.some(txnId => txnId.toLowerCase().includes(term))
     );
-  }, [payments, searchTerm]);
+  }, [payments, debouncedSearchTerm]);
 
-  // Memoized totals - calculated from ALL payments, not just current page
-  const { totalReceived, totalPaid } = useMemo(() => ({
-    totalReceived: allPaymentsForStats
-      .filter((p) => p.type === "قبض" && !p.noCashMovement)
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
-    totalPaid: allPaymentsForStats
-      .filter((p) => p.type === "صرف" && !p.noCashMovement)
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
-  }), [allPaymentsForStats]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -431,6 +450,7 @@ export default function PaymentsPage() {
         });
       }
 
+      fetchPaymentStats();
       resetForm();
       setIsDialogOpen(false);
     } catch (error) {
@@ -506,6 +526,7 @@ export default function PaymentsPage() {
                 title: "تم الحذف",
                 description: `تم حذف المدفوعة وإلغاء ${payment.allocationCount} تخصيص`,
               });
+              fetchPaymentStats();
             } else {
               toast({
                 title: "خطأ",
@@ -631,6 +652,7 @@ export default function PaymentsPage() {
               ? "تم حذف المدفوعة وتحديث الرصيد في دفتر الأستاذ"
               : "تم حذف المدفوعة بنجاح",
           });
+          fetchPaymentStats();
         } catch (error) {
           if (isDataIntegrityError(error)) {
             toast({
@@ -662,18 +684,33 @@ export default function PaymentsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleExport = () => {
-    // Export all payments, not just current page
-    exportPaymentsToExcelProfessional(allPaymentsForStats);
+  const handleExport = async () => {
+    if (!user) { return; }
+    try {
+      const exportSnapshot = await getDocs(
+        query(
+          collection(firestore, `users/${user.dataOwnerId}/payments`),
+          orderBy("date", "desc"),
+          limit(QUERY_LIMITS.PAYMENTS)
+        )
+      );
+      const allPaymentsForExport = exportSnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...convertFirestoreDates(docSnap.data()),
+      } as Payment));
+      exportPaymentsToExcelProfessional(allPaymentsForExport);
+    } catch {
+      toast({ title: "خطأ", description: "فشل تصدير البيانات. يرجى المحاولة مرة أخرى.", variant: "destructive" });
+    }
   };
 
   return (
     <div className="space-y-4">
       {/* Unified Header: Title + Stats + Search + Actions */}
       <PaymentsSummaryCards
-        totalReceived={totalReceived}
-        totalPaid={totalPaid}
-        loading={dataLoading}
+        totalReceived={totalReceived ?? 0}
+        totalPaid={totalPaid ?? 0}
+        loading={statsLoading || totalReceived === null}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         actions={
@@ -777,6 +814,7 @@ export default function PaymentsPage() {
       <MultiAllocationDialog
         open={isMultiAllocationDialogOpen}
         onOpenChange={setIsMultiAllocationDialogOpen}
+        onSuccess={fetchPaymentStats}
       />
     </div>
   );

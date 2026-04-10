@@ -176,7 +176,7 @@ const LedgerTableRow = memo(function LedgerTableRow({
       style={{
         opacity: isLoaded ? 1 : 0,
         transform: isLoaded ? "translateX(0)" : "translateX(-20px)",
-        transition: `all 0.4s ease-out ${index * 50}ms`,
+        transition: `all 0.3s ease-out ${Math.min(index * 30, 150)}ms`,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -387,7 +387,7 @@ const LedgerCard = memo(function LedgerCard({
       style={{
         opacity: isLoaded ? 1 : 0,
         transform: isLoaded ? "translateY(0)" : "translateY(10px)",
-        transition: `all 0.4s ease-out ${index * 50}ms`,
+        transition: `all 0.3s ease-out ${Math.min(index * 30, 150)}ms`,
       }}
     >
       {/* Header: Description + Amount */}

@@ -37,6 +37,7 @@ export {
   useLedgerClientsSubscription,
   useLedgerPartnersSubscription,
   useLedgerTotalCount,
+  useLedgerUnpaidCount,
   type NamedEntity,
 } from './useLedgerQueries';
 
