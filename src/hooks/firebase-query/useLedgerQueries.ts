@@ -10,6 +10,7 @@ import {
   startAfter,
   onSnapshot,
   getCountFromServer,
+  where,
   type DocumentSnapshot,
   type DocumentData,
 } from 'firebase/firestore';
@@ -395,6 +396,60 @@ export function useLedgerTotalCount() {
     count: data,
     isLoading: isLoading && !!ownerId,
   };
+}
+
+/**
+ * Real-time count of unpaid/partial AR-AP ledger entries.
+ * Uses a filtered onSnapshot on a small subset (isARAPEntry=true + unpaid/partial)
+ * instead of iterating the full 10,000-entry stats array.
+ * Equity entries are excluded automatically since LedgerService sets isARAPEntry=false for them.
+ */
+export function useLedgerUnpaidCount(): number {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  const ownerId = user?.dataOwnerId;
+  const queryKey = useMemo(
+    () => [...queryKeys.ledger.all(ownerId || ''), 'unpaidCount'] as const,
+    [ownerId]
+  );
+
+  useEffect(() => {
+    if (!ownerId) { return; }
+
+    const ledgerRef = collection(firestore, `users/${ownerId}/ledger`);
+    const q = query(
+      ledgerRef,
+      where('isARAPEntry', '==', true),
+      where('paymentStatus', 'in', ['unpaid', 'partial'])
+    );
+
+    unsubscribeRef.current = onSnapshot(
+      q,
+      (snapshot) => {
+        queryClient.setQueryData(queryKey, snapshot.size);
+      },
+      (error) => {
+        console.error('خطأ في متابعة المستحقات:', error);
+      }
+    );
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
+  }, [ownerId, queryKey, queryClient]);
+
+  const { data } = useReactiveQueryData<number>({
+    queryKey,
+    defaultValue: 0,
+    enabled: !!ownerId,
+  });
+
+  return data ?? 0;
 }
 
 /**

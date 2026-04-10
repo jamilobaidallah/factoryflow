@@ -33,8 +33,11 @@ export function ImageViewerDialog({ isOpen, onClose, imageUrl }: ImageViewerDial
             <div className="relative w-full h-[70vh]">
               <Image
                 src={imageUrl}
-                alt="Cheque"
+                alt="صورة الشيك"
                 fill
+                loading="lazy"
+                quality={75}
+                sizes="(max-width: 768px) 100vw, 896px"
                 className="object-contain rounded-lg shadow-lg"
               />
             </div>
