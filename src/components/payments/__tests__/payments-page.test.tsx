@@ -13,6 +13,7 @@ const mockDoc = jest.fn();
 const mockQuery = jest.fn();
 const mockGetDocs = jest.fn();
 const mockGetCountFromServer = jest.fn();
+const mockGetAggregateFromServer = jest.fn();
 
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -24,6 +25,8 @@ jest.mock('firebase/firestore', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   getCountFromServer: (...args: unknown[]) => mockGetCountFromServer(...args),
+  getAggregateFromServer: (...args: unknown[]) => mockGetAggregateFromServer(...args),
+  sum: jest.fn(),
   orderBy: jest.fn(),
   limit: jest.fn(),
   where: jest.fn(),
@@ -118,6 +121,7 @@ describe('PaymentsPage', () => {
       docs: [],
     });
     mockGetCountFromServer.mockResolvedValue({ data: () => ({ count: 2 }) });
+    mockGetAggregateFromServer.mockResolvedValue({ data: () => ({ total: 0 }) });
   });
 
   describe('Rendering', () => {
@@ -149,14 +153,18 @@ describe('PaymentsPage', () => {
   });
 
   describe('Stats Cards', () => {
-    it('displays total income card', () => {
+    it('displays total income card', async () => {
       render(<PaymentsPage />);
-      expect(screen.getByText('المقبوضات')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('المقبوضات')).toBeInTheDocument();
+      });
     });
 
-    it('displays total expenses card', () => {
+    it('displays total expenses card', async () => {
       render(<PaymentsPage />);
-      expect(screen.getByText('المصروفات')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('المصروفات')).toBeInTheDocument();
+      });
     });
   });
 
