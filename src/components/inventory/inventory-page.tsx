@@ -316,52 +316,21 @@ export default function InventoryPage() {
     const movement = movements.find((m) => m.id === movementId);
 
     confirm(
-      "حذف الحركة",
-      "هل أنت متأكد من حذف هذه الحركة؟ سيتم عكس تأثير الكمية على المخزون.",
+      "إلغاء الحركة",
+      "هل أنت متأكد من إلغاء هذه الحركة؟ سيتم عكس تأثير الكمية على المخزون بشكل آمن وكامل.",
       async () => {
         try {
-          // If movement has itemId, revert the quantity change
-          if (movement?.itemId) {
-            const itemRef = doc(firestore, `users/${user.dataOwnerId}/inventory`, movement.itemId);
-            const itemSnapshot = await getDoc(itemRef);
+          const { createLedgerService } = await import("@/services/ledger/LedgerService");
+          const ledgerService = createLedgerService(user.dataOwnerId, user.email || "", user.role);
+          const result = await ledgerService.voidInventoryMovement(movementId);
 
-            if (itemSnapshot.exists()) {
-              const currentQuantity = itemSnapshot.data().quantity || 0;
-              const movementQty = movement.quantity || 0;
-
-              // Reverse the movement: if it was IN (دخول), subtract; if OUT (خروج), add
-              const newQuantity = movement.type === "دخول"
-                ? safeSubtract(currentQuantity, movementQty)  // Reverse IN by subtracting
-                : safeAdd(currentQuantity, movementQty);       // Reverse OUT by adding
-
-              // Update inventory item quantity
-              await updateDoc(itemRef, {
-                quantity: Math.max(0, newQuantity),  // Prevent negative quantity
-              });
-            }
+          if (!result.success) {
+            throw new Error(result.error || "فشل إلغاء الحركة");
           }
 
-          // Delete the movement record
-          const movementRef = doc(firestore, `users/${user.dataOwnerId}/inventory_movements`, movementId);
-          await deleteDoc(movementRef);
-
-          logActivity(user.dataOwnerId, {
-            action: 'delete',
-            module: 'inventory',
-            targetId: movementId,
-            userId: user.uid,
-            userEmail: user.email || '',
-            description: `حذف حركة مخزون: ${movement?.itemName || ''} - ${movement?.type || ''} (تم عكس الكمية)`,
-            metadata: {
-              quantity: movement?.quantity,
-              itemName: movement?.itemName,
-              movementType: movement?.type,
-            },
-          });
-
           toast({
-            title: "تم الحذف",
-            description: "تم حذف الحركة وعكس تأثير الكمية على المخزون",
+            title: "تم الإلغاء",
+            description: "تم إلغاء الحركة وعكس تأثير الكمية على المخزون",
           });
         } catch (error) {
           const appError = handleError(error);

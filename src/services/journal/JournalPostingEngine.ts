@@ -22,6 +22,7 @@ import {
   serverTimestamp,
   type WriteBatch,
   type DocumentReference,
+  type Transaction,
 } from "firebase/firestore";
 import { firestore } from "@/firebase/config";
 import Decimal from "decimal.js-light";
@@ -572,6 +573,171 @@ export class JournalPostingEngine {
     });
 
     return reversalRefs;
+  }
+
+  /**
+   * Reverse a journal entry within an existing Firestore Transaction.
+   *
+   * Use this when you need journal reversal to be atomic with other document
+   * writes (e.g., updating a payment and its linked ledger entry in one shot).
+   *
+   * IMPORTANT: The sequence number MUST be reserved BEFORE entering the
+   * transaction (call reserveSequences() outside the tx body), because
+   * sequence reservation uses its own nested transaction which is not allowed
+   * inside an outer Firestore transaction.
+   *
+   * @param tx - Active Firestore Transaction
+   * @param entryId - ID of the entry to reverse
+   * @param sequenceNumber - Pre-reserved sequence number
+   * @param reason - Reason for the reversal (Arabic)
+   * @param reversalType - 'void' for errors, 'correction' for business reversals
+   * @returns Document reference for the created reversal entry
+   */
+  async reverseToTransaction(
+    tx: Transaction,
+    entryId: string,
+    sequenceNumber: number,
+    reason: string,
+    reversalType: "void" | "correction" = "correction"
+  ): Promise<DocumentReference> {
+    const originalRef = doc(firestore, this.journalPath, entryId);
+    const originalSnap = await tx.get(originalRef);
+
+    if (!originalSnap.exists()) {
+      throw new Error(`Journal entry not found: ${entryId}`);
+    }
+
+    const originalData = originalSnap.data() as JournalEntryV2Document;
+
+    if (originalData.status === "reversed") {
+      throw new Error("القيد معكوس بالفعل");
+    }
+
+    if (originalData.reversal?.isReversal) {
+      throw new Error("لا يمكن عكس قيد العكس");
+    }
+
+    const entryNumber = formatEntryNumber(sequenceNumber);
+
+    const reversedLines: JournalLine[] = originalData.lines.map((line) => ({
+      ...line,
+      debit: line.credit,
+      credit: line.debit,
+    }));
+
+    const reversalDoc: JournalEntryV2Document = {
+      sequenceNumber,
+      entryNumber,
+      date: new Date(),
+      description: `عكس: ${originalData.description} - ${reason}`,
+      lines: reversedLines,
+      totalDebits: originalData.totalCredits,
+      totalCredits: originalData.totalDebits,
+      status: "posted",
+      source: { ...originalData.source },
+      reversal: {
+        isReversal: true,
+        reversesEntryId: entryId,
+        reason,
+        reversalType,
+      },
+      createdAt: new Date(),
+      linkedTransactionId: originalData.linkedTransactionId,
+      ...(originalData.linkedPaymentId && { linkedPaymentId: originalData.linkedPaymentId }),
+      ...(originalData.linkedDocumentType && { linkedDocumentType: originalData.linkedDocumentType }),
+    };
+
+    const reversalRef = doc(collection(firestore, this.journalPath));
+
+    tx.set(reversalRef, { ...reversalDoc, createdAt: serverTimestamp() });
+    tx.update(originalRef, {
+      status: "reversed",
+      "reversal.reversedByEntryId": reversalRef.id,
+      "reversal.reversedAt": serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return reversalRef;
+  }
+
+  /**
+   * Post a new journal entry within an existing Firestore Transaction.
+   *
+   * Use this when you need journal creation to be atomic with other document
+   * writes (e.g., updating a payment and creating its new journal in one shot).
+   *
+   * IMPORTANT: The sequence number MUST be reserved BEFORE entering the
+   * transaction (call reserveSequences() outside the tx body).
+   *
+   * @param tx - Active Firestore Transaction
+   * @param request - Posting request
+   * @param sequenceNumber - Pre-reserved sequence number
+   * @returns Document reference for the created entry
+   */
+  postToTransaction(
+    tx: Transaction,
+    request: PostingRequest,
+    sequenceNumber: number
+  ): DocumentReference {
+    const accounts = resolveTemplateAccounts(
+      request.templateId,
+      request.context
+    );
+
+    const lines: JournalLine[] = request.lines || [
+      {
+        accountCode: accounts.debitAccountCode,
+        accountName: accounts.debitAccountCode,
+        accountNameAr: accounts.debitAccountNameAr,
+        debit: request.amount,
+        credit: 0,
+      },
+      {
+        accountCode: accounts.creditAccountCode,
+        accountName: accounts.creditAccountCode,
+        accountNameAr: accounts.creditAccountNameAr,
+        debit: 0,
+        credit: request.amount,
+      },
+    ];
+
+    const validation = this.validateLines(lines);
+    if (!validation.isValid) {
+      throw new Error(
+        `Journal entry is unbalanced: Debits=${validation.totalDebits}, Credits=${validation.totalCredits}`
+      );
+    }
+
+    const entryNumber = formatEntryNumber(sequenceNumber);
+    const template = getTemplate(request.templateId);
+
+    const linkedPaymentId =
+      request.source.type === "payment" ||
+      request.source.type === "endorsement"
+        ? request.source.documentId
+        : undefined;
+
+    const linkedDocumentType = this.mapSourceTypeToLegacy(request.source.type);
+
+    const entryDoc: JournalEntryV2Document = {
+      sequenceNumber,
+      entryNumber,
+      date: request.date,
+      description: request.description || template.nameAr,
+      lines,
+      totalDebits: validation.totalDebits,
+      totalCredits: validation.totalCredits,
+      status: "posted",
+      source: request.source,
+      createdAt: new Date(),
+      linkedTransactionId: request.source.transactionId,
+      ...(linkedPaymentId && { linkedPaymentId }),
+      ...(linkedDocumentType && { linkedDocumentType }),
+    };
+
+    const entryRef = doc(collection(firestore, this.journalPath));
+    tx.set(entryRef, { ...entryDoc, createdAt: serverTimestamp() });
+    return entryRef;
   }
 
   /**

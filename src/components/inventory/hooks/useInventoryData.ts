@@ -82,6 +82,8 @@ export function useInventoryData(): UseInventoryDataReturn {
       const movementsData: InventoryMovement[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
+        // Exclude voided movements (they are kept for audit trail but not displayed)
+        if (data.status === "voided") { return; }
         movementsData.push({
           id: doc.id,
           ...convertFirestoreDates(data),

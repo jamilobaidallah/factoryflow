@@ -41,10 +41,12 @@ export function useInvoicesData(): UseInvoicesDataReturn {
       const q = query(invoicesRef, orderBy("invoiceDate", "desc"), limit(500));
       const snapshot = await getDocs(q);
 
-      const data: Invoice[] = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...convertFirestoreDates(d.data()),
-      } as Invoice));
+      const data: Invoice[] = snapshot.docs
+        .filter((d) => d.data().status !== "voided")  // Exclude voided invoices
+        .map((d) => ({
+          id: d.id,
+          ...convertFirestoreDates(d.data()),
+        } as Invoice));
 
       // Fix overdue in a single batch — no loop, no re-trigger
       const overdue = data.filter(
