@@ -39,7 +39,7 @@ import {
 } from "./types/inventory.types";
 
 export default function InventoryPage() {
-  const { user } = useUser();
+  const { user, role } = useUser();
   const { toast } = useToast();
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const { isOwner } = usePermissions();
@@ -321,7 +321,7 @@ export default function InventoryPage() {
       async () => {
         try {
           const { createLedgerService } = await import("@/services/ledger/LedgerService");
-          const ledgerService = createLedgerService(user.dataOwnerId, user.email || "", user.role);
+          const ledgerService = createLedgerService(user.dataOwnerId, user.email || "", role || "owner");
           const result = await ledgerService.voidInventoryMovement(movementId);
 
           if (!result.success) {
