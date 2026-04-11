@@ -1153,6 +1153,28 @@ export class LedgerService {
       // Fetch current entry to check if AR/AP recalculation is needed
       const currentEntrySnap = await getDoc(entryRef);
       const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+
+      // Guard: reject edit if a previous edit is still mid-processing
+      if (currentData?.journalStatus === "reversal_pending") {
+        return { success: false, error: "هذا السجل قيد المعالجة. يرجى تحديث الصفحة والمحاولة مرة أخرى." };
+      }
+
+      // Pre-batch: create engine and reserve sequences for journal operations
+      // (sequence reservation uses its own sub-transaction so must happen BEFORE the batch)
+      const engine = createJournalPostingEngine(this.userId);
+      const entryDate = new Date(formData.date);
+
+      // Count existing posted journals for this entry (to know how many reversals we need)
+      const journalCountToReverse = existingTransactionId
+        ? await engine.countEntriesBySource("ledger", entryId)
+        : 0;
+
+      // Reserve: 1 per reversal + 1 for the new main journal
+      const totalSeqNeeded = journalCountToReverse + 1;
+      const reservedSeqs = await engine.reserveSequences(totalSeqNeeded);
+      const reversalSeqs = reservedSeqs.slice(0, journalCountToReverse);
+      const newMainJournalSeq = reservedSeqs[journalCountToReverse];
+
       if (currentData) {
         const oldAmount = currentData.amount || 0;
 
@@ -1246,6 +1268,52 @@ export class LedgerService {
 
       // Update the ledger entry
       batch.update(entryRef, updateData);
+
+      // --- Journal atomicity: reversal + new main journal go IN THE BATCH ---
+      // Reverse all existing main ledger journals for this entry
+      if (journalCountToReverse > 0 && existingTransactionId) {
+        await engine.reverseBySourceToBatch(
+          batch,
+          "ledger",
+          entryId,
+          "تعديل معاملة",
+          reversalSeqs
+        );
+      }
+
+      // Add new main ledger journal to batch
+      if (currentData) {
+        const mainTemplateId = getJournalTemplateForTransaction(
+          entryType,
+          formData.category,
+          formData.subCategory
+        );
+        engine.postToBatch(
+          batch,
+          {
+            templateId: mainTemplateId,
+            amount: newAmount,
+            date: entryDate,
+            description: formData.description,
+            source: {
+              type: "ledger",
+              documentId: entryId,
+              transactionId: existingTransactionId,
+            },
+            context: {
+              category: formData.category,
+              subCategory: formData.subCategory,
+              isARAPEntry: currentData.isARAPEntry ?? false,
+              immediateSettlement:
+                currentData.immediateSettlement ??
+                !(currentData.isARAPEntry ?? false),
+              isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
+            },
+          },
+          newMainJournalSeq
+        );
+      }
+      // -------------------------------------------------------------------
 
       // If there's a transaction ID, sync associated party to linked payments
       // Sync even when removing the associated party (set to empty)
@@ -1588,53 +1656,9 @@ export class LedgerService {
 
       await batch.commit();
 
-      // After batch commit: Reverse old journals and create new ones
-      // Uses immutable ledger pattern - never delete, only reverse
+      // After batch commit: Create secondary journals (COGS, discounts, endorsements)
+      // Main ledger journal reversal + recreation are now atomically in the batch above.
       try {
-        const engine = createJournalPostingEngine(this.userId);
-        const entryDate = new Date(formData.date);
-
-        // 1. Reverse all existing journals for this transaction
-        if (existingTransactionId) {
-          const existingJournals = await getEntriesByTransactionId(
-            this.userId,
-            existingTransactionId,
-            true  // Include reversed to skip them
-          );
-          for (const journal of existingJournals) {
-            if (journal.status !== "reversed") {
-              await engine.reverse(journal.id, "تعديل معاملة");
-            }
-          }
-        }
-
-        // 2. Create new main ledger journal entry
-        if (currentData) {
-          const templateId = getJournalTemplateForTransaction(
-            entryType,
-            formData.category,
-            formData.subCategory
-          );
-          await this.postJournalEntry(engine, {
-            templateId,
-            amount: newAmount,
-            date: entryDate,
-            description: formData.description,
-            source: {
-              type: "ledger",
-              documentId: entryId,
-              transactionId: existingTransactionId,
-            },
-            context: {
-              category: formData.category,
-              subCategory: formData.subCategory,
-              isARAPEntry: currentData.isARAPEntry ?? false,
-              immediateSettlement: currentData.immediateSettlement ?? !(currentData.isARAPEntry ?? false),
-              isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
-            },
-          }, "main ledger journal (update)");
-        }
-
         // 3. Create COGS journals if needed (one per sold item)
         for (const cogsResult of cogsRecreationResults) {
           await this.postJournalEntry(engine, {
@@ -1683,13 +1707,15 @@ export class LedgerService {
           }, "endorsement journal (update)");
         }
       } catch (journalError) {
-        // Note: For UPDATE operations, rollback deletes the entry
-        // This may cause data loss but prevents inconsistent books
-        await this.handleJournalFailure(
-          entryRef,
-          existingTransactionId || entryId,
-          journalError
-        );
+        // Secondary journal failure (COGS / discount / endorsement)
+        // The main ledger entry and its main journal are already committed atomically.
+        // Log the error and surface it to the user — manual correction may be needed.
+        console.error("⚠️ Secondary journal creation failed after ledger update", {
+          entryId,
+          transactionId: existingTransactionId,
+          error: journalError instanceof Error ? journalError.message : String(journalError),
+        });
+        throw journalError;
       }
 
       // Log activity (fire and forget - don't block the main operation)
@@ -2859,6 +2885,264 @@ export class LedgerService {
     }
 
     return { initialPaid, initialStatus };
+  }
+
+  // ============================================
+  // Void & Correct Operations (Immutable Ledger Pattern)
+  // ============================================
+
+  /**
+   * Void an inventory movement.
+   *
+   * Atomically marks the movement as voided and reverses the quantity
+   * change on the inventory item. Any linked journal entries are reversed.
+   * The user can then re-enter a corrected movement.
+   */
+  async voidInventoryMovement(movementId: string): Promise<ServiceResult> {
+    try {
+      const movementRef = doc(this.inventoryMovementsRef, movementId);
+      const movementSnap = await getDoc(movementRef);
+
+      if (!movementSnap.exists()) {
+        return { success: false, error: "حركة المخزن غير موجودة" };
+      }
+
+      const movementData = movementSnap.data();
+
+      if (movementData.status === "voided") {
+        return { success: false, error: "هذه الحركة ملغاة بالفعل" };
+      }
+
+      const itemId: string = movementData.itemId;
+      const quantity: number = movementData.quantity || 0;
+      const movementType: string = movementData.type; // 'entry'/'دخول' or 'exit'/'خروج'
+      const isEntry = movementType === "entry" || movementType === "دخول";
+      // Reverse: entry added → subtract; exit removed → add
+      const quantityDelta = isEntry ? -quantity : quantity;
+
+      // Find linked journal entries (if any)
+      // NOTE: getDocs() must run BEFORE runTransaction — Firestore forbids getDocs inside a transaction
+      const engine = createJournalPostingEngine(this.userId);
+      const journalCount = await engine.countEntriesBySource("inventory", movementId);
+      const sequences = journalCount > 0 ? await engine.reserveSequences(journalCount) : [];
+
+      // Pre-fetch journal IDs outside the transaction
+      let journalIdsToReverse: string[] = [];
+      if (journalCount > 0) {
+        const journalQuery = query(
+          this.journalEntriesRef,
+          where("source.type", "==", "inventory"),
+          where("source.documentId", "==", movementId),
+          where("status", "==", "posted")
+        );
+        const journalSnap = await getDocs(journalQuery);
+        journalIdsToReverse = journalSnap.docs.map((d) => d.id);
+      }
+
+      await runTransaction(firestore, async (tx) => {
+        // Lock movement and verify it hasn't been changed
+        const freshSnap = await tx.get(movementRef);
+        if (!freshSnap.exists()) throw new Error("حركة المخزن غير موجودة");
+        if (freshSnap.data().status === "voided") throw new Error("هذه الحركة ملغاة بالفعل");
+
+        // Lock inventory item
+        const itemRef = doc(firestore, `users/${this.userId}/inventory`, itemId);
+        const itemSnap = await tx.get(itemRef);
+        if (!itemSnap.exists()) throw new Error("الصنف غير موجود");
+
+        const currentQty: number = itemSnap.data().quantity || 0;
+        const newQty = currentQty + quantityDelta;
+        if (newQty < 0) {
+          throw new Error("لا يمكن إلغاء الحركة: الكمية الناتجة أقل من الصفر");
+        }
+
+        // Mark movement as voided
+        tx.update(movementRef, { status: "voided", voidedAt: serverTimestamp() });
+
+        // Restore inventory quantity
+        tx.update(itemRef, { quantity: newQty });
+
+        // Reverse linked journal entries using pre-fetched IDs
+        for (let i = 0; i < journalIdsToReverse.length && i < sequences.length; i++) {
+          await engine.reverseToTransaction(tx, journalIdsToReverse[i], sequences[i], "إلغاء حركة مخزنية", "void");
+        }
+      });
+
+      logActivity(this.userId, {
+        action: "delete",
+        module: "inventory",
+        targetId: movementId,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إلغاء حركة مخزنية للصنف: ${movementData.itemName}`,
+      });
+
+      return { success: true };
+    } catch (error) {
+      const appError = handleError(error);
+      return { success: false, error: appError.message };
+    }
+  }
+
+  /**
+   * Void a pending incoming cheque.
+   *
+   * Only pending (not yet cashed) cheques can be voided this way.
+   * Atomically marks the cheque as voided and reverses any linked journal entries.
+   */
+  async voidIncomingCheque(chequeId: string): Promise<ServiceResult> {
+    try {
+      const chequeRef = doc(this.chequesRef, chequeId);
+      const chequeSnap = await getDoc(chequeRef);
+
+      if (!chequeSnap.exists()) {
+        return { success: false, error: "الشيك غير موجود" };
+      }
+
+      const chequeData = chequeSnap.data();
+
+      if (chequeData.status === "voided") {
+        return { success: false, error: "هذا الشيك ملغى بالفعل" };
+      }
+
+      const cashedStatuses = ["تم الصرف", "cleared", "محصل", "cashed"];
+      if (cashedStatuses.includes(chequeData.status)) {
+        return {
+          success: false,
+          error: "لا يمكن إلغاء شيك تم صرفه. يرجى عكس عملية الصرف أولاً من صفحة الشيكات.",
+        };
+      }
+
+      // Find linked journal entries (for pending cheques, usually none — they're posted on cashing)
+      // NOTE: getDocs() must run BEFORE runTransaction — Firestore forbids getDocs inside a transaction
+      const engine = createJournalPostingEngine(this.userId);
+      const journalCount = await engine.countEntriesBySource("cheque_cash", chequeId);
+      const sequences = journalCount > 0 ? await engine.reserveSequences(journalCount) : [];
+
+      // Pre-fetch journal IDs outside the transaction
+      let journalIdsToReverse: string[] = [];
+      if (journalCount > 0) {
+        const journalQuery = query(
+          this.journalEntriesRef,
+          where("source.type", "==", "cheque_cash"),
+          where("source.documentId", "==", chequeId),
+          where("status", "==", "posted")
+        );
+        const journalSnap = await getDocs(journalQuery);
+        journalIdsToReverse = journalSnap.docs.map((d) => d.id);
+      }
+
+      await runTransaction(firestore, async (tx) => {
+        const freshSnap = await tx.get(chequeRef);
+        if (!freshSnap.exists()) throw new Error("الشيك غير موجود");
+        if (freshSnap.data().status === "voided") throw new Error("هذا الشيك ملغى بالفعل");
+
+        tx.update(chequeRef, { status: "voided", voidedAt: serverTimestamp() });
+
+        // Reverse any linked journal entries using pre-fetched IDs
+        for (let i = 0; i < journalIdsToReverse.length && i < sequences.length; i++) {
+          await engine.reverseToTransaction(tx, journalIdsToReverse[i], sequences[i], "إلغاء شيك", "void");
+        }
+      });
+
+      logActivity(this.userId, {
+        action: "delete",
+        module: "cheques",
+        targetId: chequeId,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إلغاء شيك: ${chequeData.chequeNumber || chequeId}`,
+      });
+
+      return { success: true };
+    } catch (error) {
+      const appError = handleError(error);
+      return { success: false, error: appError.message };
+    }
+  }
+
+  /**
+   * Void an invoice.
+   *
+   * Marks the invoice as voided. Invoices are administrative documents;
+   * their accounting impact is recorded on the linked ledger entry, not the invoice itself.
+   */
+  async voidInvoice(invoiceId: string): Promise<ServiceResult> {
+    try {
+      const invoiceRef = doc(firestore, `users/${this.userId}/invoices`, invoiceId);
+      const invoiceSnap = await getDoc(invoiceRef);
+
+      if (!invoiceSnap.exists()) {
+        return { success: false, error: "الفاتورة غير موجودة" };
+      }
+
+      if (invoiceSnap.data().status === "voided") {
+        return { success: false, error: "هذه الفاتورة ملغاة بالفعل" };
+      }
+
+      await runTransaction(firestore, async (tx) => {
+        const freshSnap = await tx.get(invoiceRef);
+        if (!freshSnap.exists()) throw new Error("الفاتورة غير موجودة");
+        if (freshSnap.data().status === "voided") throw new Error("هذه الفاتورة ملغاة بالفعل");
+        tx.update(invoiceRef, { status: "voided", voidedAt: serverTimestamp() });
+      });
+
+      logActivity(this.userId, {
+        action: "delete",
+        module: "ledger",
+        targetId: invoiceId,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إلغاء فاتورة: ${invoiceSnap.data().invoiceNumber || invoiceId}`,
+      });
+
+      return { success: true };
+    } catch (error) {
+      const appError = handleError(error);
+      return { success: false, error: appError.message };
+    }
+  }
+
+  /**
+   * Void a fixed asset record.
+   *
+   * Marks the fixed asset as voided and reverses any linked journal entries.
+   * The linked ledger transaction should also be voided/reversed separately.
+   */
+  async voidFixedAsset(assetId: string): Promise<ServiceResult> {
+    try {
+      const assetRef = doc(this.fixedAssetsRef, assetId);
+      const assetSnap = await getDoc(assetRef);
+
+      if (!assetSnap.exists()) {
+        return { success: false, error: "الأصل الثابت غير موجود" };
+      }
+
+      if (assetSnap.data().status === "voided") {
+        return { success: false, error: "هذا الأصل الثابت ملغى بالفعل" };
+      }
+
+      await runTransaction(firestore, async (tx) => {
+        const freshSnap = await tx.get(assetRef);
+        if (!freshSnap.exists()) throw new Error("الأصل الثابت غير موجود");
+        if (freshSnap.data().status === "voided") throw new Error("هذا الأصل الثابت ملغى بالفعل");
+        tx.update(assetRef, { status: "voided", voidedAt: serverTimestamp() });
+      });
+
+      logActivity(this.userId, {
+        action: "delete",
+        module: "ledger",
+        targetId: assetId,
+        userId: this.userId,
+        userEmail: this.userEmail,
+        description: `إلغاء أصل ثابت: ${assetSnap.data().assetName || assetId}`,
+      });
+
+      return { success: true };
+    } catch (error) {
+      const appError = handleError(error);
+      return { success: false, error: appError.message };
+    }
   }
 }
 

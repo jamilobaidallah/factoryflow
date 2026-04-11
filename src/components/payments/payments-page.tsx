@@ -37,6 +37,8 @@ import {
   getCountFromServer,
   getAggregateFromServer,
   sum,
+  runTransaction,
+  serverTimestamp,
   DocumentSnapshot,
   QueryConstraint,
 } from "firebase/firestore";
@@ -240,104 +242,129 @@ export default function PaymentsPage() {
         const paymentRef = doc(firestore, `users/${user.dataOwnerId}/payments`, editingPayment.id);
         const newAmount = parseAmount(formData.amount);
         const oldAmount = editingPayment.amount || 0;
-        const amountDifference = newAmount - oldAmount;
         const oldLinkedId = editingPayment.linkedTransactionId;
         const newLinkedId = formData.linkedTransactionId;
+        const ledgerColRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
 
-        // Update payment document
-        await updateDoc(paymentRef, {
-          clientName: formData.clientName,
-          amount: newAmount,
-          type: formData.type,
-          linkedTransactionId: formData.linkedTransactionId,
-          date: new Date(formData.date),
-          notes: formData.notes,
-          category: formData.category || null,
-          subCategory: formData.subCategory || null,
-        });
+        // --- Pre-transaction: gather doc IDs (queries can't run inside runTransaction) ---
 
-        // Update linked ledger entry if amount changed or linked transaction changed
-        if (amountDifference !== 0 || oldLinkedId !== newLinkedId) {
-          const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-
-          // If linked transaction changed, update both old and new ledger entries
-          if (oldLinkedId && oldLinkedId !== newLinkedId) {
-            // Remove old amount from old ledger entry
-            const oldLedgerQuery = query(ledgerRef, where("transactionId", "==", oldLinkedId));
-            const oldLedgerSnapshot = await getDocs(oldLedgerQuery);
-            if (!oldLedgerSnapshot.empty) {
-              const oldLedgerDoc = oldLedgerSnapshot.docs[0];
-              const oldLedgerData = oldLedgerDoc.data();
-              if (oldLedgerData.isARAPEntry) {
-                const oldTotalPaid = oldLedgerData.totalPaid || 0;
-                const oldTransactionAmount = oldLedgerData.amount || 0;
-                const newTotalPaid = zeroFloor(safeSubtract(oldTotalPaid, oldAmount));
-                const newRemainingBalance = calculateRemainingBalance(oldTransactionAmount, newTotalPaid, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
-                const newStatus = calculatePaymentStatus(newTotalPaid, oldTransactionAmount, oldLedgerData.totalDiscount || 0, oldLedgerData.writeoffAmount || 0);
-                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, oldLedgerDoc.id), {
-                  totalPaid: newTotalPaid,
-                  remainingBalance: newRemainingBalance,
-                  paymentStatus: newStatus,
-                });
-              }
-            }
-          }
-
-          // Add new amount to new ledger entry (or adjust if same entry)
-          if (newLinkedId) {
-            const newLedgerQuery = query(ledgerRef, where("transactionId", "==", newLinkedId));
-            const newLedgerSnapshot = await getDocs(newLedgerQuery);
-            if (!newLedgerSnapshot.empty) {
-              const newLedgerDoc = newLedgerSnapshot.docs[0];
-              const newLedgerData = newLedgerDoc.data();
-              if (newLedgerData.isARAPEntry) {
-                const currentTotalPaid = newLedgerData.totalPaid || 0;
-                const transactionAmount = newLedgerData.amount || 0;
-                // If same entry, just apply difference; if new entry, add full amount
-                const adjustmentAmount = oldLinkedId === newLinkedId ? amountDifference : newAmount;
-                const updatedTotalPaid = zeroFloor(safeAdd(currentTotalPaid, adjustmentAmount));
-                const updatedRemainingBalance = calculateRemainingBalance(transactionAmount, updatedTotalPaid, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
-                const updatedStatus = calculatePaymentStatus(updatedTotalPaid, transactionAmount, newLedgerData.totalDiscount || 0, newLedgerData.writeoffAmount || 0);
-                await updateDoc(doc(firestore, `users/${user.dataOwnerId}/ledger`, newLedgerDoc.id), {
-                  totalPaid: updatedTotalPaid,
-                  remainingBalance: updatedRemainingBalance,
-                  paymentStatus: updatedStatus,
-                });
-              }
-            }
+        // Find old ledger doc ID (if linking to a different transaction)
+        let oldLedgerDocId: string | null = null;
+        if (oldLinkedId && oldLinkedId !== newLinkedId) {
+          const snap = await getDocs(query(ledgerColRef, where("transactionId", "==", oldLinkedId)));
+          if (!snap.empty && snap.docs[0].data().isARAPEntry) {
+            oldLedgerDocId = snap.docs[0].id;
           }
         }
 
-        // Recreate journal entry for the updated payment
-        // Reverse old journals and create new one with updated data
-        try {
-          const engine = createJournalPostingEngine(user.dataOwnerId);
+        // Find new ledger doc ID
+        let newLedgerDocId: string | null = null;
+        if (newLinkedId) {
+          const snap = await getDocs(query(ledgerColRef, where("transactionId", "==", newLinkedId)));
+          if (!snap.empty && snap.docs[0].data().isARAPEntry) {
+            newLedgerDocId = snap.docs[0].id;
+          }
+        }
 
-          // Reverse old journal entries
-          const oldJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, editingPayment.id);
-          for (const journal of oldJournals) {
-            if (journal.status !== "reversed") {
-              await engine.reverse(journal.id, "تعديل مدفوعة");
-            }
+        // Find journal entries to reverse (by linkedPaymentId)
+        const engine = createJournalPostingEngine(user.dataOwnerId);
+        const oldJournals = await getEntriesByLinkedPaymentId(user.dataOwnerId, editingPayment.id);
+        const journalIdsToReverse = oldJournals
+          .filter((j) => j.status !== "reversed")
+          .map((j) => j.id);
+
+        // Reserve sequence numbers outside the transaction (sequence uses its own sub-transaction)
+        // 1 sequence per journal reversal + 1 for the new journal entry
+        const seqCount = journalIdsToReverse.length + 1;
+        const sequences = await engine.reserveSequences(seqCount);
+        const [newJournalSeq, ...reversalSeqs] = sequences;
+
+        // --- Atomic transaction: all reads via tx.get(), all writes via tx ---
+        await runTransaction(firestore, async (tx) => {
+          // Read payment (verify it still exists and detect concurrent edits)
+          const paymentSnap = await tx.get(paymentRef);
+          if (!paymentSnap.exists()) throw new Error("المدفوعة غير موجودة");
+          const currentPayment = paymentSnap.data();
+
+          // Guard: reject if a previous edit is still mid-processing
+          if (currentPayment.journalStatus === "reversal_pending") {
+            throw new Error("المدفوعة قيد المعالجة. يرجى تحديث الصفحة والمحاولة مرة أخرى");
           }
 
-          // Create new journal entry
+          // Read old ledger doc (locked for the transaction)
+          const oldLedgerRef = oldLedgerDocId
+            ? doc(firestore, `users/${user.dataOwnerId}/ledger`, oldLedgerDocId)
+            : null;
+          const oldLedgerSnap = oldLedgerRef ? await tx.get(oldLedgerRef) : null;
+
+          // Read new ledger doc (may be same as old if unchanged, or a different one)
+          const isSameLedger = newLedgerDocId === oldLedgerDocId && newLedgerDocId !== null;
+          const newLedgerRef = newLedgerDocId
+            ? doc(firestore, `users/${user.dataOwnerId}/ledger`, newLedgerDocId)
+            : null;
+          const newLedgerSnap = (newLedgerRef && !isSameLedger)
+            ? await tx.get(newLedgerRef)
+            : oldLedgerSnap;
+
+          // Reverse old journal entries (uses tx.get() inside reverseToTransaction)
+          for (let i = 0; i < journalIdsToReverse.length; i++) {
+            await engine.reverseToTransaction(tx, journalIdsToReverse[i], reversalSeqs[i], "تعديل مدفوعة");
+          }
+
+          // Create new journal entry inside transaction
           const templateId = formData.type === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
-          await engine.post({
+          engine.postToTransaction(tx, {
             templateId,
             amount: newAmount,
             date: new Date(formData.date),
-            description: `${formData.type === 'قبض' ? 'قبض من' : 'صرف إلى'} ${formData.clientName}`,
+            description: `${formData.type === "قبض" ? "قبض من" : "صرف إلى"} ${formData.clientName}`,
             source: {
               type: "payment",
               documentId: editingPayment.id,
-              transactionId: formData.linkedTransactionId || undefined,
+              transactionId: newLinkedId || undefined,
             },
+          }, newJournalSeq);
+
+          // Update AR/AP on old ledger entry (remove old payment amount)
+          if (oldLedgerRef && oldLedgerSnap?.exists()) {
+            const d = oldLedgerSnap.data();
+            const newTotalPaid = zeroFloor(safeSubtract(d.totalPaid || 0, oldAmount));
+            tx.update(oldLedgerRef, {
+              totalPaid: newTotalPaid,
+              remainingBalance: calculateRemainingBalance(d.amount || 0, newTotalPaid, d.totalDiscount || 0, d.writeoffAmount || 0),
+              paymentStatus: calculatePaymentStatus(newTotalPaid, d.amount || 0, d.totalDiscount || 0, d.writeoffAmount || 0),
+            });
+          }
+
+          // Update AR/AP on new ledger entry (add new payment amount)
+          if (newLedgerRef && newLedgerSnap?.exists()) {
+            const sourceSnap = (isSameLedger && oldLedgerRef && oldLedgerSnap?.exists())
+              ? oldLedgerSnap  // Use the original snapshot to avoid double-apply
+              : newLedgerSnap;
+            const d = sourceSnap.data();
+            const amountDifference = safeSubtract(newAmount, oldAmount);
+            const adjustmentAmount = oldLinkedId === newLinkedId ? amountDifference : newAmount;
+            const updatedTotalPaid = zeroFloor(safeAdd(d.totalPaid || 0, adjustmentAmount));
+            tx.update(newLedgerRef, {
+              totalPaid: updatedTotalPaid,
+              remainingBalance: calculateRemainingBalance(d.amount || 0, updatedTotalPaid, d.totalDiscount || 0, d.writeoffAmount || 0),
+              paymentStatus: calculatePaymentStatus(updatedTotalPaid, d.amount || 0, d.totalDiscount || 0, d.writeoffAmount || 0),
+            });
+          }
+
+          // Update payment document (last write — sets updatedAt for idempotency)
+          tx.update(paymentRef, {
+            clientName: formData.clientName,
+            amount: newAmount,
+            type: formData.type,
+            linkedTransactionId: newLinkedId || null,
+            date: new Date(formData.date),
+            notes: formData.notes,
+            category: formData.category || null,
+            subCategory: formData.subCategory || null,
+            updatedAt: serverTimestamp(),
           });
-        } catch (journalError) {
-          console.error("Failed to recreate journal entry for payment:", journalError);
-          // Continue - payment is updated, journal entry failure is logged but not blocking
-        }
+        });
 
         logActivity(user.dataOwnerId, {
           action: 'update',
@@ -371,6 +398,7 @@ export default function PaymentsPage() {
           category: formData.category || null,
           subCategory: formData.subCategory || null,
           createdAt: new Date(),
+          updatedAt: new Date(),
         });
 
         // Create journal entry for the payment (double-entry accounting)

@@ -28,7 +28,7 @@ interface UseInvoicesOperationsReturn {
 }
 
 export function useInvoicesOperations(): UseInvoicesOperationsReturn {
-  const { user } = useUser();
+  const { user, role } = useUser();
   const { toast } = useToast();
 
   const generateInvoiceNumber = () => {
@@ -198,7 +198,13 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
     if (!user) {return false;}
 
     try {
-      await deleteDoc(doc(firestore, `users/${user.dataOwnerId}/invoices`, invoiceId));
+      // Use void (mark as voided) instead of hard delete to maintain audit trail
+      const { createLedgerService } = await import("@/services/ledger/LedgerService");
+      const ledgerService = createLedgerService(user.dataOwnerId, user.email || "", role || "owner");
+      const result = await ledgerService.voidInvoice(invoiceId);
+      if (!result.success) {
+        throw new Error(result.error || "فشل إلغاء الفاتورة");
+      }
 
       // Log activity for delete
       logActivity(user.dataOwnerId, {

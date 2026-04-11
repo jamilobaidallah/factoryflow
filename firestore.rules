@@ -83,6 +83,11 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(fields);
     }
 
+    // Prevent any updates to documents that have been voided (immutable after void)
+    function isNotVoided(existingData) {
+      return !existingData.keys().hasAny(['status']) || existingData.status != 'voided';
+    }
+
     // ============================================
     // USER PROFILE DOCUMENT
     // ============================================
@@ -187,7 +192,8 @@ service cloud.firestore {
           && request.resource.data.date is timestamp
           && request.resource.data.createdAt is timestamp;
         allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
-          && isValidAmount(request.resource.data.amount);
+          && isValidAmount(request.resource.data.amount)
+          && isNotVoided(resource.data);
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
 
         // Payment allocations subcollection (for multi-allocation payments)
@@ -214,7 +220,8 @@ service cloud.firestore {
           && request.resource.data.dueDate is timestamp
           && request.resource.data.createdAt is timestamp;
         allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
-          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي', 'مجيّر', 'مرفوض', 'تم الصرف'];
+          && request.resource.data.status in ['قيد الانتظار', 'محصل', 'مرتجع', 'ملغي', 'مجيّر', 'مرفوض', 'تم الصرف', 'voided']
+          && isNotVoided(resource.data);
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 
@@ -243,7 +250,8 @@ service cloud.firestore {
           && isValidNumber(request.resource.data.usefulLifeYears)
           && request.resource.data.usefulLifeYears > 0
           && request.resource.data.createdAt is timestamp;
-        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
+        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
+          && isNotVoided(resource.data);
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 
@@ -288,7 +296,8 @@ service cloud.firestore {
           && isValidAmount(request.resource.data.totalAmount)
           && request.resource.data.issueDate is timestamp
           && request.resource.data.createdAt is timestamp;
-        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
+        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
+          && isNotVoided(resource.data);
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 
@@ -335,6 +344,15 @@ service cloud.firestore {
           && isBalanced();  // CRITICAL: Debits must equal Credits
         allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
           && isBalanced();  // CRITICAL: Debits must equal Credits on update too
+        allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
+      }
+
+      // Inventory movements — prevent edits to voided movements
+      match /inventory_movements/{movementId} {
+        allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
+        allow create: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
+        allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
+          && isNotVoided(resource.data);
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 

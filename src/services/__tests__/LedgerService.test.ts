@@ -89,6 +89,11 @@ const mockPost = jest.fn().mockResolvedValue({ success: true, entryNumber: 'JE-0
 jest.mock('@/services/journal', () => ({
   createJournalPostingEngine: jest.fn(() => ({
     post: mockPost,
+    postToBatch: jest.fn(),
+    countEntriesBySource: jest.fn().mockResolvedValue(0),
+    reserveSequences: jest.fn().mockResolvedValue([1]),
+    reverseBySourceToBatch: jest.fn().mockResolvedValue([]),
+    reverseToTransaction: jest.fn().mockResolvedValue({}),
   })),
   getEntriesByTransactionId: jest.fn().mockResolvedValue([]),
 }));

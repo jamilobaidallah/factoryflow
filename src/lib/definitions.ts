@@ -38,6 +38,7 @@ export interface Payment {
   discountAmount?: number;           // Discount given with THIS payment
   discountReason?: string;           // "خصم سداد مبكر", "خصم تسوية"
   isSettlementDiscount?: boolean;    // Flag for reporting
+  updatedAt?: Date | string;         // Set on every edit — used for idempotency/conflict detection
 }
 
 export interface InventoryItem {
