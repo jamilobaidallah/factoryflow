@@ -89,7 +89,7 @@ export function InventoryItemsTable({
                 <TableCell>{item.length ? `${item.length} سم` : '-'}</TableCell>
                 <TableCell>
                   <span className="font-semibold text-slate-900">
-                    {formatNumber(item.unitPrice || 0)} دينار
+                    {formatNumber(item.unitPrice || 0, 2)} دينار
                   </span>
                 </TableCell>
                 <TableCell>{item.location}</TableCell>
