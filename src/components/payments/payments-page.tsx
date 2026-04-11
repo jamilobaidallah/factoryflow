@@ -398,6 +398,7 @@ export default function PaymentsPage() {
           category: formData.category || null,
           subCategory: formData.subCategory || null,
           createdAt: new Date(),
+          updatedAt: new Date(),
         });
 
         // Create journal entry for the payment (double-entry accounting)

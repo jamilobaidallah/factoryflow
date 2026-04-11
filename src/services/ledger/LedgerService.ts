@@ -2921,9 +2921,23 @@ export class LedgerService {
       const quantityDelta = isEntry ? -quantity : quantity;
 
       // Find linked journal entries (if any)
+      // NOTE: getDocs() must run BEFORE runTransaction — Firestore forbids getDocs inside a transaction
       const engine = createJournalPostingEngine(this.userId);
       const journalCount = await engine.countEntriesBySource("inventory", movementId);
       const sequences = journalCount > 0 ? await engine.reserveSequences(journalCount) : [];
+
+      // Pre-fetch journal IDs outside the transaction
+      let journalIdsToReverse: string[] = [];
+      if (journalCount > 0) {
+        const journalQuery = query(
+          this.journalEntriesRef,
+          where("source.type", "==", "inventory"),
+          where("source.documentId", "==", movementId),
+          where("status", "==", "posted")
+        );
+        const journalSnap = await getDocs(journalQuery);
+        journalIdsToReverse = journalSnap.docs.map((d) => d.id);
+      }
 
       await runTransaction(firestore, async (tx) => {
         // Lock movement and verify it hasn't been changed
@@ -2948,19 +2962,9 @@ export class LedgerService {
         // Restore inventory quantity
         tx.update(itemRef, { quantity: newQty });
 
-        // Reverse linked journal entries
-        for (let i = 0; i < sequences.length; i++) {
-          const journalQuery = query(
-            this.journalEntriesRef,
-            where("source.type", "==", "inventory"),
-            where("source.documentId", "==", movementId),
-            where("status", "==", "posted")
-          );
-          const journalSnap = await getDocs(journalQuery);
-          for (const jDoc of journalSnap.docs) {
-            await engine.reverseToTransaction(tx, jDoc.id, sequences[i], "إلغاء حركة مخزنية", "void");
-            break; // One journal per movement
-          }
+        // Reverse linked journal entries using pre-fetched IDs
+        for (let i = 0; i < journalIdsToReverse.length && i < sequences.length; i++) {
+          await engine.reverseToTransaction(tx, journalIdsToReverse[i], sequences[i], "إلغاء حركة مخزنية", "void");
         }
       });
 
@@ -3010,9 +3014,23 @@ export class LedgerService {
       }
 
       // Find linked journal entries (for pending cheques, usually none — they're posted on cashing)
+      // NOTE: getDocs() must run BEFORE runTransaction — Firestore forbids getDocs inside a transaction
       const engine = createJournalPostingEngine(this.userId);
       const journalCount = await engine.countEntriesBySource("cheque_cash", chequeId);
       const sequences = journalCount > 0 ? await engine.reserveSequences(journalCount) : [];
+
+      // Pre-fetch journal IDs outside the transaction
+      let journalIdsToReverse: string[] = [];
+      if (journalCount > 0) {
+        const journalQuery = query(
+          this.journalEntriesRef,
+          where("source.type", "==", "cheque_cash"),
+          where("source.documentId", "==", chequeId),
+          where("status", "==", "posted")
+        );
+        const journalSnap = await getDocs(journalQuery);
+        journalIdsToReverse = journalSnap.docs.map((d) => d.id);
+      }
 
       await runTransaction(firestore, async (tx) => {
         const freshSnap = await tx.get(chequeRef);
@@ -3021,21 +3039,9 @@ export class LedgerService {
 
         tx.update(chequeRef, { status: "voided", voidedAt: serverTimestamp() });
 
-        // Reverse any accidentally created journal entries
-        if (sequences.length > 0) {
-          const journalQuery = query(
-            this.journalEntriesRef,
-            where("source.type", "==", "cheque_cash"),
-            where("source.documentId", "==", chequeId),
-            where("status", "==", "posted")
-          );
-          const journalSnap = await getDocs(journalQuery);
-          let seqIdx = 0;
-          for (const jDoc of journalSnap.docs) {
-            if (seqIdx < sequences.length) {
-              await engine.reverseToTransaction(tx, jDoc.id, sequences[seqIdx++], "إلغاء شيك", "void");
-            }
-          }
+        // Reverse any linked journal entries using pre-fetched IDs
+        for (let i = 0; i < journalIdsToReverse.length && i < sequences.length; i++) {
+          await engine.reverseToTransaction(tx, journalIdsToReverse[i], sequences[i], "إلغاء شيك", "void");
         }
       });
 

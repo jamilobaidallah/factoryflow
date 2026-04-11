@@ -85,7 +85,7 @@ service cloud.firestore {
 
     // Prevent any updates to documents that have been voided (immutable after void)
     function isNotVoided(existingData) {
-      return !('status' in existingData) || existingData.status != 'voided';
+      return !existingData.keys().hasAny(['status']) || existingData.status != 'voided';
     }
 
     // ============================================
