@@ -4,20 +4,30 @@ import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/firebase/provider";
 import type { Account } from "@/types/accounting";
-import { deactivateAccount, deleteAccount } from "@/services/journalService";
+import {
+  deactivateAccount,
+  deleteAccount,
+  backfillJournalAccountCodes,
+  backfillSystemAccountFlags,
+} from "@/services/journalService";
 import { AccountTree } from "./components/AccountTree";
 import { AccountLedger } from "./components/AccountLedger";
 import { AddAccountDialog } from "./components/AddAccountDialog";
 import { useActiveAccounts } from "./hooks/useActiveAccounts";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Button } from "@/components/ui/button";
+import { DatabaseZap } from "lucide-react";
 
 export function ChartOfAccountsPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const { isOwner } = usePermissions();
   const { accounts, loading, error, refresh } = useActiveAccounts();
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [migrating, setMigrating] = useState(false);
 
   const selectedAccount = accounts.find((a) => a.code === selectedCode) ?? null;
 
@@ -65,8 +75,54 @@ export function ChartOfAccountsPage() {
     [user?.dataOwnerId, selectedCode, refresh, toast]
   );
 
+  const handleMigrate = useCallback(async () => {
+    if (!user?.dataOwnerId) return;
+    setMigrating(true);
+    try {
+      const [codesResult, flagsResult] = await Promise.all([
+        backfillJournalAccountCodes(user.dataOwnerId),
+        backfillSystemAccountFlags(user.dataOwnerId),
+      ]);
+      const codesUpdated = codesResult.data ?? 0;
+      const flagsUpdated = flagsResult.data ?? 0;
+      if (codesResult.success && flagsResult.success) {
+        toast({
+          title: "تم تحديث البيانات",
+          description: `تم تحديث ${codesUpdated} قيد و${flagsUpdated} حساب`,
+        });
+      } else {
+        toast({
+          title: "خطأ جزئي",
+          description: codesResult.error ?? flagsResult.error,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setMigrating(false);
+    }
+  }, [user?.dataOwnerId, toast]);
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden" dir="rtl">
+      {/* One-time migration banner — shown to owner until backfill is done */}
+      {isOwner && !loading && accounts.length > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 shrink-0">
+          <DatabaseZap className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            لعرض القيود بشكل صحيح، يجب تحديث البيانات القديمة مرة واحدة فقط.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+            onClick={handleMigrate}
+            disabled={migrating}
+          >
+            {migrating ? "جارٍ التحديث…" : "تحديث البيانات"}
+          </Button>
+        </div>
+      )}
+      <div className="flex flex-1 overflow-hidden">
       {/* Left panel: account tree */}
       <div className="w-72 shrink-0 border-l border-slate-200 overflow-hidden flex flex-col bg-white">
         <AccountTree
@@ -85,6 +141,8 @@ export function ChartOfAccountsPage() {
       {/* Right panel: account ledger */}
       <div className="flex-1 overflow-hidden flex flex-col bg-white">
         <AccountLedger account={selectedAccount} />
+      </div>
+
       </div>
 
       {/* Add / Edit dialog */}
