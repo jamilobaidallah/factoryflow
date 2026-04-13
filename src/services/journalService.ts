@@ -769,6 +769,12 @@ export async function createJournalEntry(
     // Denormalized account codes for indexed queries (getJournalEntriesByAccount)
     const accountCodes = Array.from(new Set(lines.map(line => line.accountCode)));
 
+    // Sanitize lines: Firestore rejects undefined values — replace with null
+    const sanitizedLines = lines.map(line => ({
+      ...line,
+      description: line.description ?? null,
+    }));
+
     // Use null for optional fields (Firestore rejects undefined but accepts null)
     // This maintains type safety and consistent document structure
     // Include totalDebits and totalCredits for server-side validation in Firestore rules
@@ -776,7 +782,7 @@ export async function createJournalEntry(
       entryNumber,
       date: Timestamp.fromDate(date),
       description,
-      lines,
+      lines: sanitizedLines,
       accountCodes,
       totalDebits: validation.totalDebits,   // For server-side validation
       totalCredits: validation.totalCredits, // For server-side validation
