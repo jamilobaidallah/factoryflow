@@ -72,7 +72,7 @@ function AccountRow({
       <Collapsible open={open} onOpenChange={setOpen}>
         <div
           className={cn(
-            "flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 transition-colors",
+            "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 transition-colors",
             isSelected && "bg-primary-50 text-primary-700",
             depth > 0 && `mr-${depth * 4}`
           )}
@@ -125,7 +125,7 @@ function AccountRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 transition-colors",
+        "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 transition-colors",
         isSelected && "bg-primary-50 text-primary-700"
       )}
       style={{ marginRight: depth * 16 }}
@@ -307,7 +307,7 @@ function TypeGroup({
         {label}
         <span className="mr-auto text-slate-400 font-normal normal-case">({nodes.length})</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-0.5 group">
+      <CollapsibleContent className="space-y-0.5">
         {nodes.map((node) => (
           <AccountRow
             key={node.id}

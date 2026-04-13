@@ -28,6 +28,9 @@ export function ChartOfAccountsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('coa-backfill-done') === '1'
+  );
 
   const selectedAccount = accounts.find((a) => a.code === selectedCode) ?? null;
 
@@ -86,6 +89,8 @@ export function ChartOfAccountsPage() {
       const codesUpdated = codesResult.data ?? 0;
       const flagsUpdated = flagsResult.data ?? 0;
       if (codesResult.success && flagsResult.success) {
+        localStorage.setItem('coa-backfill-done', '1');
+        setMigrationDone(true);
         toast({
           title: "تم تحديث البيانات",
           description: `تم تحديث ${codesUpdated} قيد و${flagsUpdated} حساب`,
@@ -105,7 +110,7 @@ export function ChartOfAccountsPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden" dir="rtl">
       {/* One-time migration banner — shown to owner until backfill is done */}
-      {isOwner && !loading && accounts.length > 0 && (
+      {isOwner && !loading && accounts.length > 0 && !migrationDone && (
         <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 shrink-0">
           <DatabaseZap className="h-4 w-4 shrink-0" />
           <span className="flex-1">
