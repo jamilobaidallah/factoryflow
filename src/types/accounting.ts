@@ -35,6 +35,8 @@ export interface Account {
   type: AccountType;
   normalBalance: NormalBalance;
   isActive: boolean;
+  isSystemAccount?: boolean;  // true = seeded default account; protected from deletion
+  isContraAccount?: boolean;  // true = contra account; has opposite normal balance to its type
   parentCode?: string;    // For sub-accounts
   description?: string;
   createdAt: Date;
@@ -51,6 +53,8 @@ export interface AccountDocument {
   type: AccountType;
   normalBalance: NormalBalance;
   isActive: boolean;
+  isSystemAccount?: boolean;
+  isContraAccount?: boolean;
   parentCode?: string;
   description?: string;
   createdAt: Date;
@@ -89,9 +93,10 @@ export interface JournalEntry {
   status: JournalEntryStatus;
   linkedTransactionId?: string;   // Links to original ledger entry
   linkedPaymentId?: string;       // Links to payment if applicable
-  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'endorsement';
+  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'endorsement' | 'manual';
   reversedById?: string;          // If reversed, ID of reversing entry
   reversesEntryId?: string;       // If this reverses another entry
+  accountCodes?: string[];        // Denormalized list of account codes for indexed queries
   createdAt: Date;
   updatedAt?: Date;
   postedAt?: Date;
@@ -108,7 +113,8 @@ export interface JournalEntryDocument {
   status: JournalEntryStatus;
   linkedTransactionId?: string;
   linkedPaymentId?: string;
-  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'endorsement';
+  linkedDocumentType?: 'ledger' | 'payment' | 'cheque' | 'depreciation' | 'inventory' | 'endorsement' | 'manual';
+  accountCodes?: string[];        // Denormalized list of account codes for indexed queries
   reversedById?: string;
   reversesEntryId?: string;
   createdAt: Date;

@@ -43,6 +43,8 @@ import {
   Receipt,
   Database,
   ChevronLeft,
+  BookMarked,
+  ClipboardList,
 } from "lucide-react";
 
 const ROLE_BADGE_STYLES: Record<UserRole, string> = {
@@ -71,6 +73,7 @@ const bottomBarItems: NavItem[] = [
   { label: "الرئيسية", href: "/dashboard", icon: LayoutDashboard },
   { label: "البحث", href: "/search", icon: Search },
   { label: "دفتر الأستاذ", href: "/ledger", icon: BookOpen },
+  { label: "الحسابات", href: "/chart-of-accounts", icon: BookMarked },
 ];
 
 /** Navigation groups for the "More" menu */
@@ -80,8 +83,11 @@ const navigationGroups: NavGroup[] = [
     label: "الحسابات",
     icon: BookOpen,
     items: [
+      { label: "دفتر الأستاذ", href: "/ledger", icon: BookOpen },
       { label: "المدفوعات", href: "/payments", icon: CreditCard },
       { label: "الفواتير", href: "/invoices", icon: Receipt },
+      { label: "القيود اليومية", href: "/journal-entries", icon: ClipboardList },
+      { label: "دليل الحسابات", href: "/chart-of-accounts", icon: BookMarked },
     ],
   },
   {

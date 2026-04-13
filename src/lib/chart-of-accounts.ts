@@ -28,6 +28,7 @@ interface AccountDefinition {
   type: AccountType;
   parentCode?: string;
   description?: string;
+  isContraAccount?: boolean;
 }
 
 /**
@@ -39,9 +40,10 @@ function defineAccount(
   nameAr: string,
   type: AccountType,
   parentCode?: string,
-  description?: string
+  description?: string,
+  isContraAccount?: boolean
 ): AccountDefinition {
-  return { code, name, nameAr, type, parentCode, description };
+  return { code, name, nameAr, type, parentCode, description, isContraAccount };
 }
 
 /**
@@ -78,12 +80,45 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Amounts owed by customers'
   ),
   defineAccount(
+    '1201',
+    'Allowance for Doubtful Accounts',
+    'مخصص ديون مشكوك فيها',
+    'asset',
+    ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+    'Reserve for estimated uncollectible receivables (contra-asset)',
+    true // isContraAccount
+  ),
+  defineAccount(
     ACCOUNT_CODES.INVENTORY,
     'Inventory',
     'المخزون',
     'asset',
     undefined,
     'Raw materials and finished goods'
+  ),
+  defineAccount(
+    '1301',
+    'Raw Materials Inventory',
+    'مواد خام — مخزون',
+    'asset',
+    ACCOUNT_CODES.INVENTORY,
+    'Raw materials on hand, not yet used in production'
+  ),
+  defineAccount(
+    '1302',
+    'Finished Goods Inventory',
+    'منتجات تامة الصنع',
+    'asset',
+    ACCOUNT_CODES.INVENTORY,
+    'Completed products ready for sale'
+  ),
+  defineAccount(
+    '1310',
+    'Work-in-Progress',
+    'إنتاج قيد التنفيذ',
+    'asset',
+    ACCOUNT_CODES.INVENTORY,
+    'Partially completed products currently in production'
   ),
   defineAccount(
     ACCOUNT_CODES.PREPAID_EXPENSES,
@@ -100,6 +135,14 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'asset',
     undefined,
     'Prepayments to suppliers for future goods/services'
+  ),
+  defineAccount(
+    '1450',
+    'VAT Input Tax Receivable',
+    'ضريبة المدخلات المستحقة الاسترداد',
+    'asset',
+    undefined,
+    'Recoverable VAT paid on supplier invoices (Jordan compliance)'
   ),
 
   // Fixed Assets - الأصول الثابتة
@@ -157,9 +200,10 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     ACCOUNT_CODES.ACCUMULATED_DEPRECIATION,
     'Accumulated Depreciation',
     'مجمع الإهلاك',
-    'asset', // Contra-asset but still in asset range
+    'asset', // Contra-asset: stays in asset range but has credit normal balance
     ACCOUNT_CODES.FIXED_ASSETS,
-    'Accumulated depreciation on fixed assets (contra-asset)'
+    'Accumulated depreciation on fixed assets (contra-asset)',
+    true // isContraAccount
   ),
 
   // Loans Receivable - قروض ممنوحة
@@ -323,14 +367,24 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Other miscellaneous income'
   ),
 
-  // Contra-Revenue - خصومات المبيعات
+  // Contra-Revenue - خصومات ومردودات المبيعات
+  defineAccount(
+    ACCOUNT_CODES.SALES_RETURNS,
+    'Sales Returns',
+    'مردودات المبيعات',
+    'revenue', // Contra-revenue: reduces net revenue
+    ACCOUNT_CODES.SALES_REVENUE,
+    'Returned or rejected goods from customers (contra-revenue)',
+    true // isContraAccount
+  ),
   defineAccount(
     ACCOUNT_CODES.SALES_DISCOUNT,
     'Sales Discount',
     'خصم المبيعات',
     'revenue', // Contra-revenue: reduces net revenue, but stays in revenue range
     undefined,
-    'Settlement discounts given to customers (contra-revenue)'
+    'Settlement discounts given to customers (contra-revenue)',
+    true // isContraAccount
   ),
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +425,15 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Cost of finished goods purchased for resale'
   ),
 
+  defineAccount(
+    ACCOUNT_CODES.INVENTORY_LOSSES,
+    'Inventory Losses',
+    'خسائر المخزون',
+    'expense',
+    ACCOUNT_CODES.COST_OF_GOODS_SOLD,
+    'Wastage, spoilage, breakage, and inventory write-offs'
+  ),
+
   // Contra-Expense - خصومات المشتريات
   defineAccount(
     ACCOUNT_CODES.PURCHASE_DISCOUNT,
@@ -378,7 +441,8 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'خصم المشتريات',
     'expense', // Contra-expense: reduces net expenses, but stays in expense range
     undefined,
-    'Settlement discounts received from suppliers (contra-expense)'
+    'Settlement discounts received from suppliers (contra-expense)',
+    true // isContraAccount
   ),
 
   // Operating Expenses - مصاريف تشغيلية
@@ -503,6 +567,15 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Business insurance premiums'
   ),
 
+  defineAccount(
+    '5120',
+    'Manufacturing Overhead',
+    'مصاريف إنتاج غير مباشرة',
+    'expense',
+    undefined,
+    'Indirect production costs: factory supervision, factory utilities, equipment depreciation'
+  ),
+
   // General Expenses - مصاريف عامة
   defineAccount(
     ACCOUNT_CODES.OTHER_EXPENSES,
@@ -550,20 +623,31 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
 
 /**
  * Get default accounts as full Account objects (ready to save to Firestore)
+ * All seeded accounts are marked as system accounts (protected from deletion)
+ * Contra accounts are marked so UI can display their balance correctly
  */
 export function getDefaultAccountsForSeeding(): Omit<Account, 'id'>[] {
   const now = new Date();
-  return DEFAULT_ACCOUNTS.map(def => ({
-    code: def.code,
-    name: def.name,
-    nameAr: def.nameAr,
-    type: def.type,
-    normalBalance: getNormalBalance(def.type),
-    isActive: true,
-    parentCode: def.parentCode,
-    description: def.description,
-    createdAt: now,
-  }));
+  return DEFAULT_ACCOUNTS.map(def => {
+    // Contra accounts have the opposite normal balance to their type
+    const normalBalance = def.isContraAccount
+      ? (getNormalBalance(def.type) === 'debit' ? 'credit' : 'debit')
+      : getNormalBalance(def.type);
+
+    return {
+      code: def.code,
+      name: def.name,
+      nameAr: def.nameAr,
+      type: def.type,
+      normalBalance,
+      isActive: true,
+      isSystemAccount: true,
+      isContraAccount: def.isContraAccount ?? false,
+      parentCode: def.parentCode,
+      description: def.description,
+      createdAt: now,
+    };
+  });
 }
 
 /**

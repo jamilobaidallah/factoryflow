@@ -17,8 +17,12 @@ import {
   where,
   orderBy,
   writeBatch,
+  runTransaction,
+  startAfter,
   Timestamp,
   WriteBatch,
+  QueryDocumentSnapshot,
+  DocumentData,
   limit,
 } from 'firebase/firestore';
 import {
@@ -165,6 +169,8 @@ export async function seedChartOfAccounts(
         type: account.type,
         normalBalance: account.normalBalance,
         isActive: account.isActive,
+        isSystemAccount: true,
+        isContraAccount: account.isContraAccount ?? false,
         createdAt: Timestamp.fromDate(account.createdAt),
         parentCode: account.parentCode ?? null,
         description: account.description ?? null,
@@ -223,6 +229,8 @@ export async function ensureMissingAccounts(
         type: account.type,
         normalBalance: account.normalBalance,
         isActive: account.isActive,
+        isSystemAccount: true,
+        isContraAccount: account.isContraAccount ?? false,
         createdAt: Timestamp.fromDate(account.createdAt),
         parentCode: account.parentCode ?? null,
         description: account.description ?? null,
@@ -231,7 +239,6 @@ export async function ensureMissingAccounts(
     }
 
     await batch.commit();
-    // Removed console.log - use activity log or return value for tracking
     return { success: true, data: missingAccounts.length };
   } catch (error) {
     console.error('Error ensuring missing accounts:', error);
@@ -303,6 +310,420 @@ export async function getAccountByCode(
   }
 }
 
+/**
+ * Get all active accounts for a user
+ * Uses getDocs (one-time fetch) — accounts are quasi-static
+ */
+export async function getAccountsActive(userId: string): Promise<ServiceResult<Account[]>> {
+  try {
+    validateUserId(userId);
+    const accountsRef = collection(firestore, getAccountsPath(userId));
+    const q = query(
+      accountsRef,
+      where('isActive', '==', true),
+      orderBy('code'),
+      limit(QUERY_LIMITS.ACCOUNTS)
+    );
+    const snapshot = await getDocs(q);
+
+    const accounts: Account[] = snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...convertFirestoreDates(docSnap.data()),
+    })) as Account[];
+
+    return { success: true, data: accounts };
+  } catch (error) {
+    console.error('Error getting active accounts:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get accounts',
+    };
+  }
+}
+
+/**
+ * Get journal entries that touch a specific account
+ * Uses accountCodes[] denormalized array for indexed query
+ * Date filtering applied client-side after fetch
+ */
+export async function getJournalEntriesByAccount(
+  userId: string,
+  accountCode: string,
+  startDate?: Date,
+  endDate?: Date
+): Promise<ServiceResult<JournalEntry[]>> {
+  try {
+    validateUserId(userId);
+    if (!accountCode) {
+      return { success: false, error: 'كود الحساب مطلوب' };
+    }
+
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    const q = query(
+      journalRef,
+      where('accountCodes', 'array-contains', accountCode),
+      orderBy('date', 'desc'),
+      limit(QUERY_LIMITS.JOURNAL_ENTRIES)
+    );
+
+    const snapshot = await getDocs(q);
+    let entries: JournalEntry[] = snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...convertFirestoreDates(docSnap.data()),
+    })) as JournalEntry[];
+
+    // Filter out reversed entries
+    entries = entries.filter((entry) => {
+      const status = (entry as JournalEntry & { status?: string }).status;
+      return !status || status === 'posted';
+    });
+
+    // Apply date filters client-side
+    if (startDate || endDate) {
+      entries = entries.filter((entry) => {
+        const entryDate = entry.date;
+        if (startDate && entryDate < startDate) return false;
+        if (endDate && entryDate > endDate) return false;
+        return true;
+      });
+    }
+
+    let warning: string | undefined;
+    if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
+      warning = `تحذير: تم الوصول للحد الأقصى (${QUERY_LIMITS.JOURNAL_ENTRIES.toLocaleString()} قيد). قد تكون البيانات غير مكتملة.`;
+    }
+
+    return { success: true, data: entries, warning };
+  } catch (error) {
+    console.error('Error getting journal entries by account:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get entries',
+    };
+  }
+}
+
+/**
+ * Input for creating a new account
+ */
+export interface CreateAccountInput {
+  code: string;
+  name: string;
+  nameAr: string;
+  type: Account['type'];
+  normalBalance: Account['normalBalance'];
+  parentCode?: string;
+  description?: string;
+}
+
+/**
+ * Create a new account with atomic uniqueness guarantee
+ * Uses a lock document (`account_code_locks/{code}`) inside a transaction
+ * so two simultaneous creates with the same code cannot both succeed
+ */
+export async function createAccount(
+  userId: string,
+  input: CreateAccountInput
+): Promise<ServiceResult<Account>> {
+  try {
+    validateUserId(userId);
+
+    if (!/^\d{4}$/.test(input.code)) {
+      return { success: false, error: 'كود الحساب يجب أن يكون 4 أرقام' };
+    }
+    if (!input.nameAr.trim()) {
+      return { success: false, error: 'الاسم العربي مطلوب' };
+    }
+
+    const accountsRef = collection(firestore, getAccountsPath(userId));
+    const lockRef = doc(firestore, `users/${userId}/account_code_locks`, input.code);
+    const accountRef = doc(accountsRef);
+    const now = new Date();
+
+    const accountData = {
+      code: input.code,
+      name: input.name || input.nameAr,
+      nameAr: input.nameAr,
+      type: input.type,
+      normalBalance: input.normalBalance,
+      isActive: true,
+      isSystemAccount: false,
+      isContraAccount: false,
+      parentCode: input.parentCode ?? null,
+      description: input.description ?? null,
+      createdAt: Timestamp.fromDate(now),
+    };
+
+    await runTransaction(firestore, async (transaction) => {
+      const lockSnap = await transaction.get(lockRef);
+      if (lockSnap.exists()) {
+        throw new Error(`الكود ${input.code} مستخدم بالفعل`);
+      }
+      transaction.set(lockRef, { accountId: accountRef.id, createdAt: Timestamp.fromDate(now) });
+      transaction.set(accountRef, accountData);
+    });
+
+    const newAccount: Account = {
+      id: accountRef.id,
+      code: input.code,
+      name: input.name || input.nameAr,
+      nameAr: input.nameAr,
+      type: input.type,
+      normalBalance: input.normalBalance,
+      isActive: true,
+      isSystemAccount: false,
+      isContraAccount: false,
+      parentCode: input.parentCode,
+      description: input.description,
+      createdAt: now,
+    };
+
+    return { success: true, data: newAccount };
+  } catch (error) {
+    console.error('Error creating account:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل إنشاء الحساب',
+    };
+  }
+}
+
+/**
+ * Update mutable fields of an account
+ * Code, type, and normalBalance are immutable after creation
+ */
+export async function updateAccount(
+  userId: string,
+  accountId: string,
+  updates: Pick<Account, 'name' | 'nameAr' | 'description'>
+): Promise<ServiceResult> {
+  try {
+    validateUserId(userId);
+    if (!accountId) {
+      return { success: false, error: 'معرف الحساب مطلوب' };
+    }
+
+    const docRef = doc(firestore, getAccountsPath(userId), accountId);
+    await updateDoc(docRef, {
+      name: updates.name,
+      nameAr: updates.nameAr,
+      description: updates.description ?? null,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating account:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل تعديل الحساب',
+    };
+  }
+}
+
+/**
+ * Deactivate an account (soft delete — sets isActive: false)
+ */
+export async function deactivateAccount(
+  userId: string,
+  accountId: string
+): Promise<ServiceResult> {
+  try {
+    validateUserId(userId);
+    if (!accountId) {
+      return { success: false, error: 'معرف الحساب مطلوب' };
+    }
+
+    const docRef = doc(firestore, getAccountsPath(userId), accountId);
+    await updateDoc(docRef, {
+      isActive: false,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deactivating account:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل تعطيل الحساب',
+    };
+  }
+}
+
+/**
+ * Permanently delete an account
+ * Blocked if: isSystemAccount=true, or account has any journal entries
+ */
+export async function deleteAccount(
+  userId: string,
+  accountId: string
+): Promise<ServiceResult> {
+  try {
+    validateUserId(userId);
+    if (!accountId) {
+      return { success: false, error: 'معرف الحساب مطلوب' };
+    }
+
+    const docRef = doc(firestore, getAccountsPath(userId), accountId);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'الحساب غير موجود' };
+    }
+
+    const accountData = docSnap.data();
+    if (accountData.isSystemAccount) {
+      return { success: false, error: 'لا يمكن حذف الحسابات الافتراضية للنظام' };
+    }
+
+    const accountCode = accountData.code as string;
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+
+    // Check indexed entries (modern entries with accountCodes[] populated)
+    const indexedQuery = query(
+      journalRef,
+      where('accountCodes', 'array-contains', accountCode),
+      limit(1)
+    );
+    const indexedSnapshot = await getDocs(indexedQuery);
+    if (!indexedSnapshot.empty) {
+      return { success: false, error: 'لا يمكن حذف حساب له قيود محاسبية' };
+    }
+
+    // Check legacy entries without accountCodes field (full scan bounded by limit)
+    const legacyQuery = query(
+      journalRef,
+      orderBy('date', 'desc'),
+      limit(QUERY_LIMITS.JOURNAL_ENTRIES)
+    );
+    const legacySnapshot = await getDocs(legacyQuery);
+    const hasLegacyEntry = legacySnapshot.docs.some((snap) => {
+      const data = snap.data();
+      if (data.accountCodes && (data.accountCodes as string[]).length > 0) return false;
+      const lines = data.lines as Array<{ accountCode: string }> | undefined;
+      return lines?.some((line) => line.accountCode === accountCode) ?? false;
+    });
+
+    if (hasLegacyEntry) {
+      return { success: false, error: 'لا يمكن حذف حساب له قيود محاسبية' };
+    }
+
+    const batch = writeBatch(firestore);
+    batch.delete(docRef);
+    await batch.commit();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل حذف الحساب',
+    };
+  }
+}
+
+/**
+ * Migration: Add accountCodes[] to journal entries missing it
+ * Processes in 500-doc batches (Firestore WriteBatch limit)
+ */
+export async function backfillJournalAccountCodes(
+  userId: string
+): Promise<ServiceResult<number>> {
+  try {
+    validateUserId(userId);
+
+    const journalRef = collection(firestore, getJournalEntriesPath(userId));
+    let totalUpdated = 0;
+    let lastDocSnap: QueryDocumentSnapshot<DocumentData> | null = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const batchQuery = lastDocSnap
+        ? query(journalRef, orderBy('date', 'desc'), startAfter(lastDocSnap), limit(500))
+        : query(journalRef, orderBy('date', 'desc'), limit(500));
+
+      const snapshot = await getDocs(batchQuery);
+
+      if (snapshot.empty) {
+        hasMore = false;
+        break;
+      }
+
+      const toUpdate = snapshot.docs.filter((snap) => {
+        const data = snap.data();
+        return !data.accountCodes || (data.accountCodes as string[]).length === 0;
+      });
+
+      if (toUpdate.length > 0) {
+        const writeBatchOp = writeBatch(firestore);
+        for (const snap of toUpdate) {
+          const lines = snap.data().lines as Array<{ accountCode: string }> | undefined;
+          if (!lines) continue;
+          const codes = [...new Set(lines.map((l) => l.accountCode))];
+          writeBatchOp.update(snap.ref, { accountCodes: codes });
+        }
+        await writeBatchOp.commit();
+        totalUpdated += toUpdate.length;
+      }
+
+      lastDocSnap = snapshot.docs[snapshot.docs.length - 1];
+      hasMore = snapshot.docs.length === 500;
+    }
+
+    return { success: true, data: totalUpdated };
+  } catch (error) {
+    console.error('Error backfilling journal account codes:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل تحديث القيود',
+    };
+  }
+}
+
+/**
+ * Migration: Set isSystemAccount: true on accounts matching DEFAULT_ACCOUNTS codes
+ * Skips custom accounts (codes not in the default list)
+ */
+export async function backfillSystemAccountFlags(
+  userId: string
+): Promise<ServiceResult<number>> {
+  try {
+    validateUserId(userId);
+
+    const defaultAccounts = getDefaultAccountsForSeeding();
+    const defaultCodes = new Set(defaultAccounts.map((a) => a.code));
+
+    const accountsResult = await getAccounts(userId);
+    if (!accountsResult.success || !accountsResult.data) {
+      return { success: false, error: accountsResult.error };
+    }
+
+    const toUpdate = accountsResult.data.filter(
+      (a) => defaultCodes.has(a.code) && !a.isSystemAccount
+    );
+
+    if (toUpdate.length === 0) {
+      return { success: true, data: 0 };
+    }
+
+    const accountsRef = collection(firestore, getAccountsPath(userId));
+    const batch = writeBatch(firestore);
+    for (const account of toUpdate) {
+      const docRef = doc(accountsRef, account.id);
+      batch.update(docRef, { isSystemAccount: true });
+    }
+    await batch.commit();
+
+    return { success: true, data: toUpdate.length };
+  } catch (error) {
+    console.error('Error backfilling system account flags:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'فشل تحديث الحسابات',
+    };
+  }
+}
+
 // ============================================================================
 // Journal Entry Operations
 // ============================================================================
@@ -328,8 +749,8 @@ export async function createJournalEntry(
     validateDescription(description);
     validateDate(date);
 
-    if (!lines || lines.length === 0) {
-      return { success: false, error: 'Journal entry must have at least one line' };
+    if (!lines || lines.length < 2) {
+      return { success: false, error: 'يجب أن يحتوي القيد على سطرين على الأقل' };
     }
 
     // Validate debits = credits
@@ -348,6 +769,9 @@ export async function createJournalEntry(
     const entryNumber = generateJournalEntryNumber();
     const now = new Date();
 
+    // Denormalized account codes for indexed queries (getJournalEntriesByAccount)
+    const accountCodes = [...new Set(lines.map(line => line.accountCode))];
+
     // Use null for optional fields (Firestore rejects undefined but accepts null)
     // This maintains type safety and consistent document structure
     // Include totalDebits and totalCredits for server-side validation in Firestore rules
@@ -356,6 +780,7 @@ export async function createJournalEntry(
       date: Timestamp.fromDate(date),
       description,
       lines,
+      accountCodes,
       totalDebits: validation.totalDebits,   // For server-side validation
       totalCredits: validation.totalCredits, // For server-side validation
       status: 'posted' as const, // Auto-post for simplicity

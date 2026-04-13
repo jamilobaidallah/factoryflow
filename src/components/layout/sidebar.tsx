@@ -30,6 +30,8 @@ import {
   FileText,
   UserCog,
   Activity,
+  BookMarked,
+  ClipboardList,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -66,6 +68,8 @@ const navigationGroups: NavGroup[] = [
       { label: "دفتر الأستاذ", href: "/ledger", icon: BookOpen },
       { label: "المدفوعات", href: "/payments", icon: CreditCard },
       { label: "الفواتير", href: "/invoices", icon: Receipt },
+      { label: "القيود اليومية", href: "/journal-entries", icon: ClipboardList },
+      { label: "دليل الحسابات", href: "/chart-of-accounts", icon: BookMarked },
     ],
   },
   {

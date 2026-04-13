@@ -25,7 +25,7 @@ export interface AccountMapping {
 const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   // COGS - تكلفة البضاعة المباعة
   'تكلفة البضاعة المباعة (COGS)': ACCOUNT_CODES.COST_OF_GOODS_SOLD,
-  'مواد خام': '5010',
+  'مواد خام': '1301',  // Raw Materials Inventory (asset) — not expensed until consumed/sold
   'شحن مواد خام': ACCOUNT_CODES.INVENTORY,  // Inbound freight — always inventory (1300), never expensed
   'شراء بضاعة جاهزة': '5030',
   'نقل بضاعة': ACCOUNT_CODES.TRANSPORTATION_EXPENSE, // Operating transport → 5440 (not COGS)

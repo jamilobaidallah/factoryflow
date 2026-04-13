@@ -136,7 +136,11 @@ export interface JournalEntryV2 {
     | "cheque"
     | "depreciation"
     | "inventory"
-    | "endorsement";
+    | "endorsement"
+    | "manual";
+
+  /** Denormalized list of account codes used in this entry (for indexed queries) */
+  accountCodes?: string[];
 }
 
 /**
@@ -162,6 +166,9 @@ export interface JournalEntryV2Document {
   linkedTransactionId?: string;
   linkedPaymentId?: string;
   linkedDocumentType?: string;
+
+  /** Denormalized list of account codes used in this entry (for indexed queries) */
+  accountCodes?: string[];
 }
 
 /**
