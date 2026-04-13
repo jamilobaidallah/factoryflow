@@ -21,6 +21,7 @@ import {
   startAfter,
   Timestamp,
   WriteBatch,
+  Query,
   QueryDocumentSnapshot,
   DocumentData,
   limit,
@@ -638,7 +639,7 @@ export async function backfillJournalAccountCodes(
     let hasMore = true;
 
     while (hasMore) {
-      const batchQuery = lastDocSnap
+      const batchQuery: Query<DocumentData> = lastDocSnap
         ? query(journalRef, orderBy('date', 'desc'), startAfter(lastDocSnap), limit(500))
         : query(journalRef, orderBy('date', 'desc'), limit(500));
 
@@ -659,7 +660,7 @@ export async function backfillJournalAccountCodes(
         for (const snap of toUpdate) {
           const lines = snap.data().lines as Array<{ accountCode: string }> | undefined;
           if (!lines) continue;
-          const codes = [...new Set(lines.map((l) => l.accountCode))];
+          const codes = Array.from(new Set(lines.map((l) => l.accountCode)));
           writeBatchOp.update(snap.ref, { accountCodes: codes });
         }
         await writeBatchOp.commit();
@@ -770,7 +771,7 @@ export async function createJournalEntry(
     const now = new Date();
 
     // Denormalized account codes for indexed queries (getJournalEntriesByAccount)
-    const accountCodes = [...new Set(lines.map(line => line.accountCode))];
+    const accountCodes = Array.from(new Set(lines.map(line => line.accountCode)));
 
     // Use null for optional fields (Firestore rejects undefined but accepts null)
     // This maintains type safety and consistent document structure
