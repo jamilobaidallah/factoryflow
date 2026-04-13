@@ -13,7 +13,7 @@ import { useActiveAccounts } from "./hooks/useActiveAccounts";
 export function ChartOfAccountsPage() {
   const { user } = useUser();
   const { toast } = useToast();
-  const { accounts, loading, refresh } = useActiveAccounts();
+  const { accounts, loading, error, refresh } = useActiveAccounts();
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -72,6 +72,7 @@ export function ChartOfAccountsPage() {
         <AccountTree
           accounts={accounts}
           loading={loading}
+          error={error}
           selectedCode={selectedCode}
           onSelectAccount={handleSelectAccount}
           onAddAccount={handleAddAccount}

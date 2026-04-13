@@ -318,19 +318,15 @@ export async function getAccountByCode(
 export async function getAccountsActive(userId: string): Promise<ServiceResult<Account[]>> {
   try {
     validateUserId(userId);
+    // Filter isActive client-side to avoid needing a composite index
+    // (isActive == true + orderBy('code') on different fields requires one)
     const accountsRef = collection(firestore, getAccountsPath(userId));
-    const q = query(
-      accountsRef,
-      where('isActive', '==', true),
-      orderBy('code'),
-      limit(QUERY_LIMITS.ACCOUNTS)
-    );
+    const q = query(accountsRef, orderBy('code'), limit(QUERY_LIMITS.ACCOUNTS));
     const snapshot = await getDocs(q);
 
-    const accounts: Account[] = snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...convertFirestoreDates(docSnap.data()),
-    })) as Account[];
+    const accounts: Account[] = snapshot.docs
+      .map((docSnap) => ({ id: docSnap.id, ...convertFirestoreDates(docSnap.data()) }) as Account)
+      .filter((a) => a.isActive !== false); // treat missing field as active (backward compat)
 
     return { success: true, data: accounts };
   } catch (error) {

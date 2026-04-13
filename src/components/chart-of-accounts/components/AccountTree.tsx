@@ -23,6 +23,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 interface AccountTreeProps {
   accounts: Account[];
   loading: boolean;
+  error: string | null;
   selectedCode: string | null;
   onSelectAccount: (code: string) => void;
   onAddAccount: () => void;
@@ -187,6 +188,7 @@ function AccountMenu({ account, onEdit, onDeactivate, onDelete }: AccountMenuPro
 export function AccountTree({
   accounts,
   loading,
+  error,
   selectedCode,
   onSelectAccount,
   onAddAccount,
@@ -217,6 +219,15 @@ export function AccountTree({
       <div className="flex items-center justify-center py-16 text-slate-400">
         <Loader2 className="h-5 w-5 animate-spin ml-2" />
         <span>جارٍ تحميل الحسابات…</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-8 text-sm text-danger-600 text-center">
+        <p className="font-medium">فشل تحميل الحسابات</p>
+        <p className="text-xs text-slate-400 mt-1">{error}</p>
       </div>
     );
   }
