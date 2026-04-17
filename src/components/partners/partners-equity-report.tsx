@@ -149,10 +149,10 @@ export default function PartnersEquityReport() {
 
             if (isEquity) {
               // Direction determined by subcategory
-              if (data.subCategory === "رأس مال مالك") {
+              if (["رأس مال", "رأس مال مالك"].includes(data.subCategory ?? "")) {
                 // Capital contribution = investment (positive)
                 investments += data.amount || 0;
-              } else if (data.subCategory === "سحوبات المالك") {
+              } else if (["سحوبات", "سحوبات المالك"].includes(data.subCategory ?? "")) {
                 // Owner withdrawal = withdrawal (negative)
                 withdrawals += data.amount || 0;
               }

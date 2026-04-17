@@ -183,7 +183,9 @@ export function isExcludedFromPL(type?: string, category?: string, isInventoryPu
            isAdvanceTransaction(category) ||
            isLoanTransaction(type, category) ||
            isFixedAssetTransaction(category) ||
-           !!isInventoryPurchase;
+           !!isInventoryPurchase ||
+           type === "تحويل" ||  // Inventory transfer (1301 → 1302) — balance sheet only
+           category === "تحويل مخزون";
 }
 
 /**
@@ -232,20 +234,22 @@ export function isPaidStatus(status?: string): boolean {
 
 /**
  * Helper function to check if a subcategory represents capital contribution (cash IN)
+ * Detects both old string ("رأس مال مالك") and new generic string ("رأس مال")
  * @param subCategory - The equity subcategory
  * @returns true if this is a capital contribution (increases equity)
  */
 export function isCapitalContribution(subCategory?: string): boolean {
-    return subCategory === "رأس مال مالك";
+    return ["رأس مال", "رأس مال مالك"].includes(subCategory ?? "");
 }
 
 /**
  * Helper function to check if a subcategory represents owner drawing (cash OUT)
+ * Detects both old string ("سحوبات المالك") and new generic string ("سحوبات")
  * @param subCategory - The equity subcategory
  * @returns true if this is an owner drawing (decreases equity)
  */
 export function isOwnerDrawing(subCategory?: string): boolean {
-    return subCategory === "سحوبات المالك";
+    return ["سحوبات", "سحوبات المالك"].includes(subCategory ?? "");
 }
 
 /**
@@ -318,7 +322,13 @@ export function getJournalTemplateForTransaction(
         return "SALES_RETURN";
     }
 
-    // 5. Default to income/expense templates
+    // 5. Inventory transfer (1301 → 1302) — routes through LEDGER_EXPENSE
+    // account-mapping.ts handles the special routing for تحويل حجر خام إلى مقطوع
+    if (entryType === "تحويل" || category === "تحويل مخزون") {
+        return "LEDGER_EXPENSE";
+    }
+
+    // 6. Default to income/expense templates
     return entryType === "دخل" ? "LEDGER_INCOME" : "LEDGER_EXPENSE";
 }
 

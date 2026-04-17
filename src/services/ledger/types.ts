@@ -34,6 +34,10 @@ export interface InventoryUpdateResult extends ServiceResult {
   cogsCreated?: boolean;
   cogsAmount?: number;
   cogsDescription?: string;
+  /** Sub-inventory account code credited by the COGS journal (1301/1302/1303) */
+  cogsInventorySubCode?: string;
+  /** Sub-inventory account code to debit when returned goods re-enter inventory (1301/1302/1303) */
+  returnInventorySubCode?: string;
   inventoryChange?: { itemId: string; quantityDelta: number };
   returnCostAmount?: number;  // Cost of returned goods (qty × current unit price)
   inventoryChanges?: { itemId: string; quantityDelta: number }[]; // for multi-item rollback
@@ -167,4 +171,6 @@ export interface CollectionRefs {
 export interface COGSResult {
   amount: number;
   description: string;
+  /** Sub-inventory account code to credit in the COGS journal (1301/1302/1303) */
+  inventorySubCode?: string;
 }

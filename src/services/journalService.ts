@@ -49,6 +49,7 @@ import {
   getAccountMappingForSettlementDiscount,
   getAccountNameAr,
 } from '@/lib/account-mapping';
+import Decimal from 'decimal.js-light';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
 import { QUERY_LIMITS, ACCOUNTING_TOLERANCE } from '@/lib/constants';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
@@ -411,6 +412,7 @@ export interface CreateAccountInput {
   normalBalance: Account['normalBalance'];
   parentCode?: string;
   description?: string;
+  isContraAccount?: boolean;
 }
 
 /**
@@ -445,7 +447,7 @@ export async function createAccount(
       normalBalance: input.normalBalance,
       isActive: true,
       isSystemAccount: false,
-      isContraAccount: false,
+      isContraAccount: input.isContraAccount ?? false,
       parentCode: input.parentCode ?? null,
       description: input.description ?? null,
       createdAt: Timestamp.fromDate(now),
@@ -469,7 +471,7 @@ export async function createAccount(
       normalBalance: input.normalBalance,
       isActive: true,
       isSystemAccount: false,
-      isContraAccount: false,
+      isContraAccount: input.isContraAccount ?? false,
       parentCode: input.parentCode,
       description: input.description,
       createdAt: now,
@@ -1376,6 +1378,659 @@ export async function getBalanceSheet(
       error: error instanceof Error ? error.message : 'Failed to calculate balance sheet',
     };
   }
+}
+
+/**
+ * Find the next available partner equity account code using a lock document.
+ *
+ * Partner equity codes are allocated in the range 3100–3179:
+ *   Capital:  3100, 3120, 3140, 3160 (step +20 per partner)
+ *   Drawings: 3110, 3130, 3150, 3170 (capital + 10)
+ *
+ * Uses the same lock-document pattern as createAccount() to prevent
+ * concurrent creation from producing duplicate codes.
+ *
+ * Returns the CAPITAL code (even number); drawings = capital + 10.
+ */
+export async function findNextAvailablePartnerEquityCode(
+  userId: string
+): Promise<number> {
+  validateUserId(userId);
+
+  const EQUITY_START = 3100;
+  const EQUITY_MAX = 3179;
+  const STEP = 20;
+
+  // Scan existing lock documents or accounts to find which slots are taken
+  const accountsRef = collection(firestore, getAccountsPath(userId));
+  const equitySnap = await getDocs(
+    query(accountsRef, where('type', '==', 'equity'))
+  );
+
+  const usedCodes = new Set<number>();
+  equitySnap.forEach((d) => {
+    const code = parseInt(d.data().code, 10);
+    if (!isNaN(code) && code >= EQUITY_START && code <= EQUITY_MAX) {
+      usedCodes.add(code);
+    }
+  });
+
+  // Find the first available capital slot (3100, 3120, 3140, ...)
+  for (let code = EQUITY_START; code <= EQUITY_MAX - 10; code += STEP) {
+    if (!usedCodes.has(code) && !usedCodes.has(code + 10)) {
+      return code;
+    }
+  }
+
+  throw new Error('نفذت أكواد حقوق الشركاء المتاحة (3100–3179). يرجى التواصل مع الدعم الفني.');
+}
+
+// ============================================================================
+// Migration: Stone Business Chart of Accounts
+// ============================================================================
+
+/**
+ * One-time migration to tailor the chart of accounts for the stone business.
+ *
+ * Phase 1 — Rename accounts (3000, 1301, 1302, 4010)
+ * Phase 2 — Deactivate stale accounts (1310, 4100, 4110, 3200)
+ * Phase 3 — Create equity accounts for existing partners without codes
+ * Phase 4 — Re-tag old drawings journal lines from "سحوبات المالك" to partner-specific codes
+ * Phase 5 — Add Income Summary account (3300) if missing
+ *
+ * Idempotent: safe to run multiple times — skips work that is already done.
+ */
+export async function migrateStoneBusinessAccounts(
+  userId: string
+): Promise<ServiceResult<{ phases: Record<string, string> }>> {
+  validateUserId(userId);
+
+  const results: Record<string, string> = {};
+  const accountsRef = collection(firestore, getAccountsPath(userId));
+
+  // ── Build a code → docId map once (reused across all phases) ──────────────
+  const allAccountsSnap = await getDocs(accountsRef);
+  const codeToId = new Map<string, string>();
+  allAccountsSnap.forEach((d) => {
+    codeToId.set(d.data().code as string, d.id);
+  });
+
+  // ── Phase 1: Rename accounts ───────────────────────────────────────────────
+  const RENAMES: Record<string, { name: string; nameAr: string }> = {
+    '3000': { name: "Partners' Equity",          nameAr: 'حقوق الشركاء' },
+    '1301': { name: 'Imported Raw Stone',         nameAr: 'بلاطات حجر خام — واردات' },
+    '1302': { name: 'Cut Stone In-house',         nameAr: 'حجر مقطوع — إنتاج داخلي' },
+    '4010': { name: 'Cut Stone Sales',            nameAr: 'مبيعات حجر مقطوع' },
+    '5040': { name: 'Blade Depreciation & Machine Maintenance', nameAr: 'استهلاك شفرات وصيانة آلات التقطيع' },
+  };
+
+  let renamedCount = 0;
+  for (const [code, names] of Object.entries(RENAMES)) {
+    const id = codeToId.get(code);
+    if (!id) { continue; }
+    await updateAccount(userId, id, names);
+    renamedCount++;
+  }
+  results['phase1_renames'] = `${renamedCount} accounts renamed`;
+
+  // ── Phase 2: Deactivate stale accounts ────────────────────────────────────
+  const DEACTIVATE = ['1310', '4100', '4110', '3200'];
+  let deactivatedCount = 0;
+  for (const code of DEACTIVATE) {
+    const id = codeToId.get(code);
+    if (!id) { continue; }
+    const r = await deactivateAccount(userId, id);
+    if (r.success) { deactivatedCount++; }
+  }
+  results['phase2_deactivate'] = `${deactivatedCount} accounts deactivated`;
+
+  // ── Phase 3: Create partner equity accounts ───────────────────────────────
+  // Build a local usedCodes set from codeToId to avoid O(n²) Firestore reads
+  const partnersRef = collection(firestore, `users/${userId}/partners`);
+  const partnersSnap = await getDocs(partnersRef);
+  let partnerAccountsCreated = 0;
+
+  // Track used equity codes locally to avoid re-querying on each iteration (MEDIUM-3)
+  const EQUITY_START = 3100;
+  const EQUITY_MAX   = 3179;
+  const usedEquityCodes = new Set<number>();
+  Array.from(codeToId.keys()).forEach((code) => {
+    const n = parseInt(code, 10);
+    if (!isNaN(n) && n >= EQUITY_START && n <= EQUITY_MAX) { usedEquityCodes.add(n); }
+  });
+
+  const findNextCodeLocally = (): number => {
+    for (let code = EQUITY_START; code <= EQUITY_MAX - 10; code += 20) {
+      if (!usedEquityCodes.has(code) && !usedEquityCodes.has(code + 10)) { return code; }
+    }
+    throw new Error('نفذت أكواد حقوق الشركاء المتاحة (3100–3179).');
+  };
+
+  for (const partnerDoc of partnersSnap.docs) {
+    const partner = partnerDoc.data();
+    if (partner.capitalAccountCode) { continue; } // Already migrated
+
+    const partnerName  = partner.name as string;
+    const nextCode     = findNextCodeLocally();
+    const capitalCode  = String(nextCode);
+    const drawingsCode = String(nextCode + 10);
+
+    // Sequential creation so partial failure doesn't leave an orphaned capital account
+    await createAccount(userId, {
+      code: capitalCode,
+      name: `${partnerName} Capital`,
+      nameAr: `رأس مال — ${partnerName}`,
+      type: 'equity',
+      normalBalance: getNormalBalance('equity'),
+      parentCode: '3000',
+      isContraAccount: false,
+    });
+    await createAccount(userId, {
+      code: drawingsCode,
+      name: `${partnerName} Drawings`,
+      nameAr: `سحوبات — ${partnerName}`,
+      type: 'equity',
+      normalBalance: 'debit',
+      parentCode: '3000',
+      isContraAccount: true,
+    });
+
+    await updateDoc(partnerDoc.ref, {
+      capitalAccountCode:  capitalCode,
+      drawingsAccountCode: drawingsCode,
+    });
+
+    // Mark codes as used in the local set so the next iteration gets a fresh slot
+    usedEquityCodes.add(nextCode);
+    usedEquityCodes.add(nextCode + 10);
+    codeToId.set(capitalCode, capitalCode);   // placeholder — value not used further
+    codeToId.set(drawingsCode, drawingsCode);
+
+    partnerAccountsCreated += 2;
+  }
+  results['phase3_partner_accounts'] = `${partnerAccountsCreated} equity accounts created`;
+
+  // ── Phase 4: Re-tag old drawings journal lines ────────────────────────────
+  // Re-fetch partners to get updated codes
+  const updatedPartnersSnap = await getDocs(partnersRef);
+  const partnerByName = new Map<string, { capitalCode: string; drawingsCode: string; drawingsNameAr: string }>();
+  updatedPartnersSnap.forEach((d) => {
+    const p = d.data();
+    if (p.capitalAccountCode && p.drawingsAccountCode) {
+      partnerByName.set(p.name as string, {
+        capitalCode:    p.capitalAccountCode as string,
+        drawingsCode:   p.drawingsAccountCode as string,
+        drawingsNameAr: `سحوبات — ${p.name as string}`,
+      });
+    }
+  });
+
+  const journalRef = collection(firestore, getJournalEntriesPath(userId));
+
+  // Find journal entries that have lines on old hardcoded equity code 3100
+  const PHASE4_LIMIT = 500;
+  const oldDrawingsSnap = await getDocs(
+    query(journalRef, where('accountCodes', 'array-contains', '3100'), limit(PHASE4_LIMIT))
+  );
+  if (oldDrawingsSnap.size >= PHASE4_LIMIT) {
+    console.warn(`[migrate Phase 4] Hit query limit of ${PHASE4_LIMIT}. There may be additional journal entries on code 3100 that were not retagged. Run migration again or retag manually.`);
+  }
+
+  let retaggedEntries = 0;
+
+  for (const entryDoc of oldDrawingsSnap.docs) {
+    const entry = entryDoc.data();
+    const lines: Array<Record<string, unknown>> = entry.lines ?? [];
+
+    // Idempotent guard: skip if all 3100 lines already sit at partner-specific codes
+    const has3100Line = lines.some(
+      (l) => l.accountCode === '3100'
+    );
+    if (!has3100Line) { continue; }
+
+    // Find lines on old hardcoded code 3100 that need retagging:
+    //   - Drawings: accountCode === '3100' AND debit > 0
+    //   - Capital contributions: accountCode === '3100' AND credit > 0
+    const drawingsLineIdx = lines.findIndex(
+      (l) => l.accountCode === '3100' && (l.debit as number) > 0
+    );
+    const capitalLineIdx = lines.findIndex(
+      (l) => l.accountCode === '3100' && (l.credit as number) > 0
+    );
+    if (drawingsLineIdx === -1 && capitalLineIdx === -1) { continue; }
+
+    // Resolve partner from ownerName stored on the linked ledger entry.
+    // Strategy: look at linkedTransactionId → fetch ledger entry → get ownerName.
+    // If not resolvable, LOG and skip (never silently default).
+    const linkedTxId = entry.linkedTransactionId as string | undefined;
+    if (!linkedTxId) {
+      console.warn(`[migrate] Journal ${entryDoc.id} has no linkedTransactionId — skipping`);
+      continue;
+    }
+
+    const ledgerSnap = await getDocs(
+      query(
+        collection(firestore, `users/${userId}/ledger`),
+        where('transactionId', '==', linkedTxId),
+        limit(1)
+      )
+    );
+    if (ledgerSnap.empty) {
+      console.warn(`[migrate] No ledger entry for transactionId ${linkedTxId} — skipping`);
+      continue;
+    }
+
+    const ownerName = ledgerSnap.docs[0].data().ownerName as string | undefined;
+    if (!ownerName) {
+      console.warn(`[migrate] Ledger entry ${ledgerSnap.docs[0].id} has no ownerName — skipping`);
+      continue;
+    }
+
+    const partnerInfo = partnerByName.get(ownerName);
+    if (!partnerInfo) {
+      console.warn(`[migrate] ownerName "${ownerName}" does not match any partner — skipping`);
+      continue;
+    }
+
+    // Update the relevant lines (drawings and/or capital contribution)
+    const updatedLines = lines.map((l, idx) => {
+      if (idx === drawingsLineIdx) {
+        return {
+          ...l,
+          accountCode:   partnerInfo.drawingsCode,
+          accountName:   `${ownerName} Drawings`,
+          accountNameAr: partnerInfo.drawingsNameAr,
+        };
+      }
+      if (idx === capitalLineIdx) {
+        return {
+          ...l,
+          accountCode:   partnerInfo.capitalCode,
+          accountName:   `${ownerName} Capital`,
+          accountNameAr: `رأس مال — ${ownerName}`,
+        };
+      }
+      return l;
+    });
+
+    // Rebuild accountCodes array
+    const newAccountCodes = Array.from(
+      new Set(updatedLines.map((l) => l.accountCode as string))
+    );
+
+    await updateDoc(entryDoc.ref, {
+      lines: updatedLines,
+      accountCodes: newAccountCodes,
+    });
+    retaggedEntries++;
+  }
+  results['phase4_retag'] = `${retaggedEntries} journal entries retagged`;
+
+  // ── Phase 5: Ensure Income Summary account (3300) ─────────────────────────
+  if (!codeToId.has('3300')) {
+    await createAccount(userId, {
+      code: '3300',
+      name: 'Income Summary',
+      nameAr: 'ملخص الدخل',
+      type: 'equity',
+      normalBalance: getNormalBalance('equity'),
+      parentCode: '3000',
+      isContraAccount: false,
+    });
+    results['phase5_income_summary'] = 'Account 3300 created';
+  } else {
+    results['phase5_income_summary'] = 'Account 3300 already exists';
+  }
+
+  return { success: true, data: { phases: results } };
+}
+
+// ============================================================================
+// Year-End Closing Workflow
+// ============================================================================
+
+/**
+ * Close a financial year by creating four standard closing entries:
+ *
+ *  1. Zero revenue accounts (4xxx) → Income Summary (3300)
+ *     Handles both normal revenue (credit balance) and contra-revenue (debit balance, e.g. sales returns)
+ *  2. Zero expense accounts (5xxx) → Income Summary (3300)
+ *     Handles both normal expenses (debit balance) and contra-expenses (credit balance)
+ *  3. Allocate net profit from Income Summary → each partner's capital account
+ *  4. Close each partner's drawings account → their capital account
+ *
+ * All four entries are committed atomically in a single Firestore writeBatch.
+ * If any entry fails validation the entire batch is rejected — no partial state.
+ *
+ * Idempotent: if any closing entry for the given year already exists the function
+ * returns early without creating duplicates.
+ *
+ * @param userId - Firestore user/data-owner ID
+ * @param year   - The fiscal year to close (must be a completed year, < current year)
+ */
+export async function closeYearEnd(
+  userId: string,
+  year: number
+): Promise<ServiceResult> {
+  validateUserId(userId);
+
+  // ── Guard: only allow closing completed years ────────────────────────────
+  const currentYear = new Date().getFullYear();
+  if (year >= currentYear) {
+    return {
+      success: false,
+      error: `لا يمكن إغلاق السنة ${year}. يمكن إغلاق السنوات المنتهية فقط (قبل ${currentYear}).`,
+    };
+  }
+
+  const journalRef = collection(firestore, getJournalEntriesPath(userId));
+  const yearStr = String(year);
+
+  // ── Idempotent guard ───────────────────────────────────────────────────────
+  const existingSnap = await getDocs(
+    query(journalRef, where('linkedDocumentType', '==', 'year-end-close'), limit(50))
+  );
+  const alreadyClosed = existingSnap.docs.some(
+    (d) => ((d.data().description as string) ?? '').includes(yearStr)
+  );
+  if (alreadyClosed) {
+    return { success: false, error: `تم إغلاق السنة المالية ${year} مسبقاً` };
+  }
+
+  // ── Fetch all journal entries for the year ────────────────────────────────
+  const startDate = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00`));
+  const endDate   = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59`));
+
+  const yearEntriesSnap = await getDocs(
+    query(journalRef, where('date', '>=', startDate), where('date', '<=', endDate), limit(5000))
+  );
+
+  // Warn if the query hit the 5000-doc limit — balances may be understated.
+  if (yearEntriesSnap.size >= 5000) {
+    console.warn(
+      `closeYearEnd(${year}): query returned ${yearEntriesSnap.size} entries (limit=5000). ` +
+      'Some entries may have been excluded. Year-end balances could be understated. ' +
+      'Consider archiving old entries or splitting the close into half-year batches.'
+    );
+  }
+
+  // ── HIGH-3: Exclude prior closing entries from balance aggregation ─────────
+  // Filter client-side (Firestore != operator would require composite index)
+  const operatingDocs = yearEntriesSnap.docs.filter(
+    (d) => d.data().linkedDocumentType !== 'year-end-close'
+  );
+
+  // ── Aggregate debit/credit totals per account code ────────────────────────
+  const balances = new Map<string, { debitTotal: number; creditTotal: number }>();
+  for (const entryDoc of operatingDocs) {
+    const lines: Array<Record<string, unknown>> = entryDoc.data().lines ?? [];
+    for (const line of lines) {
+      const code  = line.accountCode as string;
+      const debit  = (line.debit  as number) || 0;
+      const credit = (line.credit as number) || 0;
+      const existing = balances.get(code) ?? { debitTotal: 0, creditTotal: 0 };
+      balances.set(code, {
+        debitTotal:  safeAdd(existing.debitTotal,  debit),
+        creditTotal: safeAdd(existing.creditTotal, credit),
+      });
+    }
+  }
+
+  // ── Classify 4xxx and 5xxx accounts, handling contra accounts (CRITICAL-2) ─
+  //
+  // Normal revenue  (4xxx, credit balance):  zero by DR account, net CR → IS
+  // Contra-revenue  (4xxx, debit balance):   zero by CR account, net DR → IS
+  // Normal expense  (5xxx, debit balance):   zero by CR account, net DR → IS
+  // Contra-expense  (5xxx, credit balance):  zero by DR account, net CR → IS
+  //
+  // The Income Summary receives ONE net line per closing entry:
+  //   Entry 1: CR IS = totalNormalRevenue − totalContraRevenue  (or DR IS if negative)
+  //   Entry 2: DR IS = totalNormalExpense − totalContraExpense  (or CR IS if negative)
+
+  interface ClosingAccount { code: string; balance: number; isContra: boolean; }
+  const revenueAccounts: ClosingAccount[] = [];
+  const expenseAccounts: ClosingAccount[] = [];
+
+  Array.from(balances.entries()).forEach(([code, { debitTotal, creditTotal }]) => {
+    if (code.startsWith('4')) {
+      const normalBal  = safeSubtract(creditTotal, debitTotal); // credit-normal
+      const contraBal  = safeSubtract(debitTotal, creditTotal); // debit = contra
+      if (normalBal > ACCOUNTING_TOLERANCE) {
+        revenueAccounts.push({ code, balance: normalBal, isContra: false });
+      } else if (contraBal > ACCOUNTING_TOLERANCE) {
+        revenueAccounts.push({ code, balance: contraBal, isContra: true });
+      }
+    } else if (code.startsWith('5')) {
+      const normalBal  = safeSubtract(debitTotal, creditTotal); // debit-normal
+      const contraBal  = safeSubtract(creditTotal, debitTotal); // credit = contra
+      if (normalBal > ACCOUNTING_TOLERANCE) {
+        expenseAccounts.push({ code, balance: normalBal, isContra: false });
+      } else if (contraBal > ACCOUNTING_TOLERANCE) {
+        expenseAccounts.push({ code, balance: contraBal, isContra: true });
+      }
+    }
+  });
+
+  const totalNormalRevenue  = revenueAccounts.filter(a => !a.isContra).reduce((s, a) => safeAdd(s, a.balance), 0);
+  const totalContraRevenue  = revenueAccounts.filter(a =>  a.isContra).reduce((s, a) => safeAdd(s, a.balance), 0);
+  const totalNormalExpense  = expenseAccounts.filter(a => !a.isContra).reduce((s, a) => safeAdd(s, a.balance), 0);
+  const totalContraExpense  = expenseAccounts.filter(a =>  a.isContra).reduce((s, a) => safeAdd(s, a.balance), 0);
+
+  // Net amounts flowing through Income Summary
+  const netRevenueToIS = safeSubtract(totalNormalRevenue, totalContraRevenue);
+  const netExpenseToIS = safeSubtract(totalNormalExpense, totalContraExpense);
+  const netProfit      = safeSubtract(netRevenueToIS, netExpenseToIS);
+
+  // ── Fetch active partners with equity codes ────────────────────────────────
+  const partnersSnap = await getDocs(
+    query(collection(firestore, `users/${userId}/partners`), where('active', '==', true))
+  );
+
+  interface PartnerInfo { name: string; capitalCode: string; drawingsCode: string; ownershipPct: number; }
+  const partners: PartnerInfo[] = [];
+  let totalPct = 0;
+  partnersSnap.forEach((d) => {
+    const p = d.data();
+    if (p.capitalAccountCode && p.drawingsAccountCode && p.ownershipPercentage) {
+      partners.push({
+        name: p.name as string,
+        capitalCode:  p.capitalAccountCode as string,
+        drawingsCode: p.drawingsAccountCode as string,
+        ownershipPct: p.ownershipPercentage as number,
+      });
+      totalPct += p.ownershipPercentage as number;
+    } else {
+      console.warn(
+        `[closeYearEnd] Partner "${p.name}" skipped — missing ` +
+        `${!p.capitalAccountCode ? 'capitalAccountCode ' : ''}` +
+        `${!p.drawingsAccountCode ? 'drawingsAccountCode ' : ''}` +
+        `${!p.ownershipPercentage ? 'ownershipPercentage' : ''}`.trim() +
+        '. Run migration to assign equity accounts.'
+      );
+    }
+  });
+
+  if (partners.length === 0) {
+    return { success: false, error: 'لا يوجد شركاء نشطون مع أكواد حقوق ملكية محددة' };
+  }
+
+  // Ownership percentages must sum to exactly 100% (within floating-point tolerance).
+  // Silent distribution would misallocate profit and leave unbalanced books — reject early.
+  if (Math.abs(totalPct - 100) > 0.01) {
+    return {
+      success: false,
+      error: `مجموع نسب الملكية للشركاء ${totalPct.toFixed(2)}% وليس 100%. يرجى تصحيح النسب قبل إغلاق السنة المالية.`,
+    };
+  }
+
+  const closeDate           = new Date(`${year}-12-31T23:59:59`);
+  const closeDateTs         = Timestamp.fromDate(closeDate);
+  const INCOME_SUMMARY_CODE = ACCOUNT_CODES.INCOME_SUMMARY; // '3300'
+  const now                 = new Date();
+
+  // ── Build all journal documents in memory ─────────────────────────────────
+  // Then commit as a single writeBatch (CRITICAL-4: atomicity)
+
+  interface PendingEntry {
+    description: string;
+    lines: JournalLine[];
+  }
+  const pendingEntries: PendingEntry[] = [];
+
+  // ── Build Entry 1: Revenue accounts → Income Summary ─────────────────────
+  if (revenueAccounts.length > 0) {
+    const lines1: JournalLine[] = [];
+
+    // Normal revenues: DR account
+    for (const a of revenueAccounts.filter(x => !x.isContra)) {
+      lines1.push({ accountCode: a.code, accountName: a.code, accountNameAr: getAccountNameAr(a.code), debit: roundCurrency(a.balance), credit: 0 });
+    }
+    // Contra-revenues: CR account
+    for (const a of revenueAccounts.filter(x => x.isContra)) {
+      lines1.push({ accountCode: a.code, accountName: a.code, accountNameAr: getAccountNameAr(a.code), debit: 0, credit: roundCurrency(a.balance) });
+    }
+    // Income Summary: net
+    const roundedNet1 = roundCurrency(Math.abs(netRevenueToIS));
+    if (netRevenueToIS >= 0) {
+      lines1.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: 0, credit: roundedNet1 });
+    } else {
+      lines1.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: roundedNet1, credit: 0 });
+    }
+
+    pendingEntries.push({ description: `إغلاق السنة المالية ${year} — إقفال حسابات الإيرادات`, lines: lines1 });
+  }
+
+  // ── Build Entry 2: Expense accounts → Income Summary ─────────────────────
+  if (expenseAccounts.length > 0) {
+    const lines2: JournalLine[] = [];
+
+    // Income Summary: net DR
+    const roundedNet2 = roundCurrency(Math.abs(netExpenseToIS));
+    if (netExpenseToIS >= 0) {
+      lines2.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: roundedNet2, credit: 0 });
+    } else {
+      lines2.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: 0, credit: roundedNet2 });
+    }
+    // Normal expenses: CR account
+    for (const a of expenseAccounts.filter(x => !x.isContra)) {
+      lines2.push({ accountCode: a.code, accountName: a.code, accountNameAr: getAccountNameAr(a.code), debit: 0, credit: roundCurrency(a.balance) });
+    }
+    // Contra-expenses: DR account
+    for (const a of expenseAccounts.filter(x => x.isContra)) {
+      lines2.push({ accountCode: a.code, accountName: a.code, accountNameAr: getAccountNameAr(a.code), debit: roundCurrency(a.balance), credit: 0 });
+    }
+
+    pendingEntries.push({ description: `إغلاق السنة المالية ${year} — إقفال حسابات المصروفات`, lines: lines2 });
+  }
+
+  // ── Build Entry 3: Allocate net profit to partners' capital ───────────────
+  if (Math.abs(netProfit) > ACCOUNTING_TOLERANCE) {
+    const profitLines: JournalLine[] = [];
+    // Wrap in roundCurrency before Decimal to eliminate floating-point noise (e.g. 12345.670000000001).
+    // The IS debit line uses roundCurrency(netProfit), so the Decimal must match exactly.
+    const decNetProfit = new Decimal(roundCurrency(netProfit));
+    const decTotalPct  = new Decimal(totalPct);
+
+    // Use Decimal.js for all share arithmetic (CRITICAL-3)
+    let allocatedDec = new Decimal(0);
+
+    if (netProfit > 0) {
+      // Profit: DR Income Summary, CR each partner's capital
+      profitLines.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: roundCurrency(netProfit), credit: 0 });
+      partners.forEach((p, i) => {
+        const shareDec = i === partners.length - 1
+          ? decNetProfit.minus(allocatedDec)
+          : decNetProfit.mul(p.ownershipPct).div(decTotalPct).toDecimalPlaces(2);
+        allocatedDec = allocatedDec.plus(shareDec);
+        profitLines.push({ accountCode: p.capitalCode, accountName: `${p.name} Capital`, accountNameAr: `رأس مال — ${p.name}`, debit: 0, credit: shareDec.toNumber() });
+      });
+      // Guard: total credits must equal the IS debit exactly
+      if (!allocatedDec.equals(decNetProfit)) {
+        return { success: false, error: `خطأ داخلي: مجموع حصص الأرباح (${allocatedDec}) لا يساوي صافي الربح (${decNetProfit}). يرجى التواصل مع الدعم الفني.` };
+      }
+    } else {
+      // Net loss: DR each partner's capital, CR Income Summary
+      const absLoss = roundCurrency(Math.abs(netProfit));
+      const decAbsLoss = new Decimal(absLoss);
+      profitLines.push({ accountCode: INCOME_SUMMARY_CODE, accountName: 'Income Summary', accountNameAr: 'ملخص الدخل', debit: 0, credit: roundCurrency(absLoss) });
+      partners.forEach((p, i) => {
+        const shareDec = i === partners.length - 1
+          ? decAbsLoss.minus(allocatedDec)
+          : decAbsLoss.mul(p.ownershipPct).div(decTotalPct).toDecimalPlaces(2);
+        allocatedDec = allocatedDec.plus(shareDec);
+        profitLines.push({ accountCode: p.capitalCode, accountName: `${p.name} Capital`, accountNameAr: `رأس مال — ${p.name}`, debit: shareDec.toNumber(), credit: 0 });
+      });
+      // Guard: total debits must equal the IS credit exactly
+      if (!allocatedDec.equals(decAbsLoss)) {
+        return { success: false, error: `خطأ داخلي: مجموع حصص الخسارة (${allocatedDec}) لا يساوي صافي الخسارة (${decAbsLoss}). يرجى التواصل مع الدعم الفني.` };
+      }
+    }
+
+    pendingEntries.push({ description: `إغلاق السنة المالية ${year} — توزيع صافي الربح على الشركاء`, lines: profitLines });
+  }
+
+  // ── Build Entry 4: Close drawings to capital (per partner) ────────────────
+  for (const partner of partners) {
+    const drawingsBalance = balances.get(partner.drawingsCode);
+    if (!drawingsBalance) { continue; }
+
+    const netDrawings = safeSubtract(drawingsBalance.debitTotal, drawingsBalance.creditTotal);
+    if (netDrawings <= ACCOUNTING_TOLERANCE) { continue; }
+
+    pendingEntries.push({
+      description: `إغلاق السنة المالية ${year} — إقفال سحوبات ${partner.name}`,
+      lines: [
+        { accountCode: partner.capitalCode,  accountName: `${partner.name} Capital`,  accountNameAr: `رأس مال — ${partner.name}`,  debit: roundCurrency(netDrawings), credit: 0 },
+        { accountCode: partner.drawingsCode, accountName: `${partner.name} Drawings`, accountNameAr: `سحوبات — ${partner.name}`, debit: 0, credit: roundCurrency(netDrawings) },
+      ],
+    });
+  }
+
+  if (pendingEntries.length === 0) {
+    return { success: false, error: 'لا توجد حسابات إيرادات أو مصروفات أو سحوبات لإغلاقها' };
+  }
+
+  // ── Validate all entries before committing (fail-fast before any writes) ──
+  for (const pe of pendingEntries) {
+    const validation = validateJournalEntry(pe.lines);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error: `قيد غير متوازن: ${pe.description} — مجموع المدين: ${validation.totalDebits}, مجموع الدائن: ${validation.totalCredits}`,
+      };
+    }
+  }
+
+  // ── Commit all entries atomically via writeBatch (CRITICAL-4) ─────────────
+  await seedChartOfAccounts(userId);
+  const batch = writeBatch(firestore);
+
+  for (const pe of pendingEntries) {
+    const entryRef  = doc(journalRef);
+    const entryNumber = generateJournalEntryNumber(closeDate);
+    const accountCodes = Array.from(new Set(pe.lines.map(l => l.accountCode)));
+    const sanitizedLines = pe.lines.map(l => ({ ...l, description: l.description ?? null }));
+    const validation = validateJournalEntry(pe.lines);
+
+    batch.set(entryRef, {
+      entryNumber,
+      date:               closeDateTs,
+      description:        pe.description,
+      lines:              sanitizedLines,
+      accountCodes,
+      totalDebits:        validation.totalDebits,
+      totalCredits:       validation.totalCredits,
+      status:             'posted' as const,
+      linkedTransactionId: null,
+      linkedPaymentId:    null,
+      linkedDocumentType: 'year-end-close' as const,
+      createdAt:          Timestamp.fromDate(now),
+      postedAt:           Timestamp.fromDate(now),
+    });
+  }
+
+  await batch.commit();
+  return { success: true };
 }
 
 // DEPRECATED: deleteJournalEntriesByTransaction and deleteJournalEntriesByPayment

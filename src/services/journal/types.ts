@@ -137,7 +137,8 @@ export interface JournalEntryV2 {
     | "depreciation"
     | "inventory"
     | "endorsement"
-    | "manual";
+    | "manual"
+    | "year-end-close";
 
   /** Denormalized list of account codes used in this entry (for indexed queries) */
   accountCodes?: string[];
@@ -236,6 +237,21 @@ export interface TemplateContext {
   /** Whether this expense reduces inventory with no cash payment (wastage/samples).
    *  When true, journal credits Inventory asset (1300) instead of Cash/AP. */
   isNonCashInventoryOut?: boolean;
+
+  /** Partner-specific capital account code (e.g. "3100" for Jamil).
+   *  Resolved by LedgerService at submission time from the partner document.
+   *  When set, overrides the default OWNER_CAPITAL (3000) parent code. */
+  partnerCapitalCode?: string;
+
+  /** Partner-specific drawings account code (e.g. "3110" for Jamil).
+   *  Resolved by LedgerService at submission time from the partner document.
+   *  When set, overrides the default fallback code. */
+  partnerDrawingsCode?: string;
+
+  /** Sub-inventory account code to credit on COGS (1301/1302/1303).
+   *  Read from the sold item's inventoryAccountCode field.
+   *  When not provided the COGS template falls back to parent 1300. */
+  inventorySubCode?: string;
 }
 
 /**

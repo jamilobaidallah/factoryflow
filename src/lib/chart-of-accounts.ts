@@ -98,19 +98,27 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   ),
   defineAccount(
     '1301',
-    'Raw Materials Inventory',
-    'مواد خام — مخزون',
+    'Imported Raw Stone',
+    'بلاطات حجر خام — واردات',
     'asset',
     ACCOUNT_CODES.INVENTORY,
-    'Raw materials on hand, not yet used in production'
+    'Raw imported stone slabs on hand'
   ),
   defineAccount(
     '1302',
-    'Finished Goods Inventory',
-    'منتجات تامة الصنع',
+    'Cut Stone In-house',
+    'حجر مقطوع — إنتاج داخلي',
     'asset',
     ACCOUNT_CODES.INVENTORY,
-    'Completed products ready for sale'
+    'Stone cut in-house from raw imported slabs'
+  ),
+  defineAccount(
+    '1303',
+    'Ready Stone — Local Purchases',
+    'حجر جاهز — مشتريات محلية',
+    'asset',
+    ACCOUNT_CODES.INVENTORY,
+    'Ready stone purchased locally for resale'
   ),
   defineAccount(
     '1310',
@@ -275,27 +283,22 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
 
   defineAccount(
     ACCOUNT_CODES.OWNER_CAPITAL,
-    "Owner's Capital",
-    'رأس المال',
+    "Partners' Equity",
+    'حقوق الشركاء',
     'equity',
     undefined,
-    'Owner investments in the business'
+    'Partner capital accounts (parent). Per-partner accounts are created dynamically.'
   ),
+  // Partner-specific capital/drawings accounts (3100–3179) are created dynamically
+  // when partners are added via the partners page. They are NOT seeded here.
   defineAccount(
-    ACCOUNT_CODES.OWNER_DRAWINGS,
-    "Owner's Drawings",
-    'سحوبات المالك',
+    ACCOUNT_CODES.INCOME_SUMMARY,
+    'Income Summary',
+    'ملخص الدخل',
     'equity',
-    undefined,
-    'Owner withdrawals from the business'
-  ),
-  defineAccount(
-    ACCOUNT_CODES.RETAINED_EARNINGS,
-    'Retained Earnings',
-    'الأرباح المحتجزة',
-    'equity',
-    undefined,
-    'Accumulated profits retained in business'
+    ACCOUNT_CODES.OWNER_CAPITAL,
+    'Transient clearing account for year-end close. Must be zero after closing entries.',
+    false  // not a contra account
   ),
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -312,11 +315,19 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   ),
   defineAccount(
     '4010',
-    'Product Sales',
-    'مبيعات منتجات',
+    'Cut Stone Sales',
+    'مبيعات حجر مقطوع',
     'revenue',
     ACCOUNT_CODES.SALES_REVENUE,
-    'Revenue from product sales'
+    'Revenue from cut stone sales'
+  ),
+  defineAccount(
+    '4020',
+    'Ready Stone Sales',
+    'مبيعات حجر جاهز',
+    'revenue',
+    ACCOUNT_CODES.SALES_REVENUE,
+    'Revenue from ready stone sales'
   ),
   defineAccount(
     ACCOUNT_CODES.SERVICE_REVENUE,
@@ -426,12 +437,20 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   ),
 
   defineAccount(
-    ACCOUNT_CODES.INVENTORY_LOSSES,
-    'Inventory Losses',
-    'خسائر المخزون',
+    ACCOUNT_CODES.INVENTORY_LOSSES,  // 5040
+    'Blade Consumption & Cutting Machine Maintenance',
+    'استهلاك شفرات وصيانة آلات التقطيع',
     'expense',
     ACCOUNT_CODES.COST_OF_GOODS_SOLD,
-    'Wastage, spoilage, breakage, and inventory write-offs'
+    'Cutting blade wear, replacement blades, and cutting machine maintenance costs'
+  ),
+  defineAccount(
+    '5060',
+    'Inventory Losses & Impairment',
+    'خسائر المخزون وهبوط القيمة',
+    'expense',
+    ACCOUNT_CODES.COST_OF_GOODS_SOLD,
+    'Stone wastage, breakage, spoilage, and inventory write-downs'
   ),
 
   // Contra-Expense - خصومات المشتريات
@@ -565,6 +584,14 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'expense',
     undefined,
     'Business insurance premiums'
+  ),
+  defineAccount(
+    '5425',
+    'Sales Commissions',
+    'عمولات مبيعات',
+    'expense',
+    undefined,
+    'Commissions paid to external sales agents'
   ),
 
   defineAccount(

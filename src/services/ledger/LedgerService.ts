@@ -53,6 +53,7 @@ import {
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
 import { NON_CASH_SUBCATEGORIES, INBOUND_FREIGHT_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
+import { DEPRECIATION_SUBCATEGORIES } from "@/types/accounting";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES, QUERY_LIMITS } from "@/lib/constants";
 import {
   parseAmount,
@@ -66,6 +67,7 @@ import {
   isDataIntegrityError,
 } from "@/lib/errors";
 import { addPaymentJournalEntryToBatch } from "@/services/journalService";
+import { isEquityCategory, getAccountNameAr } from "@/lib/account-mapping";
 import {
   createJournalPostingEngine,
   getEntriesByTransactionId,
@@ -782,20 +784,25 @@ export class LedgerService {
       // Excludes wastage/samples which are inventory OUT despite being expenses.
       // Also includes inbound freight (always capitalize, even without inventory update toggle).
       // Stored on the ledger entry so P&L reports can exclude it (asset, not expense).
+      const isDepreciation = (DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+
       const isInventoryPurchase =
         isInboundFreight ||
         (
           options.hasInventoryUpdate &&
           entryType === "مصروف" &&
-          !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "")
+          !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+          !isDepreciation
         );
 
       // Wastage/samples: inventory leaves stock with no cash payment.
       // Journal must credit Inventory (1300) not Cash — there is no cash outflow.
+      // Depreciation is also non-cash but credits Accumulated Depreciation (1510), not Inventory.
       const isNonCashInventoryOut =
         options.hasInventoryUpdate &&
         entryType === "مصروف" &&
-        (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+        (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+        !isDepreciation;
 
       // Add ledger entry
       // Always store immediateSettlement and isARAPEntry for correct behavior during edit
@@ -899,8 +906,12 @@ export class LedgerService {
         (options.inventoryFormData ? [options.inventoryFormData] : []);
 
       const allInventoryChanges: { itemId: string; quantityDelta: number }[] = [];
-      const cogsResults: { amount: number; description: string }[] = [];
+      const cogsResults: { amount: number; description: string; inventorySubCode?: string }[] = [];
       let totalReturnCostAmount = 0;
+      // Collect sub-inventory codes across return items.
+      // If all returned items share the same sub-inventory account, use it for the DR line.
+      // If items span different accounts, fall back to parent 1300 (multi-account return).
+      const returnSubCodes = new Set<string>();
 
       if (options.hasInventoryUpdate && inventoryItemsList.length > 0) {
         for (let i = 0; i < inventoryItemsList.length; i++) {
@@ -912,13 +923,23 @@ export class LedgerService {
             allInventoryChanges.push(itemResult.inventoryChange);
           }
           if (itemResult.cogsCreated && itemResult.cogsAmount && itemResult.cogsDescription) {
-            cogsResults.push({ amount: itemResult.cogsAmount, description: itemResult.cogsDescription });
+            cogsResults.push({ amount: itemResult.cogsAmount, description: itemResult.cogsDescription, inventorySubCode: itemResult.cogsInventorySubCode });
           }
           if (itemResult.returnCostAmount) {
             totalReturnCostAmount = safeAdd(totalReturnCostAmount, itemResult.returnCostAmount);
+            if (itemResult.returnInventorySubCode) {
+              returnSubCodes.add(itemResult.returnInventorySubCode);
+            }
           }
         }
       }
+
+      // The sub-inventory account to debit when returned goods re-enter stock.
+      // Use the specific sub-code only when all returned items share one account.
+      const returnInventorySubCode = returnSubCodes.size === 1
+        ? Array.from(returnSubCodes)[0]
+        : "1300";
+
       // Aggregate result for downstream use
       const inventoryResult: InventoryUpdateResult | null = options.hasInventoryUpdate && inventoryItemsList.length > 0
         ? {
@@ -1005,13 +1026,27 @@ export class LedgerService {
               transactionId,
             },
             lines: [
-              { accountCode: "4050", accountName: "4050", accountNameAr: "مردودات المبيعات",       debit: totalAmount, credit: 0 },
-              { accountCode: "1300", accountName: "1300", accountNameAr: "مخزون",                   debit: costAmount,  credit: 0 },
-              { accountCode: "1200", accountName: "1200", accountNameAr: "ذمم مدينة",                debit: 0, credit: totalAmount },
-              { accountCode: "5000", accountName: "5000", accountNameAr: "تكلفة البضاعة المباعة",    debit: 0, credit: costAmount  },
+              { accountCode: "4050", accountName: "4050", accountNameAr: "مردودات المبيعات",                            debit: totalAmount, credit: 0 },
+              { accountCode: returnInventorySubCode, accountName: returnInventorySubCode, accountNameAr: getAccountNameAr(returnInventorySubCode), debit: costAmount,  credit: 0 },
+              { accountCode: "1200", accountName: "1200", accountNameAr: "ذمم مدينة",                                    debit: 0, credit: totalAmount },
+              { accountCode: "5000", accountName: "5000", accountNameAr: "تكلفة البضاعة المباعة",                        debit: 0, credit: costAmount  },
             ],
           }, "sales return journal");
         } else {
+          // Resolve partner-specific equity account codes (only for equity entries)
+          let partnerCapitalCode: string | undefined;
+          let partnerDrawingsCode: string | undefined;
+          if (isEquityCategory(formData.category, formData.subCategory) && formData.ownerName) {
+            const partnerSnap = await getDocs(
+              query(this.partnersRef, where("name", "==", formData.ownerName), limit(1))
+            );
+            if (!partnerSnap.empty) {
+              const p = partnerSnap.docs[0].data();
+              partnerCapitalCode = p.capitalAccountCode as string | undefined;
+              partnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+            }
+          }
+
           // Main ledger journal entry
           const templateId = getJournalTemplateForTransaction(
             entryType,
@@ -1037,6 +1072,9 @@ export class LedgerService {
               isInventoryPurchase,
               // When true, journal credits Inventory asset (1300) instead of Cash/AP (wastage/samples).
               isNonCashInventoryOut,
+              // Partner-specific equity codes (undefined for non-equity entries)
+              partnerCapitalCode,
+              partnerDrawingsCode,
             },
           }, "main ledger journal");
 
@@ -1052,6 +1090,7 @@ export class LedgerService {
                 documentId: ledgerDocRef.id,
                 transactionId,
               },
+              ...(cogs.inventorySubCode && { context: { inventorySubCode: cogs.inventorySubCode } }),
             }, "COGS journal");
           }
         }
@@ -1148,7 +1187,7 @@ export class LedgerService {
       };
 
       // Track COGS recreation data for journal creation after batch commit
-      const cogsRecreationResults: { description: string; amount: number }[] = [];
+      const cogsRecreationResults: { description: string; amount: number; inventorySubCode?: string }[] = [];
 
       // Fetch current entry to check if AR/AP recalculation is needed
       const currentEntrySnap = await getDoc(entryRef);
@@ -1283,6 +1322,20 @@ export class LedgerService {
 
       // Add new main ledger journal to batch
       if (currentData) {
+        // Resolve partner equity codes for equity entries (same as createLedgerEntry)
+        let updatePartnerCapitalCode: string | undefined;
+        let updatePartnerDrawingsCode: string | undefined;
+        if (isEquityCategory(formData.category, formData.subCategory) && formData.ownerName) {
+          const partnerSnap = await getDocs(
+            query(this.partnersRef, where("name", "==", formData.ownerName), limit(1))
+          );
+          if (!partnerSnap.empty) {
+            const p = partnerSnap.docs[0].data();
+            updatePartnerCapitalCode = p.capitalAccountCode as string | undefined;
+            updatePartnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+          }
+        }
+
         const mainTemplateId = getJournalTemplateForTransaction(
           entryType,
           formData.category,
@@ -1308,6 +1361,8 @@ export class LedgerService {
                 currentData.immediateSettlement ??
                 !(currentData.isARAPEntry ?? false),
               isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
+              partnerCapitalCode: updatePartnerCapitalCode,
+              partnerDrawingsCode: updatePartnerDrawingsCode,
             },
           },
           newMainJournalSeq
@@ -1620,6 +1675,9 @@ export class LedgerService {
           const currentUnitCost = inventorySnap.exists()
             ? (inventorySnap.data()?.unitPrice || 0)
             : 0;
+          const itemInventorySubCode = inventorySnap.exists()
+            ? (inventorySnap.data()?.inventoryAccountCode as string | undefined)
+            : undefined;
 
           let newCogsAmount: number;
           let cogsNotes: string;
@@ -1650,7 +1708,7 @@ export class LedgerService {
             createdAt: new Date(),
           });
 
-          cogsRecreationResults.push({ description: cogsDescription, amount: newCogsAmount });
+          cogsRecreationResults.push({ description: cogsDescription, amount: newCogsAmount, inventorySubCode: itemInventorySubCode });
         }
       }
 
@@ -1671,6 +1729,7 @@ export class LedgerService {
               documentId: entryId,
               transactionId: existingTransactionId,
             },
+            ...(cogsResult.inventorySubCode && { context: { inventorySubCode: cogsResult.inventorySubCode } }),
           }, "COGS journal (update)");
         }
 

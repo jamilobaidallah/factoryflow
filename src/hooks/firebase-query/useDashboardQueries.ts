@@ -27,12 +27,12 @@ import {
   INCOME_TYPES,
   EXPENSE_TYPE,
   EQUITY_TYPE,
-  EQUITY_SUBCATEGORIES,
   LOAN_TYPE,
   LOAN_CATEGORIES,
   LOAN_SUBCATEGORIES,
   PAYMENT_TYPES,
 } from '@/components/dashboard/constants/dashboard.constants';
+import { isCapitalContribution, isOwnerDrawing } from '@/components/ledger/utils/ledger-helpers';
 
 /** Aggregated ledger data for dashboard */
 export interface LedgerDashboardData {
@@ -142,9 +142,9 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
     const isExcluded = isEquity || isLoan || isExcludedCategory || entry.isInventoryPurchase;
 
     if (isExcluded) {
-      if (entry.subCategory === EQUITY_SUBCATEGORIES.CAPITAL_IN) {
+      if (isCapitalContribution(entry.subCategory)) {
         finCashIn = safeAdd(finCashIn, entry.amount);
-      } else if (entry.subCategory === EQUITY_SUBCATEGORIES.DRAWINGS_OUT) {
+      } else if (isOwnerDrawing(entry.subCategory)) {
         finCashOut = safeAdd(finCashOut, entry.amount);
       }
 

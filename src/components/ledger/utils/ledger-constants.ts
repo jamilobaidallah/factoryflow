@@ -75,10 +75,10 @@ export const CATEGORIES: Category[] = [
         name: "إيرادات المبيعات",
         type: "دخل",
         subcategories: [
+            "مبيعات حجر مقطوع",      // Cut stone → DR Cash/AR, CR 4010
+            "مبيعات حجر جاهز",       // Ready stone → DR Cash/AR, CR 4020
+            // Backward compat aliases (old entries remain valid)
             "مبيعات منتجات",
-            "خدمات",
-            "استشارات",
-            "عمولات",
         ]
     },
     // Contra-Revenue (reduces revenue — goods rejected/returned by client)
@@ -94,8 +94,8 @@ export const CATEGORIES: Category[] = [
         name: "رأس المال",
         type: "حركة رأس مال",
         subcategories: [
-            "رأس مال مالك",    // Positive: increases equity, cash IN
-            "سحوبات المالك",   // Negative: decreases equity, cash OUT
+            "رأس مال",          // Capital contribution — resolves to partner's capitalAccountCode
+            "سحوبات",           // Drawings — resolves to partner's drawingsAccountCode
         ]
     },
     {
@@ -113,8 +113,13 @@ export const CATEGORIES: Category[] = [
         name: "تكلفة البضاعة المباعة (COGS)",
         type: "مصروف",
         subcategories: [
+            "شراء حجر خام مستورد",    // Imported raw stone → DR 1301
+            "استيراد ونقل وجمارك",    // Import/freight/customs → capitalizes to 1301 (IAS 2)
+            "شراء حجر جاهز",          // Ready stone purchase → DR 1303
+            "مصاريف تقطيع",           // Cutting costs → DR 5040 (blades, maintenance)
+            // Backward compat aliases
             "مواد خام",
-            "شحن مواد خام",        // Inbound freight — capitalizes to inventory (1300), not expensed immediately
+            "شحن مواد خام",
             "شراء بضاعة جاهزة",
         ]
     },
@@ -130,13 +135,23 @@ export const CATEGORIES: Category[] = [
             "رحلة عمل",
             "نقل بضاعة",
             "تسويق وإعلان",
+            "عمولات مبيعات",      // Sales commissions to external agents → DR 5425
             "مصاريف إدارية",
             "اتصالات وإنترنت",
             "مصاريف مكتبية",
-            "مستهلكات",        // Consumables (cleaning supplies, disposables, etc.)
-            "أدوات ومعدات صغيرة",  // Small tools & equipment (below capitalization threshold)
-            "هدر وتالف",          // Wastage/spoilage → account 5040 (Inventory Losses)
-            "عينات مجانية",       // Free samples → account 5420 (Marketing Expense)
+            "مستهلكات",
+            "أدوات ومعدات صغيرة",
+            "هدر وتالف",          // Wastage/spoilage → account 5060
+            "عينات مجانية",       // Free samples → account 5420 (Marketing)
+            "إهلاك الأصول",       // Depreciation → DR 5400, CR 1510 (non-cash)
+        ]
+    },
+    // Inventory Transfer (stone cutting: raw → cut)
+    {
+        name: "تحويل مخزون",
+        type: "تحويل",
+        subcategories: [
+            "تحويل حجر خام إلى مقطوع",  // DR 1302, CR 1301 — no cash movement
         ]
     },
     {
@@ -215,4 +230,7 @@ export const NON_CASH_SUBCATEGORIES = ["هدر وتالف", "عينات مجان
  * The expense flows through COGS automatically when the inventory item is sold.
  * No inventory update toggle needed — always treated as an inventory purchase.
  */
-export const INBOUND_FREIGHT_SUBCATEGORIES = ["شحن مواد خام"] as const;
+export const INBOUND_FREIGHT_SUBCATEGORIES = [
+  "شحن مواد خام",             // Legacy
+  "استيراد ونقل وجمارك",      // New: import + freight + customs
+] as const;

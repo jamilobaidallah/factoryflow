@@ -226,10 +226,11 @@ describe('Accounting Types', () => {
     });
 
     it('should have all equity accounts in correct range', () => {
+      // OWNER_DRAWINGS and RETAINED_EARNINGS removed — partner equity codes
+      // are dynamic (3100-3179). Only test the parent header and Income Summary.
       const equityCodes = [
         ACCOUNT_CODES.OWNER_CAPITAL,
-        ACCOUNT_CODES.OWNER_DRAWINGS,
-        ACCOUNT_CODES.RETAINED_EARNINGS,
+        ACCOUNT_CODES.INCOME_SUMMARY,
       ];
 
       equityCodes.forEach((code) => {

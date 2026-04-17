@@ -45,6 +45,8 @@ import PartnersEquityReport from "./partners-equity-report";
 import { formatNumber } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
 import { parseAmount, sumAmounts, safeAdd } from "@/lib/currency";
+import { createAccount, findNextAvailablePartnerEquityCode } from "@/services/journalService";
+import { getNormalBalance } from "@/types/accounting";
 
 interface Partner {
   id: string;
@@ -148,8 +150,8 @@ export default function PartnersPage() {
           const partnerData = equityMap.get(data.ownerName);
           if (!partnerData) {return;}
 
-          const isInvestment = data.subCategory === "رأس مال مالك";
-          const isWithdrawal = data.subCategory === "سحوبات المالك";
+          const isInvestment = ["رأس مال", "رأس مال مالك"].includes(data.subCategory ?? "");
+          const isWithdrawal = ["سحوبات", "سحوبات المالك"].includes(data.subCategory ?? "");
 
           if (isInvestment) {
             partnerData.investments += data.amount || 0;
@@ -260,6 +262,64 @@ export default function PartnersPage() {
           joinDate: new Date(),
           active: true,
         });
+
+        // Auto-create partner equity accounts (capital + drawings).
+        // Partial-failure safe: if capital succeeds but drawings fails, the retry
+        // reuses the SAME capitalCode so no orphaned account is created at a new slot.
+        let pendingCapitalCode: string | undefined;
+        let pendingDrawingsCode: string | undefined;
+        let capitalCreated = false;
+
+        const tryCreateEquityAccounts = async (): Promise<void> => {
+          if (!capitalCreated) {
+            // First attempt (or capital itself failed) — find a fresh slot
+            const nextCode = await findNextAvailablePartnerEquityCode(user.dataOwnerId);
+            pendingCapitalCode  = String(nextCode);
+            pendingDrawingsCode = String(nextCode + 10);
+            await createAccount(user.dataOwnerId, {
+              code: pendingCapitalCode,
+              nameAr: `رأس مال — ${formData.name}`,
+              name: `${formData.name} Capital`,
+              type: 'equity',
+              normalBalance: getNormalBalance('equity'),
+              parentCode: '3000',
+              isContraAccount: false,
+            });
+            capitalCreated = true;
+          }
+          // Drawings: use the code from the slot where capital already landed
+          await createAccount(user.dataOwnerId, {
+            code: pendingDrawingsCode!,
+            nameAr: `سحوبات — ${formData.name}`,
+            name: `${formData.name} Drawings`,
+            type: 'equity',
+            normalBalance: 'debit',
+            parentCode: '3000',
+            isContraAccount: true,
+          });
+          await updateDoc(doc(firestore, `users/${user.dataOwnerId}/partners`, docRef.id), {
+            capitalAccountCode: pendingCapitalCode,
+            drawingsAccountCode: pendingDrawingsCode,
+          });
+        };
+
+        try {
+          await tryCreateEquityAccounts();
+        } catch (firstError) {
+          // Retry once — if capital failed (TOCTOU slot collision), picks a new slot.
+          // If capital already succeeded, retries only drawings with the same code.
+          try {
+            await tryCreateEquityAccounts();
+          } catch (retryError) {
+            // Non-fatal: partner was created, equity accounts can be added via migration
+            console.error('Failed to create equity accounts for partner (after retry):', retryError);
+            toast({
+              title: "تنبيه",
+              description: "تم إضافة الشريك ولكن لم يتم إنشاء حسابات حقوق الملكية. يرجى تشغيل الترحيل.",
+              variant: "destructive",
+            });
+          }
+        }
 
         // Log activity for create
         logActivity(user.dataOwnerId, {

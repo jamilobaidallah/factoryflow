@@ -138,7 +138,7 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
     id: "COGS",
     nameAr: "تكلفة بضاعة مباعة",
     nameEn: "Cost of Goods Sold",
-    resolveAccounts: () => toTemplateMapping(getAccountMappingForCOGS()),
+    resolveAccounts: (ctx) => toTemplateMapping(getAccountMappingForCOGS(ctx.inventorySubCode)),
   },
 
   /**
@@ -277,39 +277,45 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
   },
 
   /**
-   * Owner capital contribution
-   * DR: Cash | CR: Owner's Capital
+   * Partner capital contribution
+   * DR: Cash | CR: Partner's Capital account (from TemplateContext) or 3000 fallback
    */
   OWNER_CAPITAL: {
     id: "OWNER_CAPITAL",
-    nameAr: "رأس مال مالك",
-    nameEn: "Owner Capital",
-    resolveAccounts: () => ({
-      debitAccountCode: ACCOUNT_CODES.CASH,
-      debitAccountName: ACCOUNT_CODES.CASH,
-      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
-      creditAccountCode: ACCOUNT_CODES.OWNER_CAPITAL,
-      creditAccountName: ACCOUNT_CODES.OWNER_CAPITAL,
-      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.OWNER_CAPITAL),
-    }),
+    nameAr: "رأس مال شريك",
+    nameEn: "Partner Capital",
+    resolveAccounts: (ctx) => {
+      const creditCode = ctx.partnerCapitalCode ?? ACCOUNT_CODES.OWNER_CAPITAL;
+      return {
+        debitAccountCode: ACCOUNT_CODES.CASH,
+        debitAccountName: ACCOUNT_CODES.CASH,
+        debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+        creditAccountCode: creditCode,
+        creditAccountName: creditCode,
+        creditAccountNameAr: getAccountNameAr(creditCode),
+      };
+    },
   },
 
   /**
-   * Owner drawings/withdrawal
-   * DR: Owner's Drawings | CR: Cash
+   * Partner drawings/withdrawal
+   * DR: Partner's Drawings account (from TemplateContext) or 3000 fallback | CR: Cash
    */
   OWNER_DRAWINGS: {
     id: "OWNER_DRAWINGS",
-    nameAr: "سحوبات المالك",
-    nameEn: "Owner Drawings",
-    resolveAccounts: () => ({
-      debitAccountCode: ACCOUNT_CODES.OWNER_DRAWINGS,
-      debitAccountName: ACCOUNT_CODES.OWNER_DRAWINGS,
-      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.OWNER_DRAWINGS),
-      creditAccountCode: ACCOUNT_CODES.CASH,
-      creditAccountName: ACCOUNT_CODES.CASH,
-      creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
-    }),
+    nameAr: "سحوبات شريك",
+    nameEn: "Partner Drawings",
+    resolveAccounts: (ctx) => {
+      const debitCode = ctx.partnerDrawingsCode ?? ACCOUNT_CODES.OWNER_CAPITAL;
+      return {
+        debitAccountCode: debitCode,
+        debitAccountName: debitCode,
+        debitAccountNameAr: getAccountNameAr(debitCode),
+        creditAccountCode: ACCOUNT_CODES.CASH,
+        creditAccountName: ACCOUNT_CODES.CASH,
+        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.CASH),
+      };
+    },
   },
 
   /**

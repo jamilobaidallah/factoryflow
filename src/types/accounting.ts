@@ -264,8 +264,7 @@ export const ACCOUNT_CODES = {
 
   // Equity
   OWNER_CAPITAL: '3000',
-  OWNER_DRAWINGS: '3100',
-  RETAINED_EARNINGS: '3200',
+  INCOME_SUMMARY: '3300',   // Transient closing account — zeroed out after year-end close
 
   // Revenue
   SALES_REVENUE: '4000',
@@ -299,3 +298,9 @@ export const ACCOUNT_CODES = {
   MISC_EXPENSES: '5530',
   BAD_DEBT_EXPENSE: '5600'
 } as const;
+
+/**
+ * Depreciation subcategory strings — single source of truth.
+ * Lives in types/ (not ledger-utils/) so service files can import it.
+ */
+export const DEPRECIATION_SUBCATEGORIES = ["إهلاك الأصول"] as const;

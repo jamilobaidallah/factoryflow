@@ -31,6 +31,7 @@ import {
 } from "@/lib/errors";
 import type { HandlerContext, InventoryUpdateResult, COGSResult, CollectionRefs } from "../types";
 import { NON_CASH_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
+import { getInventorySubAccountCode } from "@/lib/account-mapping";
 
 // Path helper
 const getUserCollectionPath = (userId: string, collectionName: string) =>
@@ -53,11 +54,17 @@ export async function handleInventoryUpdate(
   // - Income (إيراد/دخل) for selling → inventory OUT (خروج)
   // - Non-cash expenses (wastage, samples) → inventory OUT (خروج) even though they're expenses
   const isReturn = formData.category === "مردودات المبيعات";
+  // Non-cash expenses (wastage, samples) move inventory out without a cash payment.
+  // Depreciation is handled separately by its own journal template (DR 5400 / CR 1510)
+  // and never reaches this handler, so the exclusion below is not needed — but
+  // DEPRECIATION_SUBCATEGORIES has no overlap with NON_CASH_SUBCATEGORIES anyway.
   const isNonCashExpense = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
   const movementType = (isReturn || (entryType === "مصروف" && !isNonCashExpense)) ? "دخول" : "خروج";
   let cogsCreated = false;
   let cogsAmount = 0;
   let cogsDescription = "";
+  let cogsInventorySubCode: string | undefined;
+  let returnInventorySubCode: string | undefined;
   let inventoryChange: { itemId: string; quantityDelta: number } | undefined;
   let returnCostAmount = 0;
   const quantityChange = parseAmount(inventoryFormData.quantity);
@@ -94,6 +101,10 @@ export async function handleInventoryUpdate(
           throw new InsufficientQuantityError(currentQuantity, quantityChange, inventoryFormData.itemName);
         }
 
+        // Resolved sub-inventory code for this operation.
+        // Set to the fresh computed value on repurchase; falls back to the existing stored value otherwise.
+        let resolvedInventoryAccountCode: string | undefined = existingItemData.inventoryAccountCode;
+
         if (isReturn) {
           // Return goods at current weighted average cost
           // No landed-cost recalculation (selling price ≠ cost price)
@@ -124,6 +135,9 @@ export async function handleInventoryUpdate(
           );
 
           const totalLandedCost = sumAmounts([purchaseAmount, shippingCost, otherCosts]);
+          // Update inventoryAccountCode on every repurchase so COGS always credits the
+          // correct sub-inventory. Derived from the current purchase subcategory.
+          resolvedInventoryAccountCode = getInventorySubAccountCode(formData.subCategory || "");
 
           transaction.update(itemDocRef, {
             quantity: newQuantity,
@@ -131,13 +145,18 @@ export async function handleInventoryUpdate(
             lastPurchasePrice: purchaseUnitPrice,
             lastPurchaseDate: new Date(),
             lastPurchaseAmount: totalLandedCost,
+            inventoryAccountCode: resolvedInventoryAccountCode,
           });
         } else {
           transaction.update(itemDocRef, { quantity: newQuantity });
         }
 
         const quantityDelta = movementType === "دخول" ? quantityChange : -quantityChange;
-        return { currentUnitPrice, quantityDelta };
+        return {
+          currentUnitPrice,
+          quantityDelta,
+          inventoryAccountCode: resolvedInventoryAccountCode,
+        };
       });
 
       inventoryChange = { itemId, quantityDelta: transactionResult.quantityDelta };
@@ -152,17 +171,20 @@ export async function handleInventoryUpdate(
           quantityChange,
           transactionResult.currentUnitPrice,
           new Date(formData.date),
-          itemIndex
+          itemIndex,
+          transactionResult.inventoryAccountCode
         );
         cogsCreated = true;
         cogsAmount = cogs.amount;
         cogsDescription = cogs.description;
+        cogsInventorySubCode = cogs.inventorySubCode;
       }
 
       // Auto-record COGS reversal when goods are returned to inventory
-      // (Journal DR 1300 / CR 5000 is handled by the 4-line SALES_RETURN journal —
+      // (Journal DR sub-inventory / CR 5000 is handled by the 4-line SALES_RETURN journal —
       //  this ledger entry is for ledger-based P&L reports only)
       if (isReturn && returnCostAmount > 0) {
+        returnInventorySubCode = transactionResult.inventoryAccountCode;
         addCOGSReversalRecord(
           batch,
           refs.ledger,
@@ -218,14 +240,18 @@ export async function handleInventoryUpdate(
     cogsCreated,
     cogsAmount,
     cogsDescription,
+    ...(cogsInventorySubCode && { cogsInventorySubCode }),
     inventoryChange,
     ...(isReturn && { returnCostAmount }),
+    ...(returnInventorySubCode && { returnInventorySubCode }),
   };
 }
 
 /**
  * Create a COGS (Cost of Goods Sold) ledger entry in the batch
  * @param itemIndex - index within multi-item transaction; ensures unique transactionId per item
+ * @param inventorySubCode - sub-inventory account to credit in the COGS journal (1301/1302/1303).
+ *   Read from the item document's inventoryAccountCode field; falls back to parent 1300 when absent.
  */
 export function addCOGSRecord(
   batch: WriteBatch,
@@ -235,7 +261,8 @@ export function addCOGSRecord(
   quantity: number,
   unitCost: number,
   date: Date,
-  itemIndex: number = 0
+  itemIndex: number = 0,
+  inventorySubCode?: string
 ): COGSResult {
   const cogsAmount = safeMultiply(quantity, unitCost);
   const cogsDescription = `تكلفة البضاعة المباعة - ${itemName}`;
@@ -255,7 +282,7 @@ export function addCOGSRecord(
     createdAt: new Date(),
   });
 
-  return { amount: cogsAmount, description: cogsDescription };
+  return { amount: cogsAmount, description: cogsDescription, inventorySubCode };
 }
 
 /**
@@ -320,6 +347,9 @@ export function createNewInventoryItemInBatch(
     quantityChange
   );
 
+  // Determine which sub-inventory account this item lives in based on purchase subcategory
+  const inventoryAccountCode = getInventorySubAccountCode(formData.subCategory || "");
+
   const newItemRef = doc(inventoryRef);
   batch.set(newItemRef, {
     itemName: inventoryFormData.itemName,
@@ -337,6 +367,7 @@ export function createNewInventoryItemInBatch(
     lastPurchasePrice: calculatedUnitPrice,
     lastPurchaseDate: new Date(),
     lastPurchaseAmount: totalLandedCost,
+    inventoryAccountCode,
   });
 
   return newItemRef.id;

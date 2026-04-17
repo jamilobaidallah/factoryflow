@@ -230,8 +230,8 @@ describe('Journal Service', () => {
 
     it('should have all required equity account codes', () => {
       expect(ACCOUNT_CODES.OWNER_CAPITAL).toBe('3000');
-      expect(ACCOUNT_CODES.OWNER_DRAWINGS).toBe('3100');
-      expect(ACCOUNT_CODES.RETAINED_EARNINGS).toBe('3200');
+      // OWNER_DRAWINGS and RETAINED_EARNINGS were removed — partner equity codes
+      // are now dynamic (stored on partner documents, range 3100-3179)
     });
 
     it('should have all required revenue account codes', () => {
@@ -607,9 +607,10 @@ describe('Journal Service', () => {
       ];
 
       // Owner withdrawal: DR Drawings, CR Cash
+      // Drawings codes are dynamic per partner (3110, 3130, …) — use a representative code
       const withdrawalEntry: JournalLine[] = [
         {
-          accountCode: ACCOUNT_CODES.OWNER_DRAWINGS,
+          accountCode: '3110',  // example drawings code (dynamic per partner)
           accountName: 'Owner Drawings',
           accountNameAr: 'سحوبات المالك',
           debit: 5000,

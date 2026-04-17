@@ -201,6 +201,8 @@ export interface InventoryItemData {
   lastPurchasePrice?: number;
   lastPurchaseDate?: Date;
   lastPurchaseAmount?: number;
+  /** Sub-inventory account code where this item lives (1301/1302/1303), defaults to '1300' */
+  inventoryAccountCode?: string;
 }
 
 /**

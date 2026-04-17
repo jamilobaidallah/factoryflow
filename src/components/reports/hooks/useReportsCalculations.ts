@@ -141,10 +141,10 @@ export function useReportsCalculations({
                        entry.category === "Owner Equity";
 
       if (isEquity) {
-        // Direction determined by subcategory
-        if (entry.subCategory === "رأس مال مالك") {
+        // Direction determined by subcategory (handles both old and new strings)
+        if (["رأس مال", "رأس مال مالك"].includes(entry.subCategory ?? "")) {
           ownerInvestments = safeAdd(ownerInvestments, entry.amount);
-        } else if (entry.subCategory === "سحوبات المالك") {
+        } else if (["سحوبات", "سحوبات المالك"].includes(entry.subCategory ?? "")) {
           ownerWithdrawals = safeAdd(ownerWithdrawals, entry.amount);
         } else {
           // Fallback for old data without proper subcategory

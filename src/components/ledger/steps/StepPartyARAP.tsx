@@ -10,6 +10,7 @@ import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
 import { isLoanTransaction, isAdvanceTransaction } from "../utils/ledger-helpers";
 import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
+import { DEPRECIATION_SUBCATEGORIES } from "@/types/accounting";
 
 interface ClientOption {
   name: string;
@@ -105,8 +106,10 @@ export function StepPartyARAP({
   // Check if this is an advance transaction - advances track AR/AP (obligation to deliver goods/services)
   const isAdvance = isAdvanceTransaction(formData.category);
 
-  // Check if subcategory is a non-cash expense (wastage, free samples, etc.)
-  const isNonCashSubcategory = (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
+  // Check if subcategory is a non-cash expense (wastage, free samples, depreciation, etc.)
+  const isNonCashSubcategory =
+    (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory) ||
+    (DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
 
   // Force AR/AP tracking for loans AND advances
   // Advances represent an obligation: we owe goods/services to customer (سلفة عميل)
