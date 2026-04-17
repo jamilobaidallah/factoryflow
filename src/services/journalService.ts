@@ -1474,7 +1474,7 @@ export async function migrateStoneBusinessAccounts(
   results['phase1_renames'] = `${renamedCount} accounts renamed`;
 
   // ── Phase 2: Deactivate stale accounts ────────────────────────────────────
-  const DEACTIVATE = ['1310', '4100', '4110', '3200'];
+  const DEACTIVATE = ['1310', '4100', '4110', '3200', '3100'];
   let deactivatedCount = 0;
   for (const code of DEACTIVATE) {
     const id = codeToId.get(code);

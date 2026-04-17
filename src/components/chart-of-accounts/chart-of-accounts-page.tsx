@@ -9,6 +9,7 @@ import {
   deleteAccount,
   backfillJournalAccountCodes,
   backfillSystemAccountFlags,
+  migrateStoneBusinessAccounts,
 } from "@/services/journalService";
 import { AccountTree } from "./components/AccountTree";
 import { AccountLedger } from "./components/AccountLedger";
@@ -30,6 +31,10 @@ export function ChartOfAccountsPage() {
   const [migrating, setMigrating] = useState(false);
   const [migrationDone, setMigrationDone] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('coa-backfill-done') === '1'
+  );
+  const [stoneMigrating, setStoneMigrating] = useState(false);
+  const [stoneMigrationDone, setStoneMigrationDone] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('stone-biz-migration-done') === '1'
   );
 
   const selectedAccount = accounts.find((a) => a.code === selectedCode) ?? null;
@@ -107,6 +112,29 @@ export function ChartOfAccountsPage() {
     }
   }, [user?.dataOwnerId, toast]);
 
+  const handleStoneMigration = useCallback(async () => {
+    if (!user?.dataOwnerId) return;
+    setStoneMigrating(true);
+    try {
+      const result = await migrateStoneBusinessAccounts(user.dataOwnerId);
+      if (result.success) {
+        localStorage.setItem('stone-biz-migration-done', '1');
+        setStoneMigrationDone(true);
+        const phases = result.data?.phases ?? {};
+        const summary = Object.values(phases).join('، ');
+        toast({
+          title: "تم ترحيل حسابات الأعمال الحجرية",
+          description: summary || "اكتمل الترحيل بنجاح",
+        });
+        refresh();
+      } else {
+        toast({ title: "خطأ في الترحيل", description: result.error, variant: "destructive" });
+      }
+    } finally {
+      setStoneMigrating(false);
+    }
+  }, [user?.dataOwnerId, toast, refresh]);
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden" dir="rtl">
       {/* One-time migration banner — shown to owner until backfill is done */}
@@ -124,6 +152,24 @@ export function ChartOfAccountsPage() {
             disabled={migrating}
           >
             {migrating ? "جارٍ التحديث…" : "تحديث البيانات"}
+          </Button>
+        </div>
+      )}
+      {/* Stone business migration banner */}
+      {isOwner && !loading && accounts.length > 0 && !stoneMigrationDone && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-800 shrink-0">
+          <DatabaseZap className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            يجب تحديث دليل الحسابات ليناسب الأعمال الحجرية (إعادة تسمية الحسابات، إنشاء حسابات الشركاء).
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-blue-300 text-blue-800 hover:bg-blue-100"
+            onClick={handleStoneMigration}
+            disabled={stoneMigrating}
+          >
+            {stoneMigrating ? "جارٍ الترحيل…" : "ترحيل حسابات الحجر"}
           </Button>
         </div>
       )}
