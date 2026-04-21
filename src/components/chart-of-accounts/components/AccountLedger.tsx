@@ -59,7 +59,12 @@ export function AccountLedger({ account }: AccountLedgerProps) {
             const status = (e as JournalEntry & { status?: string }).status;
             return !status || status === "posted";
           })
-          .sort((a, b) => a.date.getTime() - b.date.getTime());
+          .sort((a, b) => {
+            const dateDiff = a.date.getTime() - b.date.getTime();
+            if (dateDiff !== 0) return dateDiff;
+            // Break ties by sequence number so same-date entries appear in posting order
+            return (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0);
+          });
         if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
           setWarning(`يتم عرض أحدث ${QUERY_LIMITS.JOURNAL_ENTRIES} قيد فقط`);
         }
