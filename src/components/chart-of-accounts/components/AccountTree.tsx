@@ -89,7 +89,7 @@ function AccountRow({
                 <ChevronLeft className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               )}
               <span className="font-medium text-slate-500 ml-1 shrink-0">{node.code}</span>
-              <span className="flex-1 truncate">{node.nameAr}</span>
+              <span className="flex-1">{node.nameAr}</span>
               <span className={cn(
                 "text-[10px] px-1 py-0.5 rounded shrink-0",
                 node.normalBalance === 'debit' ? "bg-blue-50 text-blue-500" : "bg-amber-50 text-amber-500"
@@ -139,7 +139,7 @@ function AccountRow({
     >
       <span className="w-3.5 shrink-0" />
       <span className="font-medium text-slate-500 ml-1 shrink-0">{node.code}</span>
-      <span className="flex-1 truncate">{node.nameAr}</span>
+      <span className="flex-1">{node.nameAr}</span>
       <span className={cn(
         "text-[10px] px-1 py-0.5 rounded shrink-0",
         node.normalBalance === 'debit' ? "bg-blue-50 text-blue-500" : "bg-amber-50 text-amber-500"
