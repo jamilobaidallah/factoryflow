@@ -151,6 +151,7 @@ export class JournalPostingEngine {
         status: "posted",
         source: request.source,
         createdAt: new Date(),
+        accountCodes: Array.from(new Set(lines.map((l) => l.accountCode))),
 
         // Legacy fields for backward compatibility (use conditional spread to avoid undefined)
         linkedTransactionId: request.source.transactionId,
@@ -259,6 +260,7 @@ export class JournalPostingEngine {
       status: "posted",
       source: request.source,
       createdAt: new Date(),
+      accountCodes: Array.from(new Set(lines.map((l) => l.accountCode))),
 
       // Legacy fields (use conditional spread to avoid undefined)
       linkedTransactionId: request.source.transactionId,
