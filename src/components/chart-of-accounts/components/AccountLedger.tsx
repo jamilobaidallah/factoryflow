@@ -63,7 +63,9 @@ export function AccountLedger({ account }: AccountLedgerProps) {
             const dateDiff = a.date.getTime() - b.date.getTime();
             if (dateDiff !== 0) return dateDiff;
             // Break ties by sequence number so same-date entries appear in posting order
-            return (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0);
+            const seqA = (a as JournalEntry & { sequenceNumber?: number }).sequenceNumber ?? 0;
+            const seqB = (b as JournalEntry & { sequenceNumber?: number }).sequenceNumber ?? 0;
+            return seqA - seqB;
           });
         if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
           setWarning(`يتم عرض أحدث ${QUERY_LIMITS.JOURNAL_ENTRIES} قيد فقط`);
