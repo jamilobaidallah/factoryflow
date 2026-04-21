@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatNumber } from "@/lib/date-utils";
 import { safeAdd, safeSubtract } from "@/lib/currency";
 import type { Account, JournalEntry, JournalLine } from "@/types/accounting";
-import { getJournalEntriesByAccount } from "@/services/journalService";
+import { firestore } from "@/firebase/config";
+import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { convertFirestoreDates } from "@/lib/firestore-utils";
+import { QUERY_LIMITS } from "@/lib/constants";
 import { useUser } from "@/firebase/provider";
 
 interface AccountLedgerProps {
@@ -36,25 +39,41 @@ export function AccountLedger({ account }: AccountLedgerProps) {
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
     setError(null);
     setWarning(null);
 
-    getJournalEntriesByAccount(user.dataOwnerId, account.code).then((result) => {
-      if (cancelled) return;
-      if (result.success && result.data) {
-        // Sort ascending by date for running balance
-        const sorted = [...result.data].sort((a, b) => a.date.getTime() - b.date.getTime());
-        setEntries(sorted);
-        setWarning(result.warning ?? null);
-      } else {
-        setError(result.error ?? 'فشل تحميل القيود');
-      }
-      setLoading(false);
-    });
+    const journalRef = collection(firestore, `users/${user.dataOwnerId}/journal_entries`);
+    const q = query(
+      journalRef,
+      where("accountCodes", "array-contains", account.code),
+      orderBy("date", "asc"),
+      limit(QUERY_LIMITS.JOURNAL_ENTRIES)
+    );
 
-    return () => { cancelled = true; };
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetched = snapshot.docs
+          .map((d) => ({ id: d.id, ...convertFirestoreDates(d.data()) }) as JournalEntry)
+          .filter((e) => {
+            const status = (e as JournalEntry & { status?: string }).status;
+            return !status || status === "posted";
+          });
+        if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
+          setWarning(`يتم عرض أحدث ${QUERY_LIMITS.JOURNAL_ENTRIES} قيد فقط`);
+        }
+        setEntries(fetched);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("AccountLedger snapshot error:", err);
+        setError("فشل تحميل القيود");
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [account, user?.dataOwnerId]);
 
   // Build ledger rows with running balance using per-account LINES only
