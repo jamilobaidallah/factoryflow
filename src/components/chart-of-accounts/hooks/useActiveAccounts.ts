@@ -31,15 +31,21 @@ export function useActiveAccounts(): UseActiveAccountsResult {
     getAccountsActive(user.dataOwnerId).then(async (result) => {
       if (cancelled) return;
       if (result.success && result.data) {
-        if (result.data.length === 0) {
-          // New user — seed default chart of accounts then re-fetch
-          await seedChartOfAccounts(user.dataOwnerId);
-          const seeded = await getAccountsActive(user.dataOwnerId);
+        // Always call seedChartOfAccounts:
+        // - Empty collection → seeds all defaults from scratch
+        // - Non-empty → calls ensureMissingAccounts to add any accounts added since initial seed
+        // Returns early (0 added) if nothing is missing — safe to call every time
+        const ensureResult = await seedChartOfAccounts(user.dataOwnerId);
+        const addedCount = ensureResult.data ?? 0;
+
+        if (addedCount > 0 && !cancelled) {
+          // New accounts were added — re-fetch to include them
+          const refreshed = await getAccountsActive(user.dataOwnerId);
           if (!cancelled) {
-            setAccounts(seeded.data ?? []);
-            if (!seeded.success) setError(seeded.error ?? 'فشل تحميل الحسابات');
+            setAccounts(refreshed.data ?? []);
+            if (!refreshed.success) setError(refreshed.error ?? 'فشل تحميل الحسابات');
           }
-        } else {
+        } else if (!cancelled) {
           setAccounts(result.data);
         }
       } else {
