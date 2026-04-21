@@ -7,7 +7,7 @@ import { formatDate, formatNumber } from "@/lib/date-utils";
 import { safeAdd, safeSubtract } from "@/lib/currency";
 import type { Account, JournalEntry, JournalLine } from "@/types/accounting";
 import { firestore } from "@/firebase/config";
-import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, query, where, limit, onSnapshot } from "firebase/firestore";
 import { convertFirestoreDates } from "@/lib/firestore-utils";
 import { QUERY_LIMITS } from "@/lib/constants";
 import { useUser } from "@/firebase/provider";
@@ -47,7 +47,6 @@ export function AccountLedger({ account }: AccountLedgerProps) {
     const q = query(
       journalRef,
       where("accountCodes", "array-contains", account.code),
-      orderBy("date", "asc"),
       limit(QUERY_LIMITS.JOURNAL_ENTRIES)
     );
 
@@ -59,7 +58,8 @@ export function AccountLedger({ account }: AccountLedgerProps) {
           .filter((e) => {
             const status = (e as JournalEntry & { status?: string }).status;
             return !status || status === "posted";
-          });
+          })
+          .sort((a, b) => a.date.getTime() - b.date.getTime());
         if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
           setWarning(`يتم عرض أحدث ${QUERY_LIMITS.JOURNAL_ENTRIES} قيد فقط`);
         }
