@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { ChevronDown, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,16 @@ export function JournalEntriesPage() {
   const [loading, setLoading] = useState(true);
   const [warning, setWarning] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const loadEntries = () => {
     if (!user?.dataOwnerId) return;
@@ -88,6 +99,7 @@ export function JournalEntriesPage() {
           <table className="w-full text-sm text-right">
             <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
               <tr>
+                <th className="w-8" />
                 <th className="px-4 py-2.5 font-medium text-slate-500 text-xs">رقم القيد</th>
                 <th className="px-4 py-2.5 font-medium text-slate-500 text-xs">التاريخ</th>
                 <th className="px-4 py-2.5 font-medium text-slate-500 text-xs">البيان</th>
@@ -99,37 +111,72 @@ export function JournalEntriesPage() {
             <tbody className="divide-y divide-slate-100">
               {entries.map((entry) => {
                 const totalDebit = entry.lines.reduce((s, l) => s + l.debit, 0);
+                const totalCredit = entry.lines.reduce((s, l) => s + l.credit, 0);
                 const isManual = entry.linkedDocumentType === "manual";
+                const isExpanded = expandedIds.has(entry.id);
                 return (
-                  <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-500">
-                      {entry.entryNumber}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                      {formatDate(entry.date)}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-700 max-w-[260px] truncate">
-                      {entry.description}
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-left text-xs text-slate-800">
-                      {formatNumber(totalDebit, 2)}
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-left text-xs text-slate-800">
-                      {formatNumber(totalDebit, 2)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                          isManual
-                            ? "bg-primary-100 text-primary-700"
-                            : "bg-slate-100 text-slate-600"
-                        )}
-                      >
-                        {isManual ? "يدوي" : "تلقائي"}
-                      </span>
-                    </td>
-                  </tr>
+                  <>
+                    <tr
+                      key={entry.id}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => toggleExpand(entry.id)}
+                    >
+                      <td className="pr-3 pl-1 py-2.5 text-slate-400">
+                        {isExpanded
+                          ? <ChevronDown className="h-3.5 w-3.5" />
+                          : <ChevronLeft className="h-3.5 w-3.5" />}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-slate-500">
+                        {entry.entryNumber}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
+                        {formatDate(entry.date)}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700 max-w-[260px] truncate">
+                        {entry.description}
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums text-left text-xs text-slate-800">
+                        {formatNumber(totalDebit, 2)}
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums text-left text-xs text-slate-800">
+                        {formatNumber(totalCredit, 2)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            isManual
+                              ? "bg-primary-100 text-primary-700"
+                              : "bg-slate-100 text-slate-600"
+                          )}
+                        >
+                          {isManual ? "يدوي" : "تلقائي"}
+                        </span>
+                      </td>
+                    </tr>
+                    {isExpanded && entry.lines.map((line, idx) => (
+                      <tr key={`${entry.id}-line-${idx}`} className="bg-slate-50/70">
+                        <td />
+                        <td />
+                        <td />
+                        <td className={cn("px-4 py-1.5 text-xs text-slate-600", line.debit > 0 ? "" : "pr-10")}>
+                          {line.debit > 0 ? (
+                            <span className="font-medium">{line.accountNameAr || line.accountCode}</span>
+                          ) : (
+                            <span className="text-slate-400 mr-6">{line.accountNameAr || line.accountCode}</span>
+                          )}
+                          <span className="text-slate-400 text-[10px] mr-1">({line.accountCode})</span>
+                        </td>
+                        <td className="px-4 py-1.5 tabular-nums text-left text-xs text-slate-700">
+                          {line.debit > 0 ? formatNumber(line.debit, 2) : ""}
+                        </td>
+                        <td className="px-4 py-1.5 tabular-nums text-left text-xs text-slate-700">
+                          {line.credit > 0 ? formatNumber(line.credit, 2) : ""}
+                        </td>
+                        <td />
+                      </tr>
+                    ))}
+                  </>
                 );
               })}
             </tbody>

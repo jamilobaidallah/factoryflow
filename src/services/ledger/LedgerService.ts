@@ -1036,9 +1036,10 @@ export class LedgerService {
           // Resolve partner-specific equity account codes (only for equity entries)
           let partnerCapitalCode: string | undefined;
           let partnerDrawingsCode: string | undefined;
-          if (isEquityCategory(formData.category, formData.subCategory) && formData.ownerName) {
+          const equityOwnerName = formData.ownerName || formData.associatedParty;
+          if (isEquityCategory(formData.category, formData.subCategory) && equityOwnerName) {
             const partnerSnap = await getDocs(
-              query(this.partnersRef, where("name", "==", formData.ownerName), limit(1))
+              query(this.partnersRef, where("name", "==", equityOwnerName), limit(1))
             );
             if (!partnerSnap.empty) {
               const p = partnerSnap.docs[0].data();
@@ -1325,9 +1326,10 @@ export class LedgerService {
         // Resolve partner equity codes for equity entries (same as createLedgerEntry)
         let updatePartnerCapitalCode: string | undefined;
         let updatePartnerDrawingsCode: string | undefined;
-        if (isEquityCategory(formData.category, formData.subCategory) && formData.ownerName) {
+        const updateEquityOwnerName = formData.ownerName || formData.associatedParty;
+        if (isEquityCategory(formData.category, formData.subCategory) && updateEquityOwnerName) {
           const partnerSnap = await getDocs(
-            query(this.partnersRef, where("name", "==", formData.ownerName), limit(1))
+            query(this.partnersRef, where("name", "==", updateEquityOwnerName), limit(1))
           );
           if (!partnerSnap.empty) {
             const p = partnerSnap.docs[0].data();
