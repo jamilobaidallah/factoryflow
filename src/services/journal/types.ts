@@ -197,7 +197,8 @@ export type JournalTemplateId =
   | "LOAN_COLLECTION"
   | "LOAN_RECEIVED"
   | "LOAN_REPAYMENT"
-  | "SALES_RETURN";
+  | "SALES_RETURN"
+  | "INVENTORY_TRANSFER";
 
 /**
  * Context for template account resolution

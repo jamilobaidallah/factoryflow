@@ -17,6 +17,7 @@ import { firestore } from "@/firebase/config";
 import { ProductionOrder, ProductionFormData, InventoryItem } from "../types/production";
 import { generateOrderNumber } from "../utils/production-helpers";
 import { parseAmount, safeMultiply, safeAdd, safeSubtract, safeDivide, roundCurrency } from "@/lib/currency";
+import { JournalPostingEngine } from "@/services/journal/JournalPostingEngine";
 
 interface UseProductionOperationsReturn {
   submitOrder: (
@@ -399,9 +400,21 @@ export function useProductionOperations(): UseProductionOperationsReturn {
 
       await batch.commit();
 
+      // Post inventory transfer journal entry: DR 1302, CR 1301
+      if (totalMaterialCost > 0) {
+        const engine = new JournalPostingEngine(user.dataOwnerId);
+        await engine.post({
+          templateId: "INVENTORY_TRANSFER",
+          amount: totalMaterialCost,
+          date: order.date instanceof Date ? order.date : new Date(order.date),
+          description: `تحويل حجر خام إلى جاهز — ${order.orderNumber}`,
+          source: { type: "inventory", documentId: order.id, transactionId: order.orderNumber },
+        });
+      }
+
       toast({
         title: "تم إكمال الأمر",
-        description: "تم تحديث المخزون بنجاح",
+        description: "تم تحديث المخزون وتسجيل القيد المحاسبي",
       });
       return true;
     } catch (error) {

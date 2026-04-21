@@ -1458,8 +1458,8 @@ export async function migrateStoneBusinessAccounts(
   // ── Phase 1: Rename accounts ───────────────────────────────────────────────
   const RENAMES: Record<string, { name: string; nameAr: string }> = {
     '3000': { name: "Partners' Equity",          nameAr: 'حقوق الشركاء' },
-    '1301': { name: 'Imported Raw Stone',         nameAr: 'بلاطات حجر خام — واردات' },
-    '1302': { name: 'Cut Stone In-house',         nameAr: 'حجر مقطوع — إنتاج داخلي' },
+    '1301': { name: 'Raw Stone',                   nameAr: 'حجر خام' },
+    '1302': { name: 'Finished Stone — In-house',  nameAr: 'حجر جاهز — إنتاج داخلي' },
     '4010': { name: 'Cut Stone Sales',            nameAr: 'مبيعات حجر مقطوع' },
     '5040': { name: 'Blade Depreciation & Machine Maintenance', nameAr: 'استهلاك شفرات وصيانة آلات التقطيع' },
   };

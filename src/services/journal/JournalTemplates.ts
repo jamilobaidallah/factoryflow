@@ -396,6 +396,23 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
       creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
     }),
   },
+  /**
+   * Inventory transfer: raw stone (1301) → finished stone (1302)
+   * DR: 1302 (حجر جاهز — إنتاج داخلي) | CR: 1301 (حجر خام)
+   */
+  INVENTORY_TRANSFER: {
+    id: "INVENTORY_TRANSFER",
+    nameAr: "تحويل مخزون — حجر خام إلى جاهز",
+    nameEn: "Inventory Transfer — Raw to Finished Stone",
+    resolveAccounts: () => ({
+      debitAccountCode: '1302',
+      debitAccountName: '1302',
+      debitAccountNameAr: getAccountNameAr('1302'),
+      creditAccountCode: '1301',
+      creditAccountName: '1301',
+      creditAccountNameAr: getAccountNameAr('1301'),
+    }),
+  },
 };
 
 /**

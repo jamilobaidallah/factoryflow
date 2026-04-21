@@ -177,8 +177,8 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   '5310': 'كهرباء وماء',
   '5425': 'عمولات مبيعات',
   // Stone inventory accounts
-  '1301': 'بلاطات حجر خام — واردات',
-  '1302': 'حجر مقطوع — إنتاج داخلي',
+  '1301': 'حجر خام',
+  '1302': 'حجر جاهز — إنتاج داخلي',
   '1303': 'حجر جاهز — مشتريات محلية',
   // Note: INCOME_SUMMARY (3300 = 'ملخص الدخل') is already defined above at line ~138
 };

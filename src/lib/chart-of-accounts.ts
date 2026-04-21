@@ -98,19 +98,19 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   ),
   defineAccount(
     '1301',
-    'Imported Raw Stone',
-    'بلاطات حجر خام — واردات',
+    'Raw Stone',
+    'حجر خام',
     'asset',
     ACCOUNT_CODES.INVENTORY,
-    'Raw imported stone slabs on hand'
+    'Raw imported stone on hand'
   ),
   defineAccount(
     '1302',
-    'Cut Stone In-house',
-    'حجر مقطوع — إنتاج داخلي',
+    'Finished Stone — In-house Production',
+    'حجر جاهز — إنتاج داخلي',
     'asset',
     ACCOUNT_CODES.INVENTORY,
-    'Stone cut in-house from raw imported slabs'
+    'Stone cut and finished in-house from raw stone'
   ),
   defineAccount(
     '1303',
