@@ -77,8 +77,7 @@ export const CATEGORIES: Category[] = [
         subcategories: [
             "مبيعات حجر مقطوع",      // Cut stone → DR Cash/AR, CR 4010
             "مبيعات حجر جاهز",       // Ready stone → DR Cash/AR, CR 4020
-            // Backward compat aliases (old entries remain valid)
-            "مبيعات منتجات",
+            // "مبيعات منتجات" hidden — backward compat only, kept in account-mapping.ts
         ]
     },
     // Contra-Revenue (reduces revenue — goods rejected/returned by client)
@@ -117,10 +116,7 @@ export const CATEGORIES: Category[] = [
             "استيراد ونقل وجمارك",    // Import/freight/customs → capitalizes to 1301 (IAS 2)
             "شراء حجر جاهز",          // Ready stone purchase → DR 1303
             "مصاريف تقطيع",           // Cutting costs → DR 5040 (blades, maintenance)
-            // Backward compat aliases
-            "مواد خام",
-            "شحن مواد خام",
-            "شراء بضاعة جاهزة",
+            // "مواد خام", "شحن مواد خام", "شراء بضاعة جاهزة" hidden — backward compat only
         ]
     },
     {
@@ -169,8 +165,8 @@ export const CATEGORIES: Category[] = [
         name: "التزامات مالية",
         type: "مصروف",
         subcategories: [
-            "سداد قروض",
-            "فوائد قروض",
+            // "سداد قروض" removed — use قروض مستلمة → سداد قرض (correct accounting, reduces 2300)
+            "فوائد قروض مدفوعة",  // Interest paid on borrowed loans → DR 5520
             "ضرائب ورسوم",
         ]
     },

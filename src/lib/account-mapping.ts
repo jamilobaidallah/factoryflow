@@ -75,7 +75,8 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'تأمينات': ACCOUNT_CODES.INSURANCE_EXPENSE, // Insurance
   'ضرائب': ACCOUNT_CODES.TAXES_EXPENSE,
   'ضرائب ورسوم': ACCOUNT_CODES.TAXES_EXPENSE,
-  'فوائد قروض': ACCOUNT_CODES.LOAN_INTEREST_EXPENSE,
+  'فوائد قروض': ACCOUNT_CODES.LOAN_INTEREST_EXPENSE,          // backward compat
+  'فوائد قروض مدفوعة': ACCOUNT_CODES.LOAN_INTEREST_EXPENSE,  // new name
 };
 
 /**
