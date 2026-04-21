@@ -1,26 +1,14 @@
 import { CATEGORIES } from "./ledger-constants";
 import { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR } from "@/lib/constants";
+import { LOAN_CATEGORIES as _LOAN_CATEGORIES, LOAN_SUBCATEGORIES as _LOAN_SUBCATEGORIES } from "@/lib/account-mapping";
 import type { JournalTemplateId } from "@/services/journal/types";
 
 // Re-export for convenience
 export { TRANSACTION_TYPES, PAYMENT_STATUSES, PAYMENT_STATUS_AR };
 
-/**
- * Loan category constants - Single source of truth for loan-related values
- */
-export const LOAN_CATEGORIES = {
-    RECEIVED: "قروض مستلمة",     // Liability - money borrowed
-    GIVEN: "قروض ممنوحة",        // Asset - money lent
-} as const;
-
-export const LOAN_SUBCATEGORIES = {
-    // Loans Received (Liability)
-    LOAN_RECEIPT: "استلام قرض",      // Creates liability, cash IN
-    LOAN_REPAYMENT: "سداد قرض",       // Reduces liability, cash OUT
-    // Loans Given (Asset)
-    LOAN_GIVEN: "منح قرض",           // Creates asset, cash OUT
-    LOAN_COLLECTION: "تحصيل قرض",    // Reduces asset, cash IN
-} as const;
+// Re-export from the canonical source (account-mapping.ts) — no duplication
+export const LOAN_CATEGORIES = _LOAN_CATEGORIES;
+export const LOAN_SUBCATEGORIES = _LOAN_SUBCATEGORIES;
 
 /**
  * Equity subcategory constants

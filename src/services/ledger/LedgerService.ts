@@ -53,7 +53,7 @@ import {
   getPaymentTypeForTransaction,
 } from "@/components/ledger/utils/ledger-helpers";
 import { NON_CASH_SUBCATEGORIES, INBOUND_FREIGHT_SUBCATEGORIES } from "@/components/ledger/utils/ledger-constants";
-import { DEPRECIATION_SUBCATEGORIES } from "@/types/accounting";
+import { DEPRECIATION_SUBCATEGORIES, ACCOUNT_CODES } from "@/types/accounting";
 import { CHEQUE_TYPES, CHEQUE_STATUS_AR, PAYMENT_TYPES, QUERY_LIMITS } from "@/lib/constants";
 import {
   parseAmount,
@@ -670,29 +670,29 @@ export class LedgerService {
           },
           lines: [
             {
-              accountCode: '4050',
-              accountName: '4050',
+              accountCode: ACCOUNT_CODES.SALES_RETURNS,
+              accountName: 'مردودات المبيعات',
               accountNameAr: 'مردودات المبيعات',
               debit: saleAmount,
               credit: 0,
             },
             {
               accountCode: '1300',
-              accountName: '1300',
+              accountName: 'المخزون',
               accountNameAr: 'المخزون',
               debit: costAmount,
               credit: 0,
             },
             {
               accountCode: '1200',
-              accountName: '1200',
+              accountName: 'ذمم مدينة',
               accountNameAr: 'ذمم مدينة',
               debit: 0,
               credit: saleAmount,
             },
             {
               accountCode: '5000',
-              accountName: '5000',
+              accountName: 'تكلفة البضاعة المباعة',
               accountNameAr: 'تكلفة البضاعة المباعة',
               debit: 0,
               credit: costAmount,

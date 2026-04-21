@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/firebase/provider";
 import type { Account } from "@/types/accounting";
@@ -29,13 +29,17 @@ export function ChartOfAccountsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [migrating, setMigrating] = useState(false);
-  const [migrationDone, setMigrationDone] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem('coa-backfill-done') === '1'
-  );
+  const [migrationDone, setMigrationDone] = useState(false);
   const [stoneMigrating, setStoneMigrating] = useState(false);
-  const [stoneMigrationDone, setStoneMigrationDone] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem('stone-biz-migration-done') === '1'
-  );
+  const [stoneMigrationDone, setStoneMigrationDone] = useState(false);
+
+  // Read migration flags once the user ID is known (namespaced to prevent cross-user bleed)
+  useEffect(() => {
+    const uid = user?.dataOwnerId;
+    if (!uid || typeof window === 'undefined') return;
+    setMigrationDone(localStorage.getItem(`coa-backfill-done:${uid}`) === '1');
+    setStoneMigrationDone(localStorage.getItem(`stone-biz-migration-done:${uid}`) === '1');
+  }, [user?.dataOwnerId]);
 
   const selectedAccount = accounts.find((a) => a.code === selectedCode) ?? null;
 
@@ -94,7 +98,7 @@ export function ChartOfAccountsPage() {
       const codesUpdated = codesResult.data ?? 0;
       const flagsUpdated = flagsResult.data ?? 0;
       if (codesResult.success && flagsResult.success) {
-        localStorage.setItem('coa-backfill-done', '1');
+        localStorage.setItem(`coa-backfill-done:${user.dataOwnerId}`, '1');
         setMigrationDone(true);
         toast({
           title: "تم تحديث البيانات",
@@ -118,7 +122,7 @@ export function ChartOfAccountsPage() {
     try {
       const result = await migrateStoneBusinessAccounts(user.dataOwnerId);
       if (result.success) {
-        localStorage.setItem('stone-biz-migration-done', '1');
+        localStorage.setItem(`stone-biz-migration-done:${user.dataOwnerId}`, '1');
         setStoneMigrationDone(true);
         const phases = result.data?.phases ?? {};
         const summary = Object.values(phases).join('، ');

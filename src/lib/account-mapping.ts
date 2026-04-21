@@ -30,7 +30,7 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
   'شراء حجر خام مستورد': '1301',             // Imported raw stone → DR 1301 (asset)
   'استيراد ونقل وجمارك': '1301',                   // Import+freight+customs → DR 1301 (IAS 2.10: capitalize to specific asset)
   'شراء حجر جاهز':       '1303',             // Ready stone → DR 1303 (asset)
-  'مصاريف تقطيع':        ACCOUNT_CODES.INVENTORY_LOSSES, // Blade wear + cutting maintenance → DR 5040
+  'مصاريف تقطيع':        ACCOUNT_CODES.CUTTING_MAINTENANCE, // Blade wear + cutting maintenance → DR 5040
 
   // Legacy stone aliases (backward compat)
   'مواد خام':            '1301',             // Old name for imported raw stone
@@ -100,6 +100,7 @@ const CATEGORY_TO_REVENUE_ACCOUNT: Record<string, string> = {
   // Other Income - إيرادات أخرى
   'إيرادات أخرى': ACCOUNT_CODES.OTHER_INCOME,
   'فوائد بنكية': '4210',
+  'فوائد قروض محصلة': '4210',
   'بيع أصول': '4220',
   'إيرادات متنوعة': '4230',
 };
@@ -141,7 +142,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.SERVICE_REVENUE]: 'إيرادات الخدمات',
   [ACCOUNT_CODES.OTHER_INCOME]: 'إيرادات أخرى',
   [ACCOUNT_CODES.COST_OF_GOODS_SOLD]: 'تكلفة البضاعة المباعة',
-  [ACCOUNT_CODES.INVENTORY_LOSSES]: 'استهلاك شفرات وصيانة آلات التقطيع',
+  [ACCOUNT_CODES.CUTTING_MAINTENANCE]: 'استهلاك شفرات وصيانة آلات التقطيع',
   [ACCOUNT_CODES.SALARIES_EXPENSE]: 'مصاريف الرواتب',
   [ACCOUNT_CODES.RENT_EXPENSE]: 'مصاريف الإيجار',
   [ACCOUNT_CODES.UTILITIES_EXPENSE]: 'مصاريف المرافق',
@@ -272,6 +273,19 @@ export function getAccountMappingForLedgerEntry(
   // Fixed assets are capitalized, not expensed
   if (isFixedAssetCategory(category, subCategory)) {
     return getAccountMappingForFixedAssetPurchase(immediateSettlement ?? true);
+  }
+
+  // Sales return (contra-revenue): DR Sales Returns (4050), CR Cash or AR
+  if (type === TRANSACTION_TYPES.RETURN) {
+    const creditAccount = isARAPEntry && !immediateSettlement
+      ? ACCOUNT_CODES.ACCOUNTS_RECEIVABLE
+      : ACCOUNT_CODES.CASH;
+    return {
+      debitAccount: ACCOUNT_CODES.SALES_RETURNS,
+      creditAccount,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+      creditAccountNameAr: getAccountNameAr(creditAccount),
+    };
   }
 
   // Income transaction
@@ -623,18 +637,18 @@ export function isAdvanceCategory(category: string): boolean {
 }
 
 /**
- * Loan category constants
+ * Loan category constants — single source of truth (re-exported by ledger-helpers.ts)
  */
-const LOAN_CATEGORIES = {
+export const LOAN_CATEGORIES = {
   GIVEN: 'قروض ممنوحة',
   RECEIVED: 'قروض مستلمة',
 } as const;
 
-const LOAN_SUBCATEGORIES = {
-  GIVE_LOAN: 'منح قرض',
-  RECEIVE_LOAN: 'استلام قرض',
-  COLLECT_LOAN: 'تحصيل قرض',
-  REPAY_LOAN: 'سداد قرض',
+export const LOAN_SUBCATEGORIES = {
+  LOAN_GIVEN: 'منح قرض',
+  LOAN_RECEIPT: 'استلام قرض',
+  LOAN_COLLECTION: 'تحصيل قرض',
+  LOAN_REPAYMENT: 'سداد قرض',
 } as const;
 
 /**
@@ -660,8 +674,8 @@ export function getAccountMappingForLoan(
   subCategory?: string
 ): AccountMapping {
   const isLoanGiven = category === LOAN_CATEGORIES.GIVEN;
-  const isInitialLoan = subCategory === LOAN_SUBCATEGORIES.GIVE_LOAN ||
-                        subCategory === LOAN_SUBCATEGORIES.RECEIVE_LOAN;
+  const isInitialLoan = subCategory === LOAN_SUBCATEGORIES.LOAN_GIVEN ||
+                        subCategory === LOAN_SUBCATEGORIES.LOAN_RECEIPT;
 
   if (isLoanGiven) {
     if (isInitialLoan) {

@@ -116,6 +116,7 @@ export const CATEGORIES: Category[] = [
             "استيراد ونقل وجمارك",    // Import/freight/customs → capitalizes to 1301 (IAS 2)
             "شراء حجر جاهز",          // Ready stone purchase → DR 1303
             "مصاريف تقطيع",           // Cutting costs → DR 5040 (blades, maintenance)
+            "هدر وتالف",              // Wastage/spoilage → account 5060 (belongs in COGS per IAS 2)
             // "مواد خام", "شحن مواد خام", "شراء بضاعة جاهزة" hidden — backward compat only
         ]
     },
@@ -137,7 +138,6 @@ export const CATEGORIES: Category[] = [
             "مصاريف مكتبية",
             "مستهلكات",
             "أدوات ومعدات صغيرة",
-            "هدر وتالف",          // Wastage/spoilage → account 5060
             "عينات مجانية",       // Free samples → account 5420 (Marketing)
             "إهلاك الأصول",       // Depreciation → DR 5400, CR 1510 (non-cash)
         ]

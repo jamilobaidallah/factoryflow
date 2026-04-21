@@ -73,8 +73,7 @@ function AccountRow({
         <div
           className={cn(
             "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 transition-colors",
-            isSelected && "bg-primary-50 text-primary-700",
-            depth > 0 && `mr-${depth * 4}`
+            isSelected && "bg-primary-50 text-primary-700"
           )}
           style={{ marginRight: depth * 16 }}
         >

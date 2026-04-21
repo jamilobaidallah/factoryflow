@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronDown, ChevronLeft, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, Plus, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDate, formatNumber } from "@/lib/date-utils";
+import { safeAdd } from "@/lib/currency";
 import { useUser } from "@/firebase/provider";
 import { getJournalEntries } from "@/services/journalService";
 import type { JournalEntry } from "@/types/accounting";
@@ -19,6 +20,7 @@ export function JournalEntriesPage() {
 
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -32,24 +34,31 @@ export function JournalEntriesPage() {
     });
   }, []);
 
-  const loadEntries = () => {
+  const loadEntries = useCallback(() => {
     if (!user?.dataOwnerId) return;
     setLoading(true);
-    getJournalEntries(user.dataOwnerId, undefined, undefined, false).then((result) => {
-      if (result.success && result.data) {
-        // Show manual entries first, then all posted entries sorted by date desc
-        const sorted = [...result.data].sort((a, b) => b.date.getTime() - a.date.getTime());
-        setEntries(sorted);
-        setWarning(result.warning ?? null);
-      }
-      setLoading(false);
-    });
-  };
+    setError(null);
+    getJournalEntries(user.dataOwnerId, undefined, undefined, false)
+      .then((result) => {
+        if (result.success && result.data) {
+          const sorted = [...result.data].sort((a, b) => b.date.getTime() - a.date.getTime());
+          setEntries(sorted);
+          setWarning(result.warning ?? null);
+        } else if (!result.success) {
+          setError("فشل تحميل القيود اليومية. يرجى المحاولة مرة أخرى.");
+        }
+      })
+      .catch(() => {
+        setError("حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [user?.dataOwnerId]);
 
   useEffect(() => {
     loadEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.dataOwnerId]);
+  }, [loadEntries]);
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
@@ -57,7 +66,7 @@ export function JournalEntriesPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
         <div>
           <h1 className="text-xl font-bold text-slate-900">القيود اليومية</h1>
-          {!loading && (
+          {!loading && !error && (
             <p className="text-sm text-slate-500 mt-0.5">
               {entries.length} قيد محاسبي
             </p>
@@ -84,6 +93,14 @@ export function JournalEntriesPage() {
             <Loader2 className="h-5 w-5 animate-spin ml-2" />
             <span>جارٍ التحميل…</span>
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-24 text-danger-600 gap-3">
+            <AlertCircle className="h-8 w-8 text-danger-400" />
+            <p className="text-sm">{error}</p>
+            <Button variant="outline" size="sm" onClick={loadEntries}>
+              إعادة المحاولة
+            </Button>
+          </div>
         ) : entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-2">
             <p className="text-sm">لا توجد قيود يومية</p>
@@ -109,8 +126,8 @@ export function JournalEntriesPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {entries.map((entry) => {
-                const totalDebit = entry.lines.reduce((s, l) => s + l.debit, 0);
-                const totalCredit = entry.lines.reduce((s, l) => s + l.credit, 0);
+                const totalDebit = entry.lines.reduce((s, l) => safeAdd(s, l.debit), 0);
+                const totalCredit = entry.lines.reduce((s, l) => safeAdd(s, l.credit), 0);
                 const isManual = entry.linkedDocumentType === "manual";
                 const isExpanded = expandedIds.has(entry.id);
                 return (

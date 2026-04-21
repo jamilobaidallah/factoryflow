@@ -53,6 +53,7 @@ import Decimal from 'decimal.js-light';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
 import { QUERY_LIMITS, ACCOUNTING_TOLERANCE } from '@/lib/constants';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
+import { JournalPostingEngine } from '@/services/journal/JournalPostingEngine';
 import {
   createJournalLines,
   getAccountTypeFromCode,
@@ -106,12 +107,14 @@ async function deleteJournalEntriesByField(
       return { success: true, data: 0 };
     }
 
-    const batch = writeBatch(firestore);
-    snapshot.docs.forEach((docSnap) => {
-      batch.delete(docSnap.ref);
-    });
-
-    await batch.commit();
+    // Firestore batch limit is 500 — chunk the deletes
+    const CHUNK = 500;
+    const docs = snapshot.docs;
+    for (let i = 0; i < docs.length; i += CHUNK) {
+      const batch = writeBatch(firestore);
+      docs.slice(i, i + CHUNK).forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    }
     return { success: true, data: snapshot.size };
   } catch (error) {
     console.error(`Error deleting journal entries by ${fieldName}:`, error);
@@ -1474,7 +1477,8 @@ export async function migrateStoneBusinessAccounts(
   results['phase1_renames'] = `${renamedCount} accounts renamed`;
 
   // ── Phase 2: Deactivate stale accounts ────────────────────────────────────
-  const DEACTIVATE = ['1310', '4100', '4110', '3200', '3100'];
+  // 3100 removed: Phase 3 creates new partner capital account at that code (C6)
+  const DEACTIVATE = ['1310', '4100', '4110', '3200', '5120'];
   let deactivatedCount = 0;
   for (const code of DEACTIVATE) {
     const id = codeToId.get(code);
@@ -1515,8 +1519,8 @@ export async function migrateStoneBusinessAccounts(
     const capitalCode  = String(nextCode);
     const drawingsCode = String(nextCode + 10);
 
-    // Sequential creation so partial failure doesn't leave an orphaned capital account
-    await createAccount(userId, {
+    // Sequential creation — check errors so partial failure doesn't write stale codes (C7)
+    const capResult = await createAccount(userId, {
       code: capitalCode,
       name: `${partnerName} Capital`,
       nameAr: `رأس مال — ${partnerName}`,
@@ -1525,7 +1529,10 @@ export async function migrateStoneBusinessAccounts(
       parentCode: '3000',
       isContraAccount: false,
     });
-    await createAccount(userId, {
+    if (!capResult.success) {
+      throw new Error(`فشل إنشاء حساب رأس المال للشريك "${partnerName}": ${capResult.error}`);
+    }
+    const drawResult = await createAccount(userId, {
       code: drawingsCode,
       name: `${partnerName} Drawings`,
       nameAr: `سحوبات — ${partnerName}`,
@@ -1534,6 +1541,9 @@ export async function migrateStoneBusinessAccounts(
       parentCode: '3000',
       isContraAccount: true,
     });
+    if (!drawResult.success) {
+      throw new Error(`فشل إنشاء حساب السحوبات للشريك "${partnerName}": ${drawResult.error}`);
+    }
 
     await updateDoc(partnerDoc.ref, {
       capitalAccountCode:  capitalCode,
@@ -1726,14 +1736,11 @@ export async function closeYearEnd(
   const journalRef = collection(firestore, getJournalEntriesPath(userId));
   const yearStr = String(year);
 
-  // ── Idempotent guard ───────────────────────────────────────────────────────
+  // ── Idempotent guard — query by dedicated closingYear field (C4) ──────────
   const existingSnap = await getDocs(
-    query(journalRef, where('linkedDocumentType', '==', 'year-end-close'), limit(50))
+    query(journalRef, where('closingYear', '==', year), limit(1))
   );
-  const alreadyClosed = existingSnap.docs.some(
-    (d) => ((d.data().description as string) ?? '').includes(yearStr)
-  );
-  if (alreadyClosed) {
+  if (!existingSnap.empty) {
     return { success: false, error: `تم إغلاق السنة المالية ${year} مسبقاً` };
   }
 
@@ -1754,11 +1761,11 @@ export async function closeYearEnd(
     );
   }
 
-  // ── HIGH-3: Exclude prior closing entries from balance aggregation ─────────
-  // Filter client-side (Firestore != operator would require composite index)
-  const operatingDocs = yearEntriesSnap.docs.filter(
-    (d) => d.data().linkedDocumentType !== 'year-end-close'
-  );
+  // Exclude closing entries and reversed entries from balance aggregation (H4)
+  const operatingDocs = yearEntriesSnap.docs.filter((d) => {
+    const data = d.data();
+    return data.linkedDocumentType !== 'year-end-close' && data.status !== 'reversed';
+  });
 
   // ── Aggregate debit/credit totals per account code ────────────────────────
   const balances = new Map<string, { debitTotal: number; creditTotal: number }>();
@@ -1821,9 +1828,10 @@ export async function closeYearEnd(
   const netExpenseToIS = safeSubtract(totalNormalExpense, totalContraExpense);
   const netProfit      = safeSubtract(netRevenueToIS, netExpenseToIS);
 
-  // ── Fetch active partners with equity codes ────────────────────────────────
+  // ── Fetch ALL partners (active + inactive) with equity codes (H5) ──────────
+  // Inactive partners may have drawings balances that still need closing
   const partnersSnap = await getDocs(
-    query(collection(firestore, `users/${userId}/partners`), where('active', '==', true))
+    query(collection(firestore, `users/${userId}/partners`))
   );
 
   interface PartnerInfo { name: string; capitalCode: string; drawingsCode: string; ownershipPct: number; }
@@ -2001,33 +2009,24 @@ export async function closeYearEnd(
     }
   }
 
-  // ── Commit all entries atomically via writeBatch (CRITICAL-4) ─────────────
-  await seedChartOfAccounts(userId);
+  // ── Commit all entries atomically via JournalPostingEngine (C5) ──────────
+  // Uses proper sequence numbers, V2 format, and closingYear for idempotency (C4)
+  const engine = new JournalPostingEngine(userId);
+  const sequences = await engine.reserveSequences(pendingEntries.length);
   const batch = writeBatch(firestore);
 
-  for (const pe of pendingEntries) {
-    const entryRef  = doc(journalRef);
-    const entryNumber = generateJournalEntryNumber(closeDate);
-    const accountCodes = Array.from(new Set(pe.lines.map(l => l.accountCode)));
-    const sanitizedLines = pe.lines.map(l => ({ ...l, description: l.description ?? null }));
-    const validation = validateJournalEntry(pe.lines);
-
-    batch.set(entryRef, {
-      entryNumber,
-      date:               closeDateTs,
-      description:        pe.description,
-      lines:              sanitizedLines,
-      accountCodes,
-      totalDebits:        validation.totalDebits,
-      totalCredits:       validation.totalCredits,
-      status:             'posted' as const,
-      linkedTransactionId: null,
-      linkedPaymentId:    null,
-      linkedDocumentType: 'year-end-close' as const,
-      createdAt:          Timestamp.fromDate(now),
-      postedAt:           Timestamp.fromDate(now),
-    });
-  }
+  pendingEntries.forEach((pe, i) => {
+    const entryRef = engine.postToBatch(batch, {
+      templateId: 'INVENTORY_TRANSFER', // placeholder — lines override template
+      amount: 0,
+      date: closeDate,
+      description: pe.description,
+      lines: pe.lines,
+      source: { type: 'manual', documentId: `year-end-close-${year}` },
+    }, sequences[i]);
+    // Patch closingYear onto the doc so idempotency query works
+    batch.update(entryRef, { closingYear: year, linkedDocumentType: 'year-end-close' });
+  });
 
   await batch.commit();
   return { success: true };

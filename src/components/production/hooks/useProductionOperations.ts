@@ -233,6 +233,20 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             userEmail: user.email || '',
             createdAt: new Date(),
           });
+
+          // Reverse old journal + post new one atomically in the same batch
+          const editEngine = new JournalPostingEngine(user.dataOwnerId);
+          const [seqReverse, seqNew] = await editEngine.reserveSequences(2);
+          await editEngine.reverseBySourceToBatch(batch, "inventory", editingOrderId, "تعديل أمر الإنتاج", [seqReverse]);
+          if (totalMaterialCost > 0) {
+            editEngine.postToBatch(batch, {
+              templateId: "INVENTORY_TRANSFER",
+              amount: totalMaterialCost,
+              date: new Date(formData.date),
+              description: `تحويل حجر خام إلى جاهز — ${originalOrder.orderNumber} (معدّل)`,
+              source: { type: "inventory", documentId: editingOrderId, transactionId: originalOrder.orderNumber },
+            }, seqNew);
+          }
         }
 
         // Update the order document
@@ -398,19 +412,21 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         createdAt: new Date(),
       });
 
-      await batch.commit();
+      // Reserve sequence number BEFORE batch so journal is atomic with inventory update
+      const engine = new JournalPostingEngine(user.dataOwnerId);
+      const [seq] = totalMaterialCost > 0 ? await engine.reserveSequences(1) : [0];
 
-      // Post inventory transfer journal entry: DR 1302, CR 1301
       if (totalMaterialCost > 0) {
-        const engine = new JournalPostingEngine(user.dataOwnerId);
-        await engine.post({
+        engine.postToBatch(batch, {
           templateId: "INVENTORY_TRANSFER",
           amount: totalMaterialCost,
           date: order.date instanceof Date ? order.date : new Date(order.date),
           description: `تحويل حجر خام إلى جاهز — ${order.orderNumber}`,
           source: { type: "inventory", documentId: order.id, transactionId: order.orderNumber },
-        });
+        }, seq);
       }
+
+      await batch.commit();
 
       toast({
         title: "تم إكمال الأمر",
@@ -520,6 +536,13 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           userEmail: user.email || '',
           createdAt: new Date(),
         });
+      }
+
+      // Reverse the INVENTORY_TRANSFER journal atomically (if order was completed)
+      if (order.status === "مكتمل") {
+        const engine = new JournalPostingEngine(user.dataOwnerId);
+        const [seq] = await engine.reserveSequences(1);
+        await engine.reverseBySourceToBatch(batch, "inventory", order.id, "حذف أمر الإنتاج", [seq]);
       }
 
       // Delete the order

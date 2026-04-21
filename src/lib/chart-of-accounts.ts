@@ -121,14 +121,6 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Ready stone purchased locally for resale'
   ),
   defineAccount(
-    '1310',
-    'Work-in-Progress',
-    'إنتاج قيد التنفيذ',
-    'asset',
-    ACCOUNT_CODES.INVENTORY,
-    'Partially completed products currently in production'
-  ),
-  defineAccount(
     ACCOUNT_CODES.PREPAID_EXPENSES,
     'Prepaid Expenses',
     'مصاريف مدفوعة مقدماً',
@@ -437,7 +429,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   ),
 
   defineAccount(
-    ACCOUNT_CODES.INVENTORY_LOSSES,  // 5040
+    ACCOUNT_CODES.CUTTING_MAINTENANCE,  // 5040
     'Blade Consumption & Cutting Machine Maintenance',
     'استهلاك شفرات وصيانة آلات التقطيع',
     'expense',
@@ -594,14 +586,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     'Commissions paid to external sales agents'
   ),
 
-  defineAccount(
-    '5120',
-    'Manufacturing Overhead',
-    'مصاريف إنتاج غير مباشرة',
-    'expense',
-    undefined,
-    'Indirect production costs: factory supervision, factory utilities, equipment depreciation'
-  ),
+  // 5120 Manufacturing Overhead removed — not applicable to stone business; use 5040 for cutting costs
 
   // General Expenses - مصاريف عامة
   defineAccount(

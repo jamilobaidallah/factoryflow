@@ -100,14 +100,14 @@ export class JournalPostingEngine {
       const lines: JournalLine[] = request.lines || [
         {
           accountCode: accounts.debitAccountCode,
-          accountName: accounts.debitAccountCode,
+          accountName: accounts.debitAccountName || accounts.debitAccountNameAr,
           accountNameAr: accounts.debitAccountNameAr,
           debit: request.amount,
           credit: 0,
         },
         {
           accountCode: accounts.creditAccountCode,
-          accountName: accounts.creditAccountCode,
+          accountName: accounts.creditAccountName || accounts.creditAccountNameAr,
           accountNameAr: accounts.creditAccountNameAr,
           debit: 0,
           credit: request.amount,
@@ -213,14 +213,14 @@ export class JournalPostingEngine {
     const lines: JournalLine[] = request.lines || [
       {
         accountCode: accounts.debitAccountCode,
-        accountName: accounts.debitAccountCode,
+        accountName: accounts.debitAccountName || accounts.debitAccountNameAr,
         accountNameAr: accounts.debitAccountNameAr,
         debit: request.amount,
         credit: 0,
       },
       {
         accountCode: accounts.creditAccountCode,
-        accountName: accounts.creditAccountCode,
+        accountName: accounts.creditAccountName || accounts.creditAccountNameAr,
         accountNameAr: accounts.creditAccountNameAr,
         debit: 0,
         credit: request.amount,
@@ -689,14 +689,14 @@ export class JournalPostingEngine {
     const lines: JournalLine[] = request.lines || [
       {
         accountCode: accounts.debitAccountCode,
-        accountName: accounts.debitAccountCode,
+        accountName: accounts.debitAccountName || accounts.debitAccountNameAr,
         accountNameAr: accounts.debitAccountNameAr,
         debit: request.amount,
         credit: 0,
       },
       {
         accountCode: accounts.creditAccountCode,
-        accountName: accounts.creditAccountCode,
+        accountName: accounts.creditAccountName || accounts.creditAccountNameAr,
         accountNameAr: accounts.creditAccountNameAr,
         debit: 0,
         credit: request.amount,
