@@ -228,6 +228,20 @@ export function getAccountMappingForLedgerEntry(
   // Determine the specific account from category/subcategory
   const specificCategory = subCategory || category;
 
+  // Sales return (contra-revenue): DR Sales Returns (4050), CR Cash or AR
+  // Checked FIRST so a return entry is never misrouted by a category-based guard below.
+  if (type === TRANSACTION_TYPES.RETURN) {
+    const creditAccount = isARAPEntry && !immediateSettlement
+      ? ACCOUNT_CODES.ACCOUNTS_RECEIVABLE
+      : ACCOUNT_CODES.CASH;
+    return {
+      debitAccount: ACCOUNT_CODES.SALES_RETURNS,
+      creditAccount,
+      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+      creditAccountNameAr: getAccountNameAr(creditAccount),
+    };
+  }
+
   // Check for owner equity transactions (special handling)
   // Note: actual partner-specific account codes are resolved via TemplateContext in JournalTemplates.ts
   // This block is a fallback; the real routing happens in OWNER_CAPITAL / OWNER_DRAWINGS templates.
@@ -273,19 +287,6 @@ export function getAccountMappingForLedgerEntry(
   // Fixed assets are capitalized, not expensed
   if (isFixedAssetCategory(category, subCategory)) {
     return getAccountMappingForFixedAssetPurchase(immediateSettlement ?? true);
-  }
-
-  // Sales return (contra-revenue): DR Sales Returns (4050), CR Cash or AR
-  if (type === TRANSACTION_TYPES.RETURN) {
-    const creditAccount = isARAPEntry && !immediateSettlement
-      ? ACCOUNT_CODES.ACCOUNTS_RECEIVABLE
-      : ACCOUNT_CODES.CASH;
-    return {
-      debitAccount: ACCOUNT_CODES.SALES_RETURNS,
-      creditAccount,
-      debitAccountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
-      creditAccountNameAr: getAccountNameAr(creditAccount),
-    };
   }
 
   // Income transaction

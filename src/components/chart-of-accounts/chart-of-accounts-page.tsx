@@ -29,9 +29,9 @@ export function ChartOfAccountsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [migrating, setMigrating] = useState(false);
-  const [migrationDone, setMigrationDone] = useState(false);
+  const [migrationDone, setMigrationDone] = useState<boolean | null>(null);
   const [stoneMigrating, setStoneMigrating] = useState(false);
-  const [stoneMigrationDone, setStoneMigrationDone] = useState(false);
+  const [stoneMigrationDone, setStoneMigrationDone] = useState<boolean | null>(null);
 
   // Read migration flags once the user ID is known (namespaced to prevent cross-user bleed)
   useEffect(() => {
@@ -142,7 +142,7 @@ export function ChartOfAccountsPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden" dir="rtl">
       {/* One-time migration banner — shown to owner until backfill is done */}
-      {isOwner && !loading && accounts.length > 0 && !migrationDone && (
+      {isOwner && !loading && accounts.length > 0 && migrationDone === false && (
         <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 shrink-0">
           <DatabaseZap className="h-4 w-4 shrink-0" />
           <span className="flex-1">
@@ -160,7 +160,7 @@ export function ChartOfAccountsPage() {
         </div>
       )}
       {/* Stone business migration banner */}
-      {isOwner && !loading && accounts.length > 0 && !stoneMigrationDone && (
+      {isOwner && !loading && accounts.length > 0 && stoneMigrationDone === false && (
         <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-800 shrink-0">
           <DatabaseZap className="h-4 w-4 shrink-0" />
           <span className="flex-1">

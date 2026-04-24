@@ -291,6 +291,9 @@ export interface PostingRequest {
 
   /** Optional: Pre-resolved lines (for complex entries) */
   lines?: JournalLine[];
+
+  /** Optional: Extra fields merged into the Firestore document (e.g. closingYear) */
+  extraFields?: Record<string, unknown>;
 }
 
 /**

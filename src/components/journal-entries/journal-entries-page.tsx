@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ChevronDown, ChevronLeft, Plus, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -131,9 +131,8 @@ export function JournalEntriesPage() {
                 const isManual = entry.linkedDocumentType === "manual";
                 const isExpanded = expandedIds.has(entry.id);
                 return (
-                  <>
+                  <React.Fragment key={entry.id}>
                     <tr
-                      key={entry.id}
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
                       onClick={() => toggleExpand(entry.id)}
                     >
@@ -192,7 +191,7 @@ export function JournalEntriesPage() {
                         <td />
                       </tr>
                     ))}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>

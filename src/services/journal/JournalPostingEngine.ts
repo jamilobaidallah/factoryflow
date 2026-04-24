@@ -272,6 +272,7 @@ export class JournalPostingEngine {
     const entryRef = doc(collection(firestore, this.journalPath));
     batch.set(entryRef, {
       ...entryDoc,
+      ...(request.extraFields ?? {}),
       createdAt: serverTimestamp(),
     });
 

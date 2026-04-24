@@ -278,14 +278,20 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
 
   /**
    * Partner capital contribution
-   * DR: Cash | CR: Partner's Capital account (from TemplateContext) or 3000 fallback
+   * DR: Cash | CR: Partner's Capital account (resolved via TemplateContext at submission time)
    */
   OWNER_CAPITAL: {
     id: "OWNER_CAPITAL",
     nameAr: "رأس مال شريك",
     nameEn: "Partner Capital",
     resolveAccounts: (ctx) => {
-      const creditCode = ctx.partnerCapitalCode ?? ACCOUNT_CODES.OWNER_CAPITAL;
+      if (!ctx.partnerCapitalCode) {
+        throw new Error(
+          "OWNER_CAPITAL template requires partnerCapitalCode in TemplateContext. " +
+          "Ensure LedgerService resolves the partner's capitalAccountCode before building TemplateContext."
+        );
+      }
+      const creditCode = ctx.partnerCapitalCode;
       return {
         debitAccountCode: ACCOUNT_CODES.CASH,
         debitAccountName: ACCOUNT_CODES.CASH,
@@ -299,14 +305,20 @@ export const JOURNAL_TEMPLATES: Record<JournalTemplateId, JournalTemplate> = {
 
   /**
    * Partner drawings/withdrawal
-   * DR: Partner's Drawings account (from TemplateContext) or 3000 fallback | CR: Cash
+   * DR: Partner's Drawings account (resolved via TemplateContext at submission time) | CR: Cash
    */
   OWNER_DRAWINGS: {
     id: "OWNER_DRAWINGS",
     nameAr: "سحوبات شريك",
     nameEn: "Partner Drawings",
     resolveAccounts: (ctx) => {
-      const debitCode = ctx.partnerDrawingsCode ?? ACCOUNT_CODES.OWNER_CAPITAL;
+      if (!ctx.partnerDrawingsCode) {
+        throw new Error(
+          "OWNER_DRAWINGS template requires partnerDrawingsCode in TemplateContext. " +
+          "Ensure LedgerService resolves the partner's drawingsAccountCode before building TemplateContext."
+        );
+      }
+      const debitCode = ctx.partnerDrawingsCode;
       return {
         debitAccountCode: debitCode,
         debitAccountName: debitCode,

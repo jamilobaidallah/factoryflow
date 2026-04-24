@@ -2016,16 +2016,15 @@ export async function closeYearEnd(
   const batch = writeBatch(firestore);
 
   pendingEntries.forEach((pe, i) => {
-    const entryRef = engine.postToBatch(batch, {
+    engine.postToBatch(batch, {
       templateId: 'INVENTORY_TRANSFER', // placeholder — lines override template
       amount: 0,
       date: closeDate,
       description: pe.description,
       lines: pe.lines,
       source: { type: 'manual', documentId: `year-end-close-${year}` },
+      extraFields: { closingYear: year, linkedDocumentType: 'year-end-close' },
     }, sequences[i]);
-    // Patch closingYear onto the doc so idempotency query works
-    batch.update(entryRef, { closingYear: year, linkedDocumentType: 'year-end-close' });
   });
 
   await batch.commit();

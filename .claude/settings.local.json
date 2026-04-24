@@ -43,9 +43,15 @@
       "Bash(do wc -l \"$file\")",
       "Bash(for func in \"groupBy\" \"getStatusColor\" \"isImageFile\" \"formatFileSize\" \"formatDateForInput\")",
       "Bash(for func in \"calculatePaymentStatus\" \"calculateRemainingBalance\" \"isValidTransactionId\" \"validatePaymentAmount\" \"isMultiAllocationPayment\" \"updateARAPOnPaymentAdd\" \"reverseARAPOnPaymentDelete\" \"updateLedgerEntryById\")",
-      "Bash(for func in \"createBackup\" \"downloadBackup\" \"validateBackup\" \"restoreBackup\" \"createAutoBackupBeforeRestore\" \"parseBackupFile\")"
+      "Bash(for func in \"createBackup\" \"downloadBackup\" \"validateBackup\" \"restoreBackup\" \"createAutoBackupBeforeRestore\" \"parseBackupFile\")",
+      "Bash(gh pr merge:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm outdated:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "Explanatory"
 }
