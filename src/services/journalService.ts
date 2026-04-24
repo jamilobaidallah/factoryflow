@@ -1463,7 +1463,7 @@ export async function migrateStoneBusinessAccounts(
     '3000': { name: "Partners' Equity",          nameAr: 'حقوق الشركاء' },
     '1301': { name: 'Raw Stone',                   nameAr: 'حجر خام' },
     '1302': { name: 'Finished Stone — In-house',  nameAr: 'حجر جاهز — إنتاج داخلي' },
-    '4010': { name: 'Cut Stone Sales',            nameAr: 'مبيعات حجر مقطوع' },
+    '4010': { name: 'Cut Stone Sales',            nameAr: 'مبيعات حجر مفلوق' },
     '5040': { name: 'Blade Depreciation & Machine Maintenance', nameAr: 'استهلاك شفرات وصيانة آلات التقطيع' },
   };
 

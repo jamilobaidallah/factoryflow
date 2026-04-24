@@ -308,7 +308,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
   defineAccount(
     '4010',
     'Cut Stone Sales',
-    'مبيعات حجر مقطوع',
+    'مبيعات حجر مفلوق',
     'revenue',
     ACCOUNT_CODES.SALES_REVENUE,
     'Revenue from cut stone sales'

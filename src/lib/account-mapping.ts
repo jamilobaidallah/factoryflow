@@ -84,7 +84,8 @@ const CATEGORY_TO_EXPENSE_ACCOUNT: Record<string, string> = {
  */
 const CATEGORY_TO_REVENUE_ACCOUNT: Record<string, string> = {
   // Stone business revenue — new subcategories
-  'مبيعات حجر مقطوع': '4010',
+  'مبيعات حجر مفلوق': '4010',
+  'مبيعات حجر مقطوع': '4010',  // backward compat — old name
   'مبيعات حجر جاهز':  '4020',
 
   // Legacy sales aliases (backward compat)
@@ -166,7 +167,7 @@ export const ACCOUNT_NAMES_AR: Record<string, string> = {
   [ACCOUNT_CODES.SALES_DISCOUNT]: 'خصم المبيعات',
   [ACCOUNT_CODES.PURCHASE_DISCOUNT]: 'خصم المشتريات',
   // Sub-accounts (legacy codes for backward compatibility)
-  '4010': 'مبيعات حجر مقطوع',
+  '4010': 'مبيعات حجر مفلوق',
   '4020': 'مبيعات حجر جاهز',
   '4110': 'مبيعات خدمات',
   '4210': 'فوائد بنكية',
@@ -335,7 +336,7 @@ export function getAccountMappingForLedgerEntry(
 
     // Inventory transfer: raw stone (1301) → cut stone (1302)
     // DR 1302, CR 1301 — no cash movement
-    if (specificCategory === 'تحويل حجر خام إلى مقطوع') {
+    if (specificCategory === 'تحويل حجر خام إلى مفلوق' || specificCategory === 'تحويل حجر خام إلى مقطوع') {
       return {
         debitAccount: '1302',
         creditAccount: '1301',

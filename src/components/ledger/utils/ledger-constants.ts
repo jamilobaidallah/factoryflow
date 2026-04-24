@@ -75,7 +75,7 @@ export const CATEGORIES: Category[] = [
         name: "إيرادات المبيعات",
         type: "دخل",
         subcategories: [
-            "مبيعات حجر مقطوع",      // Cut stone → DR Cash/AR, CR 4010
+            "مبيعات حجر مفلوق",      // Cut stone → DR Cash/AR, CR 4010
             "مبيعات حجر جاهز",       // Ready stone → DR Cash/AR, CR 4020
             // "مبيعات منتجات" hidden — backward compat only, kept in account-mapping.ts
         ]
