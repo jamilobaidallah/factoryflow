@@ -18,6 +18,7 @@ import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
 const INVENTORY_TOGGLE_CATEGORIES = new Set([
   "تكلفة البضاعة المباعة (COGS)",  // Stone purchases, wastage, freight
   "إيرادات المبيعات",               // Stone sales (deduct from inventory)
+  "مردودات المبيعات",               // Sales returns (goods back into inventory)
 ]);
 
 /**
