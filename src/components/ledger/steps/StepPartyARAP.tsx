@@ -10,18 +10,22 @@ import { ChevronDown } from "lucide-react";
 import { LedgerFormData } from "../types/ledger";
 import { isLoanTransaction, isAdvanceTransaction } from "../utils/ledger-helpers";
 import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
-import { DEPRECIATION_SUBCATEGORIES } from "@/types/accounting";
 
 /**
- * Subcategories where the inventory toggle must be HIDDEN.
- * These are pure expenses that must never debit an inventory account.
- * Checking the toggle for them would fall back to DR 1300 (wrong account).
+ * Categories where the inventory toggle is relevant (allowlist).
+ * Anything not in this set gets the toggle hidden.
  */
-const INVENTORY_TOGGLE_HIDDEN_SUBS: readonly string[] = [
-  "مصاريف تقطيع",   // Always DR 5040 (expense), never inventory
-  "عمولات مبيعات",  // Always DR 5425 (expense), never inventory
-  ...(DEPRECIATION_SUBCATEGORIES as readonly string[]),
-] as const;
+const INVENTORY_TOGGLE_CATEGORIES = new Set([
+  "تكلفة البضاعة المباعة (COGS)",  // Stone purchases, wastage, freight
+  "إيرادات المبيعات",               // Stone sales (deduct from inventory)
+]);
+
+/**
+ * Within COGS, these subcategories are pure expenses — they never touch inventory.
+ */
+const COGS_PURE_EXPENSE_SUBS = new Set([
+  "مصاريف تقطيع",  // DR 5040 — blade/cutting maintenance, not an inventory account
+]);
 
 interface ClientOption {
   name: string;
@@ -117,18 +121,20 @@ export function StepPartyARAP({
   // Check if this is an advance transaction - advances track AR/AP (obligation to deliver goods/services)
   const isAdvance = isAdvanceTransaction(formData.category);
 
-  // Check if subcategory is a non-cash expense (wastage, free samples, depreciation, etc.)
+  // Check if subcategory is a non-cash expense (wastage, free samples)
   const isNonCashSubcategory =
-    (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory) ||
-    (DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
+    (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
 
-  // True when the inventory toggle must be hidden entirely:
-  // pure expenses (تقطيع, عمولات) or depreciation — checking the toggle would route to DR 1300 (wrong)
-  // Also hidden for تحويل مخزون: the journal DR 1302/CR 1301 runs automatically, no item form needed
-  const hideInventoryToggle =
-    INVENTORY_TOGGLE_HIDDEN_SUBS.includes(formData.subCategory ?? "") ||
-    formData.category === "تحويل مخزون" ||
-    formData.category === "رأس المال";
+  // Show the toggle ONLY for inventory-related categories/subcategories.
+  // Allowlist approach: everything not explicitly included is hidden.
+  const showInventoryToggle =
+    // COGS purchases and wastage (exclude pure expenses like مصاريف تقطيع)
+    (INVENTORY_TOGGLE_CATEGORIES.has(formData.category ?? "") &&
+     !COGS_PURE_EXPENSE_SUBS.has(formData.subCategory ?? "")) ||
+    // عينات مجانية lives in operating expenses but IS an inventory movement
+    (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+
+  const hideInventoryToggle = !showInventoryToggle;
 
   // NON_CASH subcategories (هدر وتالف, عينات مجانية) MUST have the toggle ON:
   // the journal credits Inventory (1300) not Cash — no toggle = wrong journal (DR 5060/CR Cash)
