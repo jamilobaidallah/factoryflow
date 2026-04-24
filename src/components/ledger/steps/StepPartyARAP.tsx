@@ -12,6 +12,17 @@ import { isLoanTransaction, isAdvanceTransaction } from "../utils/ledger-helpers
 import { NON_CASH_SUBCATEGORIES } from "../utils/ledger-constants";
 import { DEPRECIATION_SUBCATEGORIES } from "@/types/accounting";
 
+/**
+ * Subcategories where the inventory toggle must be HIDDEN.
+ * These are pure expenses that must never debit an inventory account.
+ * Checking the toggle for them would fall back to DR 1300 (wrong account).
+ */
+const INVENTORY_TOGGLE_HIDDEN_SUBS: readonly string[] = [
+  "مصاريف تقطيع",   // Always DR 5040 (expense), never inventory
+  "عمولات مبيعات",  // Always DR 5425 (expense), never inventory
+  ...(DEPRECIATION_SUBCATEGORIES as readonly string[]),
+] as const;
+
 interface ClientOption {
   name: string;
   source: string;
@@ -111,6 +122,20 @@ export function StepPartyARAP({
     (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory) ||
     (DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory);
 
+  // True when the inventory toggle must be hidden entirely:
+  // pure expenses (تقطيع, عمولات) or depreciation — checking the toggle would route to DR 1300 (wrong)
+  // Also hidden for تحويل مخزون: the journal DR 1302/CR 1301 runs automatically, no item form needed
+  const hideInventoryToggle =
+    INVENTORY_TOGGLE_HIDDEN_SUBS.includes(formData.subCategory ?? "") ||
+    formData.category === "تحويل مخزون" ||
+    formData.category === "رأس المال";
+
+  // NON_CASH subcategories (هدر وتالف, عينات مجانية) MUST have the toggle ON:
+  // the journal credits Inventory (1300) not Cash — no toggle = wrong journal (DR 5060/CR Cash)
+  const requiresInventoryToggle =
+    (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+    currentEntryType === "مصروف";
+
   // Force AR/AP tracking for loans AND advances
   // Advances represent an obligation: we owe goods/services to customer (سلفة عميل)
   // or supplier owes us goods/services (سلفة مورد)
@@ -134,6 +159,14 @@ export function StepPartyARAP({
       }
     }
   }, [isNonCashSubcategory, currentEntryType, formData.trackARAP, formData.immediateSettlement, onUpdate]);
+
+  // Auto-check the inventory toggle for هدر وتالف / عينات مجانية:
+  // these entries credit Inventory (1300), not Cash — the toggle MUST be on for correct journal
+  useEffect(() => {
+    if (requiresInventoryToggle && !hasInventoryUpdate) {
+      setHasInventoryUpdate(true);
+    }
+  }, [requiresInventoryToggle, hasInventoryUpdate, setHasInventoryUpdate]);
 
   // Filter clients based on search input
   const filteredClients = useMemo(() => {
@@ -405,18 +438,27 @@ export function StepPartyARAP({
               </div>
             )}
 
-            {/* Inventory Update Option - Not for equity transactions */}
-            {formData.category !== "رأس المال" && (
+            {/* Inventory Update Option */}
+            {!hideInventoryToggle && (
               <div className="flex items-center space-x-2 space-x-reverse">
                 <input
                   type="checkbox"
                   id="enableInventoryUpdate"
                   checked={hasInventoryUpdate}
-                  onChange={(e) => setHasInventoryUpdate(e.target.checked)}
-                  className="h-4 w-4"
+                  onChange={(e) => {
+                    if (!requiresInventoryToggle) setHasInventoryUpdate(e.target.checked);
+                  }}
+                  disabled={requiresInventoryToggle}
+                  className="h-4 w-4 disabled:opacity-60"
                 />
-                <Label htmlFor="enableInventoryUpdate" className="cursor-pointer text-sm">
+                <Label
+                  htmlFor="enableInventoryUpdate"
+                  className={requiresInventoryToggle ? "text-sm text-slate-500 cursor-default" : "cursor-pointer text-sm"}
+                >
                   تحديث المخزون
+                  {requiresInventoryToggle && (
+                    <span className="text-xs text-slate-400 mr-1">(مطلوب لهذا النوع)</span>
+                  )}
                 </Label>
               </div>
             )}
