@@ -329,14 +329,7 @@ export const DEFAULT_ACCOUNTS: AccountDefinition[] = [
     undefined,
     'Revenue from services'
   ),
-  defineAccount(
-    '4110',
-    'Service Sales',
-    'مبيعات خدمات',
-    'revenue',
-    ACCOUNT_CODES.SERVICE_REVENUE,
-    'Revenue from service sales'
-  ),
+  // 4110 Service Sales removed from seed — deactivated by stone business migration
   defineAccount(
     ACCOUNT_CODES.OTHER_INCOME,
     'Other Income',

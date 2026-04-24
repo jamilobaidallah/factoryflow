@@ -164,6 +164,7 @@ export class JournalPostingEngine {
       const batch = writeBatch(firestore);
       batch.set(entryRef, {
         ...entryDoc,
+        ...(request.extraFields ?? {}),
         createdAt: serverTimestamp(),
       });
       await batch.commit();
@@ -739,7 +740,7 @@ export class JournalPostingEngine {
     };
 
     const entryRef = doc(collection(firestore, this.journalPath));
-    tx.set(entryRef, { ...entryDoc, createdAt: serverTimestamp() });
+    tx.set(entryRef, { ...entryDoc, ...(request.extraFields ?? {}), createdAt: serverTimestamp() });
     return entryRef;
   }
 

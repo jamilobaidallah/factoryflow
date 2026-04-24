@@ -1752,13 +1752,15 @@ export async function closeYearEnd(
     query(journalRef, where('date', '>=', startDate), where('date', '<=', endDate), limit(5000))
   );
 
-  // Warn if the query hit the 5000-doc limit — balances may be understated.
+  // Hard abort if the query hit the 5000-doc limit — proceeding would close the year
+  // on understated balances (silent accounting error is worse than a visible failure).
   if (yearEntriesSnap.size >= 5000) {
-    console.warn(
-      `closeYearEnd(${year}): query returned ${yearEntriesSnap.size} entries (limit=5000). ` +
-      'Some entries may have been excluded. Year-end balances could be understated. ' +
-      'Consider archiving old entries or splitting the close into half-year batches.'
-    );
+    return {
+      success: false,
+      error:
+        `لا يمكن إغلاق السنة ${year}: عدد القيود (${yearEntriesSnap.size}) تجاوز الحد الأقصى للاستعلام (5000). ` +
+        'يرجى أرشفة القيود القديمة أو التواصل مع الدعم الفني لتقسيم الإغلاق على دفعتين.',
+    };
   }
 
   // Exclude closing entries and reversed entries from balance aggregation (H4)

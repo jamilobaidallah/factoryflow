@@ -597,6 +597,7 @@ export class LedgerService {
       const invData = invSnap.data();
       const currentQty = invData.quantity || 0;
       const currentUnitPrice = invData.unitPrice || 0;
+      const returnInventorySubCode = (invData.inventoryAccountCode as string | undefined) || ACCOUNT_CODES.INVENTORY;
       const newQty = safeAdd(currentQty, returnQuantity);
 
       // Weighted average: blend existing stock cost with returned goods cost
@@ -677,9 +678,9 @@ export class LedgerService {
               credit: 0,
             },
             {
-              accountCode: ACCOUNT_CODES.INVENTORY,
-              accountName: getAccountNameAr(ACCOUNT_CODES.INVENTORY),
-              accountNameAr: getAccountNameAr(ACCOUNT_CODES.INVENTORY),
+              accountCode: returnInventorySubCode,
+              accountName: getAccountNameAr(returnInventorySubCode),
+              accountNameAr: getAccountNameAr(returnInventorySubCode),
               debit: costAmount,
               credit: 0,
             },
@@ -908,10 +909,9 @@ export class LedgerService {
       const allInventoryChanges: { itemId: string; quantityDelta: number }[] = [];
       const cogsResults: { amount: number; description: string; inventorySubCode?: string }[] = [];
       let totalReturnCostAmount = 0;
-      // Collect sub-inventory codes across return items.
-      // If all returned items share the same sub-inventory account, use it for the DR line.
-      // If items span different accounts, fall back to parent 1300 (multi-account return).
-      const returnSubCodes = new Set<string>();
+      // Track cost per sub-inventory account so the sales return journal can emit
+      // one DR line per sub-account (matches the physical inventory update exactly).
+      const returnSubCodeCosts = new Map<string, number>();
 
       if (options.hasInventoryUpdate && inventoryItemsList.length > 0) {
         for (let i = 0; i < inventoryItemsList.length; i++) {
@@ -927,18 +927,17 @@ export class LedgerService {
           }
           if (itemResult.returnCostAmount) {
             totalReturnCostAmount = safeAdd(totalReturnCostAmount, itemResult.returnCostAmount);
-            if (itemResult.returnInventorySubCode) {
-              returnSubCodes.add(itemResult.returnInventorySubCode);
-            }
+            const subCode = itemResult.returnInventorySubCode || ACCOUNT_CODES.INVENTORY;
+            returnSubCodeCosts.set(subCode, safeAdd(returnSubCodeCosts.get(subCode) ?? 0, itemResult.returnCostAmount));
           }
         }
       }
 
-      // The sub-inventory account to debit when returned goods re-enter stock.
-      // Use the specific sub-code only when all returned items share one account.
-      const returnInventorySubCode = returnSubCodes.size === 1
-        ? Array.from(returnSubCodes)[0]
-        : "1300";
+      // One DR line per sub-inventory account. Falls back to single DR 1300 if no costs recorded.
+      const returnInventoryLines: { accountCode: string; cost: number }[] =
+        returnSubCodeCosts.size > 0
+          ? Array.from(returnSubCodeCosts.entries()).map(([code, cost]) => ({ accountCode: code, cost }))
+          : [{ accountCode: ACCOUNT_CODES.INVENTORY, cost: totalReturnCostAmount }];
 
       // Aggregate result for downstream use
       const inventoryResult: InventoryUpdateResult | null = options.hasInventoryUpdate && inventoryItemsList.length > 0
@@ -1026,10 +1025,30 @@ export class LedgerService {
               transactionId,
             },
             lines: [
-              { accountCode: "4050", accountName: "4050", accountNameAr: "مردودات المبيعات",                            debit: totalAmount, credit: 0 },
-              { accountCode: returnInventorySubCode, accountName: returnInventorySubCode, accountNameAr: getAccountNameAr(returnInventorySubCode), debit: costAmount,  credit: 0 },
-              { accountCode: "1200", accountName: "1200", accountNameAr: "ذمم مدينة",                                    debit: 0, credit: totalAmount },
-              { accountCode: "5000", accountName: "5000", accountNameAr: "تكلفة البضاعة المباعة",                        debit: 0, credit: costAmount  },
+              {
+                accountCode: ACCOUNT_CODES.SALES_RETURNS,
+                accountName: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+                accountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+                debit: totalAmount, credit: 0,
+              },
+              ...returnInventoryLines.map(({ accountCode, cost }) => ({
+                accountCode,
+                accountName: getAccountNameAr(accountCode),
+                accountNameAr: getAccountNameAr(accountCode),
+                debit: cost, credit: 0,
+              })),
+              {
+                accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+                accountName: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                debit: 0, credit: totalAmount,
+              },
+              {
+                accountCode: ACCOUNT_CODES.COST_OF_GOODS_SOLD,
+                accountName: getAccountNameAr(ACCOUNT_CODES.COST_OF_GOODS_SOLD),
+                accountNameAr: getAccountNameAr(ACCOUNT_CODES.COST_OF_GOODS_SOLD),
+                debit: 0, credit: costAmount,
+              },
             ],
           }, "sales return journal");
         } else {
