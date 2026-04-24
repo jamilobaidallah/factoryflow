@@ -617,7 +617,7 @@ export class LedgerService {
       batch.set(ledgerDocRef, {
         transactionId,
         description: formData.description,
-        type: "دخل",
+        type: "مردود",
         amount: saleAmount,
         returnCostAmount: costAmount,
         category: "مردودات المبيعات",
@@ -939,6 +939,11 @@ export class LedgerService {
           ? Array.from(returnSubCodeCosts.entries()).map(([code, cost]) => ({ accountCode: code, cost }))
           : [{ accountCode: ACCOUNT_CODES.INVENTORY, cost: totalReturnCostAmount }];
 
+      // Store returnInventorySubCode on ledger entry so edit can rebuild the 4-line journal correctly
+      if (formData.category === "مردودات المبيعات" && returnInventoryLines.length === 1) {
+        batch.update(ledgerDocRef, { returnInventorySubCode: returnInventoryLines[0].accountCode });
+      }
+
       // Aggregate result for downstream use
       const inventoryResult: InventoryUpdateResult | null = options.hasInventoryUpdate && inventoryItemsList.length > 0
         ? {
@@ -1060,10 +1065,19 @@ export class LedgerService {
             const partnerSnap = await getDocs(
               query(this.partnersRef, where("name", "==", equityOwnerName), limit(1))
             );
-            if (!partnerSnap.empty) {
-              const p = partnerSnap.docs[0].data();
-              partnerCapitalCode = p.capitalAccountCode as string | undefined;
-              partnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+            if (partnerSnap.empty) {
+              // HIGH-2: pre-validate before batch commits — gives user a clear Arabic error
+              return { success: false, error: `لم يتم العثور على الشريك "${equityOwnerName}". يرجى اختيار شريك صحيح.`, errorType: ErrorType.NOT_FOUND };
+            }
+            const p = partnerSnap.docs[0].data();
+            partnerCapitalCode = p.capitalAccountCode as string | undefined;
+            partnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+            const isDrawings = formData.subCategory === "سحوبات" || formData.subCategory === "سحوبات المالك";
+            if (isDrawings && !partnerDrawingsCode) {
+              return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب سحوبات. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
+            }
+            if (!isDrawings && !partnerCapitalCode) {
+              return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب رأس مال. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
             }
           }
 
@@ -1357,6 +1371,16 @@ export class LedgerService {
           }
         }
 
+        // CRIT-4: Sales return must rebuild the 4-line compound journal on edit.
+        // The default 2-line SALES_RETURN template loses the DR Inventory and CR COGS legs.
+        const isSalesReturnEdit = formData.category === "مردودات المبيعات";
+        const editCostAmount = isSalesReturnEdit
+          ? parseAmount((currentData.returnCostAmount as string | number | undefined)?.toString() ?? '0')
+          : 0;
+        // Re-use sub-inventory code stored on the entry; fall back to parent 1300
+        const editReturnSubCode = (currentData.returnInventorySubCode as string | undefined)
+          || ACCOUNT_CODES.INVENTORY;
+
         const mainTemplateId = getJournalTemplateForTransaction(
           entryType,
           formData.category,
@@ -1374,6 +1398,35 @@ export class LedgerService {
               documentId: entryId,
               transactionId: existingTransactionId,
             },
+            // For sales returns, provide the 4-line explicit override so inventory and COGS legs are preserved
+            ...(isSalesReturnEdit && {
+              lines: [
+                {
+                  accountCode: ACCOUNT_CODES.SALES_RETURNS,
+                  accountName: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+                  accountNameAr: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
+                  debit: newAmount, credit: 0,
+                },
+                {
+                  accountCode: editReturnSubCode,
+                  accountName: getAccountNameAr(editReturnSubCode),
+                  accountNameAr: getAccountNameAr(editReturnSubCode),
+                  debit: editCostAmount, credit: 0,
+                },
+                {
+                  accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+                  accountName: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                  accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                  debit: 0, credit: newAmount,
+                },
+                {
+                  accountCode: ACCOUNT_CODES.COST_OF_GOODS_SOLD,
+                  accountName: getAccountNameAr(ACCOUNT_CODES.COST_OF_GOODS_SOLD),
+                  accountNameAr: getAccountNameAr(ACCOUNT_CODES.COST_OF_GOODS_SOLD),
+                  debit: 0, credit: editCostAmount,
+                },
+              ],
+            }),
             context: {
               category: formData.category,
               subCategory: formData.subCategory,
@@ -1384,6 +1437,13 @@ export class LedgerService {
               isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
               partnerCapitalCode: updatePartnerCapitalCode,
               partnerDrawingsCode: updatePartnerDrawingsCode,
+              // CRIT-1: preserve inventory purchase flag so edit journal hits DR 1301/1303 not DR 5000
+              isInventoryPurchase: !!(currentData.isInventoryPurchase),
+              // CRIT-2: re-derive non-cash flag from subcategory (not stored on document)
+              // Without this, wastage/samples edit posts DR expense / CR Cash instead of CR Inventory
+              isNonCashInventoryOut:
+                (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+                entryType === "مصروف",
             },
           },
           newMainJournalSeq
@@ -1878,8 +1938,21 @@ export class LedgerService {
         }
       }
 
+      // Reserve sequences for journal reversals BEFORE building the batch
+      // (sequence reservation uses a Firestore transaction and must run outside the batch)
+      const engine = createJournalPostingEngine(this.userId);
+      const journalCountToReverse = await engine.countEntriesBySource("ledger", entry.id);
+      const reversalSeqs = journalCountToReverse > 0
+        ? await engine.reserveSequences(journalCountToReverse)
+        : [];
+
       const batch = writeBatch(firestore);
       let deletedRelatedCount = 0;
+
+      // Reverse main ledger journal entries (immutable ledger — never hard-delete)
+      if (journalCountToReverse > 0) {
+        await engine.reverseBySourceToBatch(batch, "ledger", entry.id, "حذف معاملة", reversalSeqs);
+      }
 
       // Delete the ledger entry
       const entryRef = this.getLedgerDocRef(entry.id);
@@ -2041,15 +2114,16 @@ export class LedgerService {
             advancePayment.advanceId
           );
 
-          // Reverse the allocation using atomic operations
-          // paymentStatus is set to "partial" as a safe default. We can't determine
-          // if this should be "unpaid" (totalPaid=0) without reading the advance first.
-          // Since most filtering uses `!== "paid"`, this is acceptable.
-          // The numeric fields (totalPaid, remainingBalance) are authoritative.
+          // Reverse the allocation — read current advance to set correct status after reversal
+          const advanceSnap = await getDoc(advanceRef);
+          const advanceTotalPaid = advanceSnap.exists()
+            ? (advanceSnap.data().totalPaid as number ?? 0)
+            : 0;
+          const advanceNewTotalPaid = safeSubtract(advanceTotalPaid, advancePayment.amount);
           batch.update(advanceRef, {
-            totalPaid: increment(-advancePayment.amount),
+            totalPaid: advanceNewTotalPaid,
             remainingBalance: increment(advancePayment.amount),
-            paymentStatus: "partial",
+            paymentStatus: advanceNewTotalPaid <= 0 ? "unpaid" : "partial",
           });
         }
       }
@@ -2066,17 +2140,7 @@ export class LedgerService {
         deletedRelatedCount++;
       });
 
-      // Delete linked journal entries (prevents orphaned accounting records)
-      const journalQuery = query(
-        this.journalEntriesRef,
-        where("linkedTransactionId", "==", entry.transactionId),
-        limit(QUERY_LIMITS.JOURNAL_ENTRIES)
-      );
-      const journalSnapshot = await getDocs(journalQuery);
-      journalSnapshot.forEach((journalDoc) => {
-        batch.delete(journalDoc.ref);
-        deletedRelatedCount++;
-      });
+      // Main ledger journals are reversed above via reverseBySourceToBatch (immutable ledger).
 
       // ── Depreciation cascade ──────────────────────────────────────────────
       // When a depreciation ledger entry is deleted, revert the associated
