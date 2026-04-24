@@ -1421,10 +1421,18 @@ export class LedgerService {
           const partnerSnap = await getDocs(
             query(this.partnersRef, where("name", "==", updateEquityOwnerName), limit(1))
           );
-          if (!partnerSnap.empty) {
-            const p = partnerSnap.docs[0].data();
-            updatePartnerCapitalCode = p.capitalAccountCode as string | undefined;
-            updatePartnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+          if (partnerSnap.empty) {
+            return { success: false, error: `لم يتم العثور على الشريك "${updateEquityOwnerName}". يرجى اختيار شريك صحيح.`, errorType: ErrorType.NOT_FOUND };
+          }
+          const p = partnerSnap.docs[0].data();
+          updatePartnerCapitalCode = p.capitalAccountCode as string | undefined;
+          updatePartnerDrawingsCode = p.drawingsAccountCode as string | undefined;
+          const isUpdateDrawings = formData.subCategory === "سحوبات" || formData.subCategory === "سحوبات المالك";
+          if (isUpdateDrawings && !updatePartnerDrawingsCode) {
+            return { success: false, error: `الشريك "${updateEquityOwnerName}" ليس لديه حساب سحوبات. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
+          }
+          if (!isUpdateDrawings && !updatePartnerCapitalCode) {
+            return { success: false, error: `الشريك "${updateEquityOwnerName}" ليس لديه حساب رأس مال. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
           }
         }
 
