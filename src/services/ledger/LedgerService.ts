@@ -1339,6 +1339,63 @@ export class LedgerService {
         }
       }
 
+      // HIGH-1 FIX: Revert inventory movements when an entry is edited away from an
+      // inventory-affecting category.  We only revert — we do NOT re-apply — because
+      // the edit dialog does not collect new inventory form data (items, quantities).
+      // If the category stays inventory-relevant the quantity is unchanged (correct for
+      // price-correction edits); the unit-cost weighted average is a known limitation.
+      if (currentData?.isInventoryPurchase) {
+        const newEntryType = getCategoryType(formData.category, formData.subCategory);
+        const newIsInboundFreight =
+          newEntryType === "مصروف" &&
+          (INBOUND_FREIGHT_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+        const newIsCOGSPurchase =
+          newEntryType === "مصروف" &&
+          !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+          !(DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
+        const newCouldHaveInventory = newIsInboundFreight || newIsCOGSPurchase;
+
+        if (!newCouldHaveInventory) {
+          // Category changed away from inventory-purchase type → revert old movements
+          const oldMovementsSnap = await getDocs(query(
+            this.inventoryMovementsRef,
+            where("linkedTransactionId", "==", existingTransactionId ?? ""),
+            limit(100)
+          ));
+
+          const revertTasks = oldMovementsSnap.docs
+            .filter((d) => (d.data() as InventoryMovementData).itemId)
+            .map(async (movementDoc) => {
+              const movement = movementDoc.data() as InventoryMovementData;
+              const itemId = movement.itemId;
+              const quantity = movement.quantity || 0;
+              const movementType = movement.type;
+              const itemDocRef = doc(
+                firestore,
+                getUserCollectionPath(this.userId, "inventory"),
+                itemId
+              );
+              await runTransaction(firestore, async (tx) => {
+                const itemDoc = await tx.get(itemDocRef);
+                if (itemDoc.exists()) {
+                  const currentQty = (itemDoc.data() as InventoryItemData).quantity || 0;
+                  const delta = movementType === "دخول" ? -quantity : quantity;
+                  const reverted = assertNonNegative(currentQty + delta, {
+                    operation: "revertInventoryOnEdit",
+                    entityId: itemId,
+                    entityType: "inventory",
+                  });
+                  tx.update(itemDocRef, { quantity: reverted });
+                }
+              });
+              batch.delete(movementDoc.ref);
+            });
+
+          await Promise.all(revertTasks);
+          updateData.isInventoryPurchase = false;
+        }
+      }
+
       // Update the ledger entry
       batch.update(entryRef, updateData);
 
@@ -1958,21 +2015,44 @@ export class LedgerService {
       const entryRef = this.getLedgerDocRef(entry.id);
       batch.delete(entryRef);
 
-      // Delete related payments and their journal entries
-      // Bug #8: Cheque journal entries are linked by linkedPaymentId, not linkedTransactionId
-      // So we need to find payments first, then delete their associated journal entries
-      const paymentsQuery = query(
-        this.paymentsRef,
-        where("linkedTransactionId", "==", entry.transactionId),
-        limit(QUERY_LIMITS.PAYMENTS)
-      );
-      const paymentsSnapshot = await getDocs(paymentsQuery);
+      // Delete related payments and their journal entries.
+      // Payments can be linked by three different fields — must query all three to avoid orphans:
+      //   1. linkedTransactionId  — direct payment to this entry
+      //   2. allocationTransactionIds array — multi-invoice payment from the payments page
+      //   3. paidTransactionIds array — endorsement payments
+      // HIGH-3 FIX: previously only query 1 was run, leaving multi-allocation payments orphaned.
+      const [singlePaymentsSnap, multiAllocPaymentsSnap, endorsementPaymentsSnap] =
+        await Promise.all([
+          getDocs(query(
+            this.paymentsRef,
+            where("linkedTransactionId", "==", entry.transactionId),
+            limit(QUERY_LIMITS.PAYMENTS)
+          )),
+          getDocs(query(
+            this.paymentsRef,
+            where("allocationTransactionIds", "array-contains", entry.transactionId),
+            limit(QUERY_LIMITS.PAYMENTS)
+          )),
+          getDocs(query(
+            this.paymentsRef,
+            where("paidTransactionIds", "array-contains", entry.transactionId),
+            limit(QUERY_LIMITS.PAYMENTS)
+          )),
+        ]);
+
+      // Merge, deduplicate, then delete each payment
+      const seenPaymentIds = new Set<string>();
       const paymentIds: string[] = [];
-      paymentsSnapshot.forEach((doc) => {
-        paymentIds.push(doc.id);
-        batch.delete(doc.ref);
-        deletedRelatedCount++;
-      });
+      for (const snap of [singlePaymentsSnap, multiAllocPaymentsSnap, endorsementPaymentsSnap]) {
+        snap.forEach((doc) => {
+          if (!seenPaymentIds.has(doc.id)) {
+            seenPaymentIds.add(doc.id);
+            paymentIds.push(doc.id);
+            batch.delete(doc.ref);
+            deletedRelatedCount++;
+          }
+        });
+      }
 
       // Delete journal entries linked to payments (cheque cashing creates journal entries with linkedPaymentId)
       // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
