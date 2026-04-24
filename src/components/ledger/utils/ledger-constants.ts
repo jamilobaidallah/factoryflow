@@ -142,14 +142,7 @@ export const CATEGORIES: Category[] = [
             "إهلاك الأصول",       // Depreciation → DR 5400, CR 1510 (non-cash)
         ]
     },
-    // Inventory Transfer (stone cutting: raw → cut)
-    {
-        name: "تحويل مخزون",
-        type: "تحويل",
-        subcategories: [
-            "تحويل حجر خام إلى مقطوع",  // DR 1302, CR 1301 — no cash movement
-        ]
-    },
+    // تحويل مخزون removed from ledger — handled via the production page
     {
         name: "أصول ثابتة",
         type: "مصروف",
