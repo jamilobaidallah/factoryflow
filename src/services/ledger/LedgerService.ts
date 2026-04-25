@@ -750,6 +750,32 @@ export class LedgerService {
         return { success: false, error: validationError };
       }
 
+      // Equity pre-validation — MUST run before batch.commit() so no orphaned entry is saved
+      // on failure. The resolved codes are passed into TemplateContext post-batch.
+      let preResolvedCapitalCode: string | undefined;
+      let preResolvedDrawingsCode: string | undefined;
+      if (isEquityCategory(formData.category, formData.subCategory)) {
+        const equityOwnerName = formData.ownerName || formData.associatedParty;
+        if (equityOwnerName) {
+          const partnerSnap = await getDocs(
+            query(this.partnersRef, where("name", "==", equityOwnerName), limit(1))
+          );
+          if (partnerSnap.empty) {
+            return { success: false, error: `لم يتم العثور على الشريك "${equityOwnerName}". يرجى اختيار شريك صحيح.`, errorType: ErrorType.NOT_FOUND };
+          }
+          const p = partnerSnap.docs[0].data();
+          preResolvedCapitalCode = p.capitalAccountCode as string | undefined;
+          preResolvedDrawingsCode = p.drawingsAccountCode as string | undefined;
+          const isDrawings = formData.subCategory === "سحوبات" || formData.subCategory === "سحوبات المالك";
+          if (isDrawings && !preResolvedDrawingsCode) {
+            return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب سحوبات. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
+          }
+          if (!isDrawings && !preResolvedCapitalCode) {
+            return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب رأس مال. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
+          }
+        }
+      }
+
       const batch = writeBatch(firestore);
       const ledgerDocRef = doc(this.ledgerRef);
       const ctx = this.getHandlerContext(batch, transactionId, formData, entryType);
@@ -1057,29 +1083,9 @@ export class LedgerService {
             ],
           }, "sales return journal");
         } else {
-          // Resolve partner-specific equity account codes (only for equity entries)
-          let partnerCapitalCode: string | undefined;
-          let partnerDrawingsCode: string | undefined;
-          const equityOwnerName = formData.ownerName || formData.associatedParty;
-          if (isEquityCategory(formData.category, formData.subCategory) && equityOwnerName) {
-            const partnerSnap = await getDocs(
-              query(this.partnersRef, where("name", "==", equityOwnerName), limit(1))
-            );
-            if (partnerSnap.empty) {
-              // HIGH-2: pre-validate before batch commits — gives user a clear Arabic error
-              return { success: false, error: `لم يتم العثور على الشريك "${equityOwnerName}". يرجى اختيار شريك صحيح.`, errorType: ErrorType.NOT_FOUND };
-            }
-            const p = partnerSnap.docs[0].data();
-            partnerCapitalCode = p.capitalAccountCode as string | undefined;
-            partnerDrawingsCode = p.drawingsAccountCode as string | undefined;
-            const isDrawings = formData.subCategory === "سحوبات" || formData.subCategory === "سحوبات المالك";
-            if (isDrawings && !partnerDrawingsCode) {
-              return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب سحوبات. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
-            }
-            if (!isDrawings && !partnerCapitalCode) {
-              return { success: false, error: `الشريك "${equityOwnerName}" ليس لديه حساب رأس مال. يرجى تشغيل تهيئة حسابات الشركاء أولاً.`, errorType: ErrorType.VALIDATION };
-            }
-          }
+          // Use pre-resolved equity codes (resolved before batch.commit() to prevent orphaned entries)
+          const partnerCapitalCode = preResolvedCapitalCode;
+          const partnerDrawingsCode = preResolvedDrawingsCode;
 
           // Main ledger journal entry
           const templateId = getJournalTemplateForTransaction(
