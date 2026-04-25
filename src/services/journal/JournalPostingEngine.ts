@@ -506,24 +506,23 @@ export class JournalPostingEngine {
 
     const snapshot = await getDocs(q);
 
-    if (snapshot.docs.length > sequenceNumbers.length) {
+    // Filter to only entries that will actually be reversed (same filter as countEntriesBySource).
+    // Reversal entries inherit the same source, so they appear in the snapshot but must be skipped.
+    const entriesToReverse = snapshot.docs.filter((doc) => {
+      const data = doc.data() as JournalEntryV2Document;
+      return data.status !== "reversed" && !data.reversal?.isReversal;
+    });
+
+    if (entriesToReverse.length > sequenceNumbers.length) {
       throw new Error(
-        `Not enough sequence numbers reserved. Need ${snapshot.docs.length}, have ${sequenceNumbers.length}`
+        `Not enough sequence numbers reserved. Need ${entriesToReverse.length}, have ${sequenceNumbers.length}`
       );
     }
 
     const reversalRefs: DocumentReference[] = [];
 
-    snapshot.docs.forEach((originalDoc, index) => {
+    entriesToReverse.forEach((originalDoc, index) => {
       const originalData = originalDoc.data() as JournalEntryV2Document;
-
-      // Skip if already reversed or is a reversal
-      if (
-        originalData.status === "reversed" ||
-        originalData.reversal?.isReversal
-      ) {
-        return;
-      }
 
       const sequenceNumber = sequenceNumbers[index];
       const entryNumber = formatEntryNumber(sequenceNumber);
