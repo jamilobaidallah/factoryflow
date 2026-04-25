@@ -1427,14 +1427,12 @@ export class LedgerService {
                 const itemData = itemDoc.data() as InventoryItemData;
                 const currentQty = itemData.quantity || 0;
                 const currentWA = itemData.unitPrice || 0;
-                const oldLandedCost = itemData.lastPurchaseAmount || 0;
-                const oldUnitCost = itemData.lastPurchasePrice || 0;
-                const oldAmount = currentData?.amount || 0;
-                // Skip if lastPurchaseAmount doesn't match old entry amount —
-                // a subsequent purchase has updated lastPurchasePrice, so reverting
-                // this contribution would produce an incorrect weighted average.
-                if (Math.abs(oldLandedCost - oldAmount) > 0.01) return;
                 if (currentQty <= 0) return;
+                // Best estimate for the old per-unit cost of this purchase.
+                // lastPurchasePrice is set by handleInventoryUpdate on every repurchase.
+                // Falls back to currentWA, which is exact when there is only one purchase
+                // (the common case for price-correction edits).
+                const oldUnitCost = itemData.lastPurchasePrice || currentWA;
                 const newUnitCost = roundCurrency(newAmount / movQty);
                 const adjustedTotalCost = safeAdd(
                   safeSubtract(safeMultiply(currentQty, currentWA), safeMultiply(movQty, oldUnitCost)),
