@@ -1399,6 +1399,56 @@ export class LedgerService {
 
           await Promise.all(revertTasks);
           updateData.isInventoryPurchase = false;
+        } else if (newAmount !== (currentData?.amount || 0)) {
+          // HIGH-1 EXTENSION: Category stayed inventory-relevant but amount changed.
+          // Recalculate weighted average unit cost for single-item purchases.
+          // Guard: only when lastPurchaseAmount ≈ old entry amount (i.e., no later purchase
+          // has overwritten lastPurchasePrice since this transaction was created).
+          const amountMovementsSnap = await getDocs(query(
+            this.inventoryMovementsRef,
+            where("linkedTransactionId", "==", existingTransactionId ?? ""),
+            limit(10)
+          ));
+          const purchaseMovements = amountMovementsSnap.docs.filter(
+            (d) => (d.data() as InventoryMovementData).type === "دخول"
+          );
+          if (purchaseMovements.length === 1) {
+            const movement = purchaseMovements[0].data() as InventoryMovementData;
+            const movQty = movement.quantity || 0;
+            if (movQty > 0) {
+              const itemDocRef = doc(
+                firestore,
+                getUserCollectionPath(this.userId, "inventory"),
+                movement.itemId
+              );
+              await runTransaction(firestore, async (tx) => {
+                const itemDoc = await tx.get(itemDocRef);
+                if (!itemDoc.exists()) return;
+                const itemData = itemDoc.data() as InventoryItemData;
+                const currentQty = itemData.quantity || 0;
+                const currentWA = itemData.unitPrice || 0;
+                const oldLandedCost = itemData.lastPurchaseAmount || 0;
+                const oldUnitCost = itemData.lastPurchasePrice || 0;
+                const oldAmount = currentData?.amount || 0;
+                // Skip if lastPurchaseAmount doesn't match old entry amount —
+                // a subsequent purchase has updated lastPurchasePrice, so reverting
+                // this contribution would produce an incorrect weighted average.
+                if (Math.abs(oldLandedCost - oldAmount) > 0.01) return;
+                if (currentQty <= 0) return;
+                const newUnitCost = roundCurrency(newAmount / movQty);
+                const adjustedTotalCost = safeAdd(
+                  safeSubtract(safeMultiply(currentQty, currentWA), safeMultiply(movQty, oldUnitCost)),
+                  newAmount
+                );
+                const newWA = roundCurrency(adjustedTotalCost / currentQty);
+                tx.update(itemDocRef, {
+                  unitPrice: Math.max(0, newWA),
+                  lastPurchasePrice: newUnitCost,
+                  lastPurchaseAmount: newAmount,
+                });
+              });
+            }
+          }
         }
       }
 
