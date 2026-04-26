@@ -65,6 +65,7 @@ export async function handleInventoryUpdate(
   let cogsDescription = "";
   let cogsInventorySubCode: string | undefined;
   let returnInventorySubCode: string | undefined;
+  let wastageInventorySubCode: string | undefined;
   let inventoryChange: { itemId: string; quantityDelta: number } | undefined;
   let returnCostAmount = 0;
   const quantityChange = parseAmount(inventoryFormData.quantity);
@@ -180,6 +181,11 @@ export async function handleInventoryUpdate(
         cogsInventorySubCode = cogs.inventorySubCode;
       }
 
+      // Capture sub-account code for wastage journal (non-cash inventory out)
+      if (isNonCashExpense && movementType === "خروج") {
+        wastageInventorySubCode = transactionResult.inventoryAccountCode;
+      }
+
       // Auto-record COGS reversal when goods are returned to inventory
       // (Journal DR sub-inventory / CR 5000 is handled by the 4-line SALES_RETURN journal —
       //  this ledger entry is for ledger-based P&L reports only)
@@ -241,6 +247,7 @@ export async function handleInventoryUpdate(
     cogsAmount,
     cogsDescription,
     ...(cogsInventorySubCode && { cogsInventorySubCode }),
+    ...(wastageInventorySubCode && { wastageInventorySubCode }),
     inventoryChange,
     ...(isReturn && { returnCostAmount }),
     ...(returnInventorySubCode && { returnInventorySubCode }),

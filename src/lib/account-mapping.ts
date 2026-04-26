@@ -224,7 +224,8 @@ export function getAccountMappingForLedgerEntry(
   immediateSettlement?: boolean,
   isEndorsementAdvance?: boolean,
   isInventoryPurchase?: boolean,
-  isNonCashInventoryOut?: boolean
+  isNonCashInventoryOut?: boolean,
+  inventorySubCode?: string
 ): AccountMapping {
   // Determine the specific account from category/subcategory
   const specificCategory = subCategory || category;
@@ -357,13 +358,14 @@ export function getAccountMappingForLedgerEntry(
       ACCOUNT_CODES.OTHER_EXPENSES;
 
     // Wastage/samples: inventory leaves stock with no cash payment.
-    // DR Expense (5xxx), CR Inventory (1300) — not Cash/AP.
+    // DR Expense (5xxx), CR sub-inventory (1301/1302/1303) or parent 1300 if sub-code unknown.
     if (isNonCashInventoryOut) {
+      const creditAccount = inventorySubCode || ACCOUNT_CODES.INVENTORY;
       return {
         debitAccount: expenseAccount,
-        creditAccount: ACCOUNT_CODES.INVENTORY,
+        creditAccount,
         debitAccountNameAr: getAccountNameAr(expenseAccount),
-        creditAccountNameAr: getAccountNameAr(ACCOUNT_CODES.INVENTORY),
+        creditAccountNameAr: getAccountNameAr(creditAccount),
       };
     }
 

@@ -938,6 +938,8 @@ export class LedgerService {
       // Track cost per sub-inventory account so the sales return journal can emit
       // one DR line per sub-account (matches the physical inventory update exactly).
       const returnSubCodeCosts = new Map<string, number>();
+      // Sub-inventory account to credit in wastage journal (first item wins; single-item entries are the norm)
+      let wastageInventorySubCode: string | undefined;
 
       if (options.hasInventoryUpdate && inventoryItemsList.length > 0) {
         for (let i = 0; i < inventoryItemsList.length; i++) {
@@ -956,6 +958,9 @@ export class LedgerService {
             const subCode = itemResult.returnInventorySubCode || ACCOUNT_CODES.INVENTORY;
             returnSubCodeCosts.set(subCode, safeAdd(returnSubCodeCosts.get(subCode) ?? 0, itemResult.returnCostAmount));
           }
+          if (itemResult.wastageInventorySubCode && !wastageInventorySubCode) {
+            wastageInventorySubCode = itemResult.wastageInventorySubCode;
+          }
         }
       }
 
@@ -968,6 +973,11 @@ export class LedgerService {
       // Store returnInventorySubCode on ledger entry so edit can rebuild the 4-line journal correctly
       if (formData.category === "مردودات المبيعات" && returnInventoryLines.length === 1) {
         batch.update(ledgerDocRef, { returnInventorySubCode: returnInventoryLines[0].accountCode });
+      }
+
+      // Store wastageInventorySubCode on ledger entry so edit path can pass it to the journal
+      if (wastageInventorySubCode) {
+        batch.update(ledgerDocRef, { wastageInventorySubCode });
       }
 
       // Aggregate result for downstream use
@@ -1110,8 +1120,10 @@ export class LedgerService {
               immediateSettlement: formData.immediateSettlement ?? !shouldTrackARAP,
               // When true, journal debits Inventory asset (1300) instead of an expense account.
               isInventoryPurchase,
-              // When true, journal credits Inventory asset (1300) instead of Cash/AP (wastage/samples).
+              // When true, journal credits Inventory asset instead of Cash/AP (wastage/samples).
+              // inventorySubCode refines the credit to the specific sub-account (1301/1302/1303).
               isNonCashInventoryOut,
+              ...(isNonCashInventoryOut && wastageInventorySubCode && { inventorySubCode: wastageInventorySubCode }),
               // Partner-specific equity codes (undefined for non-equity entries)
               partnerCapitalCode,
               partnerDrawingsCode,
@@ -1524,6 +1536,12 @@ export class LedgerService {
               isNonCashInventoryOut:
                 (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
                 entryType === "مصروف",
+              // Pass stored wastage sub-account so edited journal credits 1301/1302/1303 not parent 1300
+              ...((NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+                entryType === "مصروف" &&
+                currentData.wastageInventorySubCode && {
+                  inventorySubCode: currentData.wastageInventorySubCode as string,
+                }),
             },
           },
           newMainJournalSeq
