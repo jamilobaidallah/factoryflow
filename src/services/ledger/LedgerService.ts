@@ -1351,12 +1351,12 @@ export class LedgerService {
       // If the category stays inventory-relevant the quantity is unchanged (correct for
       // price-correction edits); the unit-cost weighted average is a known limitation.
       if (currentData?.isInventoryPurchase) {
-        const newEntryType = getCategoryType(formData.category, formData.subCategory);
+        // Only COGS category entries affect inventory — not all مصروف entries.
+        // "مصاريف تشغيلية" (wages, rent, etc.) are also مصروف but do NOT touch inventory.
         const newIsInboundFreight =
-          newEntryType === "مصروف" &&
           (INBOUND_FREIGHT_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
         const newIsCOGSPurchase =
-          newEntryType === "مصروف" &&
+          formData.category === "تكلفة البضاعة المباعة (COGS)" &&
           !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
           !(DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "");
         const newCouldHaveInventory = newIsInboundFreight || newIsCOGSPurchase;
@@ -1508,8 +1508,17 @@ export class LedgerService {
               isEndorsementAdvance: !!currentData.linkedEndorsementChequeId,
               partnerCapitalCode: updatePartnerCapitalCode,
               partnerDrawingsCode: updatePartnerDrawingsCode,
-              // CRIT-1: preserve inventory purchase flag so edit journal hits DR 1301/1303 not DR 5000
-              isInventoryPurchase: !!(currentData.isInventoryPurchase),
+              // CRIT-1: preserve inventory purchase flag so edit journal hits DR 1301/1303 not DR 5000.
+              // But clear it when category changes away from COGS — otherwise the new expense
+              // journal (e.g. wages) would incorrectly debit inventory (1300) instead of 5100.
+              isInventoryPurchase: !!(currentData.isInventoryPurchase) && (
+                (INBOUND_FREIGHT_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") ||
+                (
+                  formData.category === "تكلفة البضاعة المباعة (COGS)" &&
+                  !(NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+                  !(DEPRECIATION_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "")
+                )
+              ),
               // CRIT-2: re-derive non-cash flag from subcategory (not stored on document)
               // Without this, wastage/samples edit posts DR expense / CR Cash instead of CR Inventory
               isNonCashInventoryOut:
