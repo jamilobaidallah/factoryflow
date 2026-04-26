@@ -1399,54 +1399,6 @@ export class LedgerService {
 
           await Promise.all(revertTasks);
           updateData.isInventoryPurchase = false;
-        } else if (newAmount !== (currentData?.amount || 0)) {
-          // HIGH-1 EXTENSION: Category stayed inventory-relevant but amount changed.
-          // Recalculate weighted average unit cost for single-item purchases.
-          // Guard: only when lastPurchaseAmount ≈ old entry amount (i.e., no later purchase
-          // has overwritten lastPurchasePrice since this transaction was created).
-          const amountMovementsSnap = await getDocs(query(
-            this.inventoryMovementsRef,
-            where("linkedTransactionId", "==", existingTransactionId ?? ""),
-            limit(10)
-          ));
-          const purchaseMovements = amountMovementsSnap.docs.filter(
-            (d) => (d.data() as InventoryMovementData).type === "دخول"
-          );
-          if (purchaseMovements.length === 1) {
-            const movement = purchaseMovements[0].data() as InventoryMovementData;
-            const movQty = movement.quantity || 0;
-            if (movQty > 0) {
-              const itemDocRef = doc(
-                firestore,
-                getUserCollectionPath(this.userId, "inventory"),
-                movement.itemId
-              );
-              await runTransaction(firestore, async (tx) => {
-                const itemDoc = await tx.get(itemDocRef);
-                if (!itemDoc.exists()) return;
-                const itemData = itemDoc.data() as InventoryItemData;
-                const currentQty = itemData.quantity || 0;
-                const currentWA = itemData.unitPrice || 0;
-                if (currentQty <= 0) return;
-                // Best estimate for the old per-unit cost of this purchase.
-                // lastPurchasePrice is set by handleInventoryUpdate on every repurchase.
-                // Falls back to currentWA, which is exact when there is only one purchase
-                // (the common case for price-correction edits).
-                const oldUnitCost = itemData.lastPurchasePrice || currentWA;
-                const newUnitCost = roundCurrency(newAmount / movQty);
-                const adjustedTotalCost = safeAdd(
-                  safeSubtract(safeMultiply(currentQty, currentWA), safeMultiply(movQty, oldUnitCost)),
-                  newAmount
-                );
-                const newWA = roundCurrency(adjustedTotalCost / currentQty);
-                tx.update(itemDocRef, {
-                  unitPrice: Math.max(0, newWA),
-                  lastPurchasePrice: newUnitCost,
-                  lastPurchaseAmount: newAmount,
-                });
-              });
-            }
-          }
         }
       }
 
@@ -1913,6 +1865,59 @@ export class LedgerService {
       }
 
       await batch.commit();
+
+      // Post-batch: Recalculate inventory weighted-average unit cost when a COGS purchase
+      // amount changes (category stays inventory-relevant, single-item purchase only).
+      // Done after batch.commit() so it only runs on successful edits.
+      if (
+        currentData?.isInventoryPurchase &&
+        newAmount !== (currentData?.amount || 0) &&
+        existingTransactionId
+      ) {
+        try {
+          const costMovementsSnap = await getDocs(query(
+            this.inventoryMovementsRef,
+            where("linkedTransactionId", "==", existingTransactionId),
+            limit(10)
+          ));
+          const purchaseMovements = costMovementsSnap.docs.filter(
+            (d) => (d.data() as InventoryMovementData).type === "دخول"
+          );
+          if (purchaseMovements.length === 1) {
+            const movement = purchaseMovements[0].data() as InventoryMovementData;
+            const movQty = movement.quantity || 0;
+            if (movQty > 0 && movement.itemId) {
+              const itemDocRef = doc(
+                firestore,
+                getUserCollectionPath(this.userId, "inventory"),
+                movement.itemId
+              );
+              const itemSnap = await getDoc(itemDocRef);
+              if (itemSnap.exists()) {
+                const itemData = itemSnap.data() as InventoryItemData;
+                const currentQty = itemData.quantity || 0;
+                const currentWA = itemData.unitPrice || 0;
+                if (currentQty > 0) {
+                  const oldUnitCost = itemData.lastPurchasePrice || currentWA;
+                  const newUnitCost = roundCurrency(newAmount / movQty);
+                  const adjustedTotalCost = safeAdd(
+                    safeSubtract(safeMultiply(currentQty, currentWA), safeMultiply(movQty, oldUnitCost)),
+                    newAmount
+                  );
+                  const newWA = roundCurrency(adjustedTotalCost / currentQty);
+                  await updateDoc(itemDocRef, {
+                    unitPrice: Math.max(0, newWA),
+                    lastPurchasePrice: newUnitCost,
+                    lastPurchaseAmount: newAmount,
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // Best-effort: inventory unit cost is non-critical; ledger update already committed
+        }
+      }
 
       // After batch commit: Create secondary journals (COGS, discounts, endorsements)
       // Main ledger journal reversal + recreation are now atomically in the batch above.
