@@ -1914,8 +1914,13 @@ export class LedgerService {
               }
             }
           }
-        } catch {
+        } catch (e) {
           // Best-effort: inventory unit cost is non-critical; ledger update already committed
+          console.error("⚠️ Inventory unit cost update failed after ledger edit", {
+            entryId,
+            existingTransactionId,
+            error: e instanceof Error ? e.message : String(e),
+          });
         }
       }
 
