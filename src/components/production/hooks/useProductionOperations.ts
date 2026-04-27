@@ -164,6 +164,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
             batch.update(newOutputItemRef, {
               quantity: safeAdd(currentQty, outputQty),
               unitPrice: calculatedUnitCost,
+              inventoryAccountCode: '1302',
             });
           } else {
             const newOutputRef = doc(collection(firestore, `users/${user.dataOwnerId}/inventory`));
@@ -180,6 +181,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
               length: formData.outputLength ? parseAmount(formData.outputLength) : null,
               notes: `تم التحديث من تعديل أمر الإنتاج - تكلفة الوحدة: ${roundCurrency(calculatedUnitCost).toFixed(2)} دينار`,
               createdAt: new Date(),
+              inventoryAccountCode: '1302',
             });
           }
 
@@ -363,6 +365,9 @@ export function useProductionOperations(): UseProductionOperationsReturn {
         batch.update(outputItemRef, {
           quantity: safeAdd(currentQty, order.outputQuantity),
           unitPrice: calculatedUnitCost,
+          // Production output is always حجر مقطوع — إنتاج داخلي (1302)
+          // so COGS on future sales credits 1302, not the raw stone account (1301)
+          inventoryAccountCode: '1302',
         });
       } else {
         const newOutputRef = doc(collection(firestore, `users/${user.dataOwnerId}/inventory`));
@@ -379,6 +384,7 @@ export function useProductionOperations(): UseProductionOperationsReturn {
           length: order.outputLength || null,
           notes: `تم الإنشاء من أمر الإنتاج ${order.orderNumber} - تكلفة الوحدة: ${roundCurrency(calculatedUnitCost).toFixed(2)} دينار`,
           createdAt: new Date(),
+          inventoryAccountCode: '1302',
         });
       }
 
