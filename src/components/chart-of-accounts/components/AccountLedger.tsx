@@ -56,8 +56,12 @@ export function AccountLedger({ account }: AccountLedgerProps) {
         const fetched = snapshot.docs
           .map((d) => ({ id: d.id, ...convertFirestoreDates(d.data()) }) as JournalEntry)
           .filter((e) => {
-            const status = (e as JournalEntry & { status?: string }).status;
-            return !status || status === "posted";
+            const entry = e as JournalEntry & { status?: string; reversal?: { isReversal?: boolean } };
+            // Hide reversed originals (status='reversed') and the reversal entries themselves.
+            // Both belong in القيود اليومية (audit log) — the COA shows only active/effective lines.
+            if (entry.status === "reversed") return false;
+            if (entry.reversal?.isReversal) return false;
+            return !entry.status || entry.status === "posted";
           })
           .sort((a, b) => {
             const dateDiff = a.date.getTime() - b.date.getTime();
