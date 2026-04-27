@@ -1464,6 +1464,34 @@ export class LedgerService {
         const editReturnSubCode = (currentData.returnInventorySubCode as string | undefined)
           || ACCOUNT_CODES.INVENTORY;
 
+        // For wastage edit: if sub-code isn't stored on doc (pre-fix entry), look it up from the
+        // linked inventory movement → item document so we still credit the right sub-account.
+        let editWastageInventorySubCode = currentData.wastageInventorySubCode as string | undefined;
+        const isWastageEdit =
+          (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
+          entryType === "مصروف";
+        if (isWastageEdit && !editWastageInventorySubCode && existingTransactionId) {
+          try {
+            const wastageMovSnap = await getDocs(
+              query(this.inventoryMovementsRef,
+                where("linkedTransactionId", "==", existingTransactionId),
+                limit(5))
+            );
+            if (!wastageMovSnap.empty) {
+              const movData = wastageMovSnap.docs[0].data() as InventoryMovementData;
+              if (movData.itemId) {
+                const itemRef = doc(firestore, `users/${this.userId}/inventory`, movData.itemId);
+                const itemSnap = await getDoc(itemRef);
+                if (itemSnap.exists()) {
+                  editWastageInventorySubCode = itemSnap.data()?.inventoryAccountCode as string | undefined;
+                }
+              }
+            }
+          } catch {
+            // Non-fatal: falls back to parent 1300
+          }
+        }
+
         const mainTemplateId = getJournalTemplateForTransaction(
           entryType,
           formData.category,
@@ -1536,12 +1564,11 @@ export class LedgerService {
               isNonCashInventoryOut:
                 (NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
                 entryType === "مصروف",
-              // Pass stored wastage sub-account so edited journal credits 1301/1302/1303 not parent 1300
-              ...((NON_CASH_SUBCATEGORIES as readonly string[]).includes(formData.subCategory ?? "") &&
-                entryType === "مصروف" &&
-                currentData.wastageInventorySubCode && {
-                  inventorySubCode: currentData.wastageInventorySubCode as string,
-                }),
+              // Pass wastage sub-account so edited journal credits 1301/1302/1303 not parent 1300.
+              // editWastageInventorySubCode is resolved above (stored field or live item lookup).
+              ...(isWastageEdit && editWastageInventorySubCode && {
+                inventorySubCode: editWastageInventorySubCode,
+              }),
             },
           },
           newMainJournalSeq
