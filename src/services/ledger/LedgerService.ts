@@ -2124,10 +2124,16 @@ export class LedgerService {
       // Reserve sequences for journal reversals BEFORE building the batch
       // (sequence reservation uses a Firestore transaction and must run outside the batch)
       const engine = createJournalPostingEngine(this.userId);
-      const journalCountToReverse = await engine.countEntriesBySource("ledger", entry.id);
-      const reversalSeqs = journalCountToReverse > 0
-        ? await engine.reserveSequences(journalCountToReverse)
+      const [journalCountToReverse, cogsJournalCountToReverse] = await Promise.all([
+        engine.countEntriesBySource("ledger", entry.id),
+        engine.countEntriesBySource("inventory", entry.id),
+      ]);
+      const totalToReverse = journalCountToReverse + cogsJournalCountToReverse;
+      const allReversalSeqs = totalToReverse > 0
+        ? await engine.reserveSequences(totalToReverse)
         : [];
+      const reversalSeqs = allReversalSeqs.slice(0, journalCountToReverse);
+      const cogsReversalSeqs = allReversalSeqs.slice(journalCountToReverse);
 
       const batch = writeBatch(firestore);
       let deletedRelatedCount = 0;
@@ -2135,6 +2141,13 @@ export class LedgerService {
       // Reverse main ledger journal entries (immutable ledger — never hard-delete)
       if (journalCountToReverse > 0) {
         await engine.reverseBySourceToBatch(batch, "ledger", entry.id, "حذف معاملة", reversalSeqs);
+      }
+
+      // Reverse COGS journal entries (source.type="inventory", source.documentId=entry.id)
+      // These are orphaned without this step — COGS ledger entries are deleted below but their
+      // journal counterparts were never cleaned up.
+      if (cogsJournalCountToReverse > 0) {
+        await engine.reverseBySourceToBatch(batch, "inventory", entry.id, "حذف معاملة — تكلفة بضاعة مباعة", cogsReversalSeqs);
       }
 
       // Delete the ledger entry
