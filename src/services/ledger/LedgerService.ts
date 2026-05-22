@@ -972,9 +972,13 @@ export class LedgerService {
           ? Array.from(returnSubCodeCosts.entries()).map(([code, cost]) => ({ accountCode: code, cost }))
           : [{ accountCode: ACCOUNT_CODES.INVENTORY, cost: totalReturnCostAmount }];
 
-      // Store returnInventorySubCode on ledger entry so edit can rebuild the 4-line journal correctly
-      if (formData.category === "مردودات المبيعات" && returnInventoryLines.length === 1) {
-        batch.update(ledgerDocRef, { returnInventorySubCode: returnInventoryLines[0].accountCode });
+      // Store returnInventorySubCode + returnCostAmount so edit can rebuild the 4-line journal correctly
+      if (formData.category === "مردودات المبيعات") {
+        const returnDocUpdate: Record<string, unknown> = { returnCostAmount: totalReturnCostAmount };
+        if (returnInventoryLines.length === 1) {
+          returnDocUpdate.returnInventorySubCode = returnInventoryLines[0].accountCode;
+        }
+        batch.update(ledgerDocRef, returnDocUpdate);
       }
 
       // Store wastageInventorySubCode on ledger entry so edit path can pass it to the journal
