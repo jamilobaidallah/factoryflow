@@ -131,12 +131,16 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 /** Determine if amount should be shown as positive (cash in) */
-function isPositiveAmount(type: string, subCategory: string): boolean {
-  if (type === "دخل" || type === "مردود") {return true;}
+function isPositiveAmount(type: string, subCategory: string, isCOGSReversal?: boolean): boolean {
+  // COGS reversal = cost reduction = benefit → show green
+  if (isCOGSReversal) return true;
+  // Sales returns are contra-revenue → show red
+  if (type === "مردود") return false;
+  if (type === "دخل") return true;
   if (type === "حركة رأس مال") {
-    return isCapitalContribution(subCategory); // Capital contribution = cash IN
+    return isCapitalContribution(subCategory);
   }
-  return false; // Expenses and owner drawings = cash OUT
+  return false;
 }
 
 // Memoized table row for better performance with large lists
@@ -254,10 +258,10 @@ const LedgerTableRow = memo(function LedgerTableRow({
         <p
           className={cn(
             "text-sm font-bold",
-            isPositiveAmount(entry.type, entry.subCategory || "") ? "text-emerald-600" : "text-rose-600"
+            isPositiveAmount(entry.type, entry.subCategory || "", entry.isCOGSReversal) ? "text-emerald-600" : "text-rose-600"
           )}
         >
-          {isPositiveAmount(entry.type, entry.subCategory || "") ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory || "", entry.isCOGSReversal) ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </p>
       </TableCell>
@@ -396,10 +400,10 @@ const LedgerCard = memo(function LedgerCard({
         <span
           className={cn(
             "font-bold whitespace-nowrap",
-            isPositiveAmount(entry.type, entry.subCategory || "") ? "text-emerald-600" : "text-rose-600"
+            isPositiveAmount(entry.type, entry.subCategory || "", entry.isCOGSReversal) ? "text-emerald-600" : "text-rose-600"
           )}
         >
-          {isPositiveAmount(entry.type, entry.subCategory || "") ? "+" : "-"}
+          {isPositiveAmount(entry.type, entry.subCategory || "", entry.isCOGSReversal) ? "+" : "-"}
           {formatNumber(entry.amount || 0)}
         </span>
       </div>
