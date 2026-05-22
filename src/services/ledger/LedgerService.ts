@@ -577,6 +577,8 @@ export class LedgerService {
       const saleAmount = parseAmount(formData.amount);
       const costAmount = parseAmount(formData.returnCostAmount || '0');
       const entryDate = new Date(formData.date);
+      const isInstantReturn = formData.immediateSettlement ?? false;
+      const returnCreditCode = isInstantReturn ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.ACCOUNTS_RECEIVABLE;
 
       if (saleAmount <= 0) {
         return { success: false, error: "يجب أن يكون سعر البيع أكبر من صفر" };
@@ -626,12 +628,12 @@ export class LedgerService {
         ownerName: formData.ownerName || "",
         date: entryDate,
         createdAt: new Date(),
-        isARAPEntry: true,
+        isARAPEntry: !isInstantReturn,
         isReturnEntry: true,
-        immediateSettlement: false,
-        paymentStatus: "unpaid",
-        remainingBalance: saleAmount,
-        totalPaid: 0,
+        immediateSettlement: isInstantReturn,
+        paymentStatus: isInstantReturn ? "paid" : "unpaid",
+        remainingBalance: isInstantReturn ? 0 : saleAmount,
+        totalPaid: isInstantReturn ? saleAmount : 0,
       });
 
       // Update inventory quantity and weighted average unit price
@@ -685,9 +687,9 @@ export class LedgerService {
               credit: 0,
             },
             {
-              accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-              accountName: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-              accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+              accountCode: returnCreditCode,
+              accountName: getAccountNameAr(returnCreditCode),
+              accountNameAr: getAccountNameAr(returnCreditCode),
               debit: 0,
               credit: saleAmount,
             },
@@ -1051,10 +1053,13 @@ export class LedgerService {
         const engine = createJournalPostingEngine(this.userId);
         const entryDate = new Date(formData.date);
 
-        // Sales return: compound 4-line journal (DR 4050 + DR 1300 / CR 1200 + CR 5000)
+        // Sales return: compound 4-line journal (DR 4050 + DR 1300 / CR Cash-or-AR + CR 5000)
         // Must bypass the default 2-line template — always uses explicit lines override
         if (formData.category === "مردودات المبيعات") {
           const costAmount = inventoryResult?.returnCostAmount ?? 0;
+          const returnCreditCode = (formData.immediateSettlement ?? false)
+            ? ACCOUNT_CODES.CASH
+            : ACCOUNT_CODES.ACCOUNTS_RECEIVABLE;
           await this.postJournalEntry(engine, {
             templateId: "SALES_RETURN",
             amount: totalAmount,
@@ -1079,9 +1084,9 @@ export class LedgerService {
                 debit: cost, credit: 0,
               })),
               {
-                accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-                accountName: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-                accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                accountCode: returnCreditCode,
+                accountName: getAccountNameAr(returnCreditCode),
+                accountNameAr: getAccountNameAr(returnCreditCode),
                 debit: 0, credit: totalAmount,
               },
               {
@@ -1511,7 +1516,12 @@ export class LedgerService {
             },
             // For sales returns, provide the 4-line explicit override so inventory and COGS legs are preserved
             ...(isSalesReturnEdit && {
-              lines: [
+              lines: (() => {
+                const editReturnCreditCode = (
+                  currentData.immediateSettlement ??
+                  !(currentData.isARAPEntry ?? true)
+                ) ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.ACCOUNTS_RECEIVABLE;
+                return [
                 {
                   accountCode: ACCOUNT_CODES.SALES_RETURNS,
                   accountName: getAccountNameAr(ACCOUNT_CODES.SALES_RETURNS),
@@ -1525,9 +1535,9 @@ export class LedgerService {
                   debit: editCostAmount, credit: 0,
                 },
                 {
-                  accountCode: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-                  accountName: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
-                  accountNameAr: getAccountNameAr(ACCOUNT_CODES.ACCOUNTS_RECEIVABLE),
+                  accountCode: editReturnCreditCode,
+                  accountName: getAccountNameAr(editReturnCreditCode),
+                  accountNameAr: getAccountNameAr(editReturnCreditCode),
                   debit: 0, credit: newAmount,
                 },
                 {
@@ -1536,7 +1546,8 @@ export class LedgerService {
                   accountNameAr: getAccountNameAr(ACCOUNT_CODES.COST_OF_GOODS_SOLD),
                   debit: 0, credit: editCostAmount,
                 },
-              ],
+                ];
+              })(),
             }),
             context: {
               category: formData.category,
