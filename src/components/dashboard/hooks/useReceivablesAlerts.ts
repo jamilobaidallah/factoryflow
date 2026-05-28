@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import type { DocumentData } from "firebase/firestore";
 import { collection, onSnapshot, query, limit } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
 import { QUERY_LIMITS } from "@/lib/constants";
 import { toast } from "@/hooks/use-toast";
-import type { AlertData, UseReceivablesAlertsReturn } from "../types/dashboard.types";
+import type { UseReceivablesAlertsReturn } from "../types/dashboard.types";
 import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
 
 /** Outstanding payment statuses */
@@ -39,17 +40,46 @@ function showLimitWarning(limitType: string, limitValue: number, message: string
  */
 export function useReceivablesAlerts(selectedMonth?: string): UseReceivablesAlertsReturn {
   const { user } = useUser();
-  const [unpaidReceivables, setUnpaidReceivables] = useState<AlertData>({ count: 0, total: 0 });
-  const [unpaidPayables, setUnpaidPayables] = useState<AlertData>({ count: 0, total: 0 });
+  // Raw docs stored separately so the Firestore subscription never re-fires when
+  // selectedMonth changes — month filtering is pure in-memory via useMemo below.
+  const [rawDocs, setRawDocs] = useState<DocumentData[]>([]);
 
+  // Subscribe only on user change — NOT on selectedMonth.
+  // This prevents tearing down and recreating a 5000-doc listener every time the
+  // user switches the month selector.
   useEffect(() => {
-    if (!user) {return;}
+    if (!user) { setRawDocs([]); return; }
 
     const ledgerRef = collection(firestore, `users/${user.dataOwnerId}/ledger`);
-    // Add limit to prevent loading unbounded data
     const ledgerQuery = query(ledgerRef, limit(QUERY_LIMITS.DASHBOARD_ENTRIES));
 
-    // Pre-compute month boundaries once (avoid recomputing inside forEach)
+    const unsubscribe = onSnapshot(
+      ledgerQuery,
+      (snapshot) => {
+        if (snapshot.size >= QUERY_LIMITS.DASHBOARD_ENTRIES) {
+          showLimitWarning(
+            'Receivables alerts',
+            QUERY_LIMITS.DASHBOARD_ENTRIES,
+            'بعض قيود الذمم المدينة/الدائنة قد لا تظهر. يُنصح بأرشفة القيود القديمة.'
+          );
+        }
+        setRawDocs(snapshot.docs.map((d) => d.data()));
+      },
+      (error) => {
+        console.error('Receivables alerts subscription error:', error);
+        toast({
+          title: "خطأ في تحميل بيانات الذمم",
+          description: "تعذّر تحميل بيانات الذمم المدينة والدائنة. يرجى تحديث الصفحة.",
+          variant: "destructive",
+        });
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Derive counts in-memory when rawDocs or selectedMonth changes (no Firestore round-trip)
+  const { unpaidReceivables, unpaidPayables } = useMemo(() => {
     let monthFrom: Date | null = null;
     let monthTo: Date | null = null;
     if (selectedMonth) {
@@ -60,52 +90,27 @@ export function useReceivablesAlerts(selectedMonth?: string): UseReceivablesAler
       monthTo = new Date(year, month, 0, 23, 59, 59, 999);
     }
 
-    const unsubscribe = onSnapshot(ledgerQuery, (snapshot) => {
-      // Show warning if limit is reached (data may be incomplete)
-      if (snapshot.size >= QUERY_LIMITS.DASHBOARD_ENTRIES) {
-        showLimitWarning(
-          'Receivables alerts',
-          QUERY_LIMITS.DASHBOARD_ENTRIES,
-          'بعض قيود الذمم المدينة/الدائنة قد لا تظهر. يُنصح بأرشفة القيود القديمة.'
-        );
+    let receivablesCount = 0;
+    let receivablesTotal = 0;
+    let payablesCount = 0;
+    let payablesTotal = 0;
+
+    for (const data of rawDocs) {
+      if (monthFrom && monthTo) {
+        const raw = data.date;
+        const entryDate: Date = raw?.toDate ? raw.toDate() : new Date(raw as string);
+        if (entryDate < monthFrom || entryDate > monthTo) continue;
       }
+      const outstanding = getOutstandingAmount(data);
+      if (isOutstandingReceivable(data)) { receivablesCount++; receivablesTotal += outstanding; }
+      if (isOutstandingPayable(data))    { payablesCount++;    payablesTotal    += outstanding; }
+    }
 
-      let receivablesCount = 0;
-      let receivablesTotal = 0;
-      let payablesCount = 0;
-      let payablesTotal = 0;
-
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-
-        // When a month is selected, only include entries from that month
-        if (monthFrom && monthTo) {
-          const raw = data.date;
-          const entryDate: Date = raw?.toDate ? raw.toDate() : new Date(raw as string);
-          if (entryDate < monthFrom || entryDate > monthTo) { return; }
-        }
-
-        const outstanding = getOutstandingAmount(data);
-
-        // Count AR entries (income type) with outstanding balances
-        if (isOutstandingReceivable(data)) {
-          receivablesCount++;
-          receivablesTotal += outstanding;
-        }
-
-        // Count AP entries (expense type) with outstanding balances
-        if (isOutstandingPayable(data)) {
-          payablesCount++;
-          payablesTotal += outstanding;
-        }
-      });
-
-      setUnpaidReceivables({ count: receivablesCount, total: receivablesTotal });
-      setUnpaidPayables({ count: payablesCount, total: payablesTotal });
-    });
-
-    return () => unsubscribe();
-  }, [user, selectedMonth]);
+    return {
+      unpaidReceivables: { count: receivablesCount, total: receivablesTotal },
+      unpaidPayables:    { count: payablesCount,    total: payablesTotal    },
+    };
+  }, [rawDocs, selectedMonth]);
 
   return { unpaidReceivables, unpaidPayables };
 }

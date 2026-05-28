@@ -4,7 +4,7 @@ import { memo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber, formatDate } from "@/lib/date-utils";
-import { DASHBOARD_LABELS } from "../constants/dashboard.constants";
+import { DASHBOARD_LABELS, INCOME_TYPES } from "../constants/dashboard.constants";
 import type { DashboardTransactionsProps, DashboardLedgerEntry } from "../types/dashboard.types";
 
 /**
@@ -72,7 +72,7 @@ function TransactionItem({
   index: number;
   isLoaded: boolean;
 }) {
-  const isIncome = transaction.type === "دخل";
+  const isIncome = INCOME_TYPES.includes(transaction.type as typeof INCOME_TYPES[number]);
   const amountColor = isIncome ? "text-emerald-600" : "text-slate-600";
   const amountPrefix = isIncome ? "+" : "-";
 
@@ -107,7 +107,7 @@ function TransactionItem({
 
 /** Transaction type icon */
 function TransactionIcon({ type }: { type: string }) {
-  const isIncome = type === "دخل";
+  const isIncome = INCOME_TYPES.includes(type as typeof INCOME_TYPES[number]);
 
   return (
     <div
