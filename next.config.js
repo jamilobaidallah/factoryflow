@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
+
+// When building the Electron desktop app, output static files that Electron
+// can load directly without a running server.
+const isElectronBuild = process.env.NEXT_BUILD_TARGET === 'electron';
+
 const nextConfig = {
+  ...(isElectronBuild && { output: 'export' }),
+
   images: {
     remotePatterns: [
       {
@@ -40,8 +47,8 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
 
-  // Headers for caching static assets
-  async headers() {
+  // Headers for caching static assets (not used in Electron static export)
+  ...(!isElectronBuild && { async headers() {
     return [
       {
         source: '/:all*(svg|jpg|png|webp|avif|ico|woff|woff2)',
@@ -62,7 +69,7 @@ const nextConfig = {
         ],
       },
     ];
-  },
+  } }),
 }
 
 module.exports = nextConfig;
