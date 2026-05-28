@@ -165,6 +165,9 @@ export interface UseDashboardDataReturn {
   expensesByCategoryMap: Map<string, { total: number; monthly: Map<string, number> }>;
   // Recent transactions
   recentTransactions: DashboardLedgerEntry[];
+  // AR/AP alert counts (derived from the ledger subscription — no extra Firestore listener)
+  unpaidReceivables: AlertData;
+  unpaidPayables: AlertData;
   // Loading state
   isLoading: boolean;
 }

@@ -1,17 +1,41 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   useLedgerDashboardData,
   usePaymentsDashboardData,
 } from "@/hooks/firebase-query/useDashboardQueries";
-import type { UseDashboardDataReturn } from "../types/dashboard.types";
+import type { UseDashboardDataReturn, DashboardLedgerEntry } from "../types/dashboard.types";
+import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
+
+const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
+type OutstandingStatus = typeof OUTSTANDING_STATUSES[number];
+
+function isOutstandingStatus(status: string | undefined): status is OutstandingStatus {
+  return OUTSTANDING_STATUSES.includes(status as OutstandingStatus);
+}
+
+function getOutstandingAmount(entry: DashboardLedgerEntry): number {
+  if (typeof entry.remainingBalance === "number" && entry.remainingBalance > 0) {
+    return entry.remainingBalance;
+  }
+  if (entry.paymentStatus === "unpaid" && typeof entry.amount === "number") {
+    return entry.amount;
+  }
+  return 0;
+}
 
 /**
- * Hook for fetching and managing all dashboard data
- * Uses React Query for caching and real-time subscriptions
+ * Hook for fetching and managing all dashboard data.
+ *
+ * When selectedMonth is provided (format "YYYY-MM"), the AR/AP alert counts
+ * are filtered to that month only. Pass undefined for all-time totals.
+ *
+ * AR/AP counts are derived in-memory from the same ledger snapshot already
+ * loaded for P&L — no second Firestore listener is opened.
  */
-export function useDashboardData(): UseDashboardDataReturn {
-  // Fetch ledger data (P&L, financing cash, loans, transactions)
+export function useDashboardData(selectedMonth?: string): UseDashboardDataReturn {
+  // Fetch ledger data (P&L, financing cash, loans, transactions, AR/AP candidates)
   const { data: ledgerData, isLoading: isLedgerLoading } = useLedgerDashboardData();
 
   // Fetch payments data (operating cash in/out)
@@ -41,6 +65,46 @@ export function useDashboardData(): UseDashboardDataReturn {
   const totalCashIn = operatingCashIn + financingCashIn + loanCashIn;
   const totalCashOut = operatingCashOut + financingCashOut + loanCashOut;
 
+  // Derive AR/AP alert counts in-memory — no Firestore round-trip.
+  // Month filtering is pure in-memory; Firestore subscription is NOT re-created on month change.
+  // ledgerData is a stable React Query reference; it only changes when the snapshot fires.
+  const { unpaidReceivables, unpaidPayables } = useMemo(() => {
+    const arApCandidates = ledgerData?.arApCandidates ?? [];
+    let monthFrom: Date | null = null;
+    let monthTo: Date | null = null;
+    if (selectedMonth) {
+      const [yearStr, monthStr] = selectedMonth.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      monthFrom = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      monthTo = new Date(year, month, 0, 23, 59, 59, 999);
+    }
+
+    let receivablesCount = 0;
+    let receivablesTotal = 0;
+    let payablesCount = 0;
+    let payablesTotal = 0;
+
+    for (const entry of arApCandidates) {
+      if (monthFrom && monthTo) {
+        if (entry.date < monthFrom || entry.date > monthTo) { continue; }
+      }
+      if (!isOutstandingStatus(entry.paymentStatus)) { continue; }
+
+      const outstanding = getOutstandingAmount(entry);
+      const isIncome = INCOME_TYPES.some(t => t === entry.type);
+      const isExpense = entry.type === EXPENSE_TYPE;
+
+      if (isIncome) { receivablesCount++; receivablesTotal += outstanding; }
+      if (isExpense) { payablesCount++;   payablesTotal   += outstanding; }
+    }
+
+    return {
+      unpaidReceivables: { count: receivablesCount, total: receivablesTotal },
+      unpaidPayables:    { count: payablesCount,    total: payablesTotal    },
+    };
+  }, [ledgerData, selectedMonth]);
+
   // Combined loading state
   const isLoading = isLedgerLoading || isPaymentsLoading;
 
@@ -61,6 +125,8 @@ export function useDashboardData(): UseDashboardDataReturn {
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,
+    unpaidReceivables,
+    unpaidPayables,
     isLoading,
   };
 }

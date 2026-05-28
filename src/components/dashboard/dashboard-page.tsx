@@ -5,7 +5,6 @@ import { useState, useEffect, useMemo } from "react";
 import { DASHBOARD_CONFIG, EXPENSE_CATEGORY_COLORS } from "./constants/dashboard.constants";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useChequesAlerts } from "./hooks/useChequesAlerts";
-import { useReceivablesAlerts } from "./hooks/useReceivablesAlerts";
 import {
   DashboardHero,
   DashboardSummaryCards,
@@ -50,10 +49,11 @@ export default function DashboardPage() {
     monthlyDataMap,
     expensesByCategoryMap,
     recentTransactions,
-  } = useDashboardData();
+    unpaidReceivables,
+    unpaidPayables,
+  } = useDashboardData(summaryView === "month" ? selectedMonth : undefined);
 
   const { chequesDueSoon } = useChequesAlerts();
-  const { unpaidReceivables, unpaidPayables } = useReceivablesAlerts(summaryView === "month" ? selectedMonth : undefined);
 
   // Generate available months for dropdown
   const availableMonths = useMemo<MonthOption[]>(() => {

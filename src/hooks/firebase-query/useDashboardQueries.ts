@@ -51,6 +51,8 @@ export interface LedgerDashboardData {
   monthlyDataMap: Map<string, MonthlyFinancialData>;
   expensesByCategoryMap: Map<string, { total: number; monthly: Map<string, number> }>;
   recentTransactions: DashboardLedgerEntry[];
+  /** AR/AP entries for receivables/payables alert computation — avoids a second Firestore listener */
+  arApCandidates: DashboardLedgerEntry[];
 }
 
 /** Aggregated payments data for dashboard */
@@ -114,6 +116,7 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
   let loanIn = 0;
   let loanOut = 0;
   const transactions: DashboardLedgerEntry[] = [];
+  const arApCandidates: DashboardLedgerEntry[] = [];
   const monthlyMap = new Map<string, MonthlyFinancialData>();
   const categoryMap = new Map<string, { total: number; monthly: Map<string, number> }>();
 
@@ -208,6 +211,10 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
     }
 
     transactions.push(entry);
+    // Collect AR/AP candidates for alert counts — avoids a second Firestore listener on the dashboard
+    if (data.paymentStatus !== undefined) {
+      arApCandidates.push(entry);
+    }
   });
 
   // Sort by date and get recent transactions
@@ -229,6 +236,7 @@ function transformLedgerData(docs: DocumentData[]): LedgerDashboardData {
     monthlyDataMap: monthlyMap,
     expensesByCategoryMap: categoryMap,
     recentTransactions: transactions.slice(0, DASHBOARD_CONFIG.TRANSACTIONS_LIMIT),
+    arApCandidates,
   };
 }
 
@@ -320,6 +328,7 @@ export function useLedgerDashboardData() {
     monthlyDataMap: new Map(),
     expensesByCategoryMap: new Map(),
     recentTransactions: [],
+    arApCandidates: [],
   };
 
   const { data, isLoading } = useReactiveQueryData<LedgerDashboardData>({
