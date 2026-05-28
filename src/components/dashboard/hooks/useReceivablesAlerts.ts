@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import type { DocumentData } from "firebase/firestore";
-import { collection, onSnapshot, query, limit } from "firebase/firestore";
+import { type DocumentData, collection, onSnapshot, query, limit } from "firebase/firestore";
 import { useUser } from "@/firebase/provider";
 import { firestore } from "@/firebase/config";
 import { QUERY_LIMITS } from "@/lib/constants";
