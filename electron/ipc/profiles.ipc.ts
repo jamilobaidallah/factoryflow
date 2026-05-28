@@ -2,6 +2,9 @@ import { ipcMain, type App } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { IPC, type Profile, type ProfilesFile } from '../types';
+import { getDatabase } from '../../src/lib/database';
+import { seedChartOfAccounts } from '../../src/lib/seed-coa';
+import { setActiveDb, clearActiveDb } from '../active-db';
 
 function getProfilesFilePath(app: App): string {
   return path.join(app.getPath('userData'), 'profiles.json');
@@ -69,5 +72,27 @@ export function registerProfileHandlers(app: App): void {
   ipcMain.handle(IPC.PROFILES_DELETE, (_, profileId: string) => {
     const profiles = readProfiles(app);
     saveProfiles(app, profiles.filter(p => p.id !== profileId));
+  });
+
+  /**
+   * Open a profile — initialises its SQLite database and sets it as active.
+   * Called from the profile picker before navigating to the main app.
+   * The main process (not the renderer) owns the database connection.
+   */
+  ipcMain.handle('profiles:open', (_, profile: Profile) => {
+    const db = getDatabase(profile.dbPath);
+    // Seed default chart of accounts if this is a brand-new profile
+    try { seedChartOfAccounts(db, profile.id); } catch { /* already seeded */ }
+    setActiveDb(db, profile.id);
+    // Update last-opened timestamp
+    const profiles = readProfiles(app);
+    const p = profiles.find(pr => pr.id === profile.id);
+    if (p) { p.lastOpened = new Date().toISOString(); saveProfiles(app, profiles); }
+    return { success: true };
+  });
+
+  ipcMain.handle('profiles:close', () => {
+    clearActiveDb();
+    return { success: true };
   });
 }

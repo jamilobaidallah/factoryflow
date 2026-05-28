@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import { registerProfileHandlers } from './ipc/profiles.ipc';
+import { registerAllHandlers } from './ipc/index';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -34,7 +34,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  registerProfileHandlers(app);
+  registerAllHandlers(app);
   createWindow();
 
   app.on('activate', () => {

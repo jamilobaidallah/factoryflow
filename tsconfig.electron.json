@@ -4,12 +4,17 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "outDir": "./electron-dist",
-    "rootDir": "./electron",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["electron/**/*.ts"],
+  "include": [
+    "electron/**/*.ts",
+    "src/lib/database.ts",
+    "src/lib/seed-coa.ts",
+    "src/lib/schema/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }
