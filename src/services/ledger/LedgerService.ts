@@ -2364,6 +2364,31 @@ export class LedgerService {
         }
       }
 
+      // HIGH-3b FIX: When a multi-allocation payment is deleted, reset the payment
+      // status of all OTHER entries that were covered by the same payment.
+      // Without this, sibling entries remain "مدفوع" even though their payment is gone.
+      for (const paymentDoc of multiAllocPaymentsSnap.docs) {
+        const allocationsRef = collection(
+          firestore,
+          `users/${this.userId}/payments/${paymentDoc.id}/allocations`
+        );
+        const allocationsSnap = await getDocs(allocationsRef);
+        for (const allocDoc of allocationsSnap.docs) {
+          const alloc = allocDoc.data() as { transactionId: string; ledgerDocId: string; allocatedAmount: number };
+          if (alloc.transactionId === entry.transactionId) continue;
+          const siblingRef = doc(this.ledgerRef, alloc.ledgerDocId);
+          const siblingSnap = await getDoc(siblingRef);
+          if (!siblingSnap.exists()) continue;
+          const s = siblingSnap.data();
+          const newTotalPaid = Math.max(0, safeSubtract(s.totalPaid || 0, alloc.allocatedAmount || 0));
+          batch.update(siblingRef, {
+            totalPaid: newTotalPaid,
+            remainingBalance: calculateRemainingBalance(s.amount || 0, newTotalPaid, s.totalDiscount || 0, s.writeoffAmount || 0),
+            paymentStatus: calculatePaymentStatus(newTotalPaid, s.amount || 0, s.totalDiscount || 0, s.writeoffAmount || 0),
+          });
+        }
+      }
+
       // Delete auto-generated COGS entries (query by linkedTransactionId to handle multiple items)
       const cogsQuery = query(
         this.ledgerRef,
