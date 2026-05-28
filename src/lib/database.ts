@@ -85,17 +85,8 @@ interface Migration {
   sql: string;
 }
 
-const ALL_MIGRATIONS: Migration[] = [
-  {
-    version: 1,
-    description: 'Initial schema — all tables',
-    sql: INITIAL_SCHEMA_SQL,
-  },
-];
-
 // ---------------------------------------------------------------------------
-// Initial schema SQL — generated from Drizzle schema definitions.
-// This is the single source of truth for table structure.
+// Initial schema SQL — must be declared before ALL_MIGRATIONS references it.
 // ---------------------------------------------------------------------------
 
 const INITIAL_SCHEMA_SQL = `
@@ -590,3 +581,12 @@ CREATE TABLE IF NOT EXISTS ledger_favorites (
 
 CREATE INDEX IF NOT EXISTS fav_profile_idx ON ledger_favorites(profile_id);
 `;
+
+const ALL_MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    description: 'Initial schema — all tables',
+    sql: INITIAL_SCHEMA_SQL,
+  },
+  // Add future migrations here — never modify existing entries
+];
