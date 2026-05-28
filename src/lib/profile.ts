@@ -37,8 +37,8 @@ export async function ipcInvoke<T>(channel: string, ...args: unknown[]): Promise
   if (typeof window === 'undefined' || !('electron' in window)) {
     throw new Error('window.electron is not available — are you running in Electron?');
   }
-  return (window as Window & { electron: { invoke: (c: string, ...a: unknown[]) => Promise<T> } })
-    .electron.invoke(channel, ...args);
+  const w = window as Window & { electron: { invoke: (c: string, ...a: unknown[]) => Promise<unknown> } };
+  return w.electron.invoke(channel, ...args) as Promise<T>;
 }
 
 /** Fetch all profiles from disk (via IPC) */
