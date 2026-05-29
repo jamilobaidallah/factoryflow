@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useActiveProfile, clearActiveProfile } from "@/hooks/local/useActiveProfile";
+import { useActiveProfile } from "@/hooks/local/useActiveProfile";
 import { useDashboardDataLocal } from "@/hooks/local/useDashboardDataLocal";
 import { DASHBOARD_CONFIG, EXPENSE_CATEGORY_COLORS } from "@/components/dashboard/constants/dashboard.constants";
 import {
@@ -26,7 +24,6 @@ import type {
 import { formatNumber } from "@/lib/date-utils";
 
 export default function LocalDashboardPage() {
-  const router = useRouter();
   const profile = useActiveProfile();
 
   // ── View states (same as Firebase dashboard) ────────────────────────────
@@ -178,44 +175,14 @@ export default function LocalDashboardPage() {
   // ── Render guards ───────────────────────────────────────────────────────
   if (!profile) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <p>جاري التحميل...</p>
       </div>
     );
   }
 
-  function handleSwitchProfile() {
-    clearActiveProfile();
-    router.push("/profile-picker");
-  }
-
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50">
-      {/* Local app header — replaces the firebase auth header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">{profile.emoji}</span>
-          <div>
-            <h1 className="font-semibold text-slate-700">{profile.name}</h1>
-            <p className="text-xs text-slate-400">النسخة المحلية — يعمل بدون إنترنت</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/local-diagnostic"
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            صفحة الاختبار
-          </Link>
-          <button
-            onClick={handleSwitchProfile}
-            className="text-sm px-3 py-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            تبديل الملف ←
-          </button>
-        </div>
-      </div>
-
+    <div dir="rtl">
       <div className="space-y-6 pb-8 px-6 pt-6">
         <DashboardHero cashBalance={cashBalance} isAnimating={isAnimating} />
 
