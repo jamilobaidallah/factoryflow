@@ -10,7 +10,9 @@ import {
   createProfile,
   markProfileOpened,
   formatLastOpened,
+  ipcInvoke,
 } from "@/lib/profile";
+import { setActiveProfile } from "@/hooks/local/useActiveProfile";
 
 export default function ProfilePickerPage() {
   const router = useRouter();
@@ -42,10 +44,18 @@ export default function ProfilePickerPage() {
   async function handleOpen(profile: Profile) {
     setOpening(profile.id);
     try {
+      // Open the SQLite database for this profile (main process side).
+      // This initialises tables, runs migrations, and seeds the COA if new.
+      await ipcInvoke<{ success: boolean }>('profiles:open', profile);
+
+      // Save active profile to localStorage so useActiveProfile() can read it.
+      setActiveProfile(profile);
       await markProfileOpened(profile.id);
-      // Phase 0: navigate to main app (still Firebase)
-      // Phase 4: this will navigate directly to /dashboard with SQLite active
-      router.push("/");
+
+      // For now, route to the diagnostic page that exercises the local
+      // SQLite data layer. Once Phase 3 wires up the real components,
+      // this will route to "/" (the dashboard).
+      router.push("/local-diagnostic");
     } catch (err) {
       console.error("Failed to open profile:", err);
       setOpening(null);
