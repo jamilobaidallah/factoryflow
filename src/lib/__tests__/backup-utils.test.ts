@@ -63,7 +63,7 @@ Object.defineProperty(window, 'URL', {
 });
 
 const originalCreateElement = document.createElement.bind(document);
-jest.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
   if (tagName === 'a') {
     return {
       href: '',
@@ -71,8 +71,8 @@ jest.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       click: mockClick,
     } as unknown as HTMLAnchorElement;
   }
-  return originalCreateElement(tagName);
-});
+  return originalCreateElement(tagName as 'a');
+}) as unknown as typeof document.createElement);
 
 jest.spyOn(document.body, 'appendChild').mockImplementation(mockAppendChild);
 jest.spyOn(document.body, 'removeChild').mockImplementation(mockRemoveChild);
