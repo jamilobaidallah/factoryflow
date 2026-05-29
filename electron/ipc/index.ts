@@ -12,6 +12,8 @@ import { registerFixedAssetsHandlers } from './fixed-assets.ipc';
 import { registerChartOfAccountsHandlers } from './chart-of-accounts.ipc';
 import { registerActivityLogsHandlers } from './activity-logs.ipc';
 import { registerFavoritesHandlers } from './favorites.ipc';
+import { registerJournalHandlers } from './journal.ipc';
+import { registerLedgerHandlers } from './ledger.ipc';
 
 /** Register all IPC handlers. Called once from main.ts before the window opens. */
 export function registerAllHandlers(app: App): void {
@@ -30,4 +32,7 @@ export function registerAllHandlers(app: App): void {
   registerChartOfAccountsHandlers();
   registerActivityLogsHandlers();
   registerFavoritesHandlers();
+  // Phase 2c
+  registerJournalHandlers();
+  registerLedgerHandlers();
 }

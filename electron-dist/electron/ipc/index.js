@@ -14,6 +14,8 @@ const fixed_assets_ipc_1 = require("./fixed-assets.ipc");
 const chart_of_accounts_ipc_1 = require("./chart-of-accounts.ipc");
 const activity_logs_ipc_1 = require("./activity-logs.ipc");
 const favorites_ipc_1 = require("./favorites.ipc");
+const journal_ipc_1 = require("./journal.ipc");
+const ledger_ipc_1 = require("./ledger.ipc");
 /** Register all IPC handlers. Called once from main.ts before the window opens. */
 function registerAllHandlers(app) {
     (0, profiles_ipc_1.registerProfileHandlers)(app);
@@ -31,4 +33,7 @@ function registerAllHandlers(app) {
     (0, chart_of_accounts_ipc_1.registerChartOfAccountsHandlers)();
     (0, activity_logs_ipc_1.registerActivityLogsHandlers)();
     (0, favorites_ipc_1.registerFavoritesHandlers)();
+    // Phase 2c
+    (0, journal_ipc_1.registerJournalHandlers)();
+    (0, ledger_ipc_1.registerLedgerHandlers)();
 }
