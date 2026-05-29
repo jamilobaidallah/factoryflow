@@ -21,11 +21,11 @@
     "test:e2e:report": "playwright show-report",
     "playwright:install": "playwright install --with-deps",
     "electron:compile": "tsc --project tsconfig.electron.json",
-    "electron:dev": "npm run electron:compile && cross-env NODE_ENV=development electron electron-dist/main.js",
+    "electron:dev": "npm run electron:compile && cross-env NODE_ENV=development electron electron-dist/electron/main.js",
     "electron:build": "cross-env NEXT_BUILD_TARGET=electron next build && npm run electron:compile && electron-builder",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
   },
-  "main": "electron-dist/main.js",
+  "main": "electron-dist/electron/main.js",
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.0",

@@ -1,91 +1,30 @@
-import { app, BrowserWindow, session, Menu, protocol } from 'electron';
+import { app, BrowserWindow, session, Menu } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
 import { registerAllHandlers } from './ipc/index';
-
-/** Map common file extensions to MIME types served by the app:// protocol. */
-const MIME_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js':   'application/javascript; charset=utf-8',
-  '.mjs':  'application/javascript; charset=utf-8',
-  '.css':  'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg':  'image/svg+xml',
-  '.png':  'image/png',
-  '.jpg':  'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif':  'image/gif',
-  '.ico':  'image/x-icon',
-  '.woff':  'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf':   'font/ttf',
-  '.otf':   'font/otf',
-  '.map':   'application/json',
-  '.txt':   'text/plain; charset=utf-8',
-};
+import { startStaticServer, type StaticServer } from './static-server';
 
 const isDev = process.env.NODE_ENV === 'development';
 
-const PROFILE_PICKER_URL = isDev
-  ? 'http://localhost:3000/profile-picker'
-  : 'app://factoryflow/profile-picker.html';
+/**
+ * Origin of the embedded static server in production. Populated during
+ * app startup before the first window is created. In dev we point at the
+ * running `next dev` server instead.
+ */
+let staticServer: StaticServer | null = null;
 
 /**
- * Resolves the absolute filesystem path of a file inside the packaged app's
- * /out/ directory (the Next.js static export). Compiled main.js lives at
- * /electron-dist/electron/main.js inside the asar bundle, so we walk up two
- * levels to reach the /out/ folder that lives alongside it.
+ * Absolute path to the Next.js static export (`out/`). The compiled main.js
+ * lives at `electron-dist/electron/main.js` inside the asar bundle, so we walk
+ * up two levels to reach the `out/` folder packaged alongside it (asarUnpack'd).
  */
-function staticAssetPath(relativePath: string): string {
-  return path.join(__dirname, '..', '..', 'out', relativePath);
+function staticExportDir(): string {
+  return path.join(__dirname, '..', '..', 'out');
 }
 
-/**
- * Register a custom `app://` protocol that serves files from the static
- * export. This is required because Next.js generates HTML with absolute
- * asset references like /_next/static/foo.js, which Electron's file://
- * protocol blocks as "local resources." Serving via a registered protocol
- * lets the browser load these assets as expected.
- */
-function registerAppProtocol(): void {
-  protocol.handle('app', async (request) => {
-    try {
-      // request.url looks like: app://factoryflow/profile-picker.html
-      // We don't care about the host — only the path.
-      const url = new URL(request.url);
-      let relativePath = decodeURIComponent(url.pathname);
-      if (relativePath.startsWith('/')) { relativePath = relativePath.slice(1); }
-      if (!relativePath || relativePath.endsWith('/')) {
-        relativePath = (relativePath || '') + 'index.html';
-      }
-
-      const fullPath = staticAssetPath(relativePath);
-      console.log(`[app://] ${request.url} -> ${fullPath}`);
-
-      // Defensive: prevent path traversal outside the out/ root
-      const outRoot = staticAssetPath('');
-      const normalized = path.normalize(fullPath);
-      if (!normalized.startsWith(path.normalize(outRoot))) {
-        return new Response('Forbidden', { status: 403 });
-      }
-      if (!fs.existsSync(normalized)) {
-        console.warn(`[app://] not found: ${normalized}`);
-        return new Response('Not found', { status: 404 });
-      }
-      // Read directly from disk — works for both asar and asar-unpacked files
-      // thanks to Electron's asar-aware fs implementation.
-      const buffer = await fs.promises.readFile(normalized);
-      const ext = path.extname(normalized).toLowerCase();
-      const mimeType = MIME_TYPES[ext] ?? 'application/octet-stream';
-      return new Response(new Uint8Array(buffer), {
-        status: 200,
-        headers: { 'Content-Type': mimeType },
-      });
-    } catch (err) {
-      console.error('[app://] protocol error:', err);
-      return new Response('Internal error', { status: 500 });
-    }
-  });
+/** URL of the profile picker — the app's entry screen. */
+function profilePickerUrl(): string {
+  if (isDev) { return 'http://localhost:3000/profile-picker'; }
+  return `${staticServer?.origin ?? ''}/profile-picker.html`;
 }
 
 /**
@@ -126,7 +65,7 @@ function createWindow(): void {
     backgroundColor: '#0f172a',
   });
 
-  win.loadURL(PROFILE_PICKER_URL);
+  win.loadURL(profilePickerUrl());
   if (isDev) { win.webContents.openDevTools({ mode: 'detach' }); }
 
   win.once('ready-to-show', () => win.show());
@@ -149,7 +88,7 @@ function buildAppMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+P',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
-            if (win) { win.loadURL(PROFILE_PICKER_URL); }
+            if (win) { win.loadURL(profilePickerUrl()); }
           },
         },
         {
@@ -169,15 +108,20 @@ function buildAppMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// The custom protocol must be registered as "standard" BEFORE app.whenReady()
-// so it behaves like http/https (supports SPA routing, fetch, etc.).
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
-]);
-
 app.whenReady().then(async () => {
   await clearStaleAuthData();
-  if (!isDev) { registerAppProtocol(); }
+
+  // In production, serve the static export over a loopback HTTP origin so that
+  // Next.js's absolute asset paths (/_next/static/...) resolve correctly. The
+  // file:// protocol blocks these, which previously left the window blank.
+  if (!isDev) {
+    try {
+      staticServer = await startStaticServer(staticExportDir());
+    } catch (err) {
+      console.error('Failed to start static server:', err);
+    }
+  }
+
   registerAllHandlers(app);
   buildAppMenu();
   createWindow();
@@ -189,4 +133,9 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('will-quit', () => {
+  // Release the loopback port on exit.
+  if (staticServer) { void staticServer.close(); }
 });

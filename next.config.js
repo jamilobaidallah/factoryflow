@@ -7,9 +7,10 @@ const isElectronBuild = process.env.NEXT_BUILD_TARGET === 'electron';
 const nextConfig = {
   ...(isElectronBuild && {
     output: 'export',
-    // Assets use default leading-slash paths. In Electron, the custom
-    // app:// protocol handler resolves /_next/static/... to the matching
-    // file inside the static export directory.
+    // Assets use default leading-slash paths. In Electron, an embedded
+    // loopback HTTP server (electron/static-server.ts) serves the export so
+    // that /_next/static/... resolves like a normal web origin — the file://
+    // protocol blocks those absolute paths and leaves the window blank.
   }),
 
   images: {
