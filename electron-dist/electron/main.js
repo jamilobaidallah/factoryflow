@@ -35,11 +35,89 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
 const index_1 = require("./ipc/index");
+/** Map common file extensions to MIME types served by the app:// protocol. */
+const MIME_TYPES = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.mjs': 'application/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.otf': 'font/otf',
+    '.map': 'application/json',
+    '.txt': 'text/plain; charset=utf-8',
+};
 const isDev = process.env.NODE_ENV === 'development';
 const PROFILE_PICKER_URL = isDev
     ? 'http://localhost:3000/profile-picker'
-    : null; // production loads from file
+    : 'app://factoryflow/profile-picker.html';
+/**
+ * Resolves the absolute filesystem path of a file inside the packaged app's
+ * /out/ directory (the Next.js static export). Compiled main.js lives at
+ * /electron-dist/electron/main.js inside the asar bundle, so we walk up two
+ * levels to reach the /out/ folder that lives alongside it.
+ */
+function staticAssetPath(relativePath) {
+    return path.join(__dirname, '..', '..', 'out', relativePath);
+}
+/**
+ * Register a custom `app://` protocol that serves files from the static
+ * export. This is required because Next.js generates HTML with absolute
+ * asset references like /_next/static/foo.js, which Electron's file://
+ * protocol blocks as "local resources." Serving via a registered protocol
+ * lets the browser load these assets as expected.
+ */
+function registerAppProtocol() {
+    electron_1.protocol.handle('app', async (request) => {
+        try {
+            // request.url looks like: app://factoryflow/profile-picker.html
+            // We don't care about the host — only the path.
+            const url = new URL(request.url);
+            let relativePath = decodeURIComponent(url.pathname);
+            if (relativePath.startsWith('/')) {
+                relativePath = relativePath.slice(1);
+            }
+            if (!relativePath || relativePath.endsWith('/')) {
+                relativePath = (relativePath || '') + 'index.html';
+            }
+            const fullPath = staticAssetPath(relativePath);
+            console.log(`[app://] ${request.url} -> ${fullPath}`);
+            // Defensive: prevent path traversal outside the out/ root
+            const outRoot = staticAssetPath('');
+            const normalized = path.normalize(fullPath);
+            if (!normalized.startsWith(path.normalize(outRoot))) {
+                return new Response('Forbidden', { status: 403 });
+            }
+            if (!fs.existsSync(normalized)) {
+                console.warn(`[app://] not found: ${normalized}`);
+                return new Response('Not found', { status: 404 });
+            }
+            // Read directly from disk — works for both asar and asar-unpacked files
+            // thanks to Electron's asar-aware fs implementation.
+            const buffer = await fs.promises.readFile(normalized);
+            const ext = path.extname(normalized).toLowerCase();
+            const mimeType = MIME_TYPES[ext] ?? 'application/octet-stream';
+            return new Response(new Uint8Array(buffer), {
+                status: 200,
+                headers: { 'Content-Type': mimeType },
+            });
+        }
+        catch (err) {
+            console.error('[app://] protocol error:', err);
+            return new Response('Internal error', { status: 500 });
+        }
+    });
+}
 /**
  * Clear stale Firebase auth sessions and other cached data left over from
  * previous Electron runs that may have used the cloud version. This ensures
@@ -49,8 +127,6 @@ const PROFILE_PICKER_URL = isDev
 async function clearStaleAuthData() {
     try {
         await electron_1.session.defaultSession.clearStorageData({
-            // Clear everything related to the dev origin (localhost:3000) and
-            // anything Firebase might have cached.
             storages: [
                 'cookies',
                 'localstorage',
@@ -74,26 +150,18 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false, // Never enable — security requirement
+            nodeIntegration: false,
         },
         show: false,
         backgroundColor: '#0f172a',
     });
-    if (isDev && PROFILE_PICKER_URL) {
-        win.loadURL(PROFILE_PICKER_URL);
+    win.loadURL(PROFILE_PICKER_URL);
+    if (isDev) {
         win.webContents.openDevTools({ mode: 'detach' });
-    }
-    else {
-        win.loadFile(path.join(__dirname, '../out/profile-picker/index.html'));
     }
     win.once('ready-to-show', () => win.show());
     win.on('closed', () => electron_1.app.quit());
 }
-/**
- * Add menu items that help the user recover from issues during development.
- * "Go to Profile Picker" lets them snap back to the start of the local flow
- * if something went wrong (e.g., a stale Firebase redirect).
- */
 function buildAppMenu() {
     const template = [
         { role: 'fileMenu' },
@@ -110,14 +178,8 @@ function buildAppMenu() {
                     accelerator: 'CmdOrCtrl+Shift+P',
                     click: () => {
                         const win = electron_1.BrowserWindow.getFocusedWindow();
-                        if (!win) {
-                            return;
-                        }
-                        if (isDev && PROFILE_PICKER_URL) {
+                        if (win) {
                             win.loadURL(PROFILE_PICKER_URL);
-                        }
-                        else {
-                            win.loadFile(path.join(__dirname, '../out/profile-picker/index.html'));
                         }
                     },
                 },
@@ -137,10 +199,16 @@ function buildAppMenu() {
     ];
     electron_1.Menu.setApplicationMenu(electron_1.Menu.buildFromTemplate(template));
 }
+// The custom protocol must be registered as "standard" BEFORE app.whenReady()
+// so it behaves like http/https (supports SPA routing, fetch, etc.).
+electron_1.protocol.registerSchemesAsPrivileged([
+    { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 electron_1.app.whenReady().then(async () => {
-    // Clear stale auth/cache from previous sessions BEFORE creating any window.
-    // Without this, a leftover Firebase session can hijack the route flow.
     await clearStaleAuthData();
+    if (!isDev) {
+        registerAppProtocol();
+    }
     (0, index_1.registerAllHandlers)(electron_1.app);
     buildAppMenu();
     createWindow();

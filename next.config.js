@@ -5,9 +5,16 @@
 const isElectronBuild = process.env.NEXT_BUILD_TARGET === 'electron';
 
 const nextConfig = {
-  ...(isElectronBuild && { output: 'export' }),
+  ...(isElectronBuild && {
+    output: 'export',
+    // Assets use default leading-slash paths. In Electron, the custom
+    // app:// protocol handler resolves /_next/static/... to the matching
+    // file inside the static export directory.
+  }),
 
   images: {
+    // Static export can't use Next.js image optimization (requires server)
+    ...(isElectronBuild && { unoptimized: true }),
     remotePatterns: [
       {
         protocol: 'https',

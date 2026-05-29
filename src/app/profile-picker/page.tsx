@@ -10,6 +10,7 @@ import {
   createProfile,
   markProfileOpened,
   formatLastOpened,
+  deleteProfile,
   ipcInvoke,
 } from "@/lib/profile";
 import { setActiveProfile } from "@/hooks/local/useActiveProfile";
@@ -128,43 +129,68 @@ export default function ProfilePickerPage() {
               const cc = colorConfig(profile.color);
               const isOpening = opening === profile.id;
               return (
-                <button
-                  key={profile.id}
-                  onClick={() => handleOpen(profile)}
-                  disabled={isOpening || opening !== null}
-                  className="group relative text-right rounded-2xl bg-slate-800 border border-slate-700
-                             hover:border-slate-500 hover:bg-slate-750 transition-all duration-200
-                             p-5 flex items-center gap-4 disabled:opacity-60 disabled:cursor-not-allowed
-                             focus:outline-none focus:ring-2 focus:ring-slate-500"
-                >
-                  {/* Colored accent bar */}
-                  <div className={`absolute top-0 right-0 w-1 h-full rounded-r-2xl ${cc.bg}`} />
+                <div key={profile.id} className="relative group">
+                  <button
+                    onClick={() => handleOpen(profile)}
+                    disabled={isOpening || opening !== null}
+                    className="w-full text-right rounded-2xl bg-slate-800 border border-slate-700
+                               hover:border-slate-500 hover:bg-slate-750 transition-all duration-200
+                               p-5 flex items-center gap-4 disabled:opacity-60 disabled:cursor-not-allowed
+                               focus:outline-none focus:ring-2 focus:ring-slate-500 relative"
+                  >
+                    {/* Colored accent bar */}
+                    <div className={`absolute top-0 right-0 w-1 h-full rounded-r-2xl ${cc.bg}`} />
 
-                  {/* Emoji avatar */}
-                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl
-                                   bg-slate-700 group-hover:bg-slate-600 transition-colors shrink-0`}>
-                    {isOpening ? (
-                      <svg className="w-6 h-6 text-white animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                      </svg>
-                    ) : profile.emoji}
-                  </div>
+                    {/* Emoji avatar */}
+                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl
+                                     bg-slate-700 group-hover:bg-slate-600 transition-colors shrink-0`}>
+                      {isOpening ? (
+                        <svg className="w-6 h-6 text-white animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        </svg>
+                      ) : profile.emoji}
+                    </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0 pr-2">
-                    <p className="text-white font-semibold text-base truncate">{profile.name}</p>
-                    <p className="text-slate-400 text-xs mt-1">{formatLastOpened(profile.lastOpened)}</p>
-                  </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 pr-2">
+                      <p className="text-white font-semibold text-base truncate">{profile.name}</p>
+                      <p className="text-slate-400 text-xs mt-1">{formatLastOpened(profile.lastOpened)}</p>
+                    </div>
 
-                  {/* Arrow */}
-                  <svg className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0 rotate-180"
-                       viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd"
-                          d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-                          clipRule="evenodd" />
-                  </svg>
-                </button>
+                    {/* Arrow */}
+                    <svg className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0 rotate-180"
+                         viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd"
+                            d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                            clipRule="evenodd" />
+                    </svg>
+                  </button>
+
+                  {/* Delete button — appears on hover */}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (opening !== null) { return; }
+                      const ok = window.confirm(
+                        `حذف الملف "${profile.name}"؟\n\nهذا لن يحذف قاعدة البيانات من القرص — فقط يزيل الملف من القائمة.`
+                      );
+                      if (!ok) { return; }
+                      try {
+                        await deleteProfile(profile.id);
+                        setProfiles(prev => prev.filter(p => p.id !== profile.id));
+                      } catch (err) {
+                        console.error("Failed to delete profile:", err);
+                      }
+                    }}
+                    title="حذف الملف"
+                    className="absolute top-2 left-2 w-7 h-7 rounded-lg bg-slate-700 hover:bg-rose-600
+                               text-slate-400 hover:text-white opacity-0 group-hover:opacity-100
+                               transition-all flex items-center justify-center text-sm"
+                  >
+                    ×
+                  </button>
+                </div>
               );
             })}
           </div>

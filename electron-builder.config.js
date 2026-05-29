@@ -21,10 +21,17 @@ module.exports = {
     'package.json',
   ],
 
-  // Windows installer
+  // Unpack the static export and native modules from app.asar so they can be
+  // read by raw fs functions (fs.existsSync needs real filesystem paths).
+  asarUnpack: [
+    'out/**/*',
+    'node_modules/better-sqlite3/**/*',
+  ],
+
+  // Windows installer (using Electron's default icon for now —
+  // a custom icon can be added later by dropping an .ico file in /assets/)
   win: {
     target: 'nsis',
-    icon: 'assets/icon.ico',
   },
 
   nsis: {
@@ -33,8 +40,6 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'FactoryFlow',
-    installerIcon: 'assets/icon.ico',
-    uninstallerIcon: 'assets/icon.ico',
   },
 
   // Rebuild native modules (better-sqlite3) for Electron's Node version
