@@ -52,10 +52,10 @@ export default function ProfilePickerPage() {
       setActiveProfile(profile);
       await markProfileOpened(profile.id);
 
-      // For now, route to the diagnostic page that exercises the local
-      // SQLite data layer. Once Phase 3 wires up the real components,
-      // this will route to "/" (the dashboard).
-      router.push("/local-diagnostic");
+      // Route to the local dashboard which mirrors the existing Firebase
+      // dashboard but reads from SQLite. /local-diagnostic remains available
+      // as a developer test page accessible from the dashboard header.
+      router.push("/local/dashboard");
     } catch (err) {
       console.error("Failed to open profile:", err);
       setOpening(null);

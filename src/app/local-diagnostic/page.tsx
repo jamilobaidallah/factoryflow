@@ -150,12 +150,20 @@ export default function LocalDiagnosticPage() {
               <p className="text-xs text-slate-500">صفحة اختبار قاعدة البيانات المحلية</p>
             </div>
           </div>
-          <button
-            onClick={handleSwitchProfile}
-            className="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            تبديل الملف ←
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push("/local/dashboard")}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+            >
+              الذهاب إلى لوحة التحكم
+            </button>
+            <button
+              onClick={handleSwitchProfile}
+              className="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              تبديل الملف ←
+            </button>
+          </div>
         </div>
 
         {/* Stats grid */}
