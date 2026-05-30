@@ -11,11 +11,14 @@ live Firebase data.**
 | `transform.ts` | Pure Firestore→SQLite transforms: `Timestamp`→UTC ISO, journal `lines[]`→rows, payment `allocations[]`→rows | ✅ unit |
 | `import.ts` | Inserts journal entries into SQLite preserving Firestore IDs; enforces debits = credits per entry | ✅ integration (trial balance = 0) |
 | `verify.ts` | Post-import checks: per-collection counts + trial balance | ✅ via integration |
+| `mappers.ts` | Per-collection field mappers (clients, partners, ledger, cheques, payments, inventory, employees, invoices) — Firestore doc → SQLite insert row, preserving IDs | ✅ unit + round-trip (27 tests) |
+| `runner.ts` | End-to-end orchestrator: load JSON exports → map all collections in FK-safe order → verify → return printable checklist. One transaction so any failure rolls back. | ✅ integration (12 tests covering full-fixture migration + atomicity) |
 
 > The **export** step and the **full live run** are intentionally not automated
 > here — they require Firebase service-account credentials, which live only on
-> your machine. The integrity-critical *transformation* logic is what's been
-> built and proven against a real in-memory database.
+> your machine. The integrity-critical *transformation*, *import*,
+> *verification*, and *orchestration* logic is what's been built and proven
+> against a real in-memory database.
 
 ## Runbook (on your machine)
 
@@ -38,54 +41,57 @@ export/
   ...
 ```
 
-### 2. Transform + import into a profile's SQLite db
+### 2. Run the migration
 
-Wire the helpers into a runner that opens the target profile DB and imports
-inside a single transaction (so any failure rolls back the whole migration):
+The orchestrator handles loading, mapping in FK-safe order, atomic insert,
+and verification — all in a single transaction:
 
 ```ts
 import { getDatabase } from '@/lib/database';
-import { importJournalEntries } from './import';
+import { runMigrationFromDirectory } from './runner';
 
 const db = getDatabase(profile.dbPath);
-const journalDocs = JSON.parse(fs.readFileSync('export/journal_entries.json', 'utf8'));
+const result = runMigrationFromDirectory(db, 'export/', { profileId: profile.id });
 
-// One transaction = all-or-nothing, same guarantee as Firestore WriteBatch
-db.transaction(() => {
-  importJournalEntries(db, journalDocs, { profileId: profile.id });
-  // ...import clients, ledger, payments (+flattenPaymentAllocations), etc.
-})();
+console.log(result.checklist);
+if (!result.trialBalance.isBalanced) {
+  throw new Error('Trial balance ≠ 0 — migration rejected.');
+}
 ```
 
-Order matters where foreign keys apply: chart_of_accounts → clients/partners →
-ledger → journal_entries → payments → payment_allocations.
+If anything fails (mapper throws, unbalanced journal entry, FK violation),
+the whole transaction rolls back and the database is left untouched.
 
-### 3. Verify (do not skip — blocks go-live)
+If documents are already in memory (e.g. fetched directly via the Admin SDK
+without writing JSON files), use the in-memory variant:
 
 ```ts
-import { checkCount, checkTrialBalance, formatChecklist } from './verify';
-import { journalEntries } from '@/lib/schema';
+import { runMigrationFromExports } from './runner';
 
-const counts = [
-  checkCount(db, journalEntries, journalEntries.profileId, profile.id, firebaseJournalCount, 'journal_entries'),
-  // ...one per collection, expected counts taken from the Firebase export
-];
-const tb = checkTrialBalance(db, profile.id);
-
-console.log(formatChecklist(counts, tb));
-if (!tb.isBalanced) throw new Error('Trial balance ≠ 0 — migration rejected.');
+const result = runMigrationFromExports(db, {
+  clients:         exportedClients,
+  ledger:          exportedLedger,
+  payments:        exportedPaymentsWithAllocations,
+  journal_entries: exportedJournalsWithLines,
+  // ...
+}, { profileId: profile.id });
 ```
 
-Then the plan's manual spot checks: 20 random ledger entries, 5 client
-balances, and 5 journal entries verified field-by-field against Firebase.
+### 3. Spot-check against Firebase
+
+The runner already verifies counts and trial balance. The plan also requires
+manual spot checks before go-live:
+
+- 20 random ledger entries — field-by-field against Firebase
+- 5 client balances — match the Firebase dashboard
+- 5 journal entries — every debit/credit line matches
 
 ## Status / remaining work
 
 - [x] Timestamp, journal-split, allocation-flatten transforms (+ tests)
 - [x] Journal import with per-entry balance enforcement (+ integration test)
 - [x] Count + trial-balance verification helpers
-- [ ] Per-collection field mappers for the simpler tables (clients, partners,
-      ledger, cheques, …) — straightforward column maps, add as the export
-      shapes are confirmed against real data
+- [x] Per-collection field mappers (8 collections — preserve Firestore IDs)
+- [x] End-to-end runner with FK-safe ordering, atomicity, and verification
 - [ ] Export script (Admin SDK) — runs on your machine with credentials
-- [ ] End-to-end runner that ties export → transform → import → verify together
+- [ ] Live run against real Firebase data (one-time, at go-live)
