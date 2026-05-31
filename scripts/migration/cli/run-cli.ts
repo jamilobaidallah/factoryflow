@@ -35,8 +35,32 @@ function appDataRoot(): string {
   return process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config');
 }
 
-function profileDbPath(profileId: string): string {
-  return path.join(appDataRoot(), 'FactoryFlow', profileId, 'data.db');
+/**
+ * Resolve the profile's data.db, checking both possible app-data folders:
+ *
+ *  - Production (installed .exe): the app uses electron-builder's
+ *    productName, "FactoryFlow", so the folder is …\AppData\Roaming\FactoryFlow
+ *  - Development (npm run electron:dev): Electron falls back to package.json's
+ *    `name` field, "factory-flow", so the folder is …\AppData\Roaming\factory-flow
+ *
+ * Both are valid depending on which way the user opened the app to create
+ * the profile. We try each in turn and use whichever exists.
+ */
+function resolveProfileDbPath(profileId: string): string | null {
+  const candidates = [
+    path.join(appDataRoot(), 'FactoryFlow',  profileId, 'data.db'),  // installed .exe
+    path.join(appDataRoot(), 'factory-flow', profileId, 'data.db'),  // dev (npm name)
+    path.join(appDataRoot(), 'Electron',     profileId, 'data.db'),  // dev (Electron default)
+  ];
+  return candidates.find((p) => fs.existsSync(p)) ?? null;
+}
+
+/** Locations we'll check for the profile — used in the "not found" error. */
+function candidateProfilePaths(profileId: string): string[] {
+  return [
+    path.join(appDataRoot(), 'FactoryFlow',  profileId, 'data.db'),
+    path.join(appDataRoot(), 'factory-flow', profileId, 'data.db'),
+  ];
 }
 
 function main(): void {
@@ -53,9 +77,12 @@ function main(): void {
     process.exit(1);
   }
 
-  const dbPath = profileDbPath(profileId);
-  if (!fs.existsSync(dbPath)) {
-    console.error(`✗ Profile database not found: ${dbPath}`);
+  const dbPath = resolveProfileDbPath(profileId);
+  if (!dbPath) {
+    console.error(`✗ Profile database not found. Checked:`);
+    for (const p of candidateProfilePaths(profileId)) {
+      console.error(`    ${p}`);
+    }
     console.error(`  Open the FactoryFlow app, create a profile named "${profileId}", click into it once,`);
     console.error('  then close the app and re-run this command.');
     process.exit(1);
