@@ -96,14 +96,20 @@ async function main(): Promise<void> {
 
   const result = await exportAllCollections(reader, {
     userId,
+    // NOTE: cannot reference `result` here — it's in the TDZ until the
+    // await resolves. Report the allocations count after binding.
     onProgress: (collection, count) => {
-      const extra =
-        collection === 'payments'
-          ? ` (${result?.payments?.reduce((s, p) => s + (p.allocations?.length ?? 0), 0) ?? 0} allocations flattened)`
-          : '';
-      console.log(`  ✓ ${collection}: ${count} documents${extra}`);
+      console.log(`  ✓ ${collection}: ${count} documents`);
     },
   });
+
+  const allocationsTotal = result.payments?.reduce(
+    (sum, p) => sum + (p.allocations?.length ?? 0),
+    0,
+  ) ?? 0;
+  if (allocationsTotal > 0) {
+    console.log(`     (${allocationsTotal} payment allocations flattened from subcollections)`);
+  }
 
   // 5. Write each collection to its own JSON file under export/.
   if (!fs.existsSync(EXPORT_DIR)) { fs.mkdirSync(EXPORT_DIR, { recursive: true }); }
