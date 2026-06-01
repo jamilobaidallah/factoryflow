@@ -8,6 +8,7 @@ import {
   useUpdateClientLocal,
   useDeleteClientLocal,
 } from "@/hooks/local/useClientsLocal";
+import { useLedgerLocal } from "@/hooks/local/useLedgerLocal";
 import { useActiveProfile } from "@/hooks/local/useActiveProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,14 +54,60 @@ interface ClientForm {
 
 const EMPTY_FORM: ClientForm = { name: "", phone: "", email: "", address: "" };
 
+/** Subset of the ledger row we need for the balance computation. */
+interface LedgerForBalance {
+  type: string;
+  amount: number;
+  associatedParty: string | null;
+  paymentStatus: string | null;
+  remainingBalance: number | null;
+  isARAPEntry: boolean | number | null;
+}
+
+/**
+ * Compute outstanding balance per client name from ledger entries.
+ *
+ * Why this exists: the SQLite `clients.balance` column is migrated as-is
+ * from Firestore, where it's always 0 (Firestore-side balances are
+ * computed live by the app from the ledger, not stored). We do the same
+ * computation here from the local ledger so the column shows real numbers.
+ *
+ * Positive = client owes you (مدين). Negative = you owe the client (دائن).
+ */
+function buildBalanceIndex(ledger: LedgerForBalance[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const e of ledger) {
+    const isARAP = e.isARAPEntry === true || e.isARAPEntry === 1;
+    if (!isARAP) { continue; }
+    if (!e.associatedParty) { continue; }
+    if (e.paymentStatus !== "unpaid" && e.paymentStatus !== "partial") { continue; }
+    const outstanding = (e.remainingBalance ?? e.amount) || 0;
+    // Income/return = client owes us; expense = we owe the supplier.
+    const sign = e.type === "دخل" || e.type === "إيراد" || e.type === "مردود" ? 1 : -1;
+    out.set(e.associatedParty, (out.get(e.associatedParty) ?? 0) + sign * outstanding);
+  }
+  return out;
+}
+
 export default function LocalClientsPage() {
   const profile = useActiveProfile();
   const { data, isLoading } = useClientsLocal();
+  const { data: ledgerData } = useLedgerLocal(5000);
   const createClient = useCreateClientLocal();
   const updateClient = useUpdateClientLocal();
   const deleteClient = useDeleteClientLocal();
 
   const clients = useMemo(() => (data as ClientRow[] | undefined) ?? [], [data]);
+
+  const balanceByName = useMemo(
+    () => buildBalanceIndex((ledgerData as LedgerForBalance[] | undefined) ?? []),
+    [ledgerData],
+  );
+
+  /** Resolve a client's display balance: computed from ledger, fallback to stored. */
+  function balanceOf(client: ClientRow): number {
+    return balanceByName.get(client.name) ?? client.balance ?? 0;
+  }
 
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -198,21 +245,26 @@ export default function LocalClientsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((client) => (
+              {filtered.map((client) => {
+                const computedBalance = balanceOf(client);
+                return (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium text-slate-800">{client.name}</TableCell>
                   <TableCell className="text-slate-600">{client.phone || "—"}</TableCell>
                   <TableCell className="text-slate-600">{client.email || "—"}</TableCell>
                   <TableCell
                     className={
-                      client.balance > 0
+                      computedBalance > 0
                         ? "text-danger-600 font-medium"
-                        : client.balance < 0
+                        : computedBalance < 0
                           ? "text-success-600 font-medium"
                           : "text-slate-500"
                     }
+                    title={computedBalance > 0 ? "مدين (يدين لك)" : computedBalance < 0 ? "دائن (تدين له)" : ""}
                   >
-                    {formatCurrency(Math.abs(client.balance))}
+                    {formatCurrency(Math.abs(computedBalance))}
+                    {computedBalance > 0 ? <span className="text-xs text-slate-400 mr-1">مدين</span> : null}
+                    {computedBalance < 0 ? <span className="text-xs text-slate-400 mr-1">دائن</span> : null}
                   </TableCell>
                   <TableCell className="text-left">
                     <div className="flex items-center justify-end gap-1">
@@ -235,7 +287,8 @@ export default function LocalClientsPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
