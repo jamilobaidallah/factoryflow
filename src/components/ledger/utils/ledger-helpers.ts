@@ -69,6 +69,25 @@ export function isAdvanceTransaction(category?: string): boolean {
 }
 
 /**
+ * Get advance direction: receivable (asset) or payable (liability).
+ *
+ * Advances are stored with income/expense type for cash-flow purposes, but their
+ * obligation runs in the OPPOSITE direction of a trade invoice:
+ * - سلفة مورد (supplier advance): we prepaid the supplier, so they owe us
+ *   goods/services → asset → "receivable" (money/value owed TO us).
+ * - سلفة عميل (customer advance): the customer prepaid us, so we owe them
+ *   goods/services → liability → "payable" (value owed BY us).
+ *
+ * @param category - Transaction category name
+ * @returns "receivable" for supplier advances, "payable" for customer advances, null otherwise
+ */
+export function getAdvanceType(category?: string): "receivable" | "payable" | null {
+    if (category === "سلفة مورد") {return "receivable";}
+    if (category === "سلفة عميل") {return "payable";}
+    return null;
+}
+
+/**
  * Helper function to check if a transaction is a loan transaction
  * Loan transactions are NOT counted in P&L - they are balance sheet items
  *
