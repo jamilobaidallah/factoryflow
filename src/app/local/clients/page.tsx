@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, Users } from "lucide-react";
 import {
   useClientsLocal,
@@ -249,7 +250,14 @@ export default function LocalClientsPage() {
                 const computedBalance = balanceOf(client);
                 return (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium text-slate-800">{client.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/local/clients/${client.id}`}
+                      className="text-slate-800 hover:text-blue-600 hover:underline"
+                    >
+                      {client.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-slate-600">{client.phone || "—"}</TableCell>
                   <TableCell className="text-slate-600">{client.email || "—"}</TableCell>
                   <TableCell
