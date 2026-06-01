@@ -30,6 +30,11 @@ jest.mock('firebase/firestore', () => ({
   orderBy: jest.fn(),
   limit: jest.fn(),
   where: jest.fn(),
+  // logActivity (activityLogService) calls Timestamp.now() synchronously; without
+  // these the save/delete paths throw "reading 'now' of undefined" depending on
+  // test execution order. Mock them so this suite is order-independent.
+  Timestamp: { now: jest.fn(() => ({ seconds: 0, nanoseconds: 0 })) },
+  serverTimestamp: jest.fn(() => ({ seconds: 0, nanoseconds: 0 })),
 }));
 
 jest.mock('@/firebase/config', () => ({

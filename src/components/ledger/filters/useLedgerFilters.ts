@@ -15,6 +15,7 @@ import {
   isLoanTransaction,
   getLoanType,
   isInitialLoan,
+  getArapDirection,
 } from "../utils/ledger-helpers";
 
 /** Date filter preset options */
@@ -24,6 +25,13 @@ export type EntryType = "all" | "دخل" | "مردود" | "مصروف" | "حرك
 
 /** Payment status filter options */
 export type PaymentStatus = "all" | "paid" | "unpaid" | "partial" | "outstanding";
+
+/**
+ * AR/AP side filter. Unlike the raw type filter, this buckets entries by what they
+ * mean economically (advances flip sides, only initial loans count) so it matches the
+ * dashboard receivables/payables cards. See getArapDirection.
+ */
+export type ArapSide = "all" | "receivable" | "payable";
 
 /** View mode for main filter tabs */
 export type ViewMode = "all" | "income" | "expense" | "unpaid" | "loans";
@@ -36,6 +44,7 @@ export interface LedgerFiltersState {
   category: string;
   subCategory: string;
   paymentStatus: PaymentStatus;
+  arapSide: ArapSide;
   search: string;
   viewMode: ViewMode;
 }
@@ -67,6 +76,8 @@ export interface UseLedgerFiltersReturn {
   setSubCategory: (subCategory: string) => void;
   /** Set payment status filter */
   setPaymentStatus: (status: PaymentStatus) => void;
+  /** Set AR/AP side filter (receivable/payable) */
+  setArapSide: (side: ArapSide) => void;
   /** Set search query */
   setSearch: (search: string) => void;
   /** Set view mode */
@@ -88,6 +99,7 @@ const defaultFilters: LedgerFiltersState = {
   category: "all",
   subCategory: "all",
   paymentStatus: "all",
+  arapSide: "all",
   search: "",
   viewMode: "all",
 };
@@ -96,6 +108,8 @@ const defaultFilters: LedgerFiltersState = {
 export interface UseLedgerFiltersOptions {
   /** Initial payment status filter */
   initialPaymentStatus?: PaymentStatus;
+  /** Initial AR/AP side filter */
+  initialArapSide?: ArapSide;
   /** Initial entry type filter */
   initialEntryType?: EntryType;
   /** Initial category filter */
@@ -128,6 +142,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
   const initialFilters: LedgerFiltersState = {
     ...defaultFilters,
     paymentStatus: options?.initialPaymentStatus || "all",
+    arapSide: options?.initialArapSide || "all",
     entryType: options?.initialEntryType || "all",
     category: options?.initialCategory || "all",
     subCategory: options?.initialSubCategory || "all",
@@ -208,6 +223,10 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
     setFilters((prev) => ({ ...prev, paymentStatus: status }));
   }, []);
 
+  const setArapSide = useCallback((side: ArapSide) => {
+    setFilters((prev) => ({ ...prev, arapSide: side }));
+  }, []);
+
   const setSearch = useCallback((search: string) => {
     setFilters((prev) => ({ ...prev, search }));
   }, []);
@@ -227,6 +246,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
       filters.category !== "all" ||
       filters.subCategory !== "all" ||
       filters.paymentStatus !== "all" ||
+      filters.arapSide !== "all" ||
       filters.search !== "" ||
       filters.viewMode !== "all"
     );
@@ -258,6 +278,14 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
         // Type filter (advanced filter)
         if (filters.entryType !== "all" && entry.type !== filters.entryType) {
           return false;
+        }
+
+        // AR/AP side filter (receivable/payable) — economic direction, not raw type.
+        // Advances flip sides and only initial loans count, matching the dashboard cards.
+        if (filters.arapSide !== "all") {
+          if (getArapDirection(entry.type, entry.category, entry.subCategory) !== filters.arapSide) {
+            return false;
+          }
         }
 
         // Category filter
@@ -363,6 +391,7 @@ export function useLedgerFilters(options?: UseLedgerFiltersOptions): UseLedgerFi
     setCategory,
     setSubCategory,
     setPaymentStatus,
+    setArapSide,
     setSearch,
     setViewMode,
     clearFilters,

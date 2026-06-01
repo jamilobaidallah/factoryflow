@@ -22,19 +22,17 @@
  * services/ledger/handlers/advanceHandlers.ts and lib/client-balance.ts.
  */
 
-import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
-import {
-  getAdvanceType,
-  getLoanType,
-  isInitialLoan,
-} from "@/components/ledger/utils/ledger-helpers";
+import { getArapDirection } from "@/components/ledger/utils/ledger-helpers";
 
 /** Outstanding payment statuses */
 export const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
 
 /**
  * Classify an entry as an outstanding receivable, payable, or neither.
- * Advances override the income/expense-based direction (they run the opposite way).
+ *
+ * Gates on outstanding status + AR/AP tracking, then delegates direction to the
+ * shared getArapDirection (advances flip sides, only initial loans count). Keeping
+ * direction in one helper means the dashboard cards and the ledger filter agree.
  */
 export function classifyOutstanding(
   data: Record<string, unknown>
@@ -55,31 +53,11 @@ export function classifyOutstanding(
     return null;
   }
 
-  // Advances run opposite to their income/expense type, so they decide direction first.
-  const advanceType = getAdvanceType(data.category as string | undefined);
-  if (advanceType) {
-    return advanceType;
-  }
-
-  // Loans (type "قرض", so not caught by the income/expense checks below):
-  // - قروض ممنوحة (loan given): money we lent → asset → receivable.
-  // - قروض مستلمة (loan received): money we borrowed → liability → payable.
-  // Only the INITIAL loan entry carries the obligation. Collection/repayment entries
-  // (تحصيل قرض / سداد قرض) are separate entries that net the balance down
-  // (see lib/client-balance.ts), so they must NOT be counted as new obligations.
-  const loanType = getLoanType(data.category as string | undefined);
-  if (loanType) {
-    return isInitialLoan(data.subCategory as string | undefined) ? loanType : null;
-  }
-
-  // Trade invoices: income → receivable, expense → payable.
-  if (INCOME_TYPES.some((type) => data.type === type)) {
-    return "receivable";
-  }
-  if (data.type === EXPENSE_TYPE) {
-    return "payable";
-  }
-  return null;
+  return getArapDirection(
+    data.type as string | undefined,
+    data.category as string | undefined,
+    data.subCategory as string | undefined
+  );
 }
 
 /** Check if entry is an outstanding receivable (value owed TO us) */

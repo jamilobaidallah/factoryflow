@@ -156,6 +156,45 @@ export function getLoanCashDirection(subCategory?: string): "in" | "out" | null 
 }
 
 /**
+ * Determine which side of AR/AP an entry belongs to, accounting for the fact that
+ * advances and loans run OPPOSITE to (or independent of) their income/expense type.
+ *
+ * This is the single source of truth for AR/AP direction, shared by the dashboard
+ * receivables/payables cards and the ledger AR/AP filter so they can never disagree.
+ *
+ * - سلفة مورد (supplier advance) → receivable; سلفة عميل (customer advance) → payable.
+ * - قروض ممنوحة (loan given) → receivable; قروض مستلمة (loan received) → payable,
+ *   counting ONLY the initial loan entry (repayments/collections net it down).
+ * - Otherwise: income (دخل/إيراد) → receivable, expense (مصروف) → payable.
+ *
+ * Note: this returns the direction regardless of payment status — compose it with a
+ * separate outstanding/paid filter when only open balances are wanted.
+ *
+ * @returns "receivable", "payable", or null when the entry is not AR/AP-directional
+ */
+export function getArapDirection(
+    type?: string,
+    category?: string,
+    subCategory?: string
+): "receivable" | "payable" | null {
+    // Advances flip relative to their income/expense type, so they decide first.
+    const advanceType = getAdvanceType(category);
+    if (advanceType) {return advanceType;}
+
+    // Loans: only the initial entry is an obligation. Collection/repayment entries
+    // (تحصيل قرض / سداد قرض) are separate netting entries and must not be counted.
+    const loanType = getLoanType(category);
+    if (loanType) {
+        return isInitialLoan(subCategory) ? loanType : null;
+    }
+
+    // Trade invoices.
+    if (type === "دخل" || type === "إيراد") {return "receivable";}
+    if (type === "مصروف") {return "payable";}
+    return null;
+}
+
+/**
  * Helper function to check if a transaction is a fixed asset purchase
  * Fixed assets are Balance Sheet items (CapEx), NOT Income Statement expenses (OpEx)
  *

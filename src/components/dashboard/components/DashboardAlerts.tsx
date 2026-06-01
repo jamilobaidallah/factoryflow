@@ -71,7 +71,7 @@ function ChequesAlert({ data }: { data: AlertData }) {
 /** Alert for unpaid receivables (money owed TO us) */
 function ReceivablesAlert({ data }: { data: AlertData }) {
   return (
-    <Link href="/ledger?paymentStatus=outstanding&type=income" className="block">
+    <Link href="/ledger?paymentStatus=outstanding&arap=receivable" className="block">
       <article className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100 transition-all duration-200 hover:shadow-md cursor-pointer">
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 bg-amber-500 rounded-full" aria-hidden="true" />
@@ -97,7 +97,7 @@ function ReceivablesAlert({ data }: { data: AlertData }) {
 /** Alert for unpaid payables (money WE owe) */
 function PayablesAlert({ data }: { data: AlertData }) {
   return (
-    <Link href="/ledger?paymentStatus=outstanding&type=expense" className="block">
+    <Link href="/ledger?paymentStatus=outstanding&arap=payable" className="block">
       <article className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-100 transition-all duration-200 hover:shadow-md cursor-pointer">
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 bg-orange-500 rounded-full" aria-hidden="true" />

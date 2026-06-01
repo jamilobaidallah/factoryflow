@@ -59,6 +59,7 @@ import {
   PaymentStatus,
   EntryType,
   ViewMode,
+  ArapSide,
 } from "./filters";
 import { parseAmount } from "@/lib/currency";
 import { getCategoryType } from "./utils/ledger-helpers";
@@ -79,6 +80,7 @@ export default function LedgerPage() {
   // Read URL params for initial filter state
   const urlPaymentStatus = searchParams.get("paymentStatus") as PaymentStatus | null;
   const urlType = searchParams.get("type");
+  const urlArap = searchParams.get("arap"); // "receivable" | "payable"
   const urlCategory = searchParams.get("category");
   const urlSubcategory = searchParams.get("subcategory");
   const urlSearch = searchParams.get("search");
@@ -86,6 +88,10 @@ export default function LedgerPage() {
 
   // Map URL type param to EntryType
   const initialEntryType: EntryType | undefined = urlType === "income" ? "دخل" : urlType === "expense" ? "مصروف" : undefined;
+
+  // Map URL arap param to AR/AP side filter (economic direction, not raw type)
+  const initialArapSide: ArapSide | undefined =
+    urlArap === "receivable" ? "receivable" : urlArap === "payable" ? "payable" : undefined;
 
   // Map URL paymentStatus to ViewMode
   const initialViewMode: ViewMode | undefined =
@@ -157,6 +163,7 @@ export default function LedgerPage() {
     calculateTotals,
   } = useLedgerFilters({
     initialPaymentStatus: urlPaymentStatus || undefined,
+    initialArapSide: initialArapSide,
     initialEntryType: initialEntryType,
     initialCategory: urlCategory || undefined,
     initialSubCategory: urlSubcategory || undefined,

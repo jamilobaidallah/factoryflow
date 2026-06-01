@@ -3,6 +3,7 @@ export type {
   DatePreset,
   EntryType,
   PaymentStatus,
+  ArapSide,
   ViewMode,
   LedgerFiltersState,
   FilteredTotals,
