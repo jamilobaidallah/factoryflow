@@ -5,25 +5,11 @@ import {
   useLedgerDashboardData,
   usePaymentsDashboardData,
 } from "@/hooks/firebase-query/useDashboardQueries";
-import type { UseDashboardDataReturn, DashboardLedgerEntry } from "../types/dashboard.types";
-import { INCOME_TYPES, EXPENSE_TYPE } from "../constants/dashboard.constants";
-
-const OUTSTANDING_STATUSES = ["unpaid", "partial"] as const;
-type OutstandingStatus = typeof OUTSTANDING_STATUSES[number];
-
-function isOutstandingStatus(status: string | undefined): status is OutstandingStatus {
-  return OUTSTANDING_STATUSES.includes(status as OutstandingStatus);
-}
-
-function getOutstandingAmount(entry: DashboardLedgerEntry): number {
-  if (typeof entry.remainingBalance === "number" && entry.remainingBalance > 0) {
-    return entry.remainingBalance;
-  }
-  if (entry.paymentStatus === "unpaid" && typeof entry.amount === "number") {
-    return entry.amount;
-  }
-  return 0;
-}
+import type { UseDashboardDataReturn } from "../types/dashboard.types";
+import {
+  classifyOutstanding,
+  getOutstandingAmount,
+} from "./receivablesClassification";
 
 /**
  * Hook for fetching and managing all dashboard data.
@@ -89,14 +75,15 @@ export function useDashboardData(selectedMonth?: string): UseDashboardDataReturn
       if (monthFrom && monthTo) {
         if (entry.date < monthFrom || entry.date > monthTo) { continue; }
       }
-      if (!isOutstandingStatus(entry.paymentStatus)) { continue; }
 
-      const outstanding = getOutstandingAmount(entry);
-      const isIncome = INCOME_TYPES.some(t => t === entry.type);
-      const isExpense = entry.type === EXPENSE_TYPE;
+      // Shared classifier: advances flip to the opposite side and loans (initial
+      // entries only) are included on the correct side. See receivablesClassification.ts.
+      const side = classifyOutstanding(entry as unknown as Record<string, unknown>);
+      if (!side) { continue; }
 
-      if (isIncome) { receivablesCount++; receivablesTotal += outstanding; }
-      if (isExpense) { payablesCount++;   payablesTotal   += outstanding; }
+      const outstanding = getOutstandingAmount(entry as unknown as Record<string, unknown>);
+      if (side === "receivable") { receivablesCount++; receivablesTotal += outstanding; }
+      else                       { payablesCount++;    payablesTotal    += outstanding; }
     }
 
     return {
