@@ -90,12 +90,14 @@ export default function LocalClientDetailPage() {
     for (const e of txForClient) {
       if (e.type === "دخل" || e.type === "إيراد") { income  += e.amount; }
       if (e.type === "مصروف")                       { expense += e.amount; }
-      const isARAP = e.isARAPEntry === true || e.isARAPEntry === 1;
-      if (isARAP && (e.paymentStatus === "unpaid" || e.paymentStatus === "partial")) {
+      // Same rule as dashboard / clients list: paymentStatus is the source of truth.
+      if (e.paymentStatus === "unpaid" || e.paymentStatus === "partial") {
         const balance = (e.remainingBalance ?? e.amount) || 0;
-        const sign = e.type === "دخل" || e.type === "إيراد" || e.type === "مردود" ? 1 : -1;
-        outstanding += sign * balance;
-        unpaidCount++;
+        if (balance > 0) {
+          const sign = e.type === "دخل" || e.type === "إيراد" || e.type === "مردود" ? 1 : -1;
+          outstanding += sign * balance;
+          unpaidCount++;
+        }
       }
     }
     return { income, expense, outstanding, unpaidCount, totalTx: txForClient.length };

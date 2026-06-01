@@ -78,11 +78,13 @@ interface LedgerForBalance {
 function buildBalanceIndex(ledger: LedgerForBalance[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const e of ledger) {
-    const isARAP = e.isARAPEntry === true || e.isARAPEntry === 1;
-    if (!isARAP) { continue; }
-    if (!e.associatedParty) { continue; }
+    // Match the dashboard's AR/AP detection: paymentStatus is the source of truth.
+    // (Don't gate on isARAPEntry — some migrated docs don't set it even when
+    // the entry is clearly outstanding. The dashboard ignores it for this reason.)
     if (e.paymentStatus !== "unpaid" && e.paymentStatus !== "partial") { continue; }
+    if (!e.associatedParty) { continue; }
     const outstanding = (e.remainingBalance ?? e.amount) || 0;
+    if (outstanding <= 0) { continue; }
     // Income/return = client owes us; expense = we owe the supplier.
     const sign = e.type === "دخل" || e.type === "إيراد" || e.type === "مردود" ? 1 : -1;
     out.set(e.associatedParty, (out.get(e.associatedParty) ?? 0) + sign * outstanding);
