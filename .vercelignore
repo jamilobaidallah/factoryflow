@@ -1,0 +1,6 @@
+electron/
+electron-dist/
+assets/
+LOCAL_APP_PLAN.md
+electron-builder.config.js
+tsconfig.electron.json

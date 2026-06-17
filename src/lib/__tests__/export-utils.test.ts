@@ -43,7 +43,7 @@ Object.defineProperty(window, 'URL', {
 
 // Mock document.createElement for link downloads
 const originalCreateElement = document.createElement.bind(document);
-jest.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
   if (tagName === 'a') {
     return {
       href: '',
@@ -52,8 +52,8 @@ jest.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       style: {},
     } as unknown as HTMLAnchorElement;
   }
-  return originalCreateElement(tagName);
-});
+  return originalCreateElement(tagName as 'a');
+}) as unknown as typeof document.createElement);
 
 // Mock window.open for HTML export
 const mockWindowOpen = jest.fn<{ document: { write: jest.Mock; close: jest.Mock } } | null, []>(() => ({

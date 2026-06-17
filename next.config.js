@@ -1,6 +1,21 @@
 /** @type {import('next').NextConfig} */
+
+// When building the Electron desktop app, output static files that Electron
+// can load directly without a running server.
+const isElectronBuild = process.env.NEXT_BUILD_TARGET === 'electron';
+
 const nextConfig = {
+  ...(isElectronBuild && {
+    output: 'export',
+    // Assets use default leading-slash paths. In Electron, an embedded
+    // loopback HTTP server (electron/static-server.ts) serves the export so
+    // that /_next/static/... resolves like a normal web origin — the file://
+    // protocol blocks those absolute paths and leaves the window blank.
+  }),
+
   images: {
+    // Static export can't use Next.js image optimization (requires server)
+    ...(isElectronBuild && { unoptimized: true }),
     remotePatterns: [
       {
         protocol: 'https',
@@ -40,8 +55,8 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
 
-  // Headers for caching static assets
-  async headers() {
+  // Headers for caching static assets (not used in Electron static export)
+  ...(!isElectronBuild && { async headers() {
     return [
       {
         source: '/:all*(svg|jpg|png|webp|avif|ico|woff|woff2)',
@@ -62,7 +77,7 @@ const nextConfig = {
         ],
       },
     ];
-  },
+  } }),
 }
 
 module.exports = nextConfig;
