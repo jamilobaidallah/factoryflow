@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  COMPANY_NAME_AR_SHORT,
+  COMPANY_SUBTITLE_AR,
+  LOGO_PATH,
+} from "@/lib/branding";
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,7 +31,6 @@ import {
   Search,
   Users2,
   Database,
-  Factory,
   ChevronLeft,
   FileText,
   UserCog,
@@ -295,12 +300,19 @@ export default function Sidebar() {
     <div className="w-64 bg-white border-l border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-lg">
-            <Factory className="w-6 h-6 text-white" />
+          <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-white">
+            <Image
+              src={LOGO_PATH}
+              alt={COMPANY_NAME_AR_SHORT}
+              width={40}
+              height={40}
+              priority
+              className="object-contain w-full h-full"
+            />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">FactoryFlow</h1>
-            <p className="text-xs text-gray-500">نظام إدارة المصنع</p>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-gray-900 truncate">{COMPANY_NAME_AR_SHORT}</h1>
+            <p className="text-xs text-gray-500 truncate">{COMPANY_SUBTITLE_AR}</p>
           </div>
         </div>
       </div>

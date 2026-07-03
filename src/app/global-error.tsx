@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { Cairo } from 'next/font/google';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
+import { COMPANY_NAME_AR_FULL } from '@/lib/branding';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -31,7 +32,7 @@ export default function GlobalError({
   return (
     <html lang="ar" dir="rtl">
       <head>
-        <title>خطأ في التطبيق - FactoryFlow</title>
+        <title>{`خطأ في التطبيق - ${COMPANY_NAME_AR_FULL}`}</title>
       </head>
       <body className={cairo.className}>
         <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">

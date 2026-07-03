@@ -15,6 +15,7 @@ import { Invoice, InvoiceFormData, InvoiceItem, CleanInvoiceItem } from "../type
 import { sumAmounts, safeMultiply, safeDivide, safeAdd, parseAmount } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date-utils";
 import { logActivity } from "@/services/activityLogService";
+import { COMPANY_NAME_AR_FULL, LOGO_PATH_SMALL } from "@/lib/branding";
 
 interface UseInvoicesOperationsReturn {
   submitInvoice: (
@@ -319,6 +320,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; direction: rtl; }
           .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+          .header img { display: block; margin: 0 auto 12px; max-width: 120px; height: auto; }
           .company-name { font-size: 24px; font-weight: bold; color: #2563eb; }
           .invoice-title { font-size: 20px; margin-top: 10px; }
           .info-section { display: flex; justify-content: space-between; margin: 30px 0; }
@@ -333,12 +335,17 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
           .total-row { font-size: 18px; font-weight: bold; background-color: #f3f4f6; }
           .notes { margin-top: 30px; padding: 15px; background-color: #f9fafb; border-radius: 5px; }
           .footer { margin-top: 50px; text-align: center; color: #666; font-size: 12px; }
-          @media print { button { display: none; } }
+          @media print {
+            button { display: none; }
+            .header { page-break-inside: avoid; }
+            .header img { display: block !important; max-width: 120px; height: auto; }
+          }
         </style>
       </head>
       <body>
         <div class="header">
-          <div class="company-name">FactoryFlow</div>
+          <img src="${window.location.origin}${LOGO_PATH_SMALL}" alt="${COMPANY_NAME_AR_FULL}" />
+          <div class="company-name">${COMPANY_NAME_AR_FULL}</div>
           <div class="invoice-title">فاتورة رقم: ${invoice.invoiceNumber}</div>
         </div>
 
@@ -412,7 +419,7 @@ export function useInvoicesOperations(): UseInvoicesOperationsReturn {
 
         <div class="footer">
           <p>شكراً لتعاملكم معنا</p>
-          <p>تم إنشاء هذه الفاتورة بواسطة نظام FactoryFlow</p>
+          <p>${`تم إنشاء هذه الفاتورة بواسطة نظام ${COMPANY_NAME_AR_FULL}`}</p>
         </div>
 
         <button onclick="window.print()" style="margin: 20px auto; display: block; padding: 10px 30px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">

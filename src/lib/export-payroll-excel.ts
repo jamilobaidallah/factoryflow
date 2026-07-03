@@ -1,6 +1,7 @@
 import { ExcelReportBuilder, EXCEL_COLORS } from './excel';
 import { formatNumber } from './date-utils';
 import { sumAmounts } from './currency';
+import { COMPANY_NAME_AR_FULL } from './branding';
 
 interface PayrollExportEntry {
   employeeName: string;
@@ -131,7 +132,7 @@ export async function exportPayrollToExcel(
       ],
       { centerAlignColumns: [2, 3, 4, 5, 6, 7] }
     )
-    .addFooter('تم إنشاء التقرير بواسطة FactoryFlow - نظام إدارة المصنع');
+    .addFooter(`تم إنشاء التقرير بواسطة ${COMPANY_NAME_AR_FULL}`);
 
   await builder.download(`Payroll_Report_${month}.xlsx`);
 }
