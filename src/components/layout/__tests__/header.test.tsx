@@ -52,10 +52,10 @@ describe('Header', () => {
   });
 
   describe('Rendering', () => {
-    it('renders title', () => {
+    it('renders the company name as the header title', () => {
       render(<Header />);
 
-      expect(screen.getByText('نظام إدارة المصنع')).toBeInTheDocument();
+      expect(screen.getByText('جبال الشام للحجر والرخام')).toBeInTheDocument();
     });
 
     it('displays user email on desktop', () => {
