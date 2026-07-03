@@ -4,6 +4,11 @@ import "./globals.css";
 import { FirebaseClientProvider } from "@/firebase/provider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { Toaster } from "@/components/ui/toaster";
+import {
+  COMPANY_NAME_AR_FULL,
+  COMPANY_DESCRIPTION_AR,
+  LOGO_PATH,
+} from "@/lib/branding";
 
 const cairo = Cairo({
   subsets: ["arabic", "latin"],
@@ -13,8 +18,18 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: "FactoryFlow - نظام إدارة المصنع",
-  description: "نظام متكامل لإدارة العمليات المالية والمخزون",
+  title: COMPANY_NAME_AR_FULL,
+  description: COMPANY_DESCRIPTION_AR,
+  openGraph: {
+    title: COMPANY_NAME_AR_FULL,
+    description: COMPANY_DESCRIPTION_AR,
+    images: [{ url: LOGO_PATH, width: 512, height: 512 }],
+  },
+  twitter: {
+    card: "summary",
+    title: COMPANY_NAME_AR_FULL,
+    description: COMPANY_DESCRIPTION_AR,
+  },
 };
 
 export default function RootLayout({

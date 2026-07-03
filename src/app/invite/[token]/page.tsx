@@ -15,7 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Factory, CheckCircle, XCircle, Clock, UserPlus, LogIn } from "lucide-react";
+import { CheckCircle, XCircle, Clock, UserPlus, LogIn } from "lucide-react";
+import Image from "next/image";
+import { COMPANY_NAME_AR_FULL, COMPANY_SUBTITLE_AR, LOGO_PATH } from "@/lib/branding";
 
 export default function InvitationPage() {
   const params = useParams();
@@ -264,13 +266,19 @@ export default function InvitationPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary rounded-full">
-              <Factory className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-white ring-2 ring-primary/20">
+              <Image
+                src={LOGO_PATH}
+                alt={COMPANY_NAME_AR_FULL}
+                width={64}
+                height={64}
+                className="object-contain w-full h-full"
+              />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">دعوة للانضمام</CardTitle>
           <CardDescription>
-            نظام إدارة المصنع - FactoryFlow
+            {`${COMPANY_SUBTITLE_AR} - ${COMPANY_NAME_AR_FULL}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

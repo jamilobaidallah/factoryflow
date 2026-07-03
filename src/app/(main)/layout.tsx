@@ -8,7 +8,8 @@ import Header from "@/components/layout/header";
 import MobileNav from "@/components/layout/mobile-nav";
 import FloatingActionButton from "@/components/layout/floating-action-button";
 import { AccessRequestForm } from "@/components/auth";
-import { Factory } from "lucide-react";
+import Image from "next/image";
+import { COMPANY_NAME_AR_FULL, LOGO_PATH } from "@/lib/branding";
 
 export default function MainLayout({
   children,
@@ -45,11 +46,17 @@ export default function MainLayout({
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              <div className="p-3 bg-primary rounded-full">
-                <Factory className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-white ring-2 ring-primary/20">
+                <Image
+                  src={LOGO_PATH}
+                  alt={COMPANY_NAME_AR_FULL}
+                  width={64}
+                  height={64}
+                  className="object-contain w-full h-full"
+                />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">مرحباً في FactoryFlow</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">مرحباً في {COMPANY_NAME_AR_FULL}</h1>
             <p className="text-gray-600">
               لا يوجد لديك صلاحية للوصول حالياً. يرجى طلب الوصول من مالك المصنع.
             </p>

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { GlobalSearch } from "@/components/search";
 import { usePermissions } from "@/hooks/usePermissions";
 import { USER_ROLE_LABELS } from "@/lib/constants";
+import { COMPANY_NAME_AR_FULL } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/rbac";
 
@@ -46,7 +47,7 @@ export default function Header() {
     >
       <div className="min-w-0 flex-shrink-0">
         <h2 className="text-sm md:text-lg font-semibold text-gray-900 truncate">
-          نظام إدارة المصنع
+          {COMPANY_NAME_AR_FULL}
         </h2>
       </div>
 

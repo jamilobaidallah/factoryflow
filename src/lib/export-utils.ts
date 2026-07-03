@@ -1,6 +1,7 @@
 'use client';
 
 import { formatShortDate, formatNumber } from './date-utils';
+import { COMPANY_NAME_AR_FULL } from './branding';
 
 /** Generic record type for export functions - represents a row of data
  * Uses `any` intentionally - these deprecated functions accept any object shape */
@@ -504,7 +505,7 @@ export function exportStatementToHTML(data: {
   </div>` : ''}
 
   <div class="footer">
-    تم إنشاء هذا التقرير بواسطة FactoryFlow - نظام إدارة المصانع
+    ${`تم إنشاء هذا التقرير بواسطة ${COMPANY_NAME_AR_FULL}`}
   </div>
 </body>
 </html>`;

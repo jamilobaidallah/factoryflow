@@ -43,10 +43,12 @@ describe('Sidebar', () => {
   });
 
   describe('Branding', () => {
-    it('renders FactoryFlow logo and name', () => {
+    it('renders the company logo and short name', () => {
       render(<Sidebar />);
 
-      expect(screen.getByText('FactoryFlow')).toBeInTheDocument();
+      // Short name is used in the space-constrained sidebar; full name lives
+      // in the header. Subtitle stays as the software category.
+      expect(screen.getByText('جبال الشام')).toBeInTheDocument();
       expect(screen.getByText('نظام إدارة المصنع')).toBeInTheDocument();
     });
   });
