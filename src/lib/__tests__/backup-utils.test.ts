@@ -9,6 +9,23 @@ jest.mock('@/firebase/config', () => ({
   firestore: {},
 }));
 
+// Mock journalService so we can control post-restore trial-balance behaviour
+// without dragging the whole accounting pipeline into these tests.
+// Default: books balanced. Individual tests can override.
+jest.mock('@/services/journalService', () => ({
+  getTrialBalance: jest.fn().mockResolvedValue({
+    success: true,
+    data: {
+      accounts: [],
+      totalDebits: 0,
+      totalCredits: 0,
+      isBalanced: true,
+      difference: 0,
+      asOfDate: new Date(),
+    },
+  }),
+}));
+
 // Mock Firebase functions - defined inside mock factory to avoid hoisting issues
 jest.mock('firebase/firestore', () => {
   const mockBatchCommitFn = jest.fn().mockResolvedValue(undefined);
@@ -28,6 +45,9 @@ jest.mock('firebase/firestore', () => {
     doc: jest.fn(),
     query: jest.fn((ref) => ref),
     limit: jest.fn(() => ({})),
+    orderBy: jest.fn(() => ({})),
+    documentId: jest.fn(() => '__name__'),
+    startAfter: jest.fn(() => ({})),
     deleteDoc: mockDeleteDocFn,
     Timestamp: {
       fromDate: jest.fn((date: Date) => ({
@@ -354,7 +374,61 @@ describe('Backup Utilities', () => {
 
       await restoreBackup(validBackup, 'test-user-id', 'merge', onProgress);
 
+      // Post-Fix-3 the final progress message flips depending on whether the
+      // trial-balance check found the books balanced; for the default balanced
+      // mock we get the clean 'Restore completed!' string.
       expect(onProgress).toHaveBeenCalledWith(100, 'Restore completed!');
+    });
+
+    it('returns no warning when the post-restore trial balance is balanced (Fix 3)', async () => {
+      const result = await restoreBackup(validBackup, 'test-user-id', 'merge');
+      expect(result.warning).toBeUndefined();
+    });
+
+    it('returns an unbalanced-books warning when the post-restore trial balance drifts (Fix 3)', async () => {
+      // Simulate the exact scenario in the plan's acceptance criteria: the
+      // restore succeeds at the write layer, but the resulting journal
+      // entries don't balance (backup file was hand-corrupted / truncated).
+      const { getTrialBalance } = jest.requireMock('@/services/journalService');
+      getTrialBalance.mockResolvedValueOnce({
+        success: true,
+        data: {
+          accounts: [],
+          totalDebits: 12345.67,
+          totalCredits: 12300.00,
+          isBalanced: false,
+          difference: 45.67,
+          asOfDate: new Date(),
+        },
+      });
+
+      const result = await restoreBackup(validBackup, 'test-user-id', 'merge');
+
+      expect(result.warning).toBeDefined();
+      expect(result.warning?.kind).toBe('unbalanced-books');
+      expect(result.warning?.totalDebits).toBeCloseTo(12345.67, 2);
+      expect(result.warning?.totalCredits).toBeCloseTo(12300.00, 2);
+      expect(result.warning?.difference).toBeCloseTo(45.67, 2);
+    });
+
+    it('does NOT warn when the drift is within ACCOUNTING_TOLERANCE (rounding noise)', async () => {
+      // Well below ACCOUNTING_TOLERANCE (0.001) — a scenario where journals
+      // are technically off due to money rounding but the business is fine.
+      const { getTrialBalance } = jest.requireMock('@/services/journalService');
+      getTrialBalance.mockResolvedValueOnce({
+        success: true,
+        data: {
+          accounts: [],
+          totalDebits: 100.0005,
+          totalCredits: 100.0000,
+          isBalanced: false,
+          difference: 0.0005,
+          asOfDate: new Date(),
+        },
+      });
+
+      const result = await restoreBackup(validBackup, 'test-user-id', 'merge');
+      expect(result.warning).toBeUndefined();
     });
   });
 

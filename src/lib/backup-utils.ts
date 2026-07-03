@@ -8,9 +8,14 @@ import {
   query,
   Timestamp,
   deleteDoc,
-  limit
+  limit,
+  orderBy,
+  documentId,
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
+import { paginateAll } from './firestore-pagination';
+import { getTrialBalance } from '@/services/journalService';
+import { ACCOUNTING_TOLERANCE } from './constants';
 
 /** Backup document type - allows any valid Firestore data structure */
 type BackupDocument = Record<string, unknown> & { id: string };
@@ -65,26 +70,35 @@ export async function createBackup(userId: string): Promise<BackupData> {
     },
   };
 
-  // Backup each collection
+  // Backup each collection.
+  //
+  // Scale-hardening Tier-1, Fix 3: the previous code used
+  // `query(collectionRef, limit(10000))` as a "safety cap". Past 10 000 docs
+  // per collection the backup silently truncated — restoring produced an
+  // incomplete database with no warning. Replaced with cursor pagination
+  // through `paginateAll` so we always get every doc.
+  //
+  // `orderBy(documentId())` gives us a stable sort so the cursor works, and
+  // it doesn't require a composite index (documentId is always indexable).
   for (const collectionName of collections) {
     try {
-      // Use correct user-specific path
       const collectionRef = collection(firestore, `users/${userId}/${collectionName}`);
-      // Safety limit to prevent browser crashes with very large datasets
-      const q = query(collectionRef, limit(10000));
-      const snapshot = await getDocs(q);
+      const allDocs = await paginateAll(
+        collectionRef,
+        [orderBy(documentId())],
+      );
 
-      const documents = snapshot.docs.map((doc) => {
-        const data = doc.data();
+      const documents = allDocs.map((doc) => {
+        const data = doc.data() as Record<string, unknown>;
 
         // Convert Firestore Timestamps to ISO strings for JSON serialization
         const serializedData: BackupDocument = { id: doc.id };
 
         Object.keys(data).forEach((key) => {
           if (data[key] instanceof Timestamp) {
-            serializedData[key] = data[key].toDate().toISOString();
+            serializedData[key] = (data[key] as Timestamp).toDate().toISOString();
           } else if (data[key] instanceof Date) {
-            serializedData[key] = data[key].toISOString();
+            serializedData[key] = (data[key] as Date).toISOString();
           } else {
             serializedData[key] = data[key];
           }
@@ -162,12 +176,27 @@ export function validateBackup(data: unknown): data is BackupData {
  * @param mode 'replace' to clear existing data, 'merge' to keep existing data
  * @param onProgress Callback for progress updates
  */
+/**
+ * Result of `restoreBackup`. Currently only carries an optional integrity
+ * warning: if the post-restore trial-balance check finds the books unbalanced,
+ * we return that here so the UI can surface a red toast without erroring out
+ * the whole restore (data IS in the DB — user just needs to know it's broken).
+ */
+export interface RestoreResult {
+  warning?: {
+    kind: 'unbalanced-books';
+    totalDebits: number;
+    totalCredits: number;
+    difference: number;
+  };
+}
+
 export async function restoreBackup(
   backupData: BackupData,
   userId: string,
   mode: 'replace' | 'merge' = 'merge',
   onProgress?: (progress: number, message: string) => void
-): Promise<void> {
+): Promise<RestoreResult> {
   // Validate backup first
   validateBackup(backupData);
 
@@ -270,8 +299,50 @@ export async function restoreBackup(
   }
 
   if (onProgress) {
-    onProgress(100, 'Restore completed!');
+    onProgress(100, 'Restore completed! Verifying trial balance...');
   }
+
+  // Scale-hardening Tier-1, Fix 3 (part 2): post-restore trial-balance check.
+  //
+  // Restore can succeed at the Firestore-write layer but still leave the
+  // books unbalanced if the backup file was corrupted, hand-edited, or
+  // truncated (from the old capped read). Without this check the user sees
+  // a green "restored" toast and only discovers the books are broken when
+  // they open the trial-balance report weeks later.
+  //
+  // Non-fatal: we return a warning rather than throwing. The DB is in the
+  // state the file described; the user just needs to know it's off.
+  let warning: RestoreResult['warning'];
+  try {
+    const tbResult = await getTrialBalance(userId);
+    if (tbResult.success && tbResult.data) {
+      const { totalDebits, totalCredits } = tbResult.data;
+      const difference = Math.abs(totalDebits - totalCredits);
+      if (difference > ACCOUNTING_TOLERANCE) {
+        warning = {
+          kind: 'unbalanced-books',
+          totalDebits,
+          totalCredits,
+          difference,
+        };
+        // eslint-disable-next-line no-console
+        console.error(
+          `[backup] Post-restore trial balance UNBALANCED: DR=${totalDebits} CR=${totalCredits} diff=${difference}`
+        );
+      }
+    }
+  } catch (e) {
+    // Not the caller's fault the check itself failed — log and move on so
+    // we don't hide the fact that the restore itself succeeded.
+    // eslint-disable-next-line no-console
+    console.error('[backup] Post-restore trial-balance check failed to run:', e);
+  }
+
+  if (onProgress) {
+    onProgress(100, warning ? 'Restore completed with warnings.' : 'Restore completed!');
+  }
+
+  return { warning };
 }
 
 /**
