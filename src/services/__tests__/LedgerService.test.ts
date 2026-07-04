@@ -282,6 +282,18 @@ describe('LedgerService', () => {
 
     // Reset journal posting mock
     mockPost.mockResolvedValue({ success: true, entryNumber: 'JE-001' });
+
+    // Restore the SMART-DEFAULT implementation for helpers whose module-mock
+    // uses category-aware logic (see line 186). `jest.clearAllMocks()` above
+    // clears CALL history but keeps any `mockReturnValue(...)` override a
+    // previous test installed — which is how the delete-with-advances test
+    // used to fail non-deterministically. Restoring the impl here means every
+    // test starts with the natural "advance iff category is سلفة" rule and no
+    // test can leak a hard-coded return value to a sibling.
+    const { isAdvanceTransaction } = require('@/components/ledger/utils/ledger-helpers');
+    isAdvanceTransaction.mockImplementation(
+      (category: string) => category === 'سلفة عميل' || category === 'سلفة مورد',
+    );
   });
 
   // ============================================
@@ -554,16 +566,33 @@ describe('LedgerService', () => {
   // ============================================
 
   describe('updateLedgerEntry', () => {
+    // Helper: wire mockRunTransaction to serve the given entry data through
+    // tx.get() and collect any tx.update() calls so tests can assert on them.
+    // Introduced in Scale-hardening Tier-1 Fix 4: the initial doc read + the
+    // balance-field write on the current entry now live inside a
+    // runTransaction, so tests must mock it to reach the rest of the function.
+    const setupTx = (
+      entryData: Record<string, unknown>,
+    ): { txUpdate: jest.Mock } => {
+      const txUpdate = jest.fn();
+      mockRunTransaction.mockImplementation(async (_firestore, callback) => {
+        const mockTransaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: () => true,
+            data: () => entryData,
+          }),
+          set: jest.fn(),
+          update: txUpdate,
+        };
+        return callback(mockTransaction);
+      });
+      return { txUpdate };
+    };
+
     it('should update basic fields', async () => {
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
-      mockGetDoc.mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          amount: 1000,
-          isARAPEntry: false,
-        }),
-      });
+      setupTx({ amount: 1000, isARAPEntry: false });
       mockGetDocs.mockResolvedValue({ docs: [], forEach: jest.fn() });
 
       const formData = createMockFormData({
@@ -580,18 +609,14 @@ describe('LedgerService', () => {
     it('should recalculate AR/AP when amount changes', async () => {
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
-      mockGetDoc.mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          amount: 1000,
-          isARAPEntry: true,
-          totalPaid: 500,
-          totalDiscount: 0,
-          writeoffAmount: 0,
-          paymentStatus: 'partial',
-        }),
+      const { txUpdate } = setupTx({
+        amount: 1000,
+        isARAPEntry: true,
+        totalPaid: 500,
+        totalDiscount: 0,
+        writeoffAmount: 0,
+        paymentStatus: 'partial',
       });
-      // Use createMockQuerySnapshot to include 'empty' property
       mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
 
       const formData = createMockFormData({ amount: '1500' });
@@ -599,26 +624,30 @@ describe('LedgerService', () => {
       const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
 
       expect(result.success).toBe(true);
-      // Should recalculate remainingBalance and paymentStatus
-      expect(mockBatch.update).toHaveBeenCalled();
+      // Post-Fix-4: remainingBalance + paymentStatus are written via tx.update
+      // (inside runTransaction) instead of the batch, so we assert on the tx
+      // instead of the batch.
+      expect(txUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          remainingBalance: expect.any(Number),
+          paymentStatus: expect.any(String),
+        }),
+      );
     });
 
     it('should reverse advance allocations when editing', async () => {
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
-      mockGetDoc.mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          amount: 1000,
-          isARAPEntry: true,
-          paidFromAdvances: [
-            { advanceId: 'adv-1', advanceTransactionId: 'TXN-ADV-1', amount: 300 },
-          ],
-          totalPaidFromAdvances: 300,
-          totalPaid: 300,
-        }),
+      const { txUpdate } = setupTx({
+        amount: 1000,
+        isARAPEntry: true,
+        paidFromAdvances: [
+          { advanceId: 'adv-1', advanceTransactionId: 'TXN-ADV-1', amount: 300 },
+        ],
+        totalPaidFromAdvances: 300,
+        totalPaid: 300,
       });
-      // Use createMockQuerySnapshot to include 'empty' property
       mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
 
       const formData = createMockFormData({ amount: '1000' });
@@ -626,23 +655,33 @@ describe('LedgerService', () => {
       const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
 
       expect(result.success).toBe(true);
-      // Should have reversed the advance allocation
+
+      // Post-Fix-4: the entry-doc balance-field reset (paidFromAdvances=[],
+      // totalPaidFromAdvances=0, totalPaid recompute) is written by the tx.
+      expect(txUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          paidFromAdvances: [],
+          totalPaidFromAdvances: 0,
+          totalPaid: expect.any(Number),
+        }),
+      );
+
+      // The advance-doc reversal (using race-safe increment) still uses the
+      // batch — different doc, different field semantics.
       expect(mockBatch.update).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           totalPaid: expect.any(Object), // increment(-300)
           remainingBalance: expect.any(Object),
-        })
+        }),
       );
     });
 
     it('should sync associated party to linked payments', async () => {
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
-      mockGetDoc.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ amount: 1000 }),
-      });
+      setupTx({ amount: 1000 });
 
       const mockPaymentDocs = [
         { ref: { id: 'pay-1' }, data: () => ({ notes: 'Payment 1' }) },
@@ -657,6 +696,107 @@ describe('LedgerService', () => {
       const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
 
       expect(result.success).toBe(true);
+    });
+
+    it('is retry-safe: callback runs twice on Firestore conflict; final balance reflects the LAST tx.get (Fix 4, audit MAJOR-1)', async () => {
+      // Firestore retries `runTransaction` if a concurrent write commits
+      // between our `tx.get` and the auto-commit. On retry the callback
+      // runs AGAIN with a fresh `tx.get` result. The correctness contract
+      // is: the code inside the callback must be deterministic against
+      // the transactional read, produce no external side effects that
+      // would double on retry, and the final write must be based on the
+      // FINAL retry's data — not the first attempt's stale snapshot.
+      const mockBatch = createMockBatch();
+      mockWriteBatch.mockReturnValue(mockBatch);
+
+      const txUpdate = jest.fn();
+      let attempt = 0;
+      mockRunTransaction.mockImplementation(async (_firestore, callback) => {
+        // Simulate the SDK invoking the callback twice: first attempt sees
+        // a stale totalPaid = 200; between attempt 1 and 2 a concurrent
+        // writer bumped totalPaid to 500; attempt 2 reads the fresh 500
+        // and its writes are the ones that stick.
+        const readsByAttempt = [200, 500];
+        let lastResult;
+        for (const totalPaidForAttempt of readsByAttempt) {
+          attempt++;
+          const mockTransaction = {
+            get: jest.fn().mockResolvedValue({
+              exists: () => true,
+              data: () => ({
+                amount: 1000,
+                isARAPEntry: true,
+                totalPaid: totalPaidForAttempt,
+                totalDiscount: 0,
+                writeoffAmount: 0,
+                paymentStatus: 'partial',
+              }),
+            }),
+            set: jest.fn(),
+            update: txUpdate,
+          };
+          lastResult = await callback(mockTransaction);
+        }
+        return lastResult;
+      });
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
+
+      const formData = createMockFormData({ amount: '1200' });
+      const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
+
+      expect(result.success).toBe(true);
+      expect(attempt).toBe(2); // Confirms both attempts ran
+
+      // Two tx.update calls happened (one per attempt). The final one is
+      // what matters — it must be based on the fresh totalPaid=500 read:
+      // remainingBalance = 1200 - 500 = 700.
+      const finalUpdate = txUpdate.mock.calls[txUpdate.mock.calls.length - 1][1];
+      expect(finalUpdate.remainingBalance).toBe(700);
+    });
+
+    it('is race-safe: recomputes balance from the FRESH tx.get value, not a pre-tx snapshot (Fix 4)', async () => {
+      // Scenario: user A opens the edit dialog when totalPaid = 300.
+      // Between clicking "save" and Firestore committing, user B in another
+      // tab calls addPaymentToEntry, bumping totalPaid to 500.
+      //
+      // Firestore's runTransaction retries the callback when a conflicting
+      // write happens between tx.get and commit. We simulate that by returning
+      // the FRESH (post-conflict) totalPaid on the FIRST tx.get — the code
+      // under test must use that fresh value, not any pre-read stale state.
+      const mockBatch = createMockBatch();
+      mockWriteBatch.mockReturnValue(mockBatch);
+
+      const freshTotalPaid = 500;
+      const txUpdate = jest.fn();
+      mockRunTransaction.mockImplementation(async (_firestore, callback) => {
+        const mockTransaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: () => true,
+            data: () => ({
+              amount: 1000,
+              isARAPEntry: true,
+              totalPaid: freshTotalPaid, // ← the fresh read after user B's write
+              totalDiscount: 0,
+              writeoffAmount: 0,
+              paymentStatus: 'partial',
+            }),
+          }),
+          set: jest.fn(),
+          update: txUpdate,
+        };
+        return callback(mockTransaction);
+      });
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
+
+      const formData = createMockFormData({ amount: '1200' });
+      const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
+
+      expect(result.success).toBe(true);
+
+      // remainingBalance MUST be computed against freshTotalPaid (500),
+      // NOT the stale pre-transaction value. 1200 - 500 = 700.
+      const [, writtenUpdate] = txUpdate.mock.calls[0];
+      expect(writtenUpdate.remainingBalance).toBe(700);
     });
   });
 
@@ -759,9 +899,22 @@ describe('LedgerService', () => {
     });
 
     it('should reverse advance allocations when deleting invoice', async () => {
+      // `deleteLedgerEntry` at LedgerService.ts:2388 reads each linked
+      // advance via `getDoc(advanceRef)` to compute the correct
+      // post-reversal payment status. The test used to mock only `getDocs`
+      // (plural), so `getDoc` returned undefined and `.exists()` threw
+      // before assertions could run.
+      //
+      // (The other cause — a leaked `isAdvanceTransaction.mockReturnValue(true)`
+      // from the previous test — is now handled systemically in the
+      // top-level `beforeEach`, so no per-test reset is needed here.)
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
       mockGetDocs.mockResolvedValue({ docs: [], forEach: jest.fn() });
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ totalPaid: 500 }),
+      });
 
       const entryWithAdvances = {
         ...mockEntry,

@@ -125,7 +125,7 @@ export default function BackupPage() {
 
           setRestoreMessage('جاري الاستعادة...');
 
-          await restoreBackup(
+          const restoreResult = await restoreBackup(
             backupPreview,
             user.uid,
             mode,
@@ -135,10 +135,24 @@ export default function BackupPage() {
             }
           );
 
-          toast({
-            title: 'تمت الاستعادة بنجاح!',
-            description: 'تم استعادة جميع البيانات',
-          });
+          if (restoreResult.warning?.kind === 'unbalanced-books') {
+            // Scale-hardening Tier-1 Fix 3: the write layer succeeded but the
+            // post-restore trial balance is off. Data is in the DB — the user
+            // just needs to know the books don't balance before they trust it.
+            const { totalDebits, totalCredits, difference } = restoreResult.warning;
+            toast({
+              title: 'تحذير: تمت الاستعادة، لكن الميزان غير متوازن',
+              description:
+                `الاستعادة اكتملت لكن مجموع المدين (${totalDebits.toFixed(2)}) لا يساوي مجموع الدائن (${totalCredits.toFixed(2)}). ` +
+                `الفرق: ${difference.toFixed(2)}. يُرجى مراجعة دفتر اليومية قبل الاعتماد على البيانات.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'تمت الاستعادة بنجاح!',
+              description: 'تم استعادة جميع البيانات',
+            });
+          }
 
           // Clear preview after successful restore
           setBackupPreview(null);

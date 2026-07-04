@@ -1250,13 +1250,107 @@ export class LedgerService {
       // Track COGS recreation data for journal creation after batch commit
       const cogsRecreationResults: { description: string; amount: number; inventorySubCode?: string }[] = [];
 
-      // Fetch current entry to check if AR/AP recalculation is needed
-      const currentEntrySnap = await getDoc(entryRef);
-      const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+      // Fetch current entry AND write the recomputed balance fields atomically.
+      //
+      // Why runTransaction (Scale-hardening Tier-1, Fix 4): the previous code
+      // did `getDoc(entryRef)` here and then wrote the recomputed balance
+      // fields (`totalPaid`, `remainingBalance`, `paymentStatus`, plus the
+      // paidFromAdvances reset) into `updateData` further down, committed
+      // via `batch.commit()` at the end. Between the read and the batch
+      // commit, another write to the same doc (e.g. `addPaymentToEntry` in
+      // another tab) could change `totalPaid`, and the batch would silently
+      // overwrite it with the stale value we computed. Wrapping the
+      // read + balance-field write in `runTransaction` makes Firestore
+      // retry the whole callback on conflict, guaranteeing our computation
+      // uses the freshest `totalPaid` / `totalDiscount` / `writeoffAmount`.
+      //
+      // Everything else (party-name sync on payments, inventory-movement
+      // revert, journal reversal + new journal, advance-doc updates via
+      // `increment()`) stays in the outer batch. Those writes either hit
+      // different docs entirely or use race-safe atomic operators, and
+      // `.update()` on Firestore is a partial write so the batch's later
+      // `batch.update(entryRef, updateData)` — which by design excludes
+      // balance fields — cannot clobber what the tx wrote here.
+      const TX_ERROR_LOCKED = "LEDGER_ENTRY_LOCKED";
+      let currentData: DocumentData | null;
+      try {
+        currentData = await runTransaction<DocumentData | null>(firestore, async (tx) => {
+          const snap = await tx.get(entryRef);
+          const data = snap.exists() ? snap.data() : null;
 
-      // Guard: reject edit if a previous edit is still mid-processing
-      if (currentData?.journalStatus === "reversal_pending") {
-        return { success: false, error: "هذا السجل قيد المعالجة. يرجى تحديث الصفحة والمحاولة مرة أخرى." };
+          // Defensive guard for a `journalStatus === "reversal_pending"`
+          // sentinel. Currently this state is never written by any code
+          // path (grep confirms only readers exist), so the branch is
+          // unreachable today — but the check is trivially cheap and
+          // future-proofs the update flow if a two-phase reversal marker
+          // gets added later. Kept intentionally, NOT relied on.
+          if (data?.journalStatus === "reversal_pending") {
+            throw new Error(TX_ERROR_LOCKED);
+          }
+
+          if (data) {
+            const balanceUpdate: Record<string, unknown> = {};
+
+            // Case A: reversing advance payments as part of this edit.
+            // (Mirrors the old block at lines 1315–1335.)
+            if (Array.isArray(data.paidFromAdvances) && data.paidFromAdvances.length > 0) {
+              const clearedTotalPaid = (Number(data.totalPaid) || 0)
+                - (Number(data.totalPaidFromAdvances) || 0);
+              const totalDiscount = Number(data.totalDiscount) || 0;
+              const writeoffAmount = Number(data.writeoffAmount) || 0;
+              balanceUpdate.paidFromAdvances = [];
+              balanceUpdate.totalPaidFromAdvances = 0;
+              balanceUpdate.totalPaid = clearedTotalPaid;
+              balanceUpdate.remainingBalance = calculateRemainingBalance(
+                newAmount, clearedTotalPaid, totalDiscount, writeoffAmount,
+              );
+              balanceUpdate.paymentStatus = calculatePaymentStatus(
+                clearedTotalPaid, newAmount, totalDiscount, writeoffAmount,
+              );
+            }
+
+            // Case B: AR/AP amount changed — recompute remainingBalance +
+            // paymentStatus off the fresh totalPaid. (Mirrors old lines
+            // 1338–1366.) This block layers on top of Case A: if both
+            // fire, Case B recomputes remainingBalance / paymentStatus
+            // using the totalPaid Case A just set.
+            const oldAmount = Number(data.amount) || 0;
+            if (data.isARAPEntry && oldAmount !== newAmount) {
+              let totalPaid = "totalPaid" in balanceUpdate
+                ? Number(balanceUpdate.totalPaid) || 0
+                : Number(data.totalPaid) || 0;
+              const totalDiscount = Number(data.totalDiscount) || 0;
+              const writeoffAmount = Number(data.writeoffAmount) || 0;
+
+              const wasImmediateSettlement = data.immediateSettlement ||
+                (totalPaid === oldAmount && data.paymentStatus === "paid");
+              if (wasImmediateSettlement) {
+                totalPaid = newAmount;
+                balanceUpdate.totalPaid = totalPaid;
+              }
+              balanceUpdate.remainingBalance = calculateRemainingBalance(
+                newAmount, totalPaid, totalDiscount, writeoffAmount,
+              );
+              balanceUpdate.paymentStatus = calculatePaymentStatus(
+                totalPaid, newAmount, totalDiscount, writeoffAmount,
+              );
+            }
+
+            if (Object.keys(balanceUpdate).length > 0) {
+              tx.update(entryRef, balanceUpdate);
+            }
+          }
+
+          return data;
+        });
+      } catch (e) {
+        if (e instanceof Error && e.message === TX_ERROR_LOCKED) {
+          return {
+            success: false,
+            error: "هذا السجل قيد المعالجة. يرجى تحديث الصفحة والمحاولة مرة أخرى.",
+          };
+        }
+        throw e;
       }
 
       // Pre-batch: create engine and reserve sequences for journal operations
@@ -1275,96 +1369,35 @@ export class LedgerService {
       const reversalSeqs = reservedSeqs.slice(0, journalCountToReverse);
       const newMainJournalSeq = reservedSeqs[journalCountToReverse];
 
-      if (currentData) {
-        const oldAmount = currentData.amount || 0;
-
-        // BUG 4 FIX: Reverse advance allocations when editing an invoice
-        // If this entry was paid by advances, we need to:
-        // 1. Reverse the allocations on each advance entry
-        // 2. Clear the paidFromAdvances and totalPaidFromAdvances fields
-        // This allows the advances to be re-allocated to other invoices
-        if (currentData.paidFromAdvances && currentData.paidFromAdvances.length > 0) {
-          for (const advancePayment of currentData.paidFromAdvances) {
-            const advanceRef = doc(
-              firestore,
-              `users/${this.userId}/ledger`,
-              advancePayment.advanceId
-            );
-
-            // Reverse the allocation using atomic operations
-            // SEMANTIC CHANGE: Using totalPaid instead of totalUsedFromAdvance
-            // This aligns advances with standard AR/AP tracking (like loans)
-            //
-            // Note: We use increment for the numeric fields. The advanceAllocations array
-            // will retain stale entries, but they don't affect calculations since we use
-            // totalPaid as the authoritative source for remaining balance.
-            // A cleanup function could be added later to remove stale allocation records.
-            //
-            // paymentStatus is set to "partial" as a safe default. We can't determine
-            // if this should be "unpaid" (totalPaid=0) without reading the advance first,
-            // which would require a transaction instead of batch. Since most filtering
-            // uses `!== "paid"` (treating unpaid and partial the same), this is acceptable.
-            // The numeric fields (totalPaid, remainingBalance) are authoritative.
-            batch.update(advanceRef, {
-              totalPaid: increment(-advancePayment.amount),
-              remainingBalance: increment(advancePayment.amount),
-              paymentStatus: "partial",
-            });
-          }
-
-          // Clear advance payment info from this entry
-          updateData.paidFromAdvances = [];
-          updateData.totalPaidFromAdvances = 0;
-
-          // Also recalculate AR/AP tracking since advance payments are being removed
-          const totalPaid = (currentData.totalPaid || 0) - (currentData.totalPaidFromAdvances || 0);
-          const totalDiscount = currentData.totalDiscount || 0;
-          const writeoffAmount = currentData.writeoffAmount || 0;
-          updateData.totalPaid = totalPaid;
-          updateData.remainingBalance = calculateRemainingBalance(
-            newAmount,
-            totalPaid,
-            totalDiscount,
-            writeoffAmount
+      // Reverse advance allocations on the source advance docs when editing
+      // an invoice that was paid from advances. The BALANCE-field updates on
+      // the CURRENT entry (paidFromAdvances=[], totalPaidFromAdvances=0,
+      // totalPaid/remainingBalance/paymentStatus recompute) were already
+      // performed atomically inside the runTransaction above; here we only
+      // touch the OTHER (advance) docs, which is safe in a batch since
+      // Firestore `increment()` is race-safe.
+      if (currentData?.paidFromAdvances && Array.isArray(currentData.paidFromAdvances)) {
+        for (const advancePayment of currentData.paidFromAdvances as Array<{
+          advanceId: string;
+          amount: number;
+        }>) {
+          const advanceRef = doc(
+            firestore,
+            `users/${this.userId}/ledger`,
+            advancePayment.advanceId
           );
-          updateData.paymentStatus = calculatePaymentStatus(
-            totalPaid,
-            newAmount,
-            totalDiscount,
-            writeoffAmount
-          );
-        }
-
-        // Recalculate AR/AP fields if this is an AR/AP entry and amount changed
-        if (currentData.isARAPEntry && oldAmount !== newAmount) {
-          let totalPaid = currentData.totalPaid || 0;
-          const totalDiscount = currentData.totalDiscount || 0;
-          const writeoffAmount = currentData.writeoffAmount || 0;
-
-          // For immediate settlement entries (was fully paid at creation),
-          // adjust totalPaid to match new amount to keep it "paid"
-          const wasImmediateSettlement = currentData.immediateSettlement ||
-            (totalPaid === oldAmount && currentData.paymentStatus === 'paid');
-
-          if (wasImmediateSettlement) {
-            totalPaid = newAmount;
-            updateData.totalPaid = totalPaid;
-          }
-
-          updateData.remainingBalance = calculateRemainingBalance(
-            newAmount,
-            totalPaid,
-            totalDiscount,
-            writeoffAmount
-          );
-          updateData.paymentStatus = calculatePaymentStatus(
-            totalPaid,
-            newAmount,
-            totalDiscount,
-            writeoffAmount
-          );
+          batch.update(advanceRef, {
+            totalPaid: increment(-advancePayment.amount),
+            remainingBalance: increment(advancePayment.amount),
+            paymentStatus: "partial",
+          });
         }
       }
+
+      // (Old AR/AP recompute block deleted — totalPaid / remainingBalance /
+      // paymentStatus are now written by the runTransaction above based on
+      // a fresh transactional read, avoiding the last-write-wins race a
+      // concurrent addPaymentToEntry could trigger.)
 
       // HIGH-1 FIX: Revert inventory movements when an entry is edited away from an
       // inventory-affecting category.  We only revert — we do NOT re-apply — because
@@ -1596,8 +1629,9 @@ export class LedgerService {
       if (existingTransactionId) {
         const newClientName = formData.associatedParty || "غير محدد";
 
-        // Get current entry data once for use throughout this block
-        const currentData = currentEntrySnap.exists() ? currentEntrySnap.data() : null;
+        // (`currentData` is provided by the runTransaction result above —
+        // no need to re-read the doc here. The old local was a shadowing
+        // re-fetch off a snapshot variable that no longer exists.)
 
         // Query 1: Single-transaction payments (linkedTransactionId)
         const singlePaymentsQuery = query(

@@ -53,6 +53,7 @@ import Decimal from 'decimal.js-light';
 import { roundCurrency, safeAdd, safeSubtract } from '@/lib/currency';
 import { QUERY_LIMITS, ACCOUNTING_TOLERANCE } from '@/lib/constants';
 import { convertFirestoreDates } from '@/lib/firestore-utils';
+import { paginateAll } from '@/lib/firestore-pagination';
 import { JournalPostingEngine } from '@/services/journal/JournalPostingEngine';
 import {
   createJournalLines,
@@ -944,13 +945,23 @@ export async function getJournalEntries(
   try {
     const journalRef = collection(firestore, getJournalEntriesPath(userId));
 
-    // Query all entries ordered by date, filter status client-side
-    // This avoids requiring a composite index (status + date) in Firestore
-    // and maintains backward compatibility with existing data without status field
-    const q = query(journalRef, orderBy('date', 'desc'), limit(QUERY_LIMITS.JOURNAL_ENTRIES));
+    // Scale-hardening Tier-1, Fix 1: replace the single `limit(10000)` read
+    // with cursor pagination. Trial-balance and every report that layers on
+    // this function must see EVERY posted journal entry to compute the right
+    // account totals — silently truncating at 10 000 makes the books appear
+    // to balance when they might not. `paginateAll` walks the whole
+    // collection in 500-doc pages using `startAfter`.
+    //
+    // We still order by `date desc` for deterministic cursoring and to keep
+    // downstream callers (which may skim recent entries first) happy. The
+    // status + date-range filters remain client-side after the read so we
+    // don't need extra composite indexes.
+    const allDocs = await paginateAll(
+      journalRef,
+      [orderBy('date', 'desc')],
+    );
 
-    const snapshot = await getDocs(q);
-    let entries: JournalEntry[] = snapshot.docs.map((doc) => ({
+    let entries: JournalEntry[] = allDocs.map((doc) => ({
       id: doc.id,
       ...convertFirestoreDates(doc.data()),
     })) as JournalEntry[];
@@ -978,13 +989,14 @@ export async function getJournalEntries(
       });
     }
 
-    // Check if we hit the query limit - warn about potential data truncation
-    let warning: string | undefined;
-    if (snapshot.size >= QUERY_LIMITS.JOURNAL_ENTRIES) {
-      warning = `تحذير: تم الوصول للحد الأقصى (${QUERY_LIMITS.JOURNAL_ENTRIES.toLocaleString()} قيد). قد تكون البيانات غير مكتملة.`;
-    }
-
-    return { success: true, data: entries, warning };
+    // `warning` field on the return shape is now permanently unused for
+    // this function — cursor pagination pulls the whole collection so
+    // there is no truncation to warn about. Left on `ServiceResult<T>`
+    // to avoid a wider API change; downstream consumers
+    // (`getTrialBalance`, `getBalanceSheet`, and the reports hooks) will
+    // now see `undefined` where they used to see the 10 000-doc-cap toast.
+    // That's the intended behaviour: no truncation → no warning.
+    return { success: true, data: entries };
   } catch (error) {
     console.error('Error getting journal entries:', error);
     return {
@@ -1745,26 +1757,28 @@ export async function closeYearEnd(
   }
 
   // ── Fetch all journal entries for the year ────────────────────────────────
+  //
+  // Scale-hardening Tier-1, Fix 2: previous code used `limit(5000)` here
+  // and hard-aborted the whole close if the year had 5 000+ entries —
+  // effectively locking out any customer with a busy fiscal year and forcing
+  // "please contact support to split the close". Now cursor-paginate with
+  // the SAME date-range where clauses so we still push filtering server-side
+  // (the `date` field is already indexed for range queries) but pull the
+  // whole year regardless of size.
   const startDate = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00`));
   const endDate   = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59`));
 
-  const yearEntriesSnap = await getDocs(
-    query(journalRef, where('date', '>=', startDate), where('date', '<=', endDate), limit(5000))
+  const yearEntryDocs = await paginateAll(
+    journalRef,
+    [
+      where('date', '>=', startDate),
+      where('date', '<=', endDate),
+      orderBy('date', 'asc'),
+    ],
   );
 
-  // Hard abort if the query hit the 5000-doc limit — proceeding would close the year
-  // on understated balances (silent accounting error is worse than a visible failure).
-  if (yearEntriesSnap.size >= 5000) {
-    return {
-      success: false,
-      error:
-        `لا يمكن إغلاق السنة ${year}: عدد القيود (${yearEntriesSnap.size}) تجاوز الحد الأقصى للاستعلام (5000). ` +
-        'يرجى أرشفة القيود القديمة أو التواصل مع الدعم الفني لتقسيم الإغلاق على دفعتين.',
-    };
-  }
-
   // Exclude closing entries and reversed entries from balance aggregation (H4)
-  const operatingDocs = yearEntriesSnap.docs.filter((d) => {
+  const operatingDocs = yearEntryDocs.filter((d) => {
     const data = d.data();
     return data.linkedDocumentType !== 'year-end-close' && data.status !== 'reversed';
   });
