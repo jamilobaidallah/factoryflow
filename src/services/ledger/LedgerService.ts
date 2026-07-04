@@ -2873,6 +2873,19 @@ export class LedgerService {
       // Create journal entry for bad debt expense
       // DR: Bad Debt Expense (5600)
       // CR: Accounts Receivable (1200)
+      //
+      // Integrity+safety Fix 6: the source is now the PAYMENT doc (not the
+      // ledger entry). Two knock-on effects, both wanted:
+      //   1. `JournalPostingEngine` auto-populates `linkedPaymentId`
+      //      when `source.type === "payment"` (JournalPostingEngine.ts:134),
+      //      so payments-page delete → `getEntriesByLinkedPaymentId(paymentId)`
+      //      now finds the BAD_DEBT journal and reverses it correctly.
+      //      Before this fix, the reverseWriteoffDelete branch of the
+      //      payments-page delete flow was leaving the BAD_DEBT journal
+      //      orphaned (a real accounting-integrity gap).
+      //   2. `reverseBySource("payment", paymentDocRef.id)` now works too.
+      // The template is still `BAD_DEBT` so the account codes and report
+      // classification are unchanged; only the linkage changes.
       try {
         const engine = createJournalPostingEngine(this.userId);
         const journalDescription = `شطب دين معدوم: ${data.associatedParty} - ${data.writeoffReason}`;
@@ -2882,8 +2895,8 @@ export class LedgerService {
           date: new Date(),
           description: journalDescription,
           source: {
-            type: "bad_debt",
-            documentId: data.entryId,
+            type: "payment",
+            documentId: paymentDocRef.id,
             transactionId: data.entryTransactionId,
           },
         }, "bad debt writeoff journal");
