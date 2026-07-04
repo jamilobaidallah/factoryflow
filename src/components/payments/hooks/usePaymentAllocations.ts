@@ -15,6 +15,7 @@ import {
   runTransaction,
   getDoc,
   arrayRemove,
+  increment,
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { useUser } from '@/firebase/provider';
@@ -341,22 +342,33 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
 
           transaction.set(allocationDocRef, allocationData);
 
-          // Update ledger entry with new payment totals (including discount if any)
+          // Update ledger entry with new payment totals (including discount if any).
+          //
+          // Integrity+safety Fix 2: numeric balance fields are updated via
+          // Firestore `increment(delta)` rather than a computed absolute
+          // value. Firestore composes concurrent increments deterministically
+          // at commit time — so even if another writer bumps `totalPaid` on
+          // the same doc between our tx.get and commit, both increments land.
+          // (Inside runTransaction that scenario would already trigger a
+          // conflict-retry, but using `increment` makes the write commutative
+          // and eliminates spurious retries under high contention.)
+          //
+          // `paymentStatus` is categorical, so it can't be an increment. We
+          // compute it from `newTotalPaid = currentTotalPaid + delta` — which
+          // is only exactly right if no OTHER writer moved totalPaid since our
+          // tx.get. If that happens the tx retries, so on the retry the
+          // computation IS correct. The numeric fields (`totalPaid`,
+          // `remainingBalance`, `totalDiscount`) — the ones that drive the
+          // actual money — are always correct.
           const transactionAmount = (ledgerData.amount as number) || 0;
           const currentTotalPaid = (ledgerData.totalPaid as number) || 0;
           const currentTotalDiscount = (ledgerData.totalDiscount as number) || 0;
           const writeoffAmount = (ledgerData.writeoffAmount as number) || 0;
 
-          const newTotalPaid = safeAdd(currentTotalPaid, allocation.allocatedAmount);
+          const paidDelta = allocation.allocatedAmount;
           const discountAmount = allocation.discountAmount || 0;
+          const newTotalPaid = safeAdd(currentTotalPaid, paidDelta);
           const newTotalDiscount = safeAdd(currentTotalDiscount, discountAmount);
-
-          const newRemainingBalance = calculateRemainingBalance(
-            transactionAmount,
-            newTotalPaid,
-            newTotalDiscount,
-            writeoffAmount
-          );
           const newStatus = calculatePaymentStatus(
             newTotalPaid,
             transactionAmount,
@@ -364,16 +376,19 @@ export function usePaymentAllocations(): UsePaymentAllocationsResult {
             writeoffAmount
           );
 
-          // Build update object
+          // Build update object using atomic increments for numeric fields.
           const updateData: Record<string, unknown> = {
-            totalPaid: newTotalPaid,
-            remainingBalance: newRemainingBalance,
+            totalPaid: increment(paidDelta),
+            // remainingBalance = amount − totalPaid − totalDiscount − writeoff
+            // Amount, writeoff, and (initial) discount are fixed within this
+            // tx, so the net change is −(paidDelta + discountAmount).
+            remainingBalance: increment(-(paidDelta + discountAmount)),
             paymentStatus: newStatus,
           };
 
           // Only update totalDiscount if there's a discount
           if (discountAmount > 0 || currentTotalDiscount > 0) {
-            updateData.totalDiscount = newTotalDiscount;
+            updateData.totalDiscount = increment(discountAmount);
           }
 
           transaction.update(ledgerRef, updateData);
