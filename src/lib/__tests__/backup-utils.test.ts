@@ -11,18 +11,12 @@ jest.mock('@/firebase/config', () => ({
 
 // Mock journalService so we can control post-restore trial-balance behaviour
 // without dragging the whole accounting pipeline into these tests.
-// Default: books balanced. Individual tests can override.
+// Default: no journal entries → totals zero → balanced. Individual tests can
+// override with specific debit/credit lines to simulate corruption scenarios.
 jest.mock('@/services/journalService', () => ({
-  getTrialBalance: jest.fn().mockResolvedValue({
+  getJournalEntries: jest.fn().mockResolvedValue({
     success: true,
-    data: {
-      accounts: [],
-      totalDebits: 0,
-      totalCredits: 0,
-      isBalanced: true,
-      difference: 0,
-      asOfDate: new Date(),
-    },
+    data: [],
   }),
 }));
 
@@ -45,9 +39,12 @@ jest.mock('firebase/firestore', () => {
     doc: jest.fn(),
     query: jest.fn((ref) => ref),
     limit: jest.fn(() => ({})),
-    orderBy: jest.fn(() => ({})),
+    // Post-audit MAJOR-7: paginateAll now asserts the caller passed an
+    // orderBy constraint. The real Firestore SDK sets `.type` on every
+    // QueryConstraint; we tag the mock the same way so the assertion passes.
+    orderBy: jest.fn(() => ({ type: 'orderBy' })),
     documentId: jest.fn(() => '__name__'),
-    startAfter: jest.fn(() => ({})),
+    startAfter: jest.fn(() => ({ type: 'startAfter' })),
     deleteDoc: mockDeleteDocFn,
     Timestamp: {
       fromDate: jest.fn((date: Date) => ({
@@ -389,17 +386,12 @@ describe('Backup Utilities', () => {
       // Simulate the exact scenario in the plan's acceptance criteria: the
       // restore succeeds at the write layer, but the resulting journal
       // entries don't balance (backup file was hand-corrupted / truncated).
-      const { getTrialBalance } = jest.requireMock('@/services/journalService');
-      getTrialBalance.mockResolvedValueOnce({
+      const { getJournalEntries } = jest.requireMock('@/services/journalService');
+      getJournalEntries.mockResolvedValueOnce({
         success: true,
-        data: {
-          accounts: [],
-          totalDebits: 12345.67,
-          totalCredits: 12300.00,
-          isBalanced: false,
-          difference: 45.67,
-          asOfDate: new Date(),
-        },
+        data: [
+          { lines: [{ debit: 12345.67, credit: 0 }, { debit: 0, credit: 12300.00 }] },
+        ],
       });
 
       const result = await restoreBackup(validBackup, 'test-user-id', 'merge');
@@ -414,17 +406,12 @@ describe('Backup Utilities', () => {
     it('does NOT warn when the drift is within ACCOUNTING_TOLERANCE (rounding noise)', async () => {
       // Well below ACCOUNTING_TOLERANCE (0.001) — a scenario where journals
       // are technically off due to money rounding but the business is fine.
-      const { getTrialBalance } = jest.requireMock('@/services/journalService');
-      getTrialBalance.mockResolvedValueOnce({
+      const { getJournalEntries } = jest.requireMock('@/services/journalService');
+      getJournalEntries.mockResolvedValueOnce({
         success: true,
-        data: {
-          accounts: [],
-          totalDebits: 100.0005,
-          totalCredits: 100.0000,
-          isBalanced: false,
-          difference: 0.0005,
-          asOfDate: new Date(),
-        },
+        data: [
+          { lines: [{ debit: 100.0005, credit: 0 }, { debit: 0, credit: 100.0000 }] },
+        ],
       });
 
       const result = await restoreBackup(validBackup, 'test-user-id', 'merge');

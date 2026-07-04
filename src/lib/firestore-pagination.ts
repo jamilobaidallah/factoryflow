@@ -66,6 +66,24 @@ export async function paginateAll<T = DocumentData>(
   baseConstraints: QueryConstraint[],
   options: PaginateAllOptions = {},
 ): Promise<QueryDocumentSnapshot<T>[]> {
+  // Runtime guard: `startAfter` cursoring is undefined behaviour without a
+  // stable ordering. Firestore v9 exposes `.type` on every QueryConstraint;
+  // insist on at least one `orderBy` up-front so a caller passing only
+  // `where(...)` filters can't silently produce shifting page boundaries
+  // (and thus duplicate/missing docs) under concurrent writes. Flagged as
+  // MAJOR-7 in the Tier-1 audit.
+  const hasOrderBy = baseConstraints.some((c) => {
+    const kind = (c as { type?: string; __kind?: string }).type
+      ?? (c as { type?: string; __kind?: string }).__kind;
+    return kind === 'orderBy';
+  });
+  if (!hasOrderBy) {
+    throw new Error(
+      'paginateAll requires at least one orderBy(...) in baseConstraints. ' +
+      'Cursor pagination via startAfter is only correct with a stable sort.'
+    );
+  }
+
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
   const results: QueryDocumentSnapshot<T>[] = [];
 

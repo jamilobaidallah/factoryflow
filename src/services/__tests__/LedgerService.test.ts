@@ -686,6 +686,62 @@ describe('LedgerService', () => {
       expect(result.success).toBe(true);
     });
 
+    it('is retry-safe: callback runs twice on Firestore conflict; final balance reflects the LAST tx.get (Fix 4, audit MAJOR-1)', async () => {
+      // Firestore retries `runTransaction` if a concurrent write commits
+      // between our `tx.get` and the auto-commit. On retry the callback
+      // runs AGAIN with a fresh `tx.get` result. The correctness contract
+      // is: the code inside the callback must be deterministic against
+      // the transactional read, produce no external side effects that
+      // would double on retry, and the final write must be based on the
+      // FINAL retry's data — not the first attempt's stale snapshot.
+      const mockBatch = createMockBatch();
+      mockWriteBatch.mockReturnValue(mockBatch);
+
+      const txUpdate = jest.fn();
+      let attempt = 0;
+      mockRunTransaction.mockImplementation(async (_firestore, callback) => {
+        // Simulate the SDK invoking the callback twice: first attempt sees
+        // a stale totalPaid = 200; between attempt 1 and 2 a concurrent
+        // writer bumped totalPaid to 500; attempt 2 reads the fresh 500
+        // and its writes are the ones that stick.
+        const readsByAttempt = [200, 500];
+        let lastResult;
+        for (const totalPaidForAttempt of readsByAttempt) {
+          attempt++;
+          const mockTransaction = {
+            get: jest.fn().mockResolvedValue({
+              exists: () => true,
+              data: () => ({
+                amount: 1000,
+                isARAPEntry: true,
+                totalPaid: totalPaidForAttempt,
+                totalDiscount: 0,
+                writeoffAmount: 0,
+                paymentStatus: 'partial',
+              }),
+            }),
+            set: jest.fn(),
+            update: txUpdate,
+          };
+          lastResult = await callback(mockTransaction);
+        }
+        return lastResult;
+      });
+      mockGetDocs.mockResolvedValue(createMockQuerySnapshot());
+
+      const formData = createMockFormData({ amount: '1200' });
+      const result = await service.updateLedgerEntry('entry-123', formData, 'TXN-123');
+
+      expect(result.success).toBe(true);
+      expect(attempt).toBe(2); // Confirms both attempts ran
+
+      // Two tx.update calls happened (one per attempt). The final one is
+      // what matters — it must be based on the fresh totalPaid=500 read:
+      // remainingBalance = 1200 - 500 = 700.
+      const finalUpdate = txUpdate.mock.calls[txUpdate.mock.calls.length - 1][1];
+      expect(finalUpdate.remainingBalance).toBe(700);
+    });
+
     it('is race-safe: recomputes balance from the FRESH tx.get value, not a pre-tx snapshot (Fix 4)', async () => {
       // Scenario: user A opens the edit dialog when totalPaid = 300.
       // Between clicking "save" and Firestore committing, user B in another

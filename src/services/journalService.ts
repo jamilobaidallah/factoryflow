@@ -989,8 +989,13 @@ export async function getJournalEntries(
       });
     }
 
-    // No truncation warning any more — cursor pagination pulls the whole
-    // collection. Kept the field on the return shape for API compatibility.
+    // `warning` field on the return shape is now permanently unused for
+    // this function — cursor pagination pulls the whole collection so
+    // there is no truncation to warn about. Left on `ServiceResult<T>`
+    // to avoid a wider API change; downstream consumers
+    // (`getTrialBalance`, `getBalanceSheet`, and the reports hooks) will
+    // now see `undefined` where they used to see the 10 000-doc-cap toast.
+    // That's the intended behaviour: no truncation → no warning.
     return { success: true, data: entries };
   } catch (error) {
     console.error('Error getting journal entries:', error);

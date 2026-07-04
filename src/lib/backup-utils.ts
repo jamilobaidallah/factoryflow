@@ -14,8 +14,9 @@ import {
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { paginateAll } from './firestore-pagination';
-import { getTrialBalance } from '@/services/journalService';
+import { getJournalEntries } from '@/services/journalService';
 import { ACCOUNTING_TOLERANCE } from './constants';
+import { safeAdd } from './currency';
 
 /** Backup document type - allows any valid Firestore data structure */
 type BackupDocument = Record<string, unknown> & { id: string };
@@ -310,13 +311,26 @@ export async function restoreBackup(
   // a green "restored" toast and only discovers the books are broken when
   // they open the trial-balance report weeks later.
   //
+  // We sum debits/credits directly from `getJournalEntries` instead of
+  // calling `getTrialBalance` — the latter triggers `seedChartOfAccounts`,
+  // which in `mode='replace'` would re-create default accounts the user
+  // may have intentionally deleted (audit MINOR-1). For this check we
+  // don't need per-account balances, just the two totals.
+  //
   // Non-fatal: we return a warning rather than throwing. The DB is in the
   // state the file described; the user just needs to know it's off.
   let warning: RestoreResult['warning'];
   try {
-    const tbResult = await getTrialBalance(userId);
-    if (tbResult.success && tbResult.data) {
-      const { totalDebits, totalCredits } = tbResult.data;
+    const entriesResult = await getJournalEntries(userId);
+    if (entriesResult.success && entriesResult.data) {
+      let totalDebits = 0;
+      let totalCredits = 0;
+      for (const entry of entriesResult.data) {
+        for (const line of entry.lines) {
+          totalDebits = safeAdd(totalDebits, line.debit || 0);
+          totalCredits = safeAdd(totalCredits, line.credit || 0);
+        }
+      }
       const difference = Math.abs(totalDebits - totalCredits);
       if (difference > ACCOUNTING_TOLERANCE) {
         warning = {

@@ -1278,9 +1278,12 @@ export class LedgerService {
           const snap = await tx.get(entryRef);
           const data = snap.exists() ? snap.data() : null;
 
-          // Authoritative guard: reject the edit if a previous edit is still
-          // mid-processing. Doing this inside the tx (not before it) is what
-          // makes the check race-free.
+          // Defensive guard for a `journalStatus === "reversal_pending"`
+          // sentinel. Currently this state is never written by any code
+          // path (grep confirms only readers exist), so the branch is
+          // unreachable today — but the check is trivially cheap and
+          // future-proofs the update flow if a two-phase reversal marker
+          // gets added later. Kept intentionally, NOT relied on.
           if (data?.journalStatus === "reversal_pending") {
             throw new Error(TX_ERROR_LOCKED);
           }
