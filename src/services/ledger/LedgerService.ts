@@ -2244,6 +2244,82 @@ export class LedgerService {
         });
       }
 
+      // Integrity+safety Fix 4: reverse sibling ledger balances for
+      // multi-allocation payments.
+      //
+      // Bug this closes: when a payment covered invoices A and B (say
+      // 100 to A, 200 to B) and the user then deletes invoice A, the
+      // cascade above deletes the whole payment doc. Without this
+      // block, B's `totalPaid` still shows 200 for a payment that no
+      // longer exists in Firestore — B appears "partially paid" but
+      // the paying record is gone. Trial balance is unaffected
+      // (journals are properly reversed) but AR/AP aging is off.
+      //
+      // Scope: this handles the CASCADE-DELETE side. The larger
+      // "when deleting one invoice, leave the payment intact with an
+      // unallocated balance so siblings stay paid" refactor is
+      // documented as Tier 3 (H7) for a future PR.
+      //
+      // Firestore transactions cap at 500 writes; a payment covering
+      // 500+ invoices would exceed that. Real payments cover
+      // 1–10 invoices, so this is safely inside the ceiling.
+      // The batch write here uses `increment()` for the numeric fields
+      // so concurrent activity on the sibling doc (e.g., another
+      // payment being applied) composes deterministically.
+      for (const payment of multiAllocPaymentsSnap.docs) {
+        const allocationsRef = collection(
+          firestore,
+          `users/${this.userId}/payments/${payment.id}/allocations`
+        );
+        const allocationsSnap = await getDocs(allocationsRef);
+        for (const allocDoc of allocationsSnap.docs) {
+          // Delete the allocation subdoc regardless of sibling status —
+          // Firestore does not cascade-delete subcollections when the
+          // parent payment is deleted, and useReversePayment uses the
+          // same pattern.
+          batch.delete(allocDoc.ref);
+
+          const allocation = allocDoc.data();
+          const allocatedAmount = Number(allocation.allocatedAmount) || 0;
+          const discountAmount = Number(allocation.discountAmount) || 0;
+          // The source invoice (entry.transactionId) is being deleted
+          // entirely so no point reversing its balance — the ledger doc
+          // is gone in the same batch.
+          if (allocation.transactionId === entry.transactionId) { continue; }
+          if (!allocation.ledgerDocId || allocatedAmount <= 0) { continue; }
+
+          const siblingRef = doc(
+            firestore,
+            `users/${this.userId}/ledger`,
+            allocation.ledgerDocId as string
+          );
+          // We need paymentStatus recomputation, which is categorical
+          // and depends on the fresh totalPaid. Read the sibling once
+          // and compute against the reversed value.
+          const siblingSnap = await getDoc(siblingRef);
+          if (!siblingSnap.exists()) { continue; }
+          const s = siblingSnap.data();
+          const oldPaid       = Number(s.totalPaid) || 0;
+          const oldDiscount   = Number(s.totalDiscount) || 0;
+          const writeoff      = Number(s.writeoffAmount) || 0;
+          const siblingAmount = Number(s.amount) || 0;
+          const newPaid       = safeSubtract(oldPaid, allocatedAmount);
+          const newDiscount   = safeSubtract(oldDiscount, discountAmount);
+          const newStatus = calculatePaymentStatus(
+            newPaid, siblingAmount, newDiscount, writeoff,
+          );
+          const siblingUpdate: Record<string, unknown> = {
+            totalPaid: increment(-allocatedAmount),
+            remainingBalance: increment(allocatedAmount + discountAmount),
+            paymentStatus: newStatus,
+          };
+          if (discountAmount > 0) {
+            siblingUpdate.totalDiscount = increment(-discountAmount);
+          }
+          batch.update(siblingRef, siblingUpdate);
+        }
+      }
+
       // Delete journal entries linked to payments (cheque cashing creates journal entries with linkedPaymentId)
       // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
       const paymentJournalPromises = paymentIds.map((paymentId) => {
