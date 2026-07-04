@@ -887,9 +887,31 @@ describe('LedgerService', () => {
     });
 
     it('should reverse advance allocations when deleting invoice', async () => {
+      // Two pieces of setup this test was missing and CI caught:
+      //
+      // 1) Reset `isAdvanceTransaction` — the previous test in this describe
+      //    block called `mockReturnValue(true)`, and jest's default
+      //    `clearAllMocks` in beforeEach clears CALL history but NOT return
+      //    values. Without this line the mock still returns true here,
+      //    `deleteLedgerEntry` mistakes the invoice for an advance, and
+      //    the "prevent deleting advance with active allocations" guard
+      //    fires with `result.success = false`.
+      //
+      // 2) Mock `getDoc` — `deleteLedgerEntry` at LedgerService.ts:2388
+      //    reads each linked advance via `getDoc(advanceRef)` so it can
+      //    set the post-reversal payment status correctly. The test
+      //    previously only mocked `getDocs` (plural), so `getDoc`
+      //    returned undefined and `.exists()` threw a TypeError.
+      const { isAdvanceTransaction } = require('@/components/ledger/utils/ledger-helpers');
+      isAdvanceTransaction.mockReturnValue(false);
+
       const mockBatch = createMockBatch();
       mockWriteBatch.mockReturnValue(mockBatch);
       mockGetDocs.mockResolvedValue({ docs: [], forEach: jest.fn() });
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ totalPaid: 500 }),
+      });
 
       const entryWithAdvances = {
         ...mockEntry,
