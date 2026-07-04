@@ -733,6 +733,13 @@ export class JournalPostingEngine {
       status: "posted",
       source: request.source,
       createdAt: new Date(),
+      // Integrity+safety Fix 3 side-effect: `postToTransaction` was
+      // previously missing the accountCodes field that `post` and
+      // `postToBatch` set, so journals posted via runTransaction would
+      // silently miss the account-code index used by
+      // backfillJournalAccountCodes and any code that queries entries
+      // by involved account. Backfill it here for consistency.
+      accountCodes: Array.from(new Set(lines.map((l) => l.accountCode))),
       linkedTransactionId: request.source.transactionId,
       ...(linkedPaymentId && { linkedPaymentId }),
       ...(linkedDocumentType && { linkedDocumentType }),

@@ -2635,6 +2635,29 @@ export class LedgerService {
         data.entrySubCategory
       );
 
+      // Integrity+safety Fix 3: journals post inside the SAME
+      // runTransaction as the payment-doc write and the ledger balance
+      // updates. Before this fix, journals were created AFTER the tx
+      // committed, with a compensating `handleJournalFailure` rollback if
+      // the journal write threw. That works most of the time — but if the
+      // compensator itself fails (network flake between two writes), the
+      // ledger doc's totalPaid / totalDiscount got the discount recorded
+      // while no offsetting journal exists → books unbalanced. The tx
+      // gives us atomicity without a compensator.
+      //
+      // Sequences must be reserved OUTSIDE the outer tx because
+      // reserveSequences() runs its own nested tx internally, which
+      // Firestore does not allow nested inside another.
+      const isAdvance = isAdvanceTransaction(data.entryCategory);
+      const isLoan = data.entryType === "قرض";
+      const willPostJournals = data.isARAPEntry && !isAdvance && !isLoan;
+      const needsPaymentJournal = willPostJournals && data.amount > 0;
+      const needsDiscountJournal = willPostJournals && discountAmount > 0;
+      const journalCount = (needsPaymentJournal ? 1 : 0) + (needsDiscountJournal ? 1 : 0);
+
+      const engine = journalCount > 0 ? createJournalPostingEngine(this.userId) : null;
+      const reservedSeqs = engine ? await engine.reserveSequences(journalCount) : [];
+
       // Use transaction to prevent race conditions when multiple payments
       // happen simultaneously on the same ledger entry
       const entryRef = this.getLedgerDocRef(data.entryId);
@@ -2723,22 +2746,18 @@ export class LedgerService {
         }
 
         transaction.update(entryRef, updateData);
-      });
 
-      // Create journal entries for AR/AP settlements (outside transaction)
-      // Skip for advances (they have special handling) and loans
-      const isAdvance = isAdvanceTransaction(data.entryCategory);
-      const isLoan = data.entryType === "قرض";
-
-      if (data.isARAPEntry && !isAdvance && !isLoan) {
-        try {
-          const engine = createJournalPostingEngine(this.userId);
+        // Integrity+safety Fix 3: post payment + discount journals INSIDE
+        // the same runTransaction as the payment doc + ledger updates.
+        // If either journal write fails the whole thing rolls back — no
+        // more "payment written, journal missing" split state.
+        if (engine) {
           const paymentDate = data.date || new Date();
+          let seqIdx = 0;
 
-          // Create journal entry for cash payment portion
-          if (data.amount > 0) {
+          if (needsPaymentJournal) {
             const templateId = paymentType === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
-            await this.postJournalEntry(engine, {
+            engine.postToTransaction(transaction, {
               templateId,
               amount: data.amount,
               date: paymentDate,
@@ -2748,13 +2767,12 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            }, "payment journal (quick payment)");
+            }, reservedSeqs[seqIdx++]);
           }
 
-          // Create journal entry for discount portion
-          if (discountAmount > 0) {
+          if (needsDiscountJournal) {
             const discountTemplateId = data.entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
-            await this.postJournalEntry(engine, {
+            engine.postToTransaction(transaction, {
               templateId: discountTemplateId,
               amount: discountAmount,
               date: paymentDate,
@@ -2764,17 +2782,14 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            }, "discount journal (quick payment)");
+            }, reservedSeqs[seqIdx++]);
           }
-        } catch (journalError) {
-          // Rollback payment and handle failure
-          await this.handleJournalFailure(
-            paymentDocRef,
-            data.entryTransactionId,
-            journalError
-          );
         }
-      }
+      });
+
+      // The old "post journals outside tx + handleJournalFailure
+      // compensator" path is gone. Atomicity is now enforced by
+      // runTransaction above; no separate journal write can be lost.
 
       return { success: true };
     } catch (error) {
