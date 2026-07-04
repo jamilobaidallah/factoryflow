@@ -130,10 +130,21 @@ export class JournalPostingEngine {
       // 6. Build entry document
       const template = getTemplate(request.templateId);
 
-      // Determine linkedPaymentId value (only for payment/endorsement types)
+      // Determine linkedPaymentId value.
+      //
+      // Auto-populated for source types whose `documentId` refers to a
+      // payment doc — `payment`, `endorsement`, and (audit MINOR-2)
+      // `discount`. Discount journals are always emitted alongside a
+      // payment doc (see addQuickPayment / usePaymentAllocations), and
+      // the payment-page delete flow reverses journals via
+      // getEntriesByLinkedPaymentId(paymentId). Without this backfill,
+      // deleting a payment that had a discount would leave the
+      // SALES_DISCOUNT / PURCHASE_DISCOUNT journal posted with no
+      // offsetting AR/AP entry.
       const linkedPaymentId =
         request.source.type === "payment" ||
-        request.source.type === "endorsement"
+        request.source.type === "endorsement" ||
+        request.source.type === "discount"
           ? request.source.documentId
           : undefined;
 
@@ -239,10 +250,15 @@ export class JournalPostingEngine {
     const entryNumber = formatEntryNumber(sequenceNumber);
     const template = getTemplate(request.templateId);
 
-    // Determine linkedPaymentId value (only for payment/endorsement types)
+    // Determine linkedPaymentId value.
+    // Auto-populated for payment / endorsement / discount source types —
+    // all three carry a payment doc as their `documentId`. Audit MINOR-2:
+    // discount was previously omitted, leaving discount journals orphaned
+    // when the payment they belonged to was later deleted.
     const linkedPaymentId =
       request.source.type === "payment" ||
-      request.source.type === "endorsement"
+      request.source.type === "endorsement" ||
+      request.source.type === "discount"
         ? request.source.documentId
         : undefined;
 
@@ -714,9 +730,12 @@ export class JournalPostingEngine {
     const entryNumber = formatEntryNumber(sequenceNumber);
     const template = getTemplate(request.templateId);
 
+    // Auto-populated for payment / endorsement / discount source types.
+    // Audit MINOR-2 backfill (see other two occurrences above for rationale).
     const linkedPaymentId =
       request.source.type === "payment" ||
-      request.source.type === "endorsement"
+      request.source.type === "endorsement" ||
+      request.source.type === "discount"
         ? request.source.documentId
         : undefined;
 

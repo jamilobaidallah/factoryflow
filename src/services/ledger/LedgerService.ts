@@ -2293,25 +2293,30 @@ export class LedgerService {
             `users/${this.userId}/ledger`,
             allocation.ledgerDocId as string
           );
-          // We need paymentStatus recomputation, which is categorical
-          // and depends on the fresh totalPaid. Read the sibling once
-          // and compute against the reversed value.
-          const siblingSnap = await getDoc(siblingRef);
-          if (!siblingSnap.exists()) { continue; }
-          const s = siblingSnap.data();
-          const oldPaid       = Number(s.totalPaid) || 0;
-          const oldDiscount   = Number(s.totalDiscount) || 0;
-          const writeoff      = Number(s.writeoffAmount) || 0;
-          const siblingAmount = Number(s.amount) || 0;
-          const newPaid       = safeSubtract(oldPaid, allocatedAmount);
-          const newDiscount   = safeSubtract(oldDiscount, discountAmount);
-          const newStatus = calculatePaymentStatus(
-            newPaid, siblingAmount, newDiscount, writeoff,
-          );
+
+          // Audit MAJOR-1: NO `paymentStatus` write here.
+          //
+          // The numeric balance fields use `increment()` which composes
+          // correctly with any concurrent writer. `paymentStatus` is
+          // categorical ('unpaid'/'partial'/'paid') and can only be
+          // computed as an absolute value from a specific totalPaid — so
+          // writing it here would race with any concurrent payment
+          // operation on the sibling doc. The concrete failure mode:
+          //     User A deletes invoice X (this code path fires).
+          //     User B applies a new payment to sibling Y at the same time.
+          //     Both writes commit: numeric fields end up correct via
+          //     increment composition, but paymentStatus reflects
+          //     whichever writer landed last — potentially wrong.
+          //
+          // Safe alternative: skip the write entirely. The next legitimate
+          // payment/discount operation on Y (which runs inside a proper
+          // runTransaction, e.g. addPaymentToEntry, addQuickPayment,
+          // usePaymentAllocations) will recompute the correct status from
+          // fresh transactional reads. Any UI that reads paymentStatus can
+          // also derive it from the numeric fields on the fly.
           const siblingUpdate: Record<string, unknown> = {
             totalPaid: increment(-allocatedAmount),
             remainingBalance: increment(allocatedAmount + discountAmount),
-            paymentStatus: newStatus,
           };
           if (discountAmount > 0) {
             siblingUpdate.totalDiscount = increment(-discountAmount);
