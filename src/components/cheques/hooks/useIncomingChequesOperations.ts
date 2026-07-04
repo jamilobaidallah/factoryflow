@@ -656,6 +656,39 @@ export function useIncomingChequesOperations(): UseIncomingChequesOperationsRetu
       // Store the supplier's transaction ID for ARAP update
       const supplierTransactionId = transactionId.trim();
 
+      // Integrity+safety Fix 5: verify the supplier transactionId
+      // resolves to an AP (expense) ledger entry BEFORE any writes.
+      //
+      // The endorsement journal is DR AP (supplier) / CR AR (client). If
+      // the caller passes an AR transactionId by mistake, the code below
+      // would still find the entry and update it — flipping the debit
+      // onto the wrong side of the ledger and creating a wrong-sign
+      // balance for that client. Refuse the whole operation here rather
+      // than trying to recover mid-batch.
+      const supplierValidationSnap = await getDocs(query(
+        ledgerRef,
+        where("transactionId", "==", supplierTransactionId),
+      ));
+      if (supplierValidationSnap.empty) {
+        toast({
+          title: "رقم معاملة غير موجود",
+          description: `لم يتم العثور على معاملة برقم "${supplierTransactionId}". يرجى التحقق من الرقم.`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      const supplierValidationData = supplierValidationSnap.docs[0].data();
+      if (supplierValidationData.type !== "مصروف" || !supplierValidationData.isARAPEntry) {
+        toast({
+          title: "نوع معاملة غير صحيح",
+          description:
+            `رقم المعاملة "${supplierTransactionId}" لا يخص ذمة دائنة (مورد). ` +
+            `تظهير الشيك يتطلب معاملة مصروف مسجلة كذمة دائنة.`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
       // 1. Update incoming cheque status, type, and outgoing reference
       batch.update(incomingChequeRef, {
         chequeType: "مجير",
