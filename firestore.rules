@@ -134,6 +134,48 @@ service cloud.firestore {
       // SUBCOLLECTIONS - Data Collections
       // ============================================
 
+      // Ledger doc invariant: for AR/AP entries, the balance identity
+      // `amount − totalPaid − totalDiscount − writeoffAmount == remainingBalance`
+      // MUST hold on every write. This is Integrity+safety Fix 7:
+      // Firestore already enforces `debits == credits` on journal_entries
+      // (isBalanced() below at ~line 324), but ledger docs had no
+      // server-side check. A malformed client (or a bug) could set
+      // `totalDiscount: 999999` with a matching negative `remainingBalance`
+      // and no offsetting journal — trial balance would still balance
+      // while AR/AP was silently corrupt.
+      //
+      // Only enforced when `isARAPEntry == true` because non-ARAP entries
+      // (immediate cash, capital moves, non-AR/AP journal-only rows)
+      // don't carry a remainingBalance concept.
+      //
+      // `.get(field, default)` is used because Firestore rules throw
+      // PERMISSION_DENIED on arithmetic against missing fields — a fresh
+      // invoice with no discount/writeoff would be legit but rejected
+      // without defaults. Rules have no `math.abs`, so drift is bounded
+      // as an interval (drift > -0.01 && drift < 0.01), matching
+      // ACCOUNTING_TOLERANCE on the JS side.
+      function isLedgerInvariant() {
+        let data     = request.resource.data;
+        let paid     = data.get('totalPaid', 0);
+        let discount = data.get('totalDiscount', 0);
+        let writeoff = data.get('writeoffAmount', 0);
+        let remain   = data.get('remainingBalance', 0);
+        let drift    = (data.amount - paid - discount - writeoff) - remain;
+        return !data.get('isARAPEntry', false)
+          || (drift > -0.01 && drift < 0.01);
+      }
+
+      // Skip the invariant check on updates that don't touch balance
+      // fields — a pure metadata edit (description, category, etc.) on
+      // a pre-existing legacy doc that violated the invariant would
+      // otherwise become read-only.
+      function balanceFieldsChanged() {
+        return request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasAny(['amount', 'totalPaid', 'totalDiscount',
+                   'writeoffAmount', 'remainingBalance', 'isARAPEntry']);
+      }
+
       // Ledger collection - accounting entries
       match /ledger/{ledgerId} {
         allow read: if canAccessOwnerData(userId) && canRead(request.auth.uid);
@@ -144,11 +186,13 @@ service cloud.firestore {
           && request.resource.data.type in ['دخل', 'إيراد', 'مصروف', 'حركة رأس مال']
           && isValidString(request.resource.data.category)
           && request.resource.data.date is timestamp
-          && request.resource.data.createdAt is timestamp;
+          && request.resource.data.createdAt is timestamp
+          && isLedgerInvariant();
         allow update: if canAccessOwnerData(userId) && canWrite(request.auth.uid)
           && request.resource.data.transactionId == resource.data.transactionId
           && isValidString(request.resource.data.description)
-          && isValidAmount(request.resource.data.amount);
+          && isValidAmount(request.resource.data.amount)
+          && (!balanceFieldsChanged() || isLedgerInvariant());
         allow delete: if canAccessOwnerData(userId) && canWrite(request.auth.uid);
       }
 

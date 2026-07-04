@@ -1758,21 +1758,31 @@ export async function closeYearEnd(
 
   // ── Fetch all journal entries for the year ────────────────────────────────
   //
-  // Scale-hardening Tier-1, Fix 2: previous code used `limit(5000)` here
-  // and hard-aborted the whole close if the year had 5 000+ entries —
-  // effectively locking out any customer with a busy fiscal year and forcing
-  // "please contact support to split the close". Now cursor-paginate with
-  // the SAME date-range where clauses so we still push filtering server-side
-  // (the `date` field is already indexed for range queries) but pull the
-  // whole year regardless of size.
-  const startDate = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00`));
-  const endDate   = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59`));
+  // Scale-hardening Tier-1, Fix 2 (2026-07-04): paginate to avoid the
+  // previous 5 000-doc cap.
+  //
+  // Integrity + safety, Fix 1: two bugs collapsed into one correct
+  // construction:
+  //   (a) The old `T23:59:59` upper bound with an inclusive `<=` missed
+  //       transactions timestamped in the final 999 milliseconds of the
+  //       year.
+  //   (b) `new Date('${year}-...')` with no `Z` / offset is parsed as
+  //       LOCAL browser time. A Jibal Al Sham (Jordan, UTC+3) client and
+  //       a Vercel serverless (UTC) runtime would resolve the same string
+  //       to two different real moments, shifting the boundary by 3
+  //       hours. Jordan does not observe DST so a fixed `+03:00` offset
+  //       is stable indefinitely.
+  //
+  // Solution: half-open interval `[startOfYear, startOfNextYear)` in Jordan
+  // local time. Deterministic across timezones AND across ms precision.
+  const startDate = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00+03:00`));
+  const endDate   = Timestamp.fromDate(new Date(`${year + 1}-01-01T00:00:00+03:00`));
 
   const yearEntryDocs = await paginateAll(
     journalRef,
     [
       where('date', '>=', startDate),
-      where('date', '<=', endDate),
+      where('date', '<', endDate),
       orderBy('date', 'asc'),
     ],
   );
@@ -1887,7 +1897,10 @@ export async function closeYearEnd(
     };
   }
 
-  const closeDate           = new Date(`${year}-12-31T23:59:59`);
+  // Integrity + safety, Fix 1: closing entry should be timestamped at the
+  // LAST instant of the fiscal year in Jordan-local time. Use the same
+  // half-open construction as the range query above and back off 1 ms.
+  const closeDate           = new Date(new Date(`${year + 1}-01-01T00:00:00+03:00`).getTime() - 1);
   const closeDateTs         = Timestamp.fromDate(closeDate);
   const INCOME_SUMMARY_CODE = ACCOUNT_CODES.INCOME_SUMMARY; // '3300'
   const now                 = new Date();

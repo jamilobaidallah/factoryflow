@@ -2244,6 +2244,87 @@ export class LedgerService {
         });
       }
 
+      // Integrity+safety Fix 4: reverse sibling ledger balances for
+      // multi-allocation payments.
+      //
+      // Bug this closes: when a payment covered invoices A and B (say
+      // 100 to A, 200 to B) and the user then deletes invoice A, the
+      // cascade above deletes the whole payment doc. Without this
+      // block, B's `totalPaid` still shows 200 for a payment that no
+      // longer exists in Firestore — B appears "partially paid" but
+      // the paying record is gone. Trial balance is unaffected
+      // (journals are properly reversed) but AR/AP aging is off.
+      //
+      // Scope: this handles the CASCADE-DELETE side. The larger
+      // "when deleting one invoice, leave the payment intact with an
+      // unallocated balance so siblings stay paid" refactor is
+      // documented as Tier 3 (H7) for a future PR.
+      //
+      // Firestore transactions cap at 500 writes; a payment covering
+      // 500+ invoices would exceed that. Real payments cover
+      // 1–10 invoices, so this is safely inside the ceiling.
+      // The batch write here uses `increment()` for the numeric fields
+      // so concurrent activity on the sibling doc (e.g., another
+      // payment being applied) composes deterministically.
+      for (const payment of multiAllocPaymentsSnap.docs) {
+        const allocationsRef = collection(
+          firestore,
+          `users/${this.userId}/payments/${payment.id}/allocations`
+        );
+        const allocationsSnap = await getDocs(allocationsRef);
+        for (const allocDoc of allocationsSnap.docs) {
+          // Delete the allocation subdoc regardless of sibling status —
+          // Firestore does not cascade-delete subcollections when the
+          // parent payment is deleted, and useReversePayment uses the
+          // same pattern.
+          batch.delete(allocDoc.ref);
+
+          const allocation = allocDoc.data();
+          const allocatedAmount = Number(allocation.allocatedAmount) || 0;
+          const discountAmount = Number(allocation.discountAmount) || 0;
+          // The source invoice (entry.transactionId) is being deleted
+          // entirely so no point reversing its balance — the ledger doc
+          // is gone in the same batch.
+          if (allocation.transactionId === entry.transactionId) { continue; }
+          if (!allocation.ledgerDocId || allocatedAmount <= 0) { continue; }
+
+          const siblingRef = doc(
+            firestore,
+            `users/${this.userId}/ledger`,
+            allocation.ledgerDocId as string
+          );
+
+          // Audit MAJOR-1: NO `paymentStatus` write here.
+          //
+          // The numeric balance fields use `increment()` which composes
+          // correctly with any concurrent writer. `paymentStatus` is
+          // categorical ('unpaid'/'partial'/'paid') and can only be
+          // computed as an absolute value from a specific totalPaid — so
+          // writing it here would race with any concurrent payment
+          // operation on the sibling doc. The concrete failure mode:
+          //     User A deletes invoice X (this code path fires).
+          //     User B applies a new payment to sibling Y at the same time.
+          //     Both writes commit: numeric fields end up correct via
+          //     increment composition, but paymentStatus reflects
+          //     whichever writer landed last — potentially wrong.
+          //
+          // Safe alternative: skip the write entirely. The next legitimate
+          // payment/discount operation on Y (which runs inside a proper
+          // runTransaction, e.g. addPaymentToEntry, addQuickPayment,
+          // usePaymentAllocations) will recompute the correct status from
+          // fresh transactional reads. Any UI that reads paymentStatus can
+          // also derive it from the numeric fields on the fly.
+          const siblingUpdate: Record<string, unknown> = {
+            totalPaid: increment(-allocatedAmount),
+            remainingBalance: increment(allocatedAmount + discountAmount),
+          };
+          if (discountAmount > 0) {
+            siblingUpdate.totalDiscount = increment(-discountAmount);
+          }
+          batch.update(siblingRef, siblingUpdate);
+        }
+      }
+
       // Delete journal entries linked to payments (cheque cashing creates journal entries with linkedPaymentId)
       // Use Promise.all to fetch all payment journals in parallel (avoid N+1 query pattern)
       const paymentJournalPromises = paymentIds.map((paymentId) => {
@@ -2635,6 +2716,29 @@ export class LedgerService {
         data.entrySubCategory
       );
 
+      // Integrity+safety Fix 3: journals post inside the SAME
+      // runTransaction as the payment-doc write and the ledger balance
+      // updates. Before this fix, journals were created AFTER the tx
+      // committed, with a compensating `handleJournalFailure` rollback if
+      // the journal write threw. That works most of the time — but if the
+      // compensator itself fails (network flake between two writes), the
+      // ledger doc's totalPaid / totalDiscount got the discount recorded
+      // while no offsetting journal exists → books unbalanced. The tx
+      // gives us atomicity without a compensator.
+      //
+      // Sequences must be reserved OUTSIDE the outer tx because
+      // reserveSequences() runs its own nested tx internally, which
+      // Firestore does not allow nested inside another.
+      const isAdvance = isAdvanceTransaction(data.entryCategory);
+      const isLoan = data.entryType === "قرض";
+      const willPostJournals = data.isARAPEntry && !isAdvance && !isLoan;
+      const needsPaymentJournal = willPostJournals && data.amount > 0;
+      const needsDiscountJournal = willPostJournals && discountAmount > 0;
+      const journalCount = (needsPaymentJournal ? 1 : 0) + (needsDiscountJournal ? 1 : 0);
+
+      const engine = journalCount > 0 ? createJournalPostingEngine(this.userId) : null;
+      const reservedSeqs = engine ? await engine.reserveSequences(journalCount) : [];
+
       // Use transaction to prevent race conditions when multiple payments
       // happen simultaneously on the same ledger entry
       const entryRef = this.getLedgerDocRef(data.entryId);
@@ -2723,22 +2827,18 @@ export class LedgerService {
         }
 
         transaction.update(entryRef, updateData);
-      });
 
-      // Create journal entries for AR/AP settlements (outside transaction)
-      // Skip for advances (they have special handling) and loans
-      const isAdvance = isAdvanceTransaction(data.entryCategory);
-      const isLoan = data.entryType === "قرض";
-
-      if (data.isARAPEntry && !isAdvance && !isLoan) {
-        try {
-          const engine = createJournalPostingEngine(this.userId);
+        // Integrity+safety Fix 3: post payment + discount journals INSIDE
+        // the same runTransaction as the payment doc + ledger updates.
+        // If either journal write fails the whole thing rolls back — no
+        // more "payment written, journal missing" split state.
+        if (engine) {
           const paymentDate = data.date || new Date();
+          let seqIdx = 0;
 
-          // Create journal entry for cash payment portion
-          if (data.amount > 0) {
+          if (needsPaymentJournal) {
             const templateId = paymentType === "قبض" ? "PAYMENT_RECEIPT" : "PAYMENT_DISBURSEMENT";
-            await this.postJournalEntry(engine, {
+            engine.postToTransaction(transaction, {
               templateId,
               amount: data.amount,
               date: paymentDate,
@@ -2748,13 +2848,12 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            }, "payment journal (quick payment)");
+            }, reservedSeqs[seqIdx++]);
           }
 
-          // Create journal entry for discount portion
-          if (discountAmount > 0) {
+          if (needsDiscountJournal) {
             const discountTemplateId = data.entryType === "دخل" ? "SALES_DISCOUNT" : "PURCHASE_DISCOUNT";
-            await this.postJournalEntry(engine, {
+            engine.postToTransaction(transaction, {
               templateId: discountTemplateId,
               amount: discountAmount,
               date: paymentDate,
@@ -2764,17 +2863,14 @@ export class LedgerService {
                 documentId: paymentDocRef.id,
                 transactionId: data.entryTransactionId,
               },
-            }, "discount journal (quick payment)");
+            }, reservedSeqs[seqIdx++]);
           }
-        } catch (journalError) {
-          // Rollback payment and handle failure
-          await this.handleJournalFailure(
-            paymentDocRef,
-            data.entryTransactionId,
-            journalError
-          );
         }
-      }
+      });
+
+      // The old "post journals outside tx + handleJournalFailure
+      // compensator" path is gone. Atomicity is now enforced by
+      // runTransaction above; no separate journal write can be lost.
 
       return { success: true };
     } catch (error) {
@@ -2873,6 +2969,19 @@ export class LedgerService {
       // Create journal entry for bad debt expense
       // DR: Bad Debt Expense (5600)
       // CR: Accounts Receivable (1200)
+      //
+      // Integrity+safety Fix 6: the source is now the PAYMENT doc (not the
+      // ledger entry). Two knock-on effects, both wanted:
+      //   1. `JournalPostingEngine` auto-populates `linkedPaymentId`
+      //      when `source.type === "payment"` (JournalPostingEngine.ts:134),
+      //      so payments-page delete → `getEntriesByLinkedPaymentId(paymentId)`
+      //      now finds the BAD_DEBT journal and reverses it correctly.
+      //      Before this fix, the reverseWriteoffDelete branch of the
+      //      payments-page delete flow was leaving the BAD_DEBT journal
+      //      orphaned (a real accounting-integrity gap).
+      //   2. `reverseBySource("payment", paymentDocRef.id)` now works too.
+      // The template is still `BAD_DEBT` so the account codes and report
+      // classification are unchanged; only the linkage changes.
       try {
         const engine = createJournalPostingEngine(this.userId);
         const journalDescription = `شطب دين معدوم: ${data.associatedParty} - ${data.writeoffReason}`;
@@ -2882,8 +2991,8 @@ export class LedgerService {
           date: new Date(),
           description: journalDescription,
           source: {
-            type: "bad_debt",
-            documentId: data.entryId,
+            type: "payment",
+            documentId: paymentDocRef.id,
             transactionId: data.entryTransactionId,
           },
         }, "bad debt writeoff journal");

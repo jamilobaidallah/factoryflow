@@ -90,8 +90,12 @@ jest.mock('@/services/journal', () => ({
   createJournalPostingEngine: jest.fn(() => ({
     post: mockPost,
     postToBatch: jest.fn(),
+    // Integrity+safety Fix 3: addQuickPayment now writes journals INSIDE
+    // the runTransaction via `postToTransaction`, so the mock must expose it
+    // (returns a fake DocumentReference — none of these tests inspect it).
+    postToTransaction: jest.fn(() => ({ id: 'mock-journal-id' })),
     countEntriesBySource: jest.fn().mockResolvedValue(0),
-    reserveSequences: jest.fn().mockResolvedValue([1]),
+    reserveSequences: jest.fn().mockResolvedValue([1, 2]),
     reverseBySourceToBatch: jest.fn().mockResolvedValue([]),
     reverseToTransaction: jest.fn().mockResolvedValue({}),
   })),
