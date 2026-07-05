@@ -11,12 +11,71 @@ import {
   limit,
   orderBy,
   documentId,
+  type WriteBatch,
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import { paginateAll } from './firestore-pagination';
 import { getJournalEntries } from '@/services/journalService';
 import { ACCOUNTING_TOLERANCE } from './constants';
 import { safeAdd } from './currency';
+
+/**
+ * Commit a batch of Firestore writeBatches with a bounded concurrency
+ * ceiling. Introduced for Tier-2 P5 — the previous sequential loop over
+ * batches was the dominant latency in restore for large collections
+ * (10 batches × ~2 s per commit ≈ 20 s total). With `concurrency = 5`
+ * we get ~5× parallel speedup without bursting far past Firestore's
+ * 500 writes/sec write-quota (5 concurrent × 500 writes = 2 500 writes
+ * in flight; well below the 10 000-writes/sec hard cap).
+ *
+ * Uses `Promise.allSettled` so a single-batch failure does NOT abort
+ * remaining commits — we WANT all the successful ones to land, and
+ * then we surface any rejected batches so the caller can decide how
+ * to handle partial state.
+ *
+ * Returns a { completed, failed, results } summary. The `onBatchDone`
+ * callback is invoked after each individual batch settles (regardless
+ * of order) so progress bars stay monotonic — this is the "completed
+ * counter" the audit called out.
+ */
+async function commitBatchesWithCap(
+  batches: WriteBatch[],
+  concurrency: number,
+  onBatchDone?: (completedSoFar: number, total: number) => void,
+): Promise<{
+  completed: number;
+  failed: number;
+  results: PromiseSettledResult<void>[];
+}> {
+  const total = batches.length;
+  let completed = 0;
+  const allResults: PromiseSettledResult<void>[] = [];
+
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const chunk = batches.slice(i, i + concurrency);
+    // Wrap each commit so onBatchDone fires as each settles, not after
+    // the whole chunk. Progress stays smooth even if one commit in the
+    // chunk is slow.
+    const wrapped = chunk.map((b) =>
+      b.commit().then(
+        () => {
+          completed++;
+          onBatchDone?.(completed, total);
+        },
+        (err) => {
+          completed++;
+          onBatchDone?.(completed, total);
+          throw err;
+        },
+      ),
+    );
+    const chunkResults = await Promise.allSettled(wrapped);
+    allResults.push(...chunkResults);
+  }
+
+  const failed = allResults.filter((r) => r.status === 'rejected').length;
+  return { completed: total, failed, results: allResults };
+}
 
 /** Backup document type - allows any valid Firestore data structure */
 type BackupDocument = Record<string, unknown> & { id: string };
@@ -224,35 +283,63 @@ export async function restoreBackup(
       const actualCollectionName = reverseMapping[collectionName] || collectionName;
       const collectionRef = collection(firestore, `users/${userId}/${actualCollectionName}`);
 
-      // If replace mode, delete existing documents first (in batches to prevent memory issues)
-      if (mode === 'replace') {
-        if (onProgress) {
-          onProgress(
-            Math.round((processedCollections / totalCollections) * 100),
-            `Clearing existing ${collectionName} data...`
-          );
-        }
+      const batchSize = 500; // Firestore batch-write cap
 
-        // Delete in batches of 500 to prevent memory issues with large collections
-        const deleteBatchSize = 500;
-        let hasMore = true;
-        while (hasMore) {
-          const existingDocs = await getDocs(query(collectionRef, limit(deleteBatchSize)));
-          if (existingDocs.empty) {
-            hasMore = false;
-          } else {
-            const deleteBatch = writeBatch(firestore);
-            existingDocs.docs.forEach((docSnapshot) => {
-              deleteBatch.delete(docSnapshot.ref);
-            });
-            await deleteBatch.commit();
-            // If we got fewer than batch size, we're done
-            hasMore = existingDocs.docs.length === deleteBatchSize;
+      // ── DELETE phase (mode='replace' only) ───────────────────────
+      //
+      // Tier-2 P5: parallelize with a concurrency cap of 5. Previously
+      // this loop ran ONE getDocs+deleteBatch commit at a time and
+      // depended on the "limit(500) returns the first 500 undeleted
+      // docs" behaviour to walk through the collection. We now:
+      //   1. Read all doc refs up-front via paginateAll (cursored).
+      //   2. Chunk into 500-doc delete batches.
+      //   3. Commit 5 concurrent batches at a time via allSettled.
+      //   4. If any batch fails, throw a clear "restore incomplete"
+      //      error so the caller surfaces a red toast. The DELETE
+      //      side has no natural mid-flight rollback anyway — the
+      //      alternative pre-Tier-2 code had the same partial-failure
+      //      exposure, just with a smaller window because it was serial.
+      if (mode === 'replace') {
+        onProgress?.(
+          Math.round((processedCollections / totalCollections) * 100),
+          `Clearing existing ${collectionName} data...`,
+        );
+
+        const allExistingSnaps = await paginateAll(
+          collectionRef,
+          [orderBy(documentId())],
+        );
+        if (allExistingSnaps.length > 0) {
+          const deleteBatches: WriteBatch[] = [];
+          for (let i = 0; i < allExistingSnaps.length; i += batchSize) {
+            const b = writeBatch(firestore);
+            for (const snap of allExistingSnaps.slice(i, i + batchSize)) {
+              b.delete(snap.ref);
+            }
+            deleteBatches.push(b);
+          }
+          const { failed } = await commitBatchesWithCap(deleteBatches, 5, (done, total) => {
+            onProgress?.(
+              Math.round((processedCollections / totalCollections) * 100),
+              `Clearing ${collectionName}... (${done}/${total} batches)`,
+            );
+          });
+          if (failed > 0) {
+            throw new Error(
+              `Delete phase incomplete for ${collectionName}: ${failed}/${deleteBatches.length} batches failed. ` +
+              'Database is in an inconsistent state — please re-run the restore.',
+            );
           }
         }
       }
-      const batchSize = 500; // Firestore batch limit
 
+      // ── WRITE phase (both merge and replace modes) ───────────────
+      //
+      // Tier-2 P5: same pattern as the delete phase. Build all
+      // batches first, then commit up to 5 at a time. Progress is
+      // reported off a completed-counter, so parallel completion is
+      // still monotonic (never regresses).
+      const writeBatches: WriteBatch[] = [];
       for (let i = 0; i < documents.length; i += batchSize) {
         const batch = writeBatch(firestore);
         const batchDocs = documents.slice(i, Math.min(i + batchSize, documents.length));
@@ -278,11 +365,22 @@ export async function restoreBackup(
           batch.set(docRef, firestoreData, { merge: mode === 'merge' });
         }
 
-        await batch.commit();
+        writeBatches.push(batch);
+      }
 
-        if (onProgress) {
-          const progress = Math.round(((processedCollections + (i / documents.length)) / totalCollections) * 100);
-          onProgress(progress, `Restoring ${collectionName}... (${i + batchDocs.length}/${documents.length})`);
+      if (writeBatches.length > 0) {
+        const { failed } = await commitBatchesWithCap(writeBatches, 5, (done, total) => {
+          onProgress?.(
+            Math.round(((processedCollections + (done / total)) / totalCollections) * 100),
+            `Restoring ${collectionName}... (${done * batchSize}/${documents.length})`,
+          );
+        });
+        if (failed > 0) {
+          throw new Error(
+            `Restore incomplete for ${collectionName}: ${failed}/${writeBatches.length} batches failed. ` +
+            'Database is in an inconsistent state — please re-run the restore. ' +
+            '(Post-restore trial-balance check will also warn if the resulting books do not balance.)',
+          );
         }
       }
 
