@@ -122,10 +122,19 @@ export default function PaymentsPage() {
       ]);
       setTotalReceived((receivedAll.data().total ?? 0) - (receivedExcluded.data().total ?? 0));
       setTotalPaid((paidAll.data().total ?? 0) - (paidExcluded.data().total ?? 0));
-    } catch {
+    } catch (err) {
       // On failure (offline / index building): keep null state.
       // PaymentsSummaryCards stays in loading skeleton — no misleading zero shown.
       // Stats refresh automatically on next successful mutation.
+      //
+      // We LOG the error (previously silently swallowed) so a missing
+      // composite index or malformed query is diagnosable from the browser
+      // console instead of only surfacing as a stuck skeleton card. The
+      // most common failure here is a missing aggregation-safe composite
+      // index — Firebase returns a URL in the error message that creates
+      // it with one click.
+      // eslint-disable-next-line no-console
+      console.error('[payments] fetchPaymentStats failed:', err);
     } finally {
       setStatsLoading(false);
     }
