@@ -1,4 +1,8 @@
-import { ExcelReportBuilder, EXCEL_COLORS } from './excel';
+// Tier-2 P1: dynamic-import `./excel` inside the export function so
+// `ExcelReportBuilder` (which imports `exceljs` at its module top) is
+// only pulled into the bundle when the user actually clicks "Export".
+// Types are still eagerly imported — they emit no runtime code and
+// don't drag exceljs into the initial bundle.
 import { formatNumber } from './date-utils';
 import { sumAmounts } from './currency';
 import { COMPANY_NAME_AR_FULL } from './branding';
@@ -42,6 +46,11 @@ export async function exportPayrollToExcel(
   const grandTotal = sumAmounts(entries.map(e => e.totalSalary));
   const paidCount = entries.filter(e => e.isPaid).length;
   const unpaidCount = entries.length - paidCount;
+
+  // Tier-2 P1: dynamic import — the ExcelJS class + builder is not in the
+  // initial bundle. First "Export" click pays the download once; subsequent
+  // exports and all other pages never touch these bytes.
+  const { ExcelReportBuilder, EXCEL_COLORS } = await import('./excel');
 
   // Build report (RTL for Arabic)
   const builder = new ExcelReportBuilder('Payroll Report', 8, true);
