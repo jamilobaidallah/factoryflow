@@ -1,4 +1,5 @@
-import { ExcelReportBuilder, EXCEL_COLORS } from './excel';
+// Tier-2 P1: `./excel` (which pulls in exceljs) is dynamically imported
+// inside the export function so ~500 KB gzip stays out of the initial bundle.
 import { formatNumber, formatShortDate } from './date-utils';
 import { safeAdd, roundCurrency } from './currency';
 
@@ -54,6 +55,9 @@ export async function exportChequesToExcelProfessional(cheques: Cheque[]): Promi
     c.status === 'مقبوض' || c.status === 'cleared' || c.status === 'تم التحصيل'
   ).length;
   const netAmount = roundCurrency(totalIncoming - totalOutgoing);
+
+  // Tier-2 P1: dynamic import — keeps exceljs out of initial bundle
+  const { ExcelReportBuilder, EXCEL_COLORS } = await import('./excel');
 
   // Build report
   const builder = new ExcelReportBuilder('Cheques Report', 7);

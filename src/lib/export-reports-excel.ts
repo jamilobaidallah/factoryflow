@@ -1,7 +1,9 @@
-import ExcelJS from 'exceljs';
+// Tier-2 P1: `exceljs` + `./excel` are dynamically imported inside the
+// export function so ~500 KB gzip stays out of the initial bundle. This
+// file uses ExcelJS directly (not via ExcelReportBuilder) so we import
+// both bytes.
 import { formatNumber } from './date-utils';
 import { roundCurrency } from './currency';
-import { EXCEL_COLORS } from './excel';
 import { COMPANY_NAME_AR_FULL } from './branding';
 
 interface ReportData {
@@ -27,6 +29,11 @@ export async function exportReportsToExcelProfessional(
   data: ReportData,
   dateRange: DateRange
 ): Promise<void> {
+  // Tier-2 P1: dynamic imports — exceljs (~500 KB) and the shared color
+  // constants only get downloaded on user's first export click.
+  const ExcelJS = (await import('exceljs')).default;
+  const { EXCEL_COLORS } = await import('./excel');
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = COMPANY_NAME_AR_FULL;
   workbook.created = new Date();
